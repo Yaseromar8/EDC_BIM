@@ -1,11 +1,12 @@
 import { apiFetch } from '../utils/apiFetch';
 import { installPivotUnderPointer } from '../utils/pivotUnderPointer';
-import { inventoryRevision } from '../lib/inventoryIdentity';
+import { mountFiltersRuntime } from '../lib/filterRuntimeBridge.js';
+import { viewerElementKey } from '../lib/filtersCore.js';
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import './viewer.css';
 import './IconMarkup.css'; // Add this line
 import { BaseExtension } from '../aps/extensions/BaseExtension';
-import { findLeafNodes, getBulkProperties, calculateDynamicFilterBucketsNative, extractPartidasNative, extractSchemaNative, calculateBucketsFromPostgres } from '../aps/utils/model';
+import { findLeafNodes, getBulkProperties, calculateDynamicFilterBucketsNative, extractPartidasNative, extractSchemaNative } from '../aps/utils/model';
 import IconMarkupExtension from '../aps/extensions/IconMarkupExtension';
 import ProgressiveExtension from '../aps/extensions/ProgressiveExtension';
 import LOB4DExtension from '../aps/extensions/LOB4DExtension';
@@ -122,6 +123,7 @@ const getDocTexture = () => {
 
 const Viewer = ({
     models,
+    filterState,
     hiddenModelUrns = [],
     sprites,
     showSprites,
@@ -169,6 +171,9 @@ const Viewer = ({
 }) => {
     // --- Refs ---
     const viewerRef = useRef(null);
+    const filterRuntimeRef = useRef(null);
+    const filterStateRef = useRef(filterState);
+    filterStateRef.current = filterState;
     const containerRef = useRef(null);
     const loadedModelsRef = useRef({});
     const loadingUrnsRef = useRef(new Set()); // URNs con carga EN CURSO (anti-duplicado por carrera)
@@ -202,7 +207,6 @@ const Viewer = ({
     const ghostMeshRef = useRef(null); // Reference to the 3D sprite mesh
     const dataVizEngineRef = useRef(null);
     const viewerReadyRef = useRef(false);
-    const recalcDebounceRef = useRef(null);
     const activeViewableGuidsRef = useRef(activeViewableGuids);
 
     // Keep ref synced with latest prop value
@@ -922,6 +926,7 @@ const Viewer = ({
                 // La sincronización con Inventory se maneja en un useEffect separado
                 // (ver "Isolation → Inventory Sync" más abajo) para resiliencia con HMR.
                 viewer.addEventListener(Autodesk.Viewing.ISOLATE_EVENT, () => {
+                    if (window._filterIsolationInProgress) return;
                     const loadedModels = viewer.impl.modelQueue().getModels();
                     let hasIsolation = false;
                     for (const model of loadedModels) {
@@ -1241,417 +1246,22 @@ const Viewer = ({
         // para evitar destruir la cámara/Section Box de la Vista 3D seleccionada.
     }, [onModelProperties]);
 
-    // Recalcular Filtros nativamente desde el API de APS (con debounce para evitar double-fire)
+    // One Filters runtime; readiness and legacy events are input bridges only.
     useEffect(() => {
-        const handleRecalculateFilters = (event) => {
-            // Coalescer ráfagas del mismo tick (evita double-fire) pero instantáneo:
-            // el cálculo ahora usa índice cacheado (FacetIndex), no re-escanea el
-            // inventario en cada clic → ya no necesita 50ms de espera.
-            if (recalcDebounceRef.current) clearTimeout(recalcDebounceRef.current);
-            recalcDebounceRef.current = setTimeout(async () => {
-            const detail = event.detail;
-            const models = Object.values(loadedModelsRef.current);
-            if(models.length === 0) return;
-            
-            // =========================================================
-            // FASE 3: EXTRACCIÓN CDE POSTGRESQL (MILISEGUNDOS)
-            // =========================================================
-            // Si el inventario global fue descargado existosamente, cruzamos
-            // los filtros directamente contra la matriz de la base de datos
-            // en O(N) ignorando las miles de llamadas lentas del C++ de Autodesk.
-
-            let finalBuckets = {};
-            let mergedValidIdsByUrn = {};
-
-            if (window.postgresInventory) {
-                console.log(`[VIEWER EXECUTE] Iniciando filtrado CDE Postgres (${window.postgresInventory.length} elementos)...`);
-                
-                const { buckets, globalValidDbIds } = calculateBucketsFromPostgres(
-                    window.postgresInventory, 
-                    detail.filterProperties, 
-                    detail.filterSelections,
-                    window.rosettaToDbId, // Mapeo Directo: URN -> ExtId -> DbId
-                    hiddenModelUrnsRef.current, // Modelos ocultos en Sources
-                    // La revision del dataset: sin ella el motor no cachea, y con
-                    // ella caduca en cuanto el inventario se escribe o se edita en
-                    // sitio. Comparar la referencia del array no bastaba.
-                    inventoryRevision(), detail.schema || []
-                );
-
-                finalBuckets = buckets;
-                
-                // Agrupar los ids válidos interceptados por modelo
-                globalValidDbIds.forEach(item => {
-                    if (!mergedValidIdsByUrn[item.modelUrn]) mergedValidIdsByUrn[item.modelUrn] = new Set();
-                    mergedValidIdsByUrn[item.modelUrn].add(item.id);
-                });
-                
-                console.log(`[VIEWER EXECUTE] Filtrado CDE finalizado instantáneamente.`);
-            } else {
-                console.warn("[VIEWER EXECUTE] postgresInventory no está listo, saltando filtrado...");
-                return;
-            }
-
-            // Enviar respuesta cruzada al App.jsx
-            window._lastCalculatedBuckets = finalBuckets;
-            // Almacenar valid IDs para Inventory filtrado
-            window._lastValidDbIds = mergedValidIdsByUrn;
-            window._lastHasActiveFilters = Object.keys(detail.filterSelections || {}).some(k => detail.filterSelections[k].length > 0);
-            window.dispatchEvent(new CustomEvent('filters-calculated', { detail: finalBuckets }));
-
-            // --- AUTO-ISOLATION INTERACTION WITH 3D MODEL ---
-            const viewer = viewerRef.current;
-            const isReady = viewerReadyRef.current;
-            console.log(`[VIEWER EXECUTE] ✅ viewerRef.current exists: ${!!viewer}, viewerReadyRef.current: ${isReady}`);
-            console.log(`[VIEWER CACHE] mergedValidIdsByUrn keys:`, Object.keys(mergedValidIdsByUrn), `total URNs:`, Object.keys(mergedValidIdsByUrn).length);
-            Object.entries(mergedValidIdsByUrn).forEach(([urn, ids]) => console.log(`[VIEWER CACHE]   URN ${urn}: ${ids.size} dbIds válidos`));
-            
-            if (viewer && isReady) {
-                const activeFilters = Object.keys(detail.filterSelections || {}).filter(k => detail.filterSelections[k].length > 0);
-                console.log(`[VIEWER EXECUTE] activeFilters count: ${activeFilters.length}`, activeFilters);
-                console.log(`[VIEWER EXECUTE] filterSelections:`, JSON.stringify(detail.filterSelections));
-                
-                // TANDEM GRAY-GHOST: Guardar el filtro global en la memoria para el manejador de Temas
-                window._lastHasActiveFilters = activeFilters.length > 0;
-                window._lastValidDbIds = mergedValidIdsByUrn;
-
-                // GUARD: Señalizar que la isolation viene del sistema de filtros,
-                // NO del usuario. Esto evita que handleIsolationSync dispare
-                // un MASTER RESET que crearía un feedback loop infinito.
-                window._filterIsolationInProgress = true;
-
-                if (activeFilters.length === 0) {
-                     console.log(`[VIEWER EXECUTE] 🔄 No active filters. Resetting isolation per-model.`);
-                     const modelsQueue = viewer.impl.modelQueue().getModels();
-                     modelsQueue.forEach(m => {
-                         // Respect Sources visibility — don't un-hide models that are toggled off
-                         const rawUrn = m.getData()?.urn;
-                         const normViewerUrn = normalizeUrn(rawUrn);
-                         if (hiddenModelUrnsRef.current && hiddenModelUrnsRef.current.some(u => normalizeUrn(u) === normViewerUrn)) {
-                             viewer.hideModel(m.id);
-                             return;
-                         }
-                         // RESTAURACION v2 EN CURSO: no se reinicia el aislamiento.
-                         //
-                         // `isolate([], m)` no solo quita el aislamiento: limpia
-                         // tambien los nodos ocultos del modelo. Si la Saved View
-                         // acaba de fijar por LMV su seleccion, sus ocultos y sus
-                         // aislados, y ademas no lleva ninguna seleccion de valores,
-                         // este reinicio borraba justo lo que se acababa de
-                         // restaurar. Medido en el round-trip de E-6: hidden [4,5]
-                         // restaurado y perdido 300 ms despues.
-                         //
-                         // Fuera de una restauracion la guardia vale 0 y esto se
-                         // comporta exactamente igual que siempre.
-                         if (window.__restaurandoVistaV2) return;
-                         viewer.isolate([], m);
-                     });
-                     if (window.__ghostCleanup) window.__ghostCleanup();
-                } else {
-                    viewer.setGhosting(true);
-                     const modelsQueue = viewer.impl.modelQueue().getModels();
-                     let totalIsolated = 0;
-                     console.log(`[VIEWER EXECUTE] modelsQueue: ${modelsQueue.length} model instances`, modelsQueue.map(m => m.getData()?.urn?.slice(-20)));
-
-                     modelsQueue.forEach((m, idx) => {
-                         const rawViewerUrn = m.getData()?.urn;
-                         const viewerUrn = normalizeUrn(rawViewerUrn);
-                         const reactUrn = Object.keys(loadedModelsRef.current).find(k => normalizeUrn(k) === viewerUrn) || rawViewerUrn;
-                         
-                         // 1. Si el modelo está oculto en Sources → hideModel y saltar
-                         if (hiddenModelUrnsRef.current && (hiddenModelUrnsRef.current.includes(reactUrn) || hiddenModelUrnsRef.current.some(u => normalizeUrn(u) === viewerUrn))) {
-                             viewer.hideModel(m.id);
-                             return;
-                         }
-
-                         // 2. Asegurar que este visible si interactuara con el filtro
-                         viewer.showModel(m.id);
-
-                         // 3. Aplicar aislamiento por filtro
-                         const idsSet = mergedValidIdsByUrn[rawViewerUrn] 
-                             || mergedValidIdsByUrn[reactUrn]
-                             || Object.entries(mergedValidIdsByUrn).find(([k]) => normalizeUrn(k) === viewerUrn)?.[1];
-                         
-                         if (idsSet && idsSet.size > 0) {
-                             const idsArray = Array.from(idsSet);
-                             // LEAF-ONLY FILTER: Aislar nodos padre hace visible toda su subrama.
-                             // Elementos Unassigned a menudo incluyen nodos Type/Category de Revit
-                             // que no tienen el parámetro de instancia. Filtramos a hojas solamente.
-                             const tree = m.getInstanceTree();
-                             const leafIds = tree 
-                                 ? idsArray.filter(id => tree.getChildCount(id) === 0) 
-                                 : idsArray;
-                             if (leafIds.length > 0) {
-                                 viewer.impl.visibilityManager.isolate(leafIds, m);
-                             } else {
-                                 viewer.impl.visibilityManager.isolate([-1], m); // No leaf matches → ghost all
-                             }
-                             console.log(`[VIEWER EXECUTE]   Model ${idx} (${viewerUrn?.slice(-20)}): ${leafIds.length} leaf elements isolated (${idsArray.length} raw).`);
-                             totalIsolated += leafIds.length;
-                         } else {
-                             viewer.impl.visibilityManager.isolate([-1], m); // Forzar ghost: dbId -1 no existe → todo el modelo queda fantasma
-                             console.log(`[VIEWER EXECUTE]   Model ${idx} (${viewerUrn?.slice(-20)}): fully ghosted`);
-                         }
-                     });
-
-                     console.log(`[VIEWER EXECUTE] \uD83C\uDFAF Per-model isolation complete: ${totalIsolated} total elements visible`);
-                     viewer.impl.invalidate(true, true, true);
-                }
-                
-                // GUARD: Liberar la bandera después de un tick para que el ISOLATE_EVENT
-                // (que se despacha asincrónicamente por el viewer) sea ignorado.
-                setTimeout(() => { window._filterIsolationInProgress = false; }, 300);
-                
-                // TANDEM GRAY-GHOST: Repintar tema automáticamente al cambiar selecciones (respeta memoria fotográfica)
-                 if (window._lastThemeEventConfig && window._lastThemeEventConfig.active) {
-                      window.dispatchEvent(new CustomEvent('theme-property-bucket', { detail: window._lastThemeEventConfig }));
-                 }
-                 
-                // Restaurar NODOS ocultos manualmente (Right Click -> Hide)
-                const hiddenAgg = viewer.getAggregateHiddenNodes();
-                if (hiddenAgg && hiddenAgg.length > 0) {
-                    hiddenAgg.forEach(agg => {
-                        if (agg.selection && agg.selection.length > 0) viewer.hide(agg.selection, agg.model);
-                    });
-                }
-                }
-            }, 50); // coalesce del storm de carga (rosetta-ready x modelo); el
-                    // cálculo ya es instantáneo por el FacetIndex cacheado.
-        };
-
-        window.addEventListener('recalculate-filters', handleRecalculateFilters);
-        return () => {
-            if (recalcDebounceRef.current) clearTimeout(recalcDebounceRef.current);
-            window.removeEventListener('recalculate-filters', handleRecalculateFilters);
-        };
-    }, []);
-
-    // --- LMV Native Event Listeners for Filters (Refactoring) ---
-    useEffect(() => {
-        const viewer = viewerRef.current;
-        if (!viewer || !viewerReady) return;
-
-        const handleIsolate = (e) => {
-            const { propId, values } = e.detail;
-            console.log(`[PUENTE] ⏱️ ${performance.now().toFixed(2)}ms - Recibido: isolate-property-bucket - propId: ${propId}, values:`, values);
-            if (!propId || !values || values.length === 0) {
-                console.log(`[PUENTE] ⏱️ ${performance.now().toFixed(2)}ms - Ejecutando: per-model isolate([]) [Reset]`);
-                const modelsQueue = viewer.impl.modelQueue().getModels();
-                modelsQueue.forEach(m => {
-                    const rawUrn = m.getData()?.urn;
-                    const normUrn = normalizeUrn(rawUrn);
-                    if (hiddenModelUrnsRef.current && hiddenModelUrnsRef.current.some(u => normalizeUrn(u) === normUrn)) {
-                        viewer.hideModel(m.id);
-                        return;
-                    }
-                    viewer.isolate([], m);
-                });
-                return;
-            }
-
-            const buckets = window._lastCalculatedBuckets;
-            if (buckets && buckets[propId]) {
-                // Group by model URN for multi-model aggregate isolation
-                const idsByUrn = {};
-                values.forEach(val => {
-                    const entry = buckets[propId].values.find(v => v.value === val);
-                    if (entry && entry.dbIds) {
-                        entry.dbIds.forEach(item => {
-                            if (!idsByUrn[item.modelUrn]) idsByUrn[item.modelUrn] = new Set();
-                            idsByUrn[item.modelUrn].add(item.id);
-                        });
-                    }
-                });
-                
-                viewer.setGhosting(true);
-                const modelsQueue = viewer.impl.modelQueue().getModels();
-                modelsQueue.forEach(m => {
-                    const rawViewerUrn = m.getData?.()?.urn;
-                    const viewerUrn = normalizeUrn(rawViewerUrn);
-                    const reactUrn = Object.keys(loadedModelsRef.current).find(k => normalizeUrn(k) === viewerUrn) || rawViewerUrn;
-                    
-                    if (hiddenModelUrnsRef.current && (hiddenModelUrnsRef.current.includes(reactUrn) || hiddenModelUrnsRef.current.some(u => normalizeUrn(u) === viewerUrn))) {
-                        viewer.hideModel(m.id);
-                        return;
-                    }
-
-                    viewer.showModel(m.id);
-
-                    const idsSet = idsByUrn[rawViewerUrn] || idsByUrn[reactUrn] || Object.entries(idsByUrn).find(([k]) => normalizeUrn(k) === viewerUrn)?.[1];
-                    if (idsSet && idsSet.size > 0) {
-                        viewer.isolate(Array.from(idsSet), m);
-                    } else {
-                        // Ghostear toda la geometria de este modelo
-                        viewer.impl.visibilityManager.isolate([-1], m);
-                    }
-                });
-                
-                viewer.impl.invalidate(true, true, true);
-                console.log(`[PUENTE] ⏱️ ${performance.now().toFixed(2)}ms - Per-model isolation applied to ${modelsQueue.length} modelo(s)`);
-                
-                // Collect all valid IDs for fitToView
-                const allIds = [];
-                Object.values(idsByUrn).forEach(set => set.forEach(id => allIds.push(id)));
-                if (allIds.length > 0) viewer.fitToView(allIds);
-            } else {
-                // Reset: Show all on every model (but respect Sources visibility)
-                const modelsQueue = viewer.impl.modelQueue().getModels();
-                modelsQueue.forEach(m => {
-                    const rawUrn = m.getData()?.urn;
-                    const normUrn = normalizeUrn(rawUrn);
-                    if (hiddenModelUrnsRef.current && hiddenModelUrnsRef.current.some(u => normalizeUrn(u) === normUrn)) {
-                        viewer.hideModel(m.id);
-                        return;
-                    }
-                    viewer.isolate([], m);
-                });
-            }
-        };
-
-        const handleTheme = (e) => {
-            const { propId, values, active, customColors } = e.detail;
-            window._lastThemeEventConfig = { propId, values, active }; // MEMORIA FOTOGRAFICA
-            console.log(`[PUENTE] ⏱️ ${performance.now().toFixed(2)}ms - Recibido: theme-property-bucket - propId: ${propId}, active: ${active}`);
-            
-            const PALETTE = [
-                '#7e9bbd', '#F97316', '#10B981', '#F43F5E', '#A855F7', '#5f7fa3', '#EAB308',
-                '#EF4444', '#8B5CF6', '#EC4899', '#6366F1', '#14B8A6', '#84CC16', '#F59E0B'
-            ];
-            // 0.6: el tinte domina pero DEJA PASAR el sombreado (AO/luz) — con
-            // 0.82 el terreno quedaba plano al colorear (el theming de LMV mezcla
-            // el color DESPUÉS de la iluminación: alfa alto = relieve borrado).
-            const THEME_COLOR_ALPHA = 0.6;
-
-            // Merge custom per-value color overrides (from color picker or global store)
-            const customOverrides = customColors || window._customValueColors || {};
-
-            const modelsQueue = viewer.impl.modelQueue().getModels();
-            
-            if (!active) {
-                console.log(`[PUENTE] ⏱️ ${performance.now().toFixed(2)}ms - Ejecutando: viewer.clearThemingColors()`);
-                modelsQueue.forEach(m => viewer.clearThemingColors(m));
-                window.__applyViewerVisualQuality?.();
-                // Live Link: colores apagados → Revit también despinta
-                window.dispatchEvent(new CustomEvent('viewer-colors-applied', { detail: { groups: [] } }));
-                return;
-            }
-
-            const buckets = window._lastCalculatedBuckets;
-            if (buckets && buckets[propId]) {
-                const valsToTheme = (!values || values.length === 0) ? buckets[propId].values.map(v => v.value) : values;
-
-                // Paso 1: Motor Gráfico de Aceleración por GPU (FacetsManager Equivalent)
-                // Construimos el colorMap (diccionario de shaders) fuera del hilo bloqueante
-                
-                const colorMapByUrn = {};
-                // TANDEM GRAY-GHOST: Si hay aislamientos vivos, solo pintamos los elementos activos (dejando en gris el resto)
-                const validIdsFilter = window._lastHasActiveFilters ? window._lastValidDbIds : null;
-
-                valsToTheme.forEach((val) => {
-                    const originalIndex = buckets[propId].values.findIndex(v => v.value === val);
-                    const entry = buckets[propId].values[originalIndex]; // Equivalente a find o valueIndex
-                    if (originalIndex !== -1 && entry) {
-                        // Check for custom per-value color override first, fall back to PALETTE
-                        const overrideKey = `${propId}::${val}`;
-                        const override = customOverrides[overrideKey];
-                        if (override === 'none') return; // usuario EXCLUYÓ este valor del coloreo (✕ en el picker)
-                        const hexColor = override || PALETTE[originalIndex % PALETTE.length];
-                        
-                        // Parse hex to Vector4 (Shader readable)
-                        const rgb = parseInt(hexColor.replace('#', ''), 16);
-                        const r = ((rgb >> 16) & 255) / 255;
-                        const g = ((rgb >> 8) & 255) / 255;
-                        const b = (rgb & 255) / 255;
-                        const colorVector = new window.THREE.Vector4(r, g, b, THEME_COLOR_ALPHA);
-
-                        // Mapeo en Diccionario por URN
-                        entry.dbIds.forEach(item => {
-                            if (validIdsFilter) {
-                                const urnSet = validIdsFilter[item.modelUrn];
-                                if (!urnSet || !urnSet.has(item.id)) return; // No pintar si está ghosteado o no hay filtro válido para este modelo
-                            }
-                            if(!colorMapByUrn[item.modelUrn]) colorMapByUrn[item.modelUrn] = [];
-                            colorMapByUrn[item.modelUrn].push({ id: item.id, colorVector, hex: hexColor });
-                        });
-                    }
-                });
-
-                // Inyección Nativa al Pipeline GPU (Non-blocking ASYNC CHUNKING)
-                const startGPU = performance.now();
-                console.log(`[GPU] 🚀 Compilando ColorMap de FacetsManager para ${Object.keys(colorMapByUrn).length} modelos federados...`);
-                
-                const processGPUBuffer = async () => {
-                    // Live Link: acumular color→(modelo→ids) para replicar en Revit
-                    const linkByColor = new Map();
-                    // Iterar por cada modelo
-                    for (const m of modelsQueue) {
-                        viewer.clearThemingColors(m); // Liberamos memoria de video base
-                        const viewerUrn = m.getData?.()?.urn;
-                        const reactUrn = Object.keys(loadedModelsRef.current).find(k => loadedModelsRef.current[k] === m) || viewerUrn;
-                        const instructions = colorMapByUrn[viewerUrn] || colorMapByUrn[reactUrn] || [];
-
-                        if (instructions.length > 0) {
-                            // Procesamiento por Lotes (Chunking: 5,000 elementos) para evitar 'Page Unresponsive'
-                            const CHUNK_SIZE = 5000;
-                            for (let i = 0; i < instructions.length; i += CHUNK_SIZE) {
-                                const chunk = instructions.slice(i, i + CHUNK_SIZE);
-                                chunk.forEach(inst => {
-                                    viewer.setThemingColor(inst.id, inst.colorVector, m, false);
-                                    if (inst.hex) {
-                                        if (!linkByColor.has(inst.hex)) linkByColor.set(inst.hex, new Map());
-                                        const modelMap = linkByColor.get(inst.hex);
-                                        if (!modelMap.has(m)) modelMap.set(m, []);
-                                        modelMap.get(m).push(inst.id);
-                                    }
-                                });
-                                // Liberar el Hilo Principal del Navegador brevemente
-                                await new Promise(resolve => setTimeout(resolve, 0));
-                                viewer.impl.invalidate(true, true, true); // Intercambio Parcial (Efecto Progreso Fluido)
-                            }
-                        }
-                    }
-
-                    // Forzar el repintado final de shader
-                    viewer.impl.invalidate(true, true, true);
-                    window.__applyViewerVisualQuality?.();
-                    console.log(`[GPU] ⚡ Tema visual re-renderizado asíncronamente en ${(performance.now() - startGPU).toFixed(2)}ms`);
-
-                    // Live Link: publicar el estado de colores (Revit lo replica)
-                    const linkColorGroups = Array.from(linkByColor.entries()).map(([hex, modelMap]) => ({
-                        color: hex,
-                        entries: Array.from(modelMap.entries()).map(([mm, ids]) => ({ model: mm, dbIds: ids })),
-                    }));
-                    window.dispatchEvent(new CustomEvent('viewer-colors-applied', { detail: { groups: linkColorGroups } }));
-                };
-
-                processGPUBuffer();
-            }
-        };
-
-        const handleReset = () => {
-             console.log(`[VIEWER EXECUTE] 🔄 RESET ALL triggered`);
-             const modelsQueue = viewer.impl.modelQueue().getModels();
-             modelsQueue.forEach(m => viewer.clearThemingColors(m));
-             if (viewer.setAggregateIsolation) {
-                 viewer.setAggregateIsolation([]);
-             } else {
-                 viewer.showAll();
-                 viewer.isolate();
-             }
-             window.__applyViewerVisualQuality?.();
-             viewer.fitToView();
-        };
-
-        window.addEventListener('isolate-property-bucket', handleIsolate);
-        window.addEventListener('theme-property-bucket', handleTheme);
-        window.addEventListener('filters-reset-all', handleReset);
-
-        return () => {
-            window.removeEventListener('isolate-property-bucket', handleIsolate);
-            window.removeEventListener('theme-property-bucket', handleTheme);
-            window.removeEventListener('filters-reset-all', handleReset);
-        };
+        if (!viewerReady || !viewerRef.current) return;
+        const runtime = mountFiltersRuntime({
+            host: window, viewer: viewerRef.current,
+            getIntent: () => filterStateRef.current,
+            models: () => Object.values(loadedModelsRef.current),
+            ready: urn => modelosAnunciadosRef.current.has(urn),
+        });
+        filterRuntimeRef.current = runtime;
+        return () => { runtime.dispose(); filterRuntimeRef.current = null; };
     }, [viewerReady]);
+    useEffect(() => {
+        if (!window.__restaurandoVistaV2) filterRuntimeRef.current?.request(filterState);
+    }, [filterState]);
+
 
     // Cleanup and Event Listeners
     useEffect(() => {
@@ -1720,6 +1330,7 @@ const Viewer = ({
             // --- Sincronización de Selección Múltiple (Silenciosa) ---
             try {
                 const allSelectedExtIds = [];
+                const selectedElementKeys = [];
                 let hasSelection = false;
 
                 for (const sel of selections) {
@@ -1740,6 +1351,7 @@ const Viewer = ({
 
                         if (extId) {
                             allSelectedExtIds.push(extId);
+                            selectedElementKeys.push(viewerElementKey(modelUrn, extId));
                         }
 
                         // Expandir a hojas
@@ -1749,6 +1361,7 @@ const Viewer = ({
                                     const childExtId = urnDict[childId];
                                     if (childExtId) {
                                         allSelectedExtIds.push(childExtId);
+                                        selectedElementKeys.push(viewerElementKey(modelUrn, childExtId));
                                     }
                                 }
                             }, true);
@@ -1757,7 +1370,7 @@ const Viewer = ({
                 }
 
                 window.dispatchEvent(new CustomEvent('inventory-selection-sync', {
-                    detail: { selectedExtIds: allSelectedExtIds }
+                    detail: { selectedExtIds: allSelectedExtIds, elementKeys: selectedElementKeys }
                 }));
             } catch (err) {
                 console.error('[SYNC ❌] Error en selection sync:', err);
@@ -1986,10 +1599,13 @@ const Viewer = ({
                 return;
             }
             console.log(`[ISOLATE_EVENT] Payload:`, event);
+            const filterRevision = window.__filterResult?.revision;
             // Pequeño retardo para asegurar que el estado interno del viewer se haya actualizado
             setTimeout(() => {
+                if (filterRevision !== window.__filterResult?.revision || window._filterIsolationInProgress) return;
                 try {
                     const allIsolatedExtIds = [];
+                    const isolatedElementKeys = [];
                     const models = viewer.impl.modelQueue().getModels();
                     let hasIsolation = false;
 
@@ -2019,6 +1635,7 @@ const Viewer = ({
 
                         if (extId) {
                             allIsolatedExtIds.push(extId);
+                            isolatedElementKeys.push(viewerElementKey(modelUrn, extId));
                             directHits++;
                         }
 
@@ -2033,6 +1650,7 @@ const Viewer = ({
                                     const childExtId = urnDict[childId];
                                     if (childExtId) {
                                         allIsolatedExtIds.push(childExtId);
+                                        isolatedElementKeys.push(viewerElementKey(modelUrn, childExtId));
                                         expandedHits++;
                                     }
                                 }
@@ -2047,7 +1665,7 @@ const Viewer = ({
                 }
 
                 window.dispatchEvent(new CustomEvent('inventory-isolation-sync', {
-                    detail: { isolatedExtIds: allIsolatedExtIds }
+                    detail: { isolatedExtIds: allIsolatedExtIds, elementKeys: isolatedElementKeys }
                 }));
                 console.log(`[SYNC ✅] ${allIsolatedExtIds.length} extIds despachados (hasIsolation=${hasIsolation})`);
             } catch (err) {

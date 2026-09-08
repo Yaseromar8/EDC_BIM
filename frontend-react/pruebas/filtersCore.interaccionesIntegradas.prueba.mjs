@@ -1,12 +1,11 @@
-/** B1 bridge for the immutable original interactions harness.
- * Original direct execution reports SOURCE_DRIFT after the authorized extraction
- * of App preload. This does NOT make that original run green or change its cases.
- * Only its preload locator is adapted in memory to the actual connected helper.
- * An in-memory mutation of that real helper must kill the same original case.
+/** Authorized B3 harness bridge. Original inputs/expected and mutation unchanged.
+ * Healthy production must PASS; the same real normalizer mutation must fail
+ * that very expected. Data-URL imports are wiring, not alternate product code.
  */
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
+import { isDeepStrictEqual } from 'node:util';
 import { fileURLToPath } from 'node:url';
 
 const originalUrl = new URL('./filtersCore.interacciones.prueba.mjs', import.meta.url);
@@ -55,6 +54,8 @@ async function run({ mutant = false } = {}) {
     code = replaceOnce(code, "const repoRoot = fileURLToPath(new URL('../../', import.meta.url));",
         `const repoRoot = ${JSON.stringify(fileURLToPath(new URL('../../', import.meta.url)))};`);
     if (!yaReanclado) code = `import { normalizeInventoryPreload } from ${JSON.stringify(moduleUrl)};\n` + code;
+    code = replaceOnce(code, "from '../src/lib/filterVisualDriver.js'",
+        `from ${JSON.stringify(new URL('../src/lib/filterVisualDriver.js', import.meta.url).href)}`);
     const loaded = await import(dataUrl(code));
     return loaded.runInteractionChecks();
 }
@@ -63,16 +64,19 @@ const mutantReport = await run({ mutant: true });
 const targetId = 'P0-7-assets-only-preload';
 const actual = report.cases.find(test => test.id === targetId);
 const mutated = mutantReport.cases.find(test => test.id === targetId);
-const killed = actual?.status === 'KNOWN_FAIL' && mutated?.status === 'UNEXPECTED_FAIL'
+const killed = actual?.status === 'PASS' && isDeepStrictEqual(actual.actual, actual.expected)
+    && isDeepStrictEqual(actual.expected, mutated?.expected)
+    && mutated?.status === 'UNEXPECTED_FAIL' && !isDeepStrictEqual(mutated.actual, actual.expected)
     && mutated.actual?.before === 0 && mutated.actual?.afterAssetsOnly === 0;
-const output = { suite: 'filtersCore.interaccionesIntegradas B1',
-    originalDirectStatus: 'SOURCE_DRIFT at App preload locator; original file unchanged; not green',
-    adapter: 'In-memory preload locator only; all original inputs, expected, knownActual and other cases unchanged',
+const output = { suite: 'filtersCore.interaccionesIntegradas B3 (B4 visible)',
+    originalDirectStatus: report.summary,
+    adapter: 'Authorized production-driver locator and Sync arguments; original inputs, expected and normalizer mutation unchanged',
     hashes: { original: sha256(originalRaw), normalizer: sha256(normalizerRaw), bridge: sha256(readFileSync(fileURLToPath(import.meta.url))) },
     summary: report.summary, cases: report.cases,
+    b3Green: report.b3Green && killed,
     mutants: { total: 1, killed: killed ? 1 : 0, survivor: killed ? 0 : 1,
         case: 'actual-preload-return-empty', observed: mutated },
-    limits: report.limits + ' The direct legacy locator must be migrated in B2 only with authorization.',
+    limits: report.limits + ' B4 known failures retain their original behaviour and nonzero whole-suite exit.',
 };
 console.log(JSON.stringify(output, null, 2));
 process.exitCode = report.exitCode || !killed ? 1 : 0;

@@ -2,6 +2,7 @@
 // Se reutiliza el derivador que ya existe en vez de escribir otro.
 import { linajeDeUrn } from '../../lib/savedViewV2.js';
 import { knownPropertyNames, legacyAliasAllowed } from '../../lib/filterPropertyIdentity.js';
+import { inventoryRowKey } from '../../lib/inventoryIdentity.js';
 
 /**
  * Encuentra todos los nodos hoja en el árbol del modelo.
@@ -444,6 +445,7 @@ function _buildFacetIndex(allData, rosettaToExtIdReversed) {
     const colUrnsWithValue = new Map();
     // preparedRows: solo filas que resuelven en rosetta (las que producían buckets).
     const rows = [];
+    const unresolved = [];
     const vistos = new Set();
     for (let i = 0; i < allData.length; i++) {
         const row = allData[i];
@@ -489,17 +491,24 @@ function _buildFacetIndex(allData, rosettaToExtIdReversed) {
             && (rosettaToExtIdReversed[rawUrn] || rosettaToExtIdReversed[safeUrn]);
         let viewerDbId;
         let effectiveModelUrn = safeUrn;
-        if (urnDict && urnDict[extId] !== undefined) {
+        if (urnDict && Object.hasOwn(urnDict, extId)) {
             viewerDbId = urnDict[extId];
         } else {
             const linaje = linajeDeUrn(rawUrn);
             const mismoDocumento = linaje ? byLinaje.get(linaje) : null;
-            if (mismoDocumento && mismoDocumento.mapping[extId] !== undefined) {
+            if (mismoDocumento && Object.hasOwn(mismoDocumento.mapping, extId)) {
                 viewerDbId = mismoDocumento.mapping[extId];
                 effectiveModelUrn = _safeUrn(mismoDocumento.urn);
             } else {
+                const nodeType = row._nodeType || row['__node__::__node_type__'] || row.__node_type__;
+                if ((urnDict || mismoDocumento) && (!nodeType || nodeType === 'instance'))
+                    unresolved.push(_safeUrn(mismoDocumento?.urn || rawUrn));
                 continue; // no existe en ningún modelo cargado → no participa
             }
+        }
+        if (!Number.isFinite(Number(viewerDbId))) {
+            unresolved.push(effectiveModelUrn);
+            continue;
         }
 
         // UN ELEMENTO CUENTA UNA VEZ. El inventario puede traer la misma fila
@@ -512,6 +521,8 @@ function _buildFacetIndex(allData, rosettaToExtIdReversed) {
         vistos.add(claveDeElemento);
 
         rows.push({
+            externalId: String(extId),
+            rowKey: inventoryRowKey(row),
             keys: new Set(Object.keys(row)),
             viewerDbId,
             effectiveModelUrn,
@@ -521,7 +532,7 @@ function _buildFacetIndex(allData, rosettaToExtIdReversed) {
             norm,
         });
     }
-    return { rows, colUrnsWithValue, propertyNames: knownPropertyNames(allData) };
+    return { rows, colUrnsWithValue, unresolved, propertyNames: knownPropertyNames(allData) };
 }
 
 export function calculateBucketsFromPostgres(allData, filterProperties, filterSelections, rosettaToExtIdReversed, hiddenModelUrns = [], datasetRevision = null, schema = []) {
@@ -572,6 +583,7 @@ export function calculateBucketsFromPostgres(allData, filterProperties, filterSe
 
     const hasAnySelection = Object.keys(filterSelections).some(k => filterSelections[k] && filterSelections[k].length > 0);
     const globalValidDbIds = [];
+    const matches = [];
 
     // Valor efectivo de una fila para una propiedad (AUDITORÍA COMPLETA):
     //   valor real (incluye typos)  → su propio bucket
@@ -608,7 +620,7 @@ export function calculateBucketsFromPostgres(allData, filterProperties, filterSe
         const r = preparedRows[i];
 
         // Excluir elementos de modelos ocultos por Sources
-        if (hiddenSet.has(r.rawUrn) || hiddenSet.has(r.safeUrn)) continue;
+        if (hiddenSet.has(r.rawUrn) || hiddenSet.has(r.safeUrn) || hiddenSet.has(r.effectiveModelUrn)) continue;
 
         const viewerDbId = r.viewerDbId;
         const effectiveModelUrn = r.effectiveModelUrn;
@@ -629,6 +641,8 @@ export function calculateBucketsFromPostgres(allData, filterProperties, filterSe
         if (hasAnySelection && passesAllFilters) {
             globalValidDbIds.push({ id: parseInt(viewerDbId, 10), modelUrn: effectiveModelUrn });
         }
+        if (passesAllFilters) matches.push({ dbId: Number(viewerDbId),
+            externalId: r.externalId, modelUrn: effectiveModelUrn, rowKey: r.rowKey });
 
         // Construir buckets (Nivel Facetado - OR para sí mismo)
         for (let propId of filterProperties) {
@@ -706,5 +720,6 @@ export function calculateBucketsFromPostgres(allData, filterProperties, filterSe
         };
     });
 
-    return { buckets: result, globalValidDbIds };
+    return { buckets: result, globalValidDbIds, matches,
+        coverage: { unresolvedRows: _facetCache.prepared.unresolved.filter(urn => !hiddenSet.has(urn)).length } };
 }

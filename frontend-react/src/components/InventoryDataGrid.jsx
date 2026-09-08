@@ -2,6 +2,8 @@ import { INVENTORY_IDENTITY_FORMAT, INVENTORY_INTERNAL_KEYS, withInventoryIdenti
 import React, { useState, useEffect, useRef, useCallback, memo, useMemo } from 'react';
 import { urlInventario, enlaceCompartido } from '../utils/enlaceCompartido';
 import * as XLSX from 'xlsx';
+import { filterInventoryRows, refineInventorySelection } from '../lib/filtersCore.js';
+import { openInventoryFilterPopout } from '../lib/inventoryFilterPopout.js';
 import { apiFetch } from '../utils/apiFetch';
 import ColumnConfiguratorModal from './ColumnConfiguratorModal';
 import { leerInventoryConfig, fijarInventoryConfig, columnasParaElGrid, columnasDesdeElGrid } from '../lib/inventoryConfig';
@@ -180,7 +182,7 @@ const InventoryRow = memo(({ row, columns, index, onRowClick, isHighlighted, top
 });
 InventoryRow.displayName = 'InventoryRow';
 
-const InventoryDataGrid = ({ activeModelUrn = 'global', dynamicFilterBuckets, filterSelections, hiddenModelUrns = [], onClose }) => {
+const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProgress, isolatedExtIds: initialIsolatedExtIds = null, onClose }) => {
     const [flattenedData, setFlattenedData] = useState([]);
     const [rawData, setRawData] = useState([]); // Unfiltered data from DB
     const [columns, setColumns] = useState([]);
@@ -204,7 +206,7 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', dynamicFilterBuckets, fi
         setFlattenedData([]);
         setCheckedIds(new Set());
         setLocalSelIds(null);
-        setIsolatedExtIds(null);
+        setIsolatedExtIds(initialIsolatedExtIds);
         setActiveSelectionFilter(null);
         setHighlightedDbId(null);
         setInventoryError(null);
@@ -342,13 +344,13 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', dynamicFilterBuckets, fi
     }, [flattenedData, containerHeight, followSelection]);
 
     // (C) Visor 3D Isolation → Tabla (multi-select / isolate sync)
-    const [isolatedExtIds, setIsolatedExtIds] = useState(null); // null = no isolation active
+    const [isolatedExtIds, setIsolatedExtIds] = useState(() => initialIsolatedExtIds); // null = no isolation active
     const [localSelIds, setLocalSelIds] = useState(null); // RAW selection from 3D (no filter yet)
     const [activeSelectionFilter, setActiveSelectionFilter] = useState(null); // The actual filter applied by the button
 
     useEffect(() => {
         const handleIsolationSync = (e) => {
-            const { isolatedExtIds: ids } = e.detail;
+            const ids = e.detail.elementKeys || e.detail.isolatedExtIds;
             if (!ids || ids.length === 0) {
                 // Isolation cleared — restore full view
                 setIsolatedExtIds(null);
@@ -361,7 +363,7 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', dynamicFilterBuckets, fi
         };
 
         const handleSelectionSync = (e) => {
-            const { selectedExtIds: ids } = e.detail;
+            const ids = e.detail.elementKeys || e.detail.selectedExtIds;
             if (!ids || ids.length === 0) {
                 setLocalSelIds(null);
             } else {
@@ -555,110 +557,21 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', dynamicFilterBuckets, fi
         return () => { isMounted = false; };
     }, [activeModelUrn, inventoryRevision]);
 
-    // React to hiddenModelUrns: filter out rows from hidden models
+    // Global membership comes exclusively from FilterResult, even with the
+    // panel closed. Sync and Assets only refine that result locally.
     useEffect(() => {
-        if (rawData.length === 0) return;
-        if (!hiddenModelUrns || hiddenModelUrns.length === 0) {
-            setFlattenedData(rawData);
-        } else {
-            // Build a Set with both raw and safe URN variants for matching
-            const hiddenSet = new Set();
-            hiddenModelUrns.forEach(u => {
-                hiddenSet.add(u);
-                hiddenSet.add(String(u).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''));
-            });
-            setFlattenedData(rawData.filter(row => {
-                const urn = row.source_urn || row.model_urn;
-                const safeUrn = String(urn).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-                return !hiddenSet.has(urn) && !hiddenSet.has(safeUrn);
-            }));
-        }
-    }, [rawData, hiddenModelUrns]);
-
-    // ═══════════════════════════════════════════════════════════
-    // SINCRONIZACIÓN BIDIRECCIONAL: Filtros + Isolation → Inventory
-    // Prioridad: Isolation 3D > Filtros laterales > Todo
-    // ═══════════════════════════════════════════════════════════
-    useEffect(() => {
-        if (rawData.length === 0) return;
-
-        // Helper: aplicar filtro de modelos ocultos
-        const applyHiddenFilter = (data) => {
-            if (!hiddenModelUrns || hiddenModelUrns.length === 0) return data;
-            const hiddenSet = new Set();
-            hiddenModelUrns.forEach(u => {
-                hiddenSet.add(u);
-                hiddenSet.add(String(u).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''));
-            });
-            return data.filter(row => {
-                const urn = row.source_urn || row.model_urn;
-                const safeUrn = String(urn).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-                return !hiddenSet.has(urn) && !hiddenSet.has(safeUrn);
-            });
-        };
-
-        // Helper: filtro "Assets only" — descarta nodos type/category legacy
-        // Nuevas extracciones ya no los traen, pero datos pre-existentes pueden tenerlos
         const applyAssetsFilter = (data) => {
             if (!showAssetsOnly) return data;
-            return data.filter(row => row._nodeType === 'instance');
+            return data.filter(row => (row._nodeType ?? row['__node__::__node_type__']
+                ?? row.__node_type__ ?? 'instance') === 'instance');
         };
 
-        // PRIORIDAD: Isolation activa desde el visor 3D O Filtro Manual
+        // PRIORIDAD: Isolation activa is a local refinement, never global truth.
         const isolationTarget = activeSelectionFilter || isolatedExtIds;
-
-        if (isolationTarget && isolationTarget.size > 0) {
-            const filtered = rawData.filter(row => isolationTarget.has(inventoryRowKey(row)) || isolationTarget.has(row.dbId));
-            setFlattenedData(applyAssetsFilter(applyHiddenFilter(filtered)));
-            window._lastHasActiveFilters = true;
-            console.log(`[Inventory] Isolation active: ${filtered.length}/${rawData.length} items`);
-            return;
-        }
-
-        // PRIORIDAD 2: Filtros del panel lateral
-        const hasActiveFilters = filterSelections && Object.keys(filterSelections).some(
-            key => filterSelections[key] && filterSelections[key].length > 0
-        );
-        window._lastHasActiveFilters = hasActiveFilters;
-
-        if (!hasActiveFilters) {
-            // Sin filtros ni isolation: mostrar todo
-            setFlattenedData(applyAssetsFilter(applyHiddenFilter(rawData)));
-            return;
-        }
-
-        // CON filtros activos: extraer los external_ids válidos de los buckets seleccionados
-        const validExtIds = new Set();
-        const buckets = dynamicFilterBuckets || window._lastCalculatedBuckets || {};
-
-        Object.entries(filterSelections).forEach(([propKey, selectedValues]) => {
-            if (!selectedValues || selectedValues.length === 0) return;
-            const bucket = buckets[propKey];
-            if (!bucket || !bucket.values) return;
-
-            selectedValues.forEach(val => {
-                const entry = bucket.values.find(v => v.value === val);
-                if (entry && entry.dbIds) {
-                    entry.dbIds.forEach(item => {
-                        const urn = item.modelUrn;
-                        const safeUrn = String(urn).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-                        const extIdDict = window.rosettaToExtId && (window.rosettaToExtId[urn] || window.rosettaToExtId[safeUrn]);
-                        if (extIdDict && extIdDict[item.id]) {
-                            validExtIds.add(extIdDict[item.id]);
-                        }
-                    });
-                }
-            });
-        });
-
-        if (validExtIds.size > 0) {
-            const filtered = rawData.filter(row => validExtIds.has(row.dbId));
-            setFlattenedData(applyAssetsFilter(applyHiddenFilter(filtered)));
-            console.log(`[Inventory] Filter sync: ${filtered.length}/${rawData.length} items match active filters`);
-        } else {
-            setFlattenedData([]);
-        }
-    }, [rawData, filterSelections, dynamicFilterBuckets, hiddenModelUrns, isolatedExtIds, activeSelectionFilter, showAssetsOnly]);
+        const globalRows = filterInventoryRows(rawData, filterResult, activeModelUrn);
+        const localRows = refineInventorySelection(globalRows, isolationTarget, rawData);
+        setFlattenedData(applyAssetsFilter(localRows));
+    }, [rawData, filterResult, activeModelUrn, isolatedExtIds, activeSelectionFilter, showAssetsOnly]);
 
     // React to column selection changes
     useEffect(() => {
@@ -931,97 +844,22 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', dynamicFilterBuckets, fi
                 {/* Window Controls (Undock / Close) */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '15px', paddingBottom: '8px' }}>
                     <button style={{ background:'none', border:'none', color:'#888', cursor:'pointer' }} title="Open in a new window" onClick={() => {
-                        // Generar HTML standalone del inventory para la ventana popup
-                        const data = flattenedData;
-                        const cols = columns;
-                        if (!data || data.length === 0) return;
-
-                        const popup = window.open('', 'InventoryPopout', 'width=1100,height=600,menubar=no,toolbar=no,location=no,status=no');
-                        if (!popup) { alert('Please allow popups for this site.'); return; }
-
-                        // Guardar referencia para comunicación
-                        window.__inventoryPopup = popup;
-
-                        const tableRows = data.map((row, i) => {
-                            const cells = cols.map(c => `<td title="${String(row[c.key] || '').replace(/"/g, '&quot;')}">${row[c.key] || ''}</td>`).join('');
-                            return `<tr class="${i % 2 === 0 ? 'even' : 'odd'}" data-extid="${row.dbId || ''}">${cells}</tr>`;
-                        }).join('');
-
-                        const headerCells = cols.map(c => `<th style="width:${c.width}px">${c.header}</th>`).join('');
-
-                        popup.document.write(`<!DOCTYPE html>
-<html><head><title>Inventory — BIM Visor</title>
-<style>
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { background: #16161a; color: #e8e8e8; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-size: 12.5px; }
-  .header { background: #23242a; padding: 8px 16px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #2a2b30; }
-  .header h1 { font-size: 11px; text-transform: uppercase; letter-spacing: 0.8px; color: #ccc; font-weight: 600; }
-  .info { font-size: 11px; color: #7a808b; padding: 6px 12px; background: #18191e; border-bottom: 1px solid #252630; }
-  .grid-wrap { overflow: auto; flex: 1; }
-  table { width: 100%; border-collapse: collapse; table-layout: fixed; }
-  th { background: #1e1f24; color: #999; font-weight: 600; font-size: 12px; padding: 6px 12px; text-align: left; border-bottom: 1px solid #2a2b30; border-right: 1px solid #333; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; position: sticky; top: 0; z-index: 1; }
-  td { padding: 2px 12px; border-bottom: 1px solid #32363e; border-right: 1px solid #2a2b30; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; height: 25px; }
-  tr.even { background: #1e1f24; }
-  tr.odd { background: #1a1b1f; }
-  tr:hover { background: #2a3040 !important; }
-  tr.highlighted { background: #2a4a8a !important; color: #fff; }
-  .container { display: flex; flex-direction: column; height: 100vh; }
-  .dock-btn { background: none; border: 1px solid #444; color: #aaa; padding: 4px 12px; border-radius: 4px; cursor: pointer; font-size: 11px; }
-  .dock-btn:hover { background: #333; color: #fff; }
-</style></head>
-<body>
-<div class="container">
-  <div class="header">
-    <h1>Inventory</h1>
-    <button class="dock-btn" onclick="window.opener && window.opener.postMessage({type:'inventory-dock'},'*'); window.close();">⬇ Dock back</button>
-  </div>
-  <div class="info">Showing ${data.length.toLocaleString()} items</div>
-  <div class="grid-wrap">
-    <table><thead><tr>${headerCells}</tr></thead>
-    <tbody>${tableRows}</tbody></table>
-  </div>
-</div>
-<script>
-  // Click en fila → seleccionar en el visor padre
-  document.querySelectorAll('tbody tr').forEach(tr => {
-    tr.addEventListener('click', () => {
-      document.querySelectorAll('tr.highlighted').forEach(r => r.classList.remove('highlighted'));
-      tr.classList.add('highlighted');
-      const extId = tr.dataset.extid;
-      if (extId && window.opener) {
-        window.opener.postMessage({ type: 'inventory-popout-select', extId }, '*');
-      }
-    });
-  });
-
-  // Recibir highlights del visor padre
-  window.addEventListener('message', (e) => {
-    if (e.data && e.data.type === 'inventory-popout-highlight') {
-      document.querySelectorAll('tr.highlighted').forEach(r => r.classList.remove('highlighted'));
-      const extId = e.data.extId;
-      const tr = document.querySelector('tr[data-extid="' + extId + '"]');
-      if (tr) { tr.classList.add('highlighted'); tr.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
-    }
-    if (e.data && e.data.type === 'inventory-popout-isolation') {
-      const ids = new Set(e.data.isolatedExtIds || []);
-      document.querySelectorAll('tbody tr').forEach(tr => {
-        if (ids.size === 0) { tr.style.display = ''; return; }
-        tr.style.display = ids.has(tr.dataset.extid) ? '' : 'none';
-      });
-    }
-  });
-</script>
-</body></html>`);
-                        popup.document.close();
-
-                        // Cerrar el panel inline
-                        if (onClose) onClose();
+                        openInventoryFilterPopout({ host:window,scopeId:activeModelUrn,columns,
+                            assetsOnly:showAssetsOnly,selection:activeSelectionFilter||isolatedExtIds,onClose });
                     }}><Icons.Undock/></button>
                     <button style={{ background:'none', border:'none', color:'#888', cursor:'pointer' }} onClick={() => onClose ? onClose() : window.dispatchEvent(new CustomEvent('close-inventory'))} title="Close panel"><Icons.Close/></button>
                 </div>
             </div>
 
             {inventoryError && <div role="alert" style={{ color: '#fecaca', background: '#4c1d24', padding: '8px 12px', fontSize: '12px' }}>{inventoryError}</div>}
+            <div role="status" style={{ padding: '4px 12px', fontSize: '12px' }}>
+                {!filterResult || filterResult.scopeId !== activeModelUrn || filterResult.status === 'pending'
+                    ? 'Filtros: esperando datos o cálculo'
+                    : filterResult.status !== 'ready'
+                        ? 'Filtros: ' + (filterResult.diagnostics?.[0]?.message || filterResult.diagnostics?.[0]?.code || filterResult.status)
+                        : filterResult.matches.length + ' coincidencias globales · ' + flattenedData.length + ' filas locales'}
+                {filterProgress?.phase === 'paused' ? ' · Aplicación visual pausada: ' + filterProgress.owner : ''}
+            </div>
             {/* Toolbar (Filters, Columns, Group rows...) */}
             <div style={{ display: 'flex', background: '#1c1d22', minHeight: '36px', alignItems: 'center', padding: '0 12px', borderBottom: checkedIds.size > 0 ? 'none' : '1px solid #252630', gap: '12px' }}>
                 <div style={{ display: 'flex', alignItems: 'center' }}>
@@ -1102,7 +940,8 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', dynamicFilterBuckets, fi
 
                         const isFiltered = activeSelectionFilter !== null || isolatedExtIds !== null;
                         const filterSize = activeSelectionFilter ? activeSelectionFilter.size : (isolatedExtIds ? isolatedExtIds.size : 0);
-                        const isSyncDisabled = mergedSyncIds && isFiltered && mergedSyncIds.size === filterSize;
+                        const isSyncDisabled = mergedSyncIds && isFiltered && mergedSyncIds.size === filterSize
+                            && [...mergedSyncIds].every(id => (activeSelectionFilter || isolatedExtIds)?.has(id));
 
                         return (
                             <div style={{ display: 'flex', alignItems: 'center', gap: '2px', marginRight: '4px', borderRight: '1px solid #333', paddingRight: '8px' }}>

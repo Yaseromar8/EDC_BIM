@@ -910,7 +910,7 @@ function App() {
           return {};
         });
       } else {
-        setIsolatedExtIds(new Set(ids));
+        setIsolatedExtIds(new Set(e.detail.elementKeys || ids));
         console.log(`[App.jsx] Isolation SET: ${ids.length} elements (sample: ${ids.slice(0, 2).join(', ')})`);
       }
       // Forward to popout window if open
@@ -3989,20 +3989,42 @@ function App() {
   const hasMoreProperties = selectedPropertyObjects.length > visiblePropertiesCount;
 
   const [dynamicFilterBuckets, setDynamicFilterBuckets] = useState({});
+  const [filterResult, setFilterResult] = useState(null);
+  const [filterProgress, setFilterProgress] = useState(null);
+  const filterState = useMemo(() => ({
+    scopeId: selectedProject?.id || 'global',
+    models: models.map(m => ({ urn: m.urn })),
+    filterProperties, filterSelections, filterColors,
+    schema: availableProperties, hiddenModelUrns,
+    customColors: window._customValueColors || {},
+  }), [selectedProject?.id, models, filterProperties, filterSelections, filterColors,
+    availableProperties, hiddenModelUrns]);
 
   // 1. Recibir los resultados del Motor APS
   useEffect(() => {
     const handleFiltersCalculated = (e) => {
-      setDynamicFilterBuckets(e.detail);
+      setFilterResult(e.detail);
+      setDynamicFilterBuckets(e.detail?.status === 'ready' ? e.detail.facets : {});
     };
-    window.addEventListener('filters-calculated', handleFiltersCalculated);
-    return () => window.removeEventListener('filters-calculated', handleFiltersCalculated);
+    const progress = e => setFilterProgress(e.detail);
+    const reset = () => { setFilterSelections({}); setFilterColors({}); };
+    const select = e => setFilterSelections(e.detail);
+    window.addEventListener('filter-result', handleFiltersCalculated);
+    window.addEventListener('filter-progress', progress);
+    window.addEventListener('filter-intent-reset', reset);
+    window.addEventListener('filter-intent-selection', select);
+    return () => {
+      window.removeEventListener('filter-result', handleFiltersCalculated);
+      window.removeEventListener('filter-progress', progress);
+      window.removeEventListener('filter-intent-reset', reset);
+      window.removeEventListener('filter-intent-selection', select);
+    };
   }, []);
 
   // 2. Disparar recálculos nativos sin colapsar React
   useEffect(() => {
-    emitirRecalculoDeFiltros({ filterProperties, filterSelections, schema: availableProperties }, 'efecto de filtros');
-  }, [filterProperties, filterSelections, availableProperties]);
+    emitirRecalculoDeFiltros(filterState, 'intención Filters');
+  }, [filterState]);
 
   const togglePropertyAll = useCallback((propId) => {
     const bucket = dynamicFilterBuckets[propId];
@@ -4113,47 +4135,6 @@ function App() {
     return () => window.removeEventListener('viewer-schema-extracted', handleSchemaExtracted);
   }, [filterProperties, filterSelections]);
 
-  // Recalcular nativamente las cubetas cuando cambia la selección de filtros o de las categorías base
-  useEffect(() => {
-    if (availableProperties.length === 0) return; // No disparar si no ha cargado el esquema
-    
-    const triggerRecalc = () => {
-        console.log(`[REACT] ⏱️ ${performance.now().toFixed(2)}ms - Cambio detectado: Disparando recalculate-filters hacia LMV`);
-        emitirRecalculoDeFiltros({ filterProperties, filterSelections, schema: availableProperties }, 'cambio de filtros/esquema');
-    };
-
-    triggerRecalc();
-
-    // Cuando un nuevo modelo termina de indexar su árbol (rosetta-ready), forzar recálculo
-    // para que la UI incluya sus elementos en los buckets de filtros.
-    window.addEventListener('rosetta-ready', triggerRecalc);
-    return () => window.removeEventListener('rosetta-ready', triggerRecalc);
-  }, [filterProperties, filterSelections, availableProperties, hiddenModelUrns]);
-
-  // Guardar en la UI las nuevas cubetas calculadas asincrónicamente por el Viewer LMV Worker
-  useEffect(() => {
-    const handleFiltersCalculated = (e) => {
-      console.log(`[REACT] ⏱️ ${performance.now().toFixed(2)}ms - Recibido: filters-calculated - Actualizando UI de Paneles`);
-      setDynamicFilterBuckets(e.detail);
-
-      // AUTO-INYECCIÓN VISTA GUARDADA: Si al terminar de cargar los buckets hay colores activos, reinstanciarlos
-      Object.keys(filterColors).forEach(propId => {
-          if (filterColors[propId]) {
-              const selectedValues = filterSelections[propId] || [];
-              window.dispatchEvent(new CustomEvent('theme-property-bucket', {
-                  detail: {
-                      propId,
-                      values: selectedValues.length > 0 ? selectedValues : null,
-                      active: true,
-                      paletteName: 'Classic Tandem'
-                  }
-              }));
-          }
-      });
-    };
-    window.addEventListener('filters-calculated', handleFiltersCalculated);
-    return () => window.removeEventListener('filters-calculated', handleFiltersCalculated);
-  }, [filterColors, filterSelections]);
 
   // --- RENDER: LOGIN -> LANDING -> APP ---
   // Auth robusto: mostramos login si NO hay sesion. El gateway (frontend-docs)
@@ -4633,6 +4614,7 @@ function App() {
                   <Viewer
                     key={selectedProject?.id || 'viewer-default'}
                     models={models}
+                    filterState={filterState}
                     hiddenModelUrns={hiddenModelUrns}
                     sprites={sprites}
                     showSprites={showSprites}
@@ -4673,6 +4655,18 @@ function App() {
                     hideToolbar={activePanel === 'progress'}
                   />
                   </ErrorBoundary>
+                )}
+
+                {!compareMode && models.length > 0 && (
+                  <div role="status" style={{position:'absolute',top:8,left:8,zIndex:5,background:'#20242ddd',color:'#fff',padding:'5px 9px',fontSize:12,pointerEvents:'none'}}>
+                    {!filterResult || filterResult.scopeId !== filterState.scopeId || filterResult.status === 'pending'
+                      ? 'Filtros: esperando datos/cálculo. La vista anterior aún no representa la nueva consulta.'
+                      : filterResult.status !== 'ready'
+                        ? 'Filtros no aplicados: ' + (filterResult.diagnostics?.[0]?.message || filterResult.diagnostics?.[0]?.code || filterResult.status)
+                        : (filterResult.hasActivePredicates ? filterResult.matches.length + ' coincidencias' : 'Sin predicados activos')
+                          + (filterProgress?.revision !== filterResult.revision || filterProgress?.phase !== 'visually-applied' ? ' · aplicación visual pendiente/pausada' : '')}
+                    {filterProgress?.revision === filterResult?.revision && filterProgress?.phase === 'paused' ? ' · control visual: ' + filterProgress.owner : ''}
+                  </div>
                 )}
 
                 {/* 📈 Perfil longitudinal interactivo (sincronizado con la PK 3D) */}
@@ -4990,6 +4984,8 @@ function App() {
                   </div>
                   <InventoryDataGrid
                     activeModelUrn={selectedProject?.id || 'global'}
+                    filterResult={filterResult}
+                    filterProgress={filterProgress}
                     dynamicFilterBuckets={dynamicFilterBuckets}
                     filterSelections={filterSelections}
                     hiddenModelUrns={hiddenModelUrns}

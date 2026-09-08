@@ -1,11 +1,12 @@
 /**
- * B1: reproducciones de interacciones, NO implementacion de Filters.
+ * Reproducciones históricas B1, reancladas al producto B3 autorizado.
  * Ejecutar: node frontend-react/pruebas/filtersCore.interacciones.prueba.mjs
  *
  * Extrae fragmentos del producto sin importar/montar App ni tocar DB/red.
  * Los expected representan el contrato correcto, no el defecto del baseline.
  * KNOWN_FAIL exige una firma defectuosa exacta; cualquier otro fallo es
- * UNEXPECTED_FAIL. Una correccion observada es UNEXPECTED_PASS, no se oculta.
+ * UNEXPECTED_FAIL. Los cuatro defectos B3 corregidos exigen el expected original;
+ * sólo búsqueda/DnD B4 conservan KNOWN_FAIL y detectan UNEXPECTED_PASS.
  * Exit 1 con cualquier KNOWN_FAIL/resultado inesperado. Los controles sanos
  * se clasifican PASS. Esto NO es una prueba de React DOM, LMV GPU ni navegador.
  */
@@ -14,6 +15,7 @@ import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { resolve } from 'node:path';
+import { createFilterVisualDriver } from '../src/lib/filterVisualDriver.js';
 
 const repoRoot = fileURLToPath(new URL('../../', import.meta.url));
 const quietConsole = { log() {}, warn() {}, error() {} };
@@ -23,6 +25,8 @@ const sources = {
     grid: 'frontend-react/src/components/InventoryDataGrid.jsx',
     panel: 'frontend-react/src/components/TandemFilterPanel.jsx',
     modal: 'frontend-react/src/components/FilterConfiguratorModal.jsx',
+    driver: 'frontend-react/src/lib/filterVisualDriver.js',
+    bridge: 'frontend-react/src/lib/filterRuntimeBridge.js',
 };
 
 const { normalizeInventoryPreload } = await import('../src/lib/inventoryNormalizers.js');
@@ -108,21 +112,26 @@ async function colorScenario(src, { count, turnOff }) {
         _lastHasActiveFilters: false,
         dispatchEvent: event => emitted.push({ type: event.type, groups: event.detail.groups.length }),
     };
-    const body = between(src.viewer, '        const handleTheme = (e) => {', '        const handleReset = () => {');
-    const handleTheme = new Function('viewer', 'window', 'loadedModelsRef', 'console', 'performance', 'CustomEvent', 'setTimeout', 'clearTimeout',
-        `${body}\nreturn handleTheme;`)(viewer, fakeWindow, { current: { m1: model } }, quietConsole,
-        { now: () => 0 }, TestEvent, timers.setTimeout, timers.clearTimeout);
-    handleTheme(new TestEvent('theme-property-bucket', { detail: { propId: 'G::Estado', values: null, active: true } }));
+    // Exact same bucket, values, ids and timer boundary as the original case.
+    // Only the locator/argument adapter changes: Viewer now mounts this driver.
+    if (!src.viewer.text.includes('mountFiltersRuntime({') || !src.bridge.text.includes('createFilterVisualDriver({'))
+        throw new Error('SOURCE_DRIFT: production Viewer/driver connection missing');
+    const driver = createFilterVisualDriver({ viewer, models: () => [model], window: fakeWindow,
+        yieldFrame: () => new Promise(resolve => timers.setTimeout(resolve)) });
+    const result = { revision: 1, hasActivePredicates: false, matchesByModel: [], facets: fakeWindow._lastCalculatedBuckets };
+    const job = driver.apply(result, { filterColors: { 'G::Estado': true } }, () => true);
     const afterFirstChunk = painted.size;
     if (afterFirstChunk !== Math.min(count, 5000) || timers.size !== 1) {
         throw new Error(`FIXTURE_DRIFT: primer lote=${afterFirstChunk}, timers=${timers.size}`);
     }
     if (turnOff) {
-        handleTheme(new TestEvent('theme-property-bucket', { detail: { propId: 'G::Estado', active: false } }));
+        driver.cancelColors(true);
         if (painted.size !== 0) throw new Error('FIXTURE_DRIFT: apagar no limpio el primer lote');
     }
     const eventBoundary = emitted.length;
     await timers.drain();
+    await job;
+    driver.dispose();
     return {
         afterFirstChunk,
         paintedAfterDrain: painted.size,
@@ -205,34 +214,34 @@ function dragScenario(src) {
 
 function syncScenario(src) {
     const expression = matchOne(src.grid, /const isSyncDisabled = ([^;]+);/g);
-    const check = new Function('mergedSyncIds', 'isFiltered', 'filterSize', `return ${expression};`);
-    return { disabledForReplacement: check(new Set(['B']), true, new Set(['A']).size) };
+    const check = new Function('mergedSyncIds', 'isFiltered', 'filterSize', 'activeSelectionFilter', 'isolatedExtIds', `return ${expression};`);
+    return { disabledForReplacement: check(new Set(['B']), true, new Set(['A']).size, new Set(['A']), null) };
 }
 
 const definitions = [
     {
-        id: 'P0-6-color-off-no-late-write', defect: 'P0-6',
-        evidence: ['Viewer.jsx:1549 handleTheme / processGPUBuffer'],
+        id: 'P0-6-color-off-no-late-write', defect: 'P0-6', fixedIn: 'B3',
+        evidence: ['Viewer.jsx mountFiltersRuntime → filterVisualDriver.apply/cancelColors'],
         limitation: 'LMV y timers simulados; no prueba GPU ni navegador.',
         expected: { afterFirstChunk: 5000, paintedAfterDrain: 0, nonemptyEventsAfterBoundary: 0 },
         knownActual: { afterFirstChunk: 5000, paintedAfterDrain: 1, nonemptyEventsAfterBoundary: 1 },
         run: src => colorScenario(src, { count: 5001, turnOff: true }),
     },
     {
-        id: 'control-color-completion', evidence: ['Viewer.jsx:1621 processGPUBuffer'],
+        id: 'control-color-completion', evidence: ['filterVisualDriver.apply'],
         limitation: 'Control positivo del mismo mock, sin cancelacion.',
         expected: { afterFirstChunk: 1, paintedAfterDrain: 1, nonemptyEventsAfterBoundary: 1 },
         run: src => colorScenario(src, { count: 1, turnOff: false }),
     },
     {
-        id: 'P0-7-assets-only-preload', defect: 'P0-7',
+        id: 'P0-7-assets-only-preload', defect: 'P0-7', fixedIn: 'B3',
         evidence: ['App.jsx:2495 preload', 'InventoryDataGrid.jsx:579 applyAssetsFilter'],
         limitation: 'Fixture de una instancia; normalizador de categoria stub, fuera del caso.',
         expected: { before: 1, afterAssetsOnly: 1 }, knownActual: { before: 1, afterAssetsOnly: 0 },
         run: preloadAssetsScenario,
     },
     {
-        id: 'P0-7-isolation-before-inventory-mount', defect: 'P0-7',
+        id: 'P0-7-isolation-before-inventory-mount', defect: 'P0-7', fixedIn: 'B3',
         evidence: ['InventoryDataGrid.jsx:181 firma', 'InventoryDataGrid.jsx:325 estado/listeners'],
         limitation: 'Hooks y bus minimos: prueba de inicializacion/prop/listener, no montaje React DOM.',
         expected: { isolatedExtIds: ['x'] }, knownActual: { isolatedExtIds: null },
@@ -257,7 +266,7 @@ const definitions = [
         run: dragScenario,
     },
     {
-        id: 'P1-sync-equal-size-different-members', defect: 'P1-sync', evidence: ['InventoryDataGrid.jsx:1094 isSyncDisabled'],
+        id: 'P1-sync-equal-size-different-members', defect: 'P1-sync', fixedIn: 'B3', evidence: ['InventoryDataGrid.jsx isSyncDisabled'],
         limitation: 'Predicado real de habilitacion, no interaccion de boton en navegador.',
         expected: { disabledForReplacement: false }, knownActual: { disabledForReplacement: true },
         run: syncScenario,
@@ -276,8 +285,8 @@ export async function runInteractionChecks() {
             const actual = await run(src);
             const matchesContract = isDeepStrictEqual(actual, definition.expected);
             const status = matchesContract
-                ? (definition.defect ? 'UNEXPECTED_PASS' : 'PASS')
-                : (definition.defect && isDeepStrictEqual(actual, knownActual) ? 'KNOWN_FAIL' : 'UNEXPECTED_FAIL');
+                ? (definition.defect && !definition.fixedIn ? 'UNEXPECTED_PASS' : 'PASS')
+                : (definition.defect && !definition.fixedIn && isDeepStrictEqual(actual, knownActual) ? 'KNOWN_FAIL' : 'UNEXPECTED_FAIL');
             cases.push({ ...metadata, status, actual });
         } catch (error) {
             cases.push({ ...metadata, status: 'UNEXPECTED_FAIL', error: String(error) });
@@ -286,10 +295,11 @@ export async function runInteractionChecks() {
     const summary = { total: cases.length, PASS: 0, KNOWN_FAIL: 0, UNEXPECTED_FAIL: 0, UNEXPECTED_PASS: 0 };
     for (const result of cases) summary[result.status]++;
     return {
-        suite: 'filtersCore.interacciones B1',
+        suite: 'filtersCore.interacciones B3 (B4 visible)',
         limits: 'Fragmentos reales con mocks locales; sin DB/red/React DOM/LMV GPU. No certifica UI integrada ni Saved Views.',
         sources: Object.fromEntries(Object.values(src).map(({ path, sha256 }) => [path, sha256])),
         summary,
+        b3Green: summary.PASS === 6 && summary.KNOWN_FAIL === 2 && !summary.UNEXPECTED_FAIL && !summary.UNEXPECTED_PASS,
         cases,
         exitCode: summary.KNOWN_FAIL || summary.UNEXPECTED_FAIL || summary.UNEXPECTED_PASS ? 1 : 0,
     };

@@ -57,6 +57,10 @@ local observada `origin/main` es `cf7a845`; no se hizo fetch ni push.
 
 Historia funcional hasta el baseline:
 
+Posteriores declarados adicionales: `0cf10a5` (handoff), `b7014be` (bloqueo),
+`71d23c7` (corrección B2 autorizada) y el commit funcional de cierre B3 descrito
+en STATUS. Ninguno se desplegó ni cambia el CODE BASELINE de producción.
+
 ```
 3e413cd feat(saved-views/e-7): make the v2 pipeline the default path
 e3290ec feat(saved-views/e-6): capture and save canonical v2 views
@@ -403,6 +407,16 @@ Propios de esta revisión: `docs/AI_WORKSTATE.md` y
 documental. No hay cambios funcionales propios. Los cinco M ajenos y los
 untracked declarados permanecen UNRELATED / PROTECTED / PRESERVE.
 
+### Unidad B3 incorporada — posterior a 71d23c7
+
+El WIP propio anterior entra en el commit funcional B3. Archivos y fitness en
+[filters/B3_RESULTADOS.md](filters/B3_RESULTADOS.md).
+NO queda WIP propio B3 esperado después del commit. Se conservan exactamente
+los cinco M ajenos y todos los untracked históricos de la tabla anterior.
+En Viewer sólo quedan sin commit las **48 líneas ViewerFacade** ajenas.
+Los dos bancos históricos se adaptaron con autorización explícita:
+expected/datos originales intactos; sólo dos KNOWN_FAIL de B4.
+
 ## FROZEN / DO NOT REOPEN
 
 - **Saved Views 2.0 está cerrado.** No se reabre la arquitectura salvo
@@ -467,40 +481,41 @@ Observaciones reales, ya conocidas y aceptadas. Ninguna bloquea nada.
    propietario (7-sep-2026). No bloquea B1.
 ## CURRENT TASK
 
-**FILTERS CORE — B3**
+**NONE**
 
 ## STATUS
 
-**B1 = CLOSED. B2 INTEGRATION REVIEW PASS. B2 = CLOSED.**
-Las tres correcciones de frontera autorizadas y sus fitness permanentes pasan.
-Evidencia nueva: [filters/B2_INTEGRATION_REVIEW.md](filters/B2_INTEGRATION_REVIEW.md).
-El informe [filters/B2_REVIEW_B3_BLOCKED.md](filters/B2_REVIEW_B3_BLOCKED.md)
-queda como evidencia histórica, no como bloqueo vigente.
-B3 autorizado, implementación por comenzar. No B4/push/deploy/producción.
+**B1 = CLOSED. B2 = CLOSED (71d23c7). B3 = CODE/TEST GREEN.**
+Resultado único revisionado conectado a Viewer/Inventory/popout.
+Todos los casos B3 históricos cumplen el mismo expected original.
+Sólo permanecen dos KNOWN_FAIL B4 (búsqueda/DnD), cero resultados inesperados
+en los casos sanos. Mutante integrado muerto sin modificar la mutación.
+Evidencia: [filters/B3_RESULTADOS.md](filters/B3_RESULTADOS.md).
+[filters/B3_WIP_VALIDATION.md](filters/B3_WIP_VALIDATION.md) es historia del
+bloqueo ya resuelto, NO la instrucción vigente.
+B3 entra en el commit funcional descendiente de 71d23c7 titulado
+`feat(filters): unify revisioned results across viewer and inventory`.
+Consultar HEAD real; no exigir un hash autorreferencial dentro del documento.
 
 ## EXACT NEXT ACTION
 
-Implementar B3: FilterState → DatasetSnapshot → FilterResult(revision) →
-Viewer + Inventory. Una autoridad por revisión, no-filter/zero/pending/error,
-cancelación de trabajo viejo, máscaras propias y puente live edit sin detail.
-Mantener los KNOWN FAIL de B4 fuera de alcance salvo corrección legítima
-demostrada, y no tocar contrato/serialización/capturador ni arquitectura V2.
+Esperar instrucciones del propietario. **B4 NOT AUTHORIZED / NOT STARTED.**
+No programar, no reabrir B1/B2/V2, no push ni deploy.
+CODE/TEST GREEN no equivale a validación de host/LMV/GPU ni a producción.
 
-### [WIP HANDOFF] — B2 CLOSED, continúa B3 sin nueva autorización
+### Cierre de unidad B3
 
-~~~text
-[WIP HANDOFF]
-TAREA:                FILTERS CORE — B3
-IMPLEMENTADO:         B2 INTEGRATION REVIEW PASS/CLOSED: preflight cualificado, homonimia dataset/schema y huella exacta Rosetta; B1 cerrado intacto
-PENDIENTE:            B3 resultado autoritativo, revisión/cancelación, Viewer/Inventory, eventos/color; fitness, mutantes, build y regresiones
-ARCHIVOS MODIFICADOS: Propios B2: frontend-react/src/lib/filterPropertyIdentity.js; frontend-react/src/lib/preflightFiltros.js; frontend-react/src/aps/utils/model.js; frontend-react/src/App.jsx; un hunk de frontend-react/src/components/Viewer.jsx; frontend-react/pruebas/filtersCore.adversarial.prueba.mjs; frontend-react/pruebas/filtersCore.adversarialMutants.prueba.mjs; docs/filters/B2_INTEGRATION_REVIEW.md; docs/AI_WORKSTATE.md. Ajenos: cinco M y todos los untracked declarados; ViewerFacade/hunks históricos excluidos del commit
-TESTS EJECUTADOS:     node frontend-react/pruebas/<nombre>.prueba.mjs: adversarial 10/10; mutantes 3/3; filtersCore 39 PASS; normalizadores 11/11; boundary 6/6; restaurarVistaV2 150/150; capturarVistaV2 63/63; savedViewV2 111/111; inventoryIdentity 17/17; inventoryConfig 20/20; frenteDeVistas 20/20; lob4dIdentidad 26/26; interacciones e integradas 2 PASS+6 KNOWN FAIL cada una; build alterno exit 0 en 10,90 s
-TESTS PENDIENTES:     B3 todavía no implementado; navegador/LMV/GPU y backend no ejecutados en esta corrección frontend
-FALLO CONOCIDO:       Seis KNOWN FAIL de interacciones intactos; live edit emite recalculate-filters sin detail (B3); coste caliente sintético sube 86,83→154,37 ms por validación exacta, documentado
-NEXT EXACT ACTION:    Implementar controlador/resultado B3 y conectar los consumidores reales, sin pedir otra autorización
-DO NOT TOUCH:         WIP ajeno, B1 CLOSED, formato/capturador/contrato/datos Saved Views V1/V2, esquema backend, arquitectura restore, LMV7/Rosetta contract, 4D/5D/AR, compare, ViewerFacade, B4/exclusividad de color, producción
-COMMIT/HEAD REF:      b7014be124d0ba990fa3e8943d91ab1bd5e201cb (antes del commit funcional B2)
-~~~
+- Runtime 17/17, mutantes runtime 3/3, popout 1 escenario/16 aserciones.
+- Interacciones e integradas: cada uno 6 PASS + 2 KNOWN_FAIL B4, cero
+  inesperados; mutante integrado 1/1. Mantienen exit 1 del banco completo
+  por B4; `b3Green=true` indica la puerta autorizada B3.
+- Adversarial 10/10, mutantes B2 3/3, core 39 PASS, normalizadores 11/11,
+  boundary 6/6; restore 150/150, captura 63/63, V2 111/111; inventoryIdentity
+  17/17, inventoryConfig 20/20, frenteDeVistas 20/20, lob4dIdentidad 26/26.
+- Build normal alterno exit 0 (516 módulos/11,19 s); build final con Viewer
+  del índice sin las 48 líneas ajenas exit 0 (515 módulos/9,99 s).
+- WIP ajeno preservado; ningún cambio de DB, .env, backend ni producción.
+- No quedan tareas activas de B3. Host real no ejecutado; ver límites del informe.
 
 ## TEST / BUILD BASELINE
 
