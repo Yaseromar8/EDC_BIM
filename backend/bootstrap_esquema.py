@@ -52,6 +52,10 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+# Arriba y no dentro de la funcion: si este fichero faltara en un despliegue,
+# que se sepa al importar y no en mitad de la comprobacion.
+from canonico_sql import canonico  # noqa: E402
+
 
 def _rutinas():
     """(nombre, funcion) en orden de dependencia. Import perezoso: algunos modulos
@@ -470,6 +474,26 @@ _CONDICIONALES = (
 )
 
 
+# FAMILIAS QUE SE COMPARAN POR FORMA, NO POR TEXTO.
+# Solo las restricciones, y solo porque `pg_dump | pg_restore` reescribe la
+# forma deparseada de algunos CHECK sin cambiar lo que significan. Medido en P1
+# el 8-sep-2026: una copia FIEL de produccion --mismos datos, mismas reglas,
+# comprobado tabla a tabla-- se rechazaba al arrancar, y con `start` siendo
+# `--verificar && gunicorn` eso es un servicio que no levanta sobre su propia
+# copia. El respaldo servia; la vuelta no.
+#
+# El detalle de que se normaliza y que NO --los parentesis que agrupan no se
+# tocan-- esta en canonico_sql.py. Tablas, columnas, indices, funciones y
+# extensiones se siguen comparando por texto exacto: esto no las afecta.
+_POR_FORMA = ('restriccion',)
+
+
+def _clave(tipo, nombre):
+    """Con que se compara este objeto. El nombre original se conserva aparte,
+    porque es lo que se imprime y lo que mira `_exigible`."""
+    return canonico(nombre) if tipo in _POR_FORMA else nombre
+
+
 def _exigible(tipo, nombre):
     """¿Este objeto hace falta con la configuracion de AHORA?
 
@@ -557,8 +581,10 @@ def verificar():
         if esperadas_tablas:
             esperado['tabla'] |= esperadas_tablas
         for tipo in _TIPOS:
-            faltan_por_tipo[tipo] = sorted(n for n in (esperado[tipo] - presente[tipo])
-                                           if _exigible(tipo, n))
+            formas = {_clave(tipo, n) for n in presente[tipo]}
+            faltan_por_tipo[tipo] = sorted(n for n in esperado[tipo]
+                                           if _clave(tipo, n) not in formas
+                                           and _exigible(tipo, n))
 
     for tipo in _TIPOS:
         if tipo not in faltan_por_tipo:
