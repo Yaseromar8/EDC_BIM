@@ -55,6 +55,20 @@ import { BackgroundTask } from '@capawesome/capacitor-background-task';
 import { Network } from '@capacitor/network';
 
 // =====================================================================
+// Con qué grupos arranca el panel de Filtros.
+//
+// `Standard::Sources` NO está, y es a propósito: el bloque `Sources` de arriba
+// ya es la lista de fuentes, con sus nombres de fichero. Tenerlo además como
+// grupo de facetas mostraba lo mismo dos veces, y abajo en crudo —URNs en
+// base64 que se truncan justo por donde se diferencian—. Tandem arranca con
+// Sources + Revit Categories, y esto se alinea con eso.
+//
+// Sigue disponible en ⚙ Configurar para quien lo quiera, la lista blanca de
+// abajo impide que se caiga si alguien lo eligió, y cada Saved View restaura su
+// propia lista de propiedades.
+const FILTROS_POR_DEFECTO = ['Standard::Revit Category'];
+
+// =====================================================================
 // NORMALIZACIÓN DE CATEGORÍAS REVIT (ES → EN)
 // Revit exporta categorías en el idioma del template.
 // Este mapa unifica las categorías en español a su equivalente inglés
@@ -962,7 +976,7 @@ function App() {
   const [documentsModalOpen, setDocumentsModalOpen] = useState(false);
   const [filterConfiguratorOpen, setFilterConfiguratorOpen] = useState(false);
   const [availableProperties, setAvailableProperties] = useState([]);
-  const [filterProperties, setFilterProperties] = useState(['Standard::Sources', 'Standard::Revit Category']);
+  const [filterProperties, setFilterProperties] = useState(FILTROS_POR_DEFECTO);
 
   const [filterSelections, setFilterSelections] = useState({});
 
@@ -2135,13 +2149,13 @@ function App() {
 
       if (sanitized.length) return sanitized;
       // Default fallback
-      return ['Standard::Sources', 'Standard::Revit Category'];
+      return FILTROS_POR_DEFECTO;
     });
   }, [availableProperties]);
 
   const resetFiltersToDefault = useCallback(() => {
     // Reset to hardcoded defaults
-    setFilterProperties(['Standard::Sources', 'Standard::Revit Category']);
+    setFilterProperties(FILTROS_POR_DEFECTO);
   }, []);
 
   useEffect(() => {
