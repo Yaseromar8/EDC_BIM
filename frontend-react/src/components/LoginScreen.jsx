@@ -29,6 +29,7 @@ const T = {
         password: 'Contraseña',
         ver: 'Mostrar contraseña',
         ocultar: 'Ocultar contraseña',
+        recordar: 'Mantener la sesión 30 días en este equipo',
         entrar: 'Ingresar',
         entrando: 'Verificando…',
         despertando: 'El servidor estaba en reposo y está arrancando. Puede tardar hasta un minuto.',
@@ -83,6 +84,7 @@ const T = {
         password: 'Password',
         ver: 'Show password',
         ocultar: 'Hide password',
+        recordar: 'Keep me signed in on this device for 30 days',
         entrar: 'Sign in',
         entrando: 'Checking…',
         despertando: 'The server was asleep and is starting up. This can take up to a minute.',
@@ -170,6 +172,7 @@ const LoginScreen = ({ onLogin }) => {
     // y para poder entrar solo tras restablecer la contraseña.
     const [correo, setCorreo] = useState(() => correoDeInvitacion(invitacion || tokenReset));
     const [clave, setClave] = useState('');
+    const [recordar, setRecordar] = useState(false);
     const [verClave, setVerClave] = useState(false);
     const [nombre, setNombre] = useState('');
     const [clave2, setClave2] = useState('');
@@ -234,7 +237,7 @@ const LoginScreen = ({ onLogin }) => {
     const acceder = async (e) => {
         e.preventDefault();
         if (enviando || !correo.trim() || !clave) return;
-        const { ok, estado, datos } = await pedir('/api/auth/login', { email: correo.trim(), password: clave });
+        const { ok, estado, datos } = await pedir('/api/auth/login', { email: correo.trim(), password: clave, recordar });
         if (ok && datos.requiere_2fa) {
             // NO se entra: la contraseña solo ha ganado el derecho a que le
             // pidan el código. Se limpia la clave para no dejarla en memoria
@@ -310,7 +313,7 @@ const LoginScreen = ({ onLogin }) => {
         });
         if (ok) {
             // La contraseña ya cambió; se entra con ella para no pedirla dos veces.
-            const acceso = await pedir('/api/auth/login', { email: correo.trim(), password: clave });
+            const acceso = await pedir('/api/auth/login', { email: correo.trim(), password: clave, recordar });
             if (acceso.ok) { setEntrado(true); onLogin(acceso.datos); }
             else { window.history.replaceState({}, '', window.location.pathname); setPidiendoEnlace(false); }
         } else {
@@ -489,6 +492,18 @@ const LoginScreen = ({ onLogin }) => {
                             {error && <p className="cta-error">{error}</p>}
                             {despertando && <p className="cta-espera">{t.despertando}</p>}
                         </div>
+
+                        {/* MANTENER LA SESION. Opcional y por dispositivo: sin marcarla
+                            la sesion dura lo de siempre. La eleccion se manda al
+                            servidor, que es quien fija la caducidad; el cliente no
+                            decide cuanto vive su propia sesion. */}
+                        {!modo2fa && !modoRecuperar && !modoNuevaClave && !modoRegistro && (
+                            <label className="cta-recordar">
+                                <input type="checkbox" checked={recordar}
+                                    onChange={e => setRecordar(e.target.checked)} />
+                                <span>{t.recordar}</span>
+                            </label>
+                        )}
 
                         <button type="submit" className="cta-enviar" disabled={enviando || entrado}>
                             {enviando && <span className="cta-giro" aria-hidden="true" />}

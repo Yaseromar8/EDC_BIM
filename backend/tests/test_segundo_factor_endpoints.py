@@ -140,7 +140,13 @@ def entorno(monkeypatch):
         def __exit__(self, *a): return False
 
     monkeypatch.setattr(ra, 'get_db_connection', lambda: Conn())
-    monkeypatch.setattr(ra, 'create_session', lambda uid: f'sesion-de-{uid}')
+    # El doble sigue la firma de verdad: `create_session` acepta ahora un
+    # `recordar` opcional. Se anota para poder afirmar que la casilla de «30
+    # dias» llega de verdad al servidor, y no se queda en el formulario.
+    def _crear_sesion(uid, recordar=False):
+        estado['ultimo_recordar'] = bool(recordar)
+        return f'sesion-de-{uid}'
+    monkeypatch.setattr(ra, 'create_session', _crear_sesion)
 
     app = Flask(__name__)
 
@@ -200,6 +206,55 @@ def test_el_codigo_correcto_canjea_el_desafio_por_una_sesion(entorno):
     assert r.status_code == 200, r.get_json()
     assert r.get_json()['session_token'] == 'sesion-de-7'
     assert r.get_json()['email'] == 'ana@contratista.com'
+
+
+# ── La casilla de «mantener la sesion 30 dias» ─────────────────────────────
+#
+# La eleccion la toma el usuario en el formulario, pero quien fija la caducidad
+# es el servidor. Estas pruebas siguen el viaje del interruptor de punta a punta.
+
+def test_sin_marcar_la_casilla_la_sesion_es_la_de_siempre(entorno):
+    c, e, _ra = entorno
+    e['totp_activo'] = False
+    r = c.post('/api/auth/login', json={'email': 'ana@contratista.com', 'password': CLAVE})
+    assert r.status_code == 200, r.get_json()
+    assert e['ultimo_recordar'] is False, 'no pedirla no puede alargar la sesion'
+
+
+def test_marcar_la_casilla_pide_la_sesion_larga(entorno):
+    c, e, _ra = entorno
+    e['totp_activo'] = False
+    r = c.post('/api/auth/login',
+               json={'email': 'ana@contratista.com', 'password': CLAVE, 'recordar': True})
+    assert r.status_code == 200, r.get_json()
+    assert e['ultimo_recordar'] is True
+
+
+def test_la_casilla_sobrevive_al_segundo_factor(entorno):
+    # Con 2FA la sesion NO nace en la contrasena, nace al canjear el codigo. La
+    # eleccion viaja dentro del desafio, que va firmado: si se perdiera por el
+    # camino, marcar la casilla no serviria de nada justo en las cuentas mas
+    # protegidas, que son las que mas veces escriben el codigo.
+    c, e, _ra = entorno
+    desafio = c.post('/api/auth/login',
+                     json={'email': 'ana@contratista.com', 'password': CLAVE,
+                           'recordar': True}).get_json()['desafio']
+    r = c.post('/api/auth/2fa/verify', json={'desafio': desafio, 'codigo': _codigo_ahora()})
+    assert r.status_code == 200, r.get_json()
+    assert e['ultimo_recordar'] is True
+
+
+def test_el_cliente_no_puede_regalarse_la_sesion_larga_en_el_canje(entorno):
+    # El desafio va firmado y manda el. Mandar `recordar` suelto en el canje no
+    # debe conceder nada: si no, cualquiera se da 30 dias saltandose el
+    # formulario.
+    c, e, _ra = entorno
+    desafio = c.post('/api/auth/login',
+                     json={'email': 'ana@contratista.com', 'password': CLAVE}).get_json()['desafio']
+    r = c.post('/api/auth/2fa/verify',
+               json={'desafio': desafio, 'codigo': _codigo_ahora(), 'recordar': True})
+    assert r.status_code == 200, r.get_json()
+    assert e['ultimo_recordar'] is False, 'la eleccion solo vale si viene firmada'
 
 
 def test_desactivada_entre_la_password_y_el_canje_no_abre(entorno):

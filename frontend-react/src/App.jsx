@@ -655,25 +655,42 @@ function App() {
     if (!user) return;
     if (new URLSearchParams(window.location.search).get('sso_ticket')) return;
     let cancelado = false;
+    // SOLO UN 401 CIERRA LA SESION.
+    //
+    // Antes, este `.catch` se tragaba TODO: un corte de red, un tiempo agotado,
+    // un 500, un 502 mientras Render recicla un worker o despliega. Cualquiera
+    // de esas cosas borraba la sesion, y volvias al login con contrasena y
+    // codigo aunque tu sesion de la base siguiera intacta. Abrir el visor con el
+    // backend frio bastaba. Eso es lo que hacia que pidiera sesion «cada dia».
+    //
+    // Un fallo de red no dice NADA sobre tu sesion. Sobre ella solo tiene
+    // autoridad el servidor, y lo dice con un 401.
     apiFetch(`${BACKEND_URL}/api/auth/me`)
-      .then(r => (r.ok ? r.json() : Promise.reject(new Error('sesión no válida'))))
-      .then(u => {
-        if (cancelado || !u?.id) return;
+      .then(r => {
+        if (r.status === 401) return { sesionInvalida: true };
+        if (!r.ok) return null;          // problema del servidor, no de tu sesion
+        return r.json().then(u => ({ usuario: u }));
+      })
+      .then(res => {
+        if (cancelado || !res) return;
+        if (res.sesionInvalida) {
+          // Limpieza explícita en vez de llamar a handleLogout, que se declara
+          // más abajo: así no se depende del orden de definición.
+          localStorage.removeItem('visor_user');
+          localStorage.removeItem('visor_session_token');
+          localStorage.removeItem('visor_selectedProject');
+          setUser(null);
+          return;
+        }
+        const u = res.usuario;
+        if (!u?.id) return;
         if (u.role !== user.role || u.email !== user.email) {
           const fresco = { ...user, ...u };
           localStorage.setItem('visor_user', JSON.stringify(fresco));
           setUser(fresco);
         }
       })
-      .catch(() => {
-        if (cancelado) return;
-        // Limpieza explícita en vez de llamar a handleLogout, que se declara
-        // más abajo: así no se depende del orden de definición.
-        localStorage.removeItem('visor_user');
-        localStorage.removeItem('visor_session_token');
-        localStorage.removeItem('visor_selectedProject');
-        setUser(null);
-      });
+      .catch(() => { /* red caída o respuesta ilegible: la sesión NO se toca */ });
     return () => { cancelado = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

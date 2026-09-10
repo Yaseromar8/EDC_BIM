@@ -159,11 +159,27 @@ def hash_de_token(token):
     return hmac.new(_pimienta(), (token or '').encode(), hashlib.sha256).hexdigest()
 
 
-def create_session(user_id):
-    """Create a new session in the database and return the token."""
+# Duracion de la sesion. La corta es la de siempre; la larga solo se concede si
+# el usuario la pide EXPRESAMENTE en el login, marcando la casilla.
+#
+# Una sesion de 30 dias es aceptable aqui por una razon concreta: vive en la base
+# como fila, no como un token autocontenido. Cerrar sesion, desactivar al usuario
+# o expulsarlo la mata al instante, mismo dia 1 que dia 29. Con un JWT de 30 dias
+# no habria forma de retirarla y no la ofreceriamos.
+DIAS_SESION = 7
+DIAS_SESION_RECORDADA = 30
+
+
+def create_session(user_id, recordar=False):
+    """Create a new session in the database and return the token.
+
+    `recordar` alarga la sesion a 30 dias. Por defecto False: quien no lo pida
+    --y todas las llamadas que ya existian-- sigue con 7 dias exactos.
+    """
     from db import get_db_connection
     token = generate_session_token()
-    expires_at = datetime.utcnow() + timedelta(days=7)  # 7-day sessions
+    expires_at = datetime.utcnow() + timedelta(
+        days=DIAS_SESION_RECORDADA if recordar else DIAS_SESION)
     
     try:
         with get_db_connection() as conn:

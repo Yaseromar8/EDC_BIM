@@ -363,3 +363,23 @@
     line-height: 1.4;
     color: rgba(255, 255, 255, .55);
 }
+
+/* Casilla «mantener la sesión». Discreta: es una opción, no una llamada a la
+   acción, y no debe competir con el botón de entrar. */
+.cta-recordar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0 12px;
+  font-size: 13px;
+  color: var(--text-secondary, #9ca3af);
+  cursor: pointer;
+  user-select: none;
+}
+.cta-recordar input {
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  cursor: pointer;
+  accent-color: var(--cta-primary, #2d8fa5);
+}

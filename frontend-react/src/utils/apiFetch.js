@@ -72,7 +72,24 @@ export async function apiFetch(url, options = {}) {
     // EN MEDIO de la vista compartida, que se quedaba colgada cargando.
     const esVistaCompartida = typeof window !== 'undefined'
       && new URLSearchParams(window.location.search).has('shareView');
-    if (!isPublicAuth && !esVistaCompartida) {
+    // UN 401 NO SIEMPRE ES «NO TIENES SESION».
+    //
+    // Antes, cualquier 401 de cualquier ruta borraba la sesion entera y echaba
+    // al usuario a la pantalla de acceso -- con contrasena y segundo factor de
+    // nuevo-- aunque su sesion siguiera perfectamente viva. Bastaba con pedir
+    // algo a lo que esa cuenta no tiene derecho.
+    //
+    // El backend distingue y lo dice: `NO_TOKEN` e `INVALID_TOKEN` hablan de la
+    // sesion (auth_middleware.py:838-840); cualquier otro 401 habla de ESE
+    // recurso. Se cierra sesion solo con los primeros, o cuando el que responde
+    // es el propio comprobador de sesion, que es autoridad por definicion.
+    let deSesion = false;
+    try {
+      const cuerpo = await response.clone().json();
+      deSesion = !!cuerpo && (cuerpo.code === 'NO_TOKEN' || cuerpo.code === 'INVALID_TOKEN');
+    } catch { /* sin cuerpo JSON: no afirma nada sobre la sesion */ }
+    if (!deSesion && typeof url === 'string' && url.includes('/api/auth/me')) deSesion = true;
+    if (!isPublicAuth && !esVistaCompartida && deSesion) {
       console.warn('[apiFetch] 401 Unauthorized — session expired');
       clearSession();
       if (onUnauthorized) {

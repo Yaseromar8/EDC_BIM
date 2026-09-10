@@ -410,6 +410,9 @@ def login():
         data = request.get_json() or {}
         email = data.get('email')
         password = data.get('password')
+        # Casilla «mantener la sesion 30 dias». Opcional y por dispositivo: si no
+        # viene, la sesion dura lo de siempre.
+        recordar = bool(data.get('recordar'))
 
         if not email or not password:
             return jsonify({'error': 'Faltan credenciales'}), 400
@@ -462,7 +465,9 @@ def login():
                     registrar_evento('login_pide_2fa', email=email, user_id=user[0])
                     return jsonify({
                         'requiere_2fa': True,
-                        'desafio': emitir(PROPOSITO_2FA, {'uid': user[0]}),
+                        # La eleccion viaja DENTRO del desafio, que va firmado: el
+                        # cliente no puede regalarse 30 dias reenviandola a mano.
+                        'desafio': emitir(PROPOSITO_2FA, {'uid': user[0], 'recordar': recordar}),
                     }), 200
 
                 # A quien se le exige el segundo factor y no lo tiene puesto, se
@@ -491,7 +496,7 @@ def login():
                     'role': user[4],
                     'company': user[5],
                     'job_title': user[6],
-                    'session_token': create_session(user[0]),
+                    'session_token': create_session(user[0], recordar),
                     'segundo_factor_pendiente': _pendiente,
                 }), 200
             else:
@@ -1783,7 +1788,7 @@ def dfa_verify():
         registrar_evento('login_ok', email=fila[2], user_id=uid, detalle='con segundo factor')
         return jsonify({'id': fila[0], 'name': fila[1], 'email': fila[2], 'role': fila[3],
                         'company': fila[4], 'job_title': fila[5],
-                        'session_token': create_session(uid)}), 200
+                        'session_token': create_session(uid, bool(datos.get('recordar')))}), 200
     except Exception as e:
         print(f'[2fa] verify: {e}')
         return jsonify({'error': 'No se pudo completar el inicio de sesión.'}), 500
