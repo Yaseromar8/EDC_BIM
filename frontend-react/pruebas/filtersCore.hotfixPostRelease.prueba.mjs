@@ -110,5 +110,47 @@ await test('D · un coloreo ajeno que NO es Sources sigue pausando', async () =>
     runtime.dispose?.();
 });
 
+// ── A · MARCADO INICIAL ──────────────────────────────────────────────────────
+// Sin restricción el panel se ve TODO marcado, como en baseline y como en
+// Tandem. El estado lógico no cambia: `selectedValues` vacío sigue siendo
+// «sin restricción» y el motor lo trata como «Virtual All».
+const { componentHost, nodes, label, categoryExport, panelFile } = await import('./filtersCore.b4.prueba.mjs');
+const categoria = (over = {}) => ({
+    prop: { id: 'G::Estado', name: 'Estado' },
+    bucket: { values: [{ value: 'Ejecutado', count: 3 }, { value: 'Pendiente', count: 2 }, { value: 'Vacia', count: 0 }] },
+    selectedValues: [], expanded: false, searchConfig: { open: true, query: '' }, ready: true,
+    customValueColors: {}, isColorActive: false, DEFAULT_VISIBLE_VALUES: 5, PALETTE: ['#7e9bbd'],
+    setFacetSearch() {}, setExpandedFilters() {}, togglePropertyAll() {}, handleValueToggle() {},
+    handleColorToggle() {}, handleCustomColorChange() {}, ...over,
+});
+
+await test('A · sin restriccion, todo lo que existe se ve marcado', () => {
+    const ui = componentHost(panelFile, { exports: categoryExport });
+    const tree = ui.render(categoria());
+    for (const v of ['Ejecutado', 'Pendiente']) {
+        assert.equal(label(tree, `G::Estado: ${v}`).props.checked, true,
+            `el panel arranca en gris: ${v} deberia verse marcado sin restriccion`);
+        assert.equal(label(tree, `G::Estado: ${v}`).props.disabled, false);
+    }
+    ui.dispose();
+});
+
+await test('A · un valor SIN elementos no se marca ni se habilita', () => {
+    const ui = componentHost(panelFile, { exports: categoryExport });
+    // Sólo se alcanza buscándolo; en la vista normal está oculto.
+    const tree = ui.render(categoria({ searchConfig: { open: true, query: 'vacia' } }));
+    assert.equal(label(tree, 'G::Estado: Vacia').props.checked, false);
+    assert.equal(label(tree, 'G::Estado: Vacia').props.disabled, true);
+    ui.dispose();
+});
+
+await test('A · con restriccion manda la seleccion, no el estado vacio', () => {
+    const ui = componentHost(panelFile, { exports: categoryExport });
+    const tree = ui.render(categoria({ selectedValues: ['Ejecutado'] }));
+    assert.equal(label(tree, 'G::Estado: Ejecutado').props.checked, true);
+    assert.equal(label(tree, 'G::Estado: Pendiente').props.checked, false);
+    ui.dispose();
+});
+
 console.log(JSON.stringify({ suite: 'hotfixPostRelease', pass, fail }));
 if (fail) process.exit(1);

@@ -37,6 +37,12 @@ const FilterCategory = React.memo(({
     // estilo va aquí y no en App.css.
     const CASILLA_INVISIBLE = { position: 'absolute', opacity: 0, width: 16, height: 16, margin: 0, cursor: 'pointer' };
     const searchQuery = searchConfig?.query || '';
+    // SIN RESTRICCIÓN SE VE TODO MARCADO — baseline, y también Tandem.
+    // `selectedValues` vacío significa «sin restricción», y el motor ya lo trata
+    // así: `handleValueToggle` llama a ese estado «Virtual All» y el primer clic
+    // aísla un valor. El B4 dejó de dibujarlo y el panel arrancaba en gris, como
+    // si no hubiera nada incluido, cuando en realidad estaba todo.
+    const sinRestriccion = selectedValues.length === 0;
     const [renderLimit, setRenderLimit] = useState(100);
     // Los valores sin coincidencias se ocultan, como en baseline; buscar los
     // vuelve a mostrar. El conmutador «Mostrar valores no disponibles» era
@@ -122,7 +128,10 @@ const FilterCategory = React.memo(({
 
             <ul className={`tandem-list open`}>
                 {filteredVisibleItems.map(item => {
-                    const isChecked = item.selected;
+                    // Un valor SIN elementos no se marca aunque no haya
+                    // restricción: no está incluido en nada, y sigue
+                    // deshabilitado. Sólo se ve al buscarlo.
+                    const isChecked = item.selected || (sinRestriccion && !item.disabled);
                     const customColorKey = `${prop.id}::${item.value}`;
                     const customColor = customValueColors[customColorKey];
                     let colorStyle = {};
