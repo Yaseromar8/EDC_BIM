@@ -2089,6 +2089,44 @@ th {
   margin-top: 16px;
 }
 
+/* Los botones del pie de un modal eran texto suelto: no cambiaban al pasar por
+   encima, asi que ni parecian pulsables ni se sabia cual estabas a punto de
+   pulsar. Aqui solo se anade la RESPUESTA -- reposo, foco, pulsado, apagado --;
+   el color de cada boton lo sigue poniendo cada dialogo, que hay seis y no es
+   momento de redisenarlos todos. */
+.modal-actions button {
+  padding: 7px 16px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.modal-actions button:hover:not(:disabled) {
+  background: var(--neutral-100, #eef2f7);
+}
+
+.modal-actions button:active:not(:disabled) {
+  background: var(--neutral-200, #d9e3ef);
+}
+
+/* Con teclado hay que ver DONDE estas antes de pulsar. */
+.modal-actions button:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  background: var(--neutral-100, #eef2f7);
+}
+
+/* Mientras la peticion viaja el boton queda apagado: sin esto se podia pulsar
+   «Crear» tres veces seguidas y salian tres carpetas. */
+.modal-actions button:disabled {
+  color: var(--text-muted, #aaa);
+  cursor: default;
+}
+
 /* ─── ACCESS BADGE ─── */
 .access-badge {
   display: inline-flex;

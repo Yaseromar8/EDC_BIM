@@ -52,11 +52,17 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
 
   // ── Cargar markups + calibraciones del documento ──
   useEffect(() => {
-    if (!nodeId) return;
+    if (!nodeId) return undefined;
+    // Saltar a otro documento mientras estas dos respuestas viajaban pintaba
+    // las marcas -y la escala- del documento ANTERIOR encima del que estas
+    // mirando. Una redlinea sobre el plano equivocado no es una demora, es un
+    // error: el pestillo descarta lo que llega cuando ya no es de este nodo.
+    let vigente = true;
     apiFetch(`${API}/api/pdf/markups?node_id=${nodeId}`).then(r => r.json())
-      .then(d => { if (d.success) setMarkups(d.markups); }).catch(() => {});
+      .then(d => { if (vigente && d.success) setMarkups(d.markups); }).catch(() => {});
     apiFetch(`${API}/api/pdf/calibration?node_id=${nodeId}`).then(r => r.json())
-      .then(d => { if (d.success) setCalibrations(d.calibrations || {}); }).catch(() => {});
+      .then(d => { if (vigente && d.success) setCalibrations(d.calibrations || {}); }).catch(() => {});
+    return () => { vigente = false; };
   }, [nodeId]);
 
   // ── Transformaciones ──

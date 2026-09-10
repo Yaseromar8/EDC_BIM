@@ -63,6 +63,7 @@ export function useFileExplorer(project, user) {
   // ── New Folder Modal ──
   const [showNewFolder, setShowNewFolder] = useState(false);
   const [folderName, setFolderName] = useState('');
+  const [creandoCarpeta, setCreandoCarpeta] = useState(false);
   const [newFolderParentPath, setNewFolderParentPath] = useState('');
 
   // ── Upload State ──
@@ -315,15 +316,45 @@ export function useFileExplorer(project, user) {
     const targetPath = (newFolderParentPath || currentPath) + ((newFolderParentPath || currentPath).endsWith('/') ? '' : '/') + folderName.trim() + '/';
     const parentId = newFolderParentPath || (currentPath.startsWith(projectPrefix) && (currentPath === projectPrefix || currentPath === projectPrefix + '/') ? null : currentPath);
     if (parentId && parentId.length > 30) setProcessingIds(prev => ({ ...prev, [parentId]: true }));
+    setCreandoCarpeta(true);
     try {
       const res = await apiFetch(`${API}/api/docs/folder`, {
         method: 'POST',
         body: JSON.stringify({ path: targetPath, model_urn: projectPrefix, user: user?.name })
       });
       if (res.ok) {
+        const cuerpo = await res.json().catch(() => ({}));
         setShowNewFolder(false);
         setFolderName('');
         setNewFolderParentPath('');
+
+        // LA CARPETA SE PONE EN LA TABLA YA. Antes habia DOS esperas seguidas:
+        // la peticion, y despues el refresco entero de la carpeta -- la carpeta
+        // recien creada tardaba otro par de segundos en asomar, y parecia que
+        // no se habia creado. El refresco de abajo sigue, pero pasa a ser lo que
+        // debe ser: una reconciliacion de fondo, no lo que la hace aparecer.
+        //
+        // Se usa el id que devuelve el servidor, asi que cuando llegue el
+        // listado real sustituye a esta fila en vez de duplicarla. Y el
+        // `fullName` de una carpeta lleva barra final, igual que `targetPath`:
+        // con eso se puede entrar en ella sin esperar a nada.
+        const creada = (nueva) => nueva && !nueva.startsWith('__');
+        if (cuerpo.id && creada(String(cuerpo.id)) && !newFolderParentPath) {
+          const fila = {
+            id: cuerpo.id,
+            name: folderName.trim(),
+            fullName: targetPath,
+            type: 'folder',
+            updated: new Date().toISOString(),
+            updated_by: user?.name || user?.email || '',
+            description: '',
+            has_children: false,
+            has_access: true,
+          };
+          setFolders(prev => prev.some(f => String(f.id) === String(fila.id))
+            ? prev
+            : [...prev, fila].sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' })));
+        }
         // COHERENCIA ÁRBOL: invalidar el caché del nodo padre para que la
         // carpeta nueva aparezca en el panel izquierdo sin esperar 30s (STALE_TIME).
         if (cacheMethods) cacheMethods.invalidateNode(currentNodeId || '__root__');
@@ -335,6 +366,7 @@ export function useFileExplorer(project, user) {
       }
     } catch (e) { console.error(e); }
     finally {
+      setCreandoCarpeta(false);
       if (parentId) setProcessingIds(prev => { const n = { ...prev }; delete n[parentId]; return n; });
     }
   };
@@ -390,6 +422,14 @@ export function useFileExplorer(project, user) {
     }
   };
 
+  // CUANTAS peticiones de desplazar caben a la vez. Iban de UNA EN UNA, en fila:
+  // mover ocho ficheros eran ocho viajes seguidos al servidor, y el dialogo se
+  // quedaba con su ruedecita hasta el ultimo. Sin lote en el servidor
+  // (`/api/docs/batch` solo hace estado y borrado), lo que si se puede es dejar
+  // de esperar a que uno acabe para empezar el siguiente. Cuatro, no todas:
+  // abrir veinte peticiones a la vez castiga al servidor mas de lo que ayuda.
+  const DESPLAZAMIENTOS_A_LA_VEZ = 4;
+
   const handleExecuteMove = async () => {
     if (!isAdmin || !moveState.destPath || !moveState.itemIds?.length) return;
     const idsToMove = [...moveState.itemIds];
@@ -397,52 +437,76 @@ export function useFileExplorer(project, user) {
       toast.error('No puedes mover un elemento dentro de sí mismo.');
       return;
     }
+
+    // El destino se guarda ANTES de cerrar: cerrar vacia `moveState`.
+    const destId = moveState.destId;
+
     setProcessingIds(prev => {
       const n = { ...prev };
       idsToMove.forEach(id => n[id] = true);
       return n;
     });
-    let moved = 0;
+
+    // El dialogo se cierra YA. La espera no desaparece -- el servidor tarda lo
+    // que tarda -- pero deja de ser una ventana bloqueada: las filas que se
+    // estan moviendo ya salen apagadas en la tabla, que es donde el usuario
+    // esta mirando.
+    setMoveState({ step: 0, items: [], itemIds: [], destPath: '', destId: null });
+    setSelected(new Set());
+
+    const movidos = [];
     const failures = [];
-    for (const nodeId of idsToMove) {
+    const cola = [...idsToMove];
+
+    const desplazarUno = async (nodeId) => {
       try {
         const res = await apiFetch(`${API}/api/docs/move`, {
           method: 'PUT',
-          body: JSON.stringify({ node_id: nodeId, destNodeId: moveState.destId, model_urn: projectPrefix, user: user?.email })
+          body: JSON.stringify({ node_id: nodeId, destNodeId: destId, model_urn: projectPrefix, user: user?.email })
         });
         if (!res.ok) {
-          const errData = await res.json();
+          const errData = await res.json().catch(() => ({}));
           failures.push(errData.error || 'Error al desplazar');
-          continue;
+          return;
         }
-        moved += 1;
+        movidos.push(nodeId);
       } catch (e) {
         console.error(e);
         failures.push('Error de red al desplazar');
       }
-    }
+    };
+
+    const trabajador = async () => { while (cola.length) await desplazarUno(cola.shift()); };
+    await Promise.all(
+      Array.from({ length: Math.min(DESPLAZAMIENTOS_A_LA_VEZ, cola.length) }, trabajador)
+    );
+
     setProcessingIds(prev => {
       const n = { ...prev };
       idsToMove.forEach(id => delete n[id]);
       return n;
     });
+
+    // Lo que se ha movido YA NO ESTA AQUI: se quita de la tabla en cuanto el
+    // servidor lo confirma, sin esperar al refresco. Salvo que el destino sea
+    // esta misma carpeta, claro, donde moverlo no lo saca de la vista.
+    if (String(destId ?? '') !== String(currentNodeId ?? '')) quitarDeLaTabla(movidos);
+
     // COHERENCIA TABLA ↔ ÁRBOL: al desplazar cambian DOS ramas (origen y
     // destino). Sin invalidar ambas, el árbol seguía mostrando el elemento en
     // su sitio viejo (y no aparecía en el nuevo) hasta recargar la página.
     if (cacheMethods) {
       const origen = currentNodeId || '__root__';
       cacheMethods.invalidateNode(origen);
-      if (moveState.destId) cacheMethods.invalidateNode(moveState.destId);
+      if (destId) cacheMethods.invalidateNode(destId);
       else cacheMethods.invalidateNode('__root__');
     }
-    setMoveState({ step: 0, items: [], itemIds: [], destPath: '', destId: null });
-    setSelected(new Set());
     setRefreshSignal(s => s + 1);
     triggerRefresh();
     if (failures.length) {
-      toast.error(`${moved} de ${idsToMove.length} elemento(s) movido(s). ${failures[0]}`);
+      toast.error(`${movidos.length} de ${idsToMove.length} elemento(s) movido(s). ${failures[0]}`);
     } else {
-      toast.success(`${moved} elemento(s) movido(s) correctamente.`);
+      toast.success(`${movidos.length} elemento(s) movido(s) correctamente.`);
     }
   };
 
@@ -616,6 +680,7 @@ export function useFileExplorer(project, user) {
     folderName, setFolderName,
     newFolderParentPath, setNewFolderParentPath,
     createFolder,
+    creandoCarpeta,
     
     // Upload
     showUploadModal, setShowUploadModal,

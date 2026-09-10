@@ -70,15 +70,21 @@ export default function AddPermissionModal({ folder, modelUrn, apiBaseUrl, onClo
     // lee como «no hay a quien conceder», y eso da por bueno un reparto que
     // nadie ha comprobado. El fallo se dice.
     setErrorCatalogo('');
+    // Y de otra carpeta TAMPOCO: si se cambia de carpeta mientras esto viaja,
+    // la respuesta vieja dejaria en el desplegable a quien pertenece a la
+    // anterior, y se concederia acceso a quien no toca.
+    let vigente = true;
     apiFetch(`${apiBaseUrl}/api/docs/sujetos-concedibles?folder_id=${folder.id}&model_urn=${encodeURIComponent(modelUrn)}`)
       .then(r => r.json().then(d => (r.ok && d.success !== false)
         ? d
         : Promise.reject(new Error(d.error || 'No se pudo cargar a quién conceder.'))))
-      .then(d => setCatalogo(d))
+      .then(d => { if (vigente) setCatalogo(d); })
       .catch(e => {
+        if (!vigente) return;
         setCatalogo({ personas: [], empresas: [], funciones: [] });
         setErrorCatalogo(e.message || 'No se pudo cargar a quién conceder.');
       });
+    return () => { vigente = false; };
   }, [folder?.id, modelUrn, apiBaseUrl]);
 
   // Niveles EXACTOS que reconoce el backend (folder_permissions.PERMISSION_LEVELS).

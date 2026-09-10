@@ -94,18 +94,24 @@ export default function DocumentViewer({
   }, [file, viewedVersionInfo, projectPrefix, isShared, API]);
 
   useEffect(() => {
-    if (!file) return;
-    
+    if (!file) return undefined;
+
+    // Abrir un documento y saltar enseguida a otro dejaba la URL firmada del
+    // PRIMERO ganando la carrera: se veia el documento anterior con el nombre
+    // del actual. El pestillo tira lo que llega cuando ya no es de este fichero.
+    let vigente = true;
+    const soltar = () => { vigente = false; };
+
     const lowerName = file.name.toLowerCase();
     if (['.docx', '.doc', '.xlsx', '.xls', '.pptx', '.ppt'].some(ext => lowerName.endsWith(ext))) {
       // Si es enlace compartido, ya tenemos la URL firmada
       if (isShared && file.url) {
-        queueMicrotask(() => setOfficeUrl(file.url));
-        return;
+        queueMicrotask(() => { if (vigente) setOfficeUrl(file.url); });
+        return soltar;
       }
       
       // Lógica interna (plataforma)
-      queueMicrotask(() => setLoadingOffice(true));
+      queueMicrotask(() => { if (vigente) setLoadingOffice(true); });
       const urn = viewedVersionInfo?.gcs_urn || file.gcs_urn;
       const url = urn 
         ? `${API}/api/docs/signed-url?urn=${encodeURIComponent(urn)}&model_urn=${encodeURIComponent(projectPrefix)}`
@@ -114,17 +120,20 @@ export default function DocumentViewer({
       apiFetch(url)
         .then(r => r.json())
         .then(data => {
+          if (!vigente) return;
           if (data.success) setOfficeUrl(data.url);
           else console.error("Error fetching signed URL:", data.error);
         })
         .catch(err => console.error("Fetch Office URL error:", err))
-        .finally(() => setLoadingOffice(false));
+        .finally(() => { if (vigente) setLoadingOffice(false); });
     } else {
       queueMicrotask(() => {
+        if (!vigente) return;
         setOfficeUrl('');
         setLoadingOffice(false);
       });
     }
+    return soltar;
   }, [file, viewedVersionInfo, projectPrefix, isShared, API]);
 
   useEffect(() => {

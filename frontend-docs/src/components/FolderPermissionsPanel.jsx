@@ -139,22 +139,31 @@ function PermisoEfectivo({ folder, modelUrn, apiBaseUrl }) {
 
   useEffect(() => {
     setFalloLista('');
+    // En una pantalla de PERMISOS, ver lo de OTRA carpeta no es un retraso: es
+    // repartir acceso mirando la respuesta equivocada. Cambiar de carpeta
+    // mientras esta viajaba dejaba en la lista a la gente de la anterior.
+    let vigente = true;
     apiFetch(`${apiBaseUrl}/api/docs/sujetos-concedibles?folder_id=${folder.id}&model_urn=${encodeURIComponent(modelUrn)}`)
       .then(r => r.json().then(d => (r.ok && d.success !== false)
         ? d
         : Promise.reject(new Error(d.error || 'No se pudo cargar la lista de personas.'))))
-      .then(d => setPersonas(d.personas || []))
-      .catch(e => { setPersonas([]); setFalloLista(e.message || 'No se pudo cargar la lista de personas.'); });
+      .then(d => { if (vigente) setPersonas(d.personas || []); })
+      .catch(e => { if (vigente) { setPersonas([]); setFalloLista(e.message || 'No se pudo cargar la lista de personas.'); } });
+    return () => { vigente = false; };
   }, [folder?.id, modelUrn, apiBaseUrl]);
 
   useEffect(() => {
-    if (!quien) { setRes(null); return; }
+    if (!quien) { setRes(null); return undefined; }
     setCargando(true);
+    // Y lo mismo cambiando de PERSONA: la respuesta de la anterior podia
+    // aterrizar la ultima y quedarse en pantalla bajo el nombre de esta.
+    let vigente = true;
     apiFetch(`${apiBaseUrl}/api/docs/permiso-efectivo?node_id=${folder.id}&user_id=${quien}&model_urn=${encodeURIComponent(modelUrn)}`)
       .then(r => r.json())
-      .then(d => setRes(d))
-      .catch(() => setRes({ success: false, error: 'No se pudo consultar.' }))
-      .finally(() => setCargando(false));
+      .then(d => { if (vigente) setRes(d); })
+      .catch(() => { if (vigente) setRes({ success: false, error: 'No se pudo consultar.' }); })
+      .finally(() => { if (vigente) setCargando(false); });
+    return () => { vigente = false; };
   }, [quien, folder?.id, modelUrn, apiBaseUrl]);
 
   const m = res && res.motivo;
