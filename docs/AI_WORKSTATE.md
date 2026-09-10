@@ -588,12 +588,18 @@ autorreferencial del presente documento. Consultar HEAD real por separado.
 
 **Ninguna.** El release y su hotfix están en producción.
 
+**LOS DOS SHA DESPLEGADOS SON DISTINTOS Y ESO ES DELIBERADO.**
+
 ```
 FILTERS CORE = PRODUCTION GREEN
-PRODUCTION RC (backend) = 0864878a985b9b30ea6a8e6859eda92b9031e5b6
 P0..P9 PASS — evidencia: docs/filters/RELEASE_EJECUTADO.md
 
-FILTERS POST-RELEASE HOTFIX — desplegado SOLO a ALEPHIA View
+FILTERS POST-RELEASE HOTFIX = PRODUCTION GREEN   (10-sep-2026)
+
+backend  visor-ecd-backend    0864878a985b9b30ea6a8e6859eda92b9031e5b6
+View     visor-ecd-frontend   74f4dff1935fb174dcfbe5e77f7ad0351712363c
+Docs     visor-ecd-portal     f5fe63d  (no se desplegó)
+
 A · UX ............... ARREGLADO — presentación de baseline restituida
 B · LATENCIA ......... ARREGLADO — 1402 ms -> 60 ms (baseline 3e413cd = 21 ms)
 C · FLUJO DE DATOS ... CERRADO por el propietario
@@ -602,11 +608,29 @@ D · COLOR ............ EXPECTED · sin persistencia en ninguno de los dos siste
 evidencia: docs/filters/HOTFIX_POST_RELEASE.md
 ```
 
-El hotfix toca `TandemFilterPanel.jsx`, `aps/utils/model.js`,
+El hotfix es **sólo frontend**: `TandemFilterPanel.jsx`, `aps/utils/model.js`,
 `lib/filterVisualDriver.js` y `lib/filterRuntimeBridge.js`, más el banco nuevo
 `pruebas/filtersCore.hotfixPostRelease.prueba.mjs` y siete oráculos reapuntados
 en `filtersCore.b4` / `filtersCore.b4Adversarial`. Backend, Docs, PostgreSQL y
-migraciones: **sin tocar**.
+migraciones: **sin tocar**. Que View vaya por delante del backend es correcto y
+esperado hasta el próximo release; no es una desincronización que haya que
+«arreglar» desplegando el backend.
+
+**Verificación del despliegue, por contenido y no por el panel** (10-sep-2026):
+
+```
+View     assets/index-B3tSwlc8.js · 3.138.198 bytes
+         las 5 cadenas de la UI retirada dan 0 en el paquete servido
+backend  /api/health -> status ok · rama main · version 0864878a985b · postura 7/7
+```
+
+> **El primer Manual Deploy publicó el commit equivocado.** Construyó
+> `index-DjGQhZe_.js`, que es el paquete de `0864878`, y el sitio quedó *live*
+> con el código anterior aunque el commit ya estaba en `origin/main`. Se detectó
+> porque el paquete servido aún contenía las cadenas que el hotfix elimina. **Un
+> «Your site is live 🎉» no prueba qué código se publicó**: la comprobación buena
+> es el hash del bundle en el log del build, o grep de un marcador en el paquete
+> servido.
 
 > **AVISO — pérdida de este fichero, 9-sep-2026.** Al cerrar el hotfix truncué
 > `AI_WORKSTATE.md` a 0 bytes con un script mío mal escrito y hubo que

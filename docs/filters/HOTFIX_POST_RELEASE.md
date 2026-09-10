@@ -362,6 +362,26 @@ vite build                          OK
 
 ---
 
-Commiteado y desplegado **sólo a ALEPHIA View**. Backend en
-`0864878a985b9b30ea6a8e6859eda92b9031e5b6`, Docs sin desplegar, PostgreSQL sin
-tocar, sin migraciones.
+## `FILTERS POST-RELEASE HOTFIX = PRODUCTION GREEN`
+
+Desplegado **sólo a ALEPHIA View**, 10-sep-2026.
+
+```
+View     visor-ecd-frontend   74f4dff1935fb174dcfbe5e77f7ad0351712363c
+         assets/index-B3tSwlc8.js · 3.138.198 bytes
+         las 5 cadenas de la UI retirada dan 0 en el paquete servido
+backend  visor-ecd-backend    0864878a985b9b30ea6a8e6859eda92b9031e5b6
+         /api/health -> status ok · rama main · postura 7/7
+Docs     sin desplegar · PostgreSQL sin tocar · sin migraciones
+```
+
+Smoke productivo del propietario: UX de baseline restituida PASS · `Floors` =
+1336 con respuesta rápida PASS · «Color by source» ON→OFF con el control visual
+liberado PASS.
+
+**El primer Manual Deploy publicó el commit equivocado**: construyó
+`index-DjGQhZe_.js`, el paquete de `0864878`, y el sitio quedó *live* con el
+código anterior aunque el commit ya estaba en `origin/main`. Se detectó porque el
+paquete servido aún contenía las cadenas que el hotfix elimina. Un «Your site is
+live 🎉» no prueba qué código se publicó; el hash del bundle en el log del build,
+o un grep sobre el paquete servido, sí.
