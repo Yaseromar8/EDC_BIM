@@ -152,6 +152,12 @@ const FilterCategory = React.memo(({
                     // Un valor SIN elementos no se marca aunque no haya
                     // restricción: no está incluido en nada, y sigue
                     // deshabilitado. Sólo se ve al buscarlo.
+                    //
+                    // `isChecked` es SÓLO el dibujo. La compuerta de abajo mira
+                    // `item.selected`, la selección de verdad, para que pintar
+                    // «todo marcado» no vuelva pulsable una fila que antes
+                    // estaba bloqueada --por ejemplo mientras el resultado se
+                    // calcula--. Dibujo y comportamiento, separados.
                     const isChecked = item.selected || (sinRestriccion && !item.disabled);
                     const customColorKey = `${prop.id}::${item.value}`;
                     const customColor = customValueColors[customColorKey];
@@ -180,7 +186,7 @@ const FilterCategory = React.memo(({
                                         como en baseline. El `label` que las envuelve hace que
                                         pulsar la caja marque la casilla. */}
                                     <input type="checkbox" style={CASILLA_INVISIBLE} aria-label={`${prop.id}: ${item.value}`} checked={isChecked}
-                                        disabled={!isChecked && (!ready || item.disabled)}
+                                        disabled={!item.selected && (!ready || item.disabled)}
                                         onChange={() => handleValueToggle(prop.id, item.value)} />
                                     <div className="tandem-cb-wrap" aria-hidden="true">
                                         <div className={`tandem-cb-box ${isChecked ? 'checked' : ''} ${selectedValues.length > 0 ? 'active' : ''}`}>

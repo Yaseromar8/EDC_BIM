@@ -197,5 +197,14 @@ await test('A · el titulo usa el nombre corto, y se cualifica solo si hay homon
     ui.dispose();
 });
 
+await test('A · pintar todo marcado NO desbloquea filas mientras se calcula', () => {
+    const ui = componentHost(panelFile, { exports: categoryExport });
+    const tree = ui.render(categoria({ ready: false }));
+    const caja = label(tree, 'G::Estado: Ejecutado');
+    assert.equal(caja.props.checked, true, 'sin restriccion se sigue viendo marcada');
+    assert.equal(caja.props.disabled, true, 'pero pendiente de calculo NO se puede tocar');
+    ui.dispose();
+});
+
 console.log(JSON.stringify({ suite: 'hotfixPostRelease', pass, fail }));
 if (fail) process.exit(1);
