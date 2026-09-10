@@ -157,14 +157,15 @@ const cajas = t => nodes(t, n => typeof n.props.className === 'string' && n.prop
 const cuenta = t => text(nodes(t, n => n.props.className === 'tandem-group-count')[0]).replace(/\s+/g, ' ');
 const titulo = t => text(nodes(t, n => n.props.className === 'tandem-group-title')[0]).trim();
 
-await test('A · sin restriccion: cabecera con palomita, sin azul, y (N of N)', () => {
+await test('A · sin restriccion: cabecera VACIA, y (N of N)', () => {
+    // La cabecera dice si la seleccion es EXPLICITA, no si hay elementos dentro.
+    // Vacia = modo «pulsar un valor lo aisla». Marcada = modo «pulsar lo quita».
+    // Sin esa diferencia visible los dos modos son indistinguibles.
     const ui = componentHost(panelFile, { exports: categoryExport });
     const tree = ui.render(categoria());
     const caja = cajas(tree)[0];
-    assert.ok(caja.props.className.includes('checked'), 'la cabecera debe ir marcada cuando esta todo incluido');
-    assert.ok(!caja.props.className.includes('active'), 'sin restriccion no es una eleccion del usuario: no va en azul');
-    assert.equal(nodes(caja, n => n.type === 'path').length, 1, 'palomita, no guion');
-    assert.equal(cuenta(tree), '( 3 of 3 )');
+    assert.ok(!caja.props.className.includes('checked'), 'sin seleccion explicita la cabecera va vacia');
+    assert.equal(cuenta(tree), '( 3 of 3 )', 'pero la cuenta sigue diciendo que esta todo incluido');
     ui.dispose();
 });
 
@@ -178,13 +179,23 @@ await test('A · seleccion parcial: guion, azul y (1 of 3)', () => {
     ui.dispose();
 });
 
-await test('A · la cabecera se puede pulsar aunque no haya seleccion', () => {
+await test('A · pulsar la cabecera SELECCIONA TODO; volver a pulsarla lo quita', () => {
     const ui = componentHost(panelFile, { exports: categoryExport });
-    let limpiados = 0;
-    const tree = ui.render(categoria({ togglePropertyAll: () => limpiados++ }));
-    const boton = label(tree, 'Todos los valores de G::Estado');
-    assert.ok(!boton.props.disabled, 'deshabilitada no se puede usar para «activar todo»');
-    boton.props.onClick({ stopPropagation() {} });
+    let limpiados = 0, elegidos = null;
+    const props = { togglePropertyAll: () => limpiados++, seleccionarTodos: (_id, v) => { elegidos = v; } };
+    const boton = t => label(t, 'Seleccionar todos los valores de G::Estado');
+
+    // Sin seleccion: selecciona todo. Este es el gesto que faltaba y que hace
+    // posible el flujo de «lo tengo todo y voy quitando».
+    const b1 = boton(ui.render(categoria(props)));
+    assert.ok(!b1.props.disabled);
+    b1.props.onClick({ stopPropagation() {} });
+    assert.deepEqual(elegidos, ['Ejecutado', 'Pendiente', 'Vacia']);
+    assert.equal(limpiados, 0, 'no limpia: selecciona');
+
+    // Con todo seleccionado: limpia.
+    boton(ui.render(categoria({ ...props, selectedValues: ['Ejecutado', 'Pendiente', 'Vacia'] })))
+        .props.onClick({ stopPropagation() {} });
     assert.equal(limpiados, 1);
     ui.dispose();
 });

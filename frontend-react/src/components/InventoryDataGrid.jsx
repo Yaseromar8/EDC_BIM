@@ -124,15 +124,18 @@ const InventoryRow = memo(({ row, columns, index, onRowClick, isHighlighted, top
 
     if (!row) return null;
     return (
-        <div 
+        <div
+            className={`inv-fila${index % 2 === 0 ? ' par' : ''}${row._isSaving ? ' guardando' : ''}${isHighlighted ? ' resaltada' : ''}${isChecked ? ' marcada' : ''}`}
             data-inventory-dbid={row.dbId}
             data-inventory-key={inventoryRowKey(row)}
             style={{
                 position: 'absolute', top, left: 0, display: 'inline-flex', 
                 minWidth: '100%',
-                borderBottom: '1px solid #32363e', alignItems: 'center', 
+                borderBottom: '1px solid #32363e', alignItems: 'center',
                 fontSize: '12px', height: `${ROW_HEIGHT}px`,
-                background: isChecked ? '#1e3a5f' : (isHighlighted ? '#2a4a8a' : (row._isSaving ? '#2d3340' : (index % 2 === 0 ? '#1e1f24' : '#1a1b1f'))),
+                // El fondo NO va aquí: un estilo en línea gana siempre a una
+                // hoja, y sin hoja no hay `:hover`. Vive en App.css, por clases,
+                // para que pasar el ratón sombree la fila y se sepa dónde estás.
                 color: isHighlighted ? '#fff' : '#d1d5db',
                 cursor: 'pointer', userSelect: 'none', transition: 'background 0.1s ease',
                 opacity: row._isSaving ? 0.6 : 1

@@ -17,6 +17,7 @@ const FilterCategory = React.memo(({
     searchConfig,
     isColorActive,
     togglePropertyAll,
+    seleccionarTodos,
     handleValueToggle,
     setExpandedFilters,
     setFacetSearch,
@@ -53,7 +54,6 @@ const FilterCategory = React.memo(({
     const todoSeleccionado = total > 0 && selectedValues.length === total
         && (() => { const s = new Set(selectedValues); return (bucket?.values || []).every(v => s.has(v.value)); })();
     const parcial = !sinRestriccion && !todoSeleccionado;   // guion en vez de palomita
-    const conRestriccion = !sinRestriccion;                 // azul, el mismo criterio que las filas
     const [renderLimit, setRenderLimit] = useState(100);
     // Los valores sin coincidencias se ocultan, como en baseline; buscar los
     // vuelve a mostrar. El conmutador «Mostrar valores no disponibles» era
@@ -87,24 +87,29 @@ const FilterCategory = React.memo(({
     return (
         <div className="tandem-group" data-test-id={`facet-item:${prop.id}`}>
             <div className="tandem-group-header">
-                {/* Casilla de cabecera de TRES estados, como en baseline:
-                    palomita cuando está todo incluido, guion cuando la selección
-                    es parcial. El B4 la dejó sólo con guion y DESHABILITADA
-                    mientras no hubiera selección, así que no se podía «activar
-                    todo» desde ella. Pulsarla retira la restricción, que es
-                    exactamente eso. Azul sólo cuando el usuario ha restringido:
-                    el mismo criterio que las filas. */}
+                {/* CASILLA DE CABECERA — un interruptor de verdad, no un adorno.
+                    Vacía: no hay selección explícita, y entonces pulsar un valor
+                    lo AÍSLA. Marcada: están todos elegidos, y entonces pulsar un
+                    valor lo QUITA. Guion: la selección es parcial.
+                    Pulsarla alterna entre esos dos modos, que es lo que hace
+                    falta para el flujo de «selecciono todo y voy quitando». Antes
+                    sólo sabía limpiar, así que en el estado inicial parecía un
+                    interruptor y no hacía nada. */}
                 <button className="tandem-cb-container tandem-action-btn"
-                    title={sinRestriccion ? 'Todos los valores incluidos' : 'Quitar restricción de esta propiedad'}
-                    aria-label={`Todos los valores de ${prop.id}`}
-                    aria-checked={parcial ? 'mixed' : 'true'} role="checkbox"
-                    onClick={e => { e.stopPropagation(); togglePropertyAll(prop.id); }}>
+                    title={todoSeleccionado ? 'Quitar la selección' : 'Seleccionar todos los valores'}
+                    aria-label={`Seleccionar todos los valores de ${prop.id}`}
+                    aria-checked={parcial ? 'mixed' : (todoSeleccionado ? 'true' : 'false')} role="checkbox"
+                    onClick={e => {
+                        e.stopPropagation();
+                        if (todoSeleccionado || !total) togglePropertyAll(prop.id);
+                        else seleccionarTodos(prop.id, (bucket?.values || []).map(v => v.value));
+                    }}>
                     <div className="tandem-cb-wrap">
-                        <div className={`tandem-cb-box checked ${conRestriccion ? 'active' : ''}`}>
+                        <div className={`tandem-cb-box ${sinRestriccion ? '' : 'checked active'}`}>
                             <svg viewBox="0 0 24 24" preserveAspectRatio="xMidYMid meet" className="tandem-cb-icon">
                                 {parcial
                                     ? <line x1="6" y1="12" x2="18" y2="12" stroke="#fff" strokeWidth="3" />
-                                    : <path fill="none" stroke="#fff" strokeWidth="3" d="M6,11.3 L10.3,16 L18,6.2" />}
+                                    : <path fill="none" stroke={sinRestriccion ? 'transparent' : '#fff'} strokeWidth="3" d="M6,11.3 L10.3,16 L18,6.2" />}
                             </svg>
                         </div>
                     </div>
@@ -932,6 +937,7 @@ const TandemFilterPanel = ({
                         isColorActive={filterColors[prop.id]}
                         nombreAmbiguo={nombresRepetidos.has(prop.name || prop.id)}
                         togglePropertyAll={togglePropertyAll}
+                        seleccionarTodos={(id, valores) => setFilterSelections(prev => ({ ...prev, [id]: valores }))}
                         handleValueToggle={handleValueToggle}
                         setExpandedFilters={setExpandedFilters}
                         setFacetSearch={setFacetSearch}

@@ -2121,3 +2121,18 @@ input[type='checkbox']:hover {
 #toolbar-fullscreenTool {
   display: flex !important;
 }
+/* REJILLA DE INVENTORY — los fondos viven aquí, no en el estilo en línea.
+   Un estilo en línea gana a cualquier hoja, así que mientras el fondo se
+   calculaba en el JSX no había manera de tener `:hover`: la fila no daba
+   ninguna señal de dónde estaba el ratón sobre miles de filas. Las
+   combinaciones con estado llevan su propia regla porque `:hover` a secas
+   empata en especificidad y, por orden, le ganaría el azul a una fila marcada. */
+.inv-fila { background: #1a1b1f; }
+.inv-fila.par { background: #1e1f24; }
+.inv-fila.guardando { background: #2d3340; }
+.inv-fila.resaltada { background: #2a4a8a; }
+.inv-fila.marcada { background: #1e3a5f; }
+.inv-fila:hover { background: #272b33; }
+.inv-fila.guardando:hover { background: #363c4a; }
+.inv-fila.resaltada:hover { background: #33559e; }
+.inv-fila.marcada:hover { background: #264a75; }
