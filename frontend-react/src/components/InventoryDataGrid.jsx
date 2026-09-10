@@ -131,7 +131,7 @@ const InventoryRow = memo(({ row, columns, index, onRowClick, isHighlighted, top
                 position: 'absolute', top, left: 0, display: 'inline-flex', 
                 minWidth: '100%',
                 borderBottom: '1px solid #32363e', alignItems: 'center', 
-                fontSize: '12.5px', height: `${ROW_HEIGHT}px`,
+                fontSize: '12px', height: `${ROW_HEIGHT}px`,
                 background: isChecked ? '#1e3a5f' : (isHighlighted ? '#2a4a8a' : (row._isSaving ? '#2d3340' : (index % 2 === 0 ? '#1e1f24' : '#1a1b1f'))),
                 color: isHighlighted ? '#fff' : '#d1d5db',
                 cursor: 'pointer', userSelect: 'none', transition: 'background 0.1s ease',
@@ -1198,8 +1198,11 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
                     <div 
                         ref={headerRef}
                         style={{ 
-                            display: 'flex', background: '#1e1f24', height: '34px', alignItems: 'center', 
-                            fontSize: '12px', fontWeight: 600, color: '#999', flexShrink: 0, 
+                            // La cabecera NO puede ser más apagada que el dato que rotula.
+                            // Estaba en #999 con las celdas en #d1d5db, o sea al revés que
+                            // en Tandem (cabecera #dcdcdc sobre celdas #999).
+                            display: 'flex', background: '#1e1f24', height: '34px', alignItems: 'center',
+                            fontSize: '12px', fontWeight: 600, color: '#dcdcdc', flexShrink: 0,
                             borderBottom: '1px solid #2a2b30',
                             position: 'sticky', top: 0, zIndex: 2
                         }}
