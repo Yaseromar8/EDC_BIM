@@ -273,8 +273,17 @@ export function useFileExplorer(project, user) {
     const isRoot = normalizedPath === projectPrefix;
     const finalId = isRoot ? null : id;
     const finalPath = path.endsWith('/') ? path : path + '/';
+
+    // Pulsar una carpeta SALE de la busqueda, y esto va ANTES de la salida de
+    // abajo a proposito: el caso corriente es volver a pulsar la carpeta en la
+    // que YA estas para recuperar su contenido. Si esperase a que cambie la
+    // ruta, ese clic -el que el usuario repite- seria justo el que no hace
+    // nada. La busqueda es de todo el proyecto y no se reencuadra al cambiar
+    // de carpeta, asi que no se pierde nada al cerrarla.
+    setSearchQuery('');
+
     if (finalPath === currentPath && finalId === currentNodeId) return;
-    
+
     // No vaciamos los arrays ni ponemos loading bruto, dejamos que fetchContents lo maneje con caché
     setCurrentPath(finalPath);
     setCurrentNodeId(finalId);

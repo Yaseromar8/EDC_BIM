@@ -24,6 +24,8 @@ export default (env) => {
       input: {
         index: 'index.html',
         banco: 'probar-lector.html',
+        tabla: 'probar-tabla.html',
+        busqueda: 'probar-busqueda.html',
       },
     },
   }

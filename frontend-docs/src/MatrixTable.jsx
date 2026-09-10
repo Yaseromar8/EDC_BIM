@@ -3,6 +3,8 @@ import { createPortal } from 'react-dom';
 import { FixedSizeList as List } from 'react-window';
 import AutoSizer from 'react-virtualized-auto-sizer';
 import { ESTADOS } from './utils/estadosECD';
+import { ANCHO_MINIMO, ANCHO_MAXIMO } from './utils/anchosColumnas';
+import { PASO_TECLADO, PASO_TECLADO_GRANDE } from './hooks/useColumnResize';
 
 // ── ISO 19650 Document Lifecycle ──────────────────────────────────────────
 //
@@ -182,6 +184,37 @@ const ReviewStatusControl = ({ item, isAdmin, onStatusChange }) => {
     </div>
   );
 };
+
+/**
+ * TIRADOR DE ANCHO de una columna.
+ *
+ * Uno solo para las diez: la conducta —puntero, teclado, y lo que anuncia a un
+ * lector de pantalla— se arregla en un sitio y vale para todas, y anadir una
+ * columna manana no obliga a repetirla.
+ *
+ * Es `role="separator"` con foco, que es exactamente lo que un divisor
+ * ajustable debe anunciar: por eso lleva valor, minimo y maximo.
+ */
+const TiradorColumna = ({ columna, etiqueta, ancho, iniciar, ajustar }) => (
+  <div
+    className="resizer-acc"
+    role="separator"
+    aria-orientation="vertical"
+    aria-label={`Ancho de la columna ${etiqueta}`}
+    aria-valuenow={ancho}
+    aria-valuemin={ANCHO_MINIMO}
+    aria-valuemax={ANCHO_MAXIMO}
+    tabIndex={0}
+    title={`Arrastra para cambiar el ancho de ${etiqueta}. Con el teclado: flechas, y inicio para el ancho original.`}
+    onPointerDown={e => iniciar(e, columna)}
+    onKeyDown={e => {
+      const paso = e.shiftKey ? PASO_TECLADO_GRANDE : PASO_TECLADO;
+      if (e.key === 'ArrowLeft') { e.preventDefault(); ajustar(columna, -paso); }
+      else if (e.key === 'ArrowRight') { e.preventDefault(); ajustar(columna, paso); }
+      else if (e.key === 'Home') { e.preventDefault(); ajustar(columna, null); }
+    }}
+  />
+);
 
 /**
  * TableRow Component - Renders an individual row in the virtualized list.
@@ -575,6 +608,7 @@ const MatrixTable = ({
   onShowVersions,
   onRowMenu,
   startResizing,
+  ajustarAncho,
   setSelected,
   renderFileIconSop,
   editingNodeId,
@@ -603,47 +637,47 @@ const MatrixTable = ({
           </div>
           <div className="td-cell name-cell td-frozen-left" style={{ width: columnWidths.name, left: columnWidths.checkbox }}>
             Nombre
-            <div className="resizer-acc" onMouseDown={e => startResizing(e, 'name')} />
+            <TiradorColumna columna="name" etiqueta="Nombre" ancho={columnWidths.name} iniciar={startResizing} ajustar={ajustarAncho} />
           </div>
           {!isTrashMode && (
             <div className="td-cell" style={{ width: columnWidths.description }}>
               Descripción
-              <div className="resizer-acc" onMouseDown={e => startResizing(e, 'description')} />
+              <TiradorColumna columna="description" etiqueta="Descripción" ancho={columnWidths.description} iniciar={startResizing} ajustar={ajustarAncho} />
             </div>
           )}
           {!isTrashMode && (
             <>
               <div className="td-cell" style={{ width: columnWidths.version }}>
                 Versión
-                <div className="resizer-acc" onMouseDown={e => startResizing(e, 'version')} />
+                <TiradorColumna columna="version" etiqueta="Versión" ancho={columnWidths.version} iniciar={startResizing} ajustar={ajustarAncho} />
               </div>
               <div className="td-cell" style={{ width: columnWidths.indicators }}>
                 Indicadores
-                <div className="resizer-acc" onMouseDown={e => startResizing(e, 'indicators')} />
+                <TiradorColumna columna="indicators" etiqueta="Indicadores" ancho={columnWidths.indicators} iniciar={startResizing} ajustar={ajustarAncho} />
               </div>
               <div className="td-cell" style={{ width: columnWidths.markup }}>
                 Marcas de rev.
-                <div className="resizer-acc" onMouseDown={e => startResizing(e, 'markup')} />
+                <TiradorColumna columna="markup" etiqueta="Marcas de rev." ancho={columnWidths.markup} iniciar={startResizing} ajustar={ajustarAncho} />
               </div>
               <div className="td-cell" style={{ width: columnWidths.issues }}>
                 Incidencias
-                <div className="resizer-acc" onMouseDown={e => startResizing(e, 'issues')} />
+                <TiradorColumna columna="issues" etiqueta="Incidencias" ancho={columnWidths.issues} iniciar={startResizing} ajustar={ajustarAncho} />
               </div>
               <div className="td-cell" style={{ width: columnWidths.size }}>
                 Tamaño
-                <div className="resizer-acc" onMouseDown={e => startResizing(e, 'size')} />
+                <TiradorColumna columna="size" etiqueta="Tamaño" ancho={columnWidths.size} iniciar={startResizing} ajustar={ajustarAncho} />
               </div>
               <div className="td-cell" style={{ width: columnWidths.updated }}>
                 Últ. actualización
-                <div className="resizer-acc" onMouseDown={e => startResizing(e, 'updated')} />
+                <TiradorColumna columna="updated" etiqueta="Últ. actualización" ancho={columnWidths.updated} iniciar={startResizing} ajustar={ajustarAncho} />
               </div>
               <div className="td-cell" style={{ width: columnWidths.user }}>
                 Actualizado por
-                <div className="resizer-acc" onMouseDown={e => startResizing(e, 'user')} />
+                <TiradorColumna columna="user" etiqueta="Actualizado por" ancho={columnWidths.user} iniciar={startResizing} ajustar={ajustarAncho} />
               </div>
               <div className="td-cell" style={{ width: columnWidths.status }}>
                 Estado de rev.
-                <div className="resizer-acc" onMouseDown={e => startResizing(e, 'status')} />
+                <TiradorColumna columna="status" etiqueta="Estado de rev." ancho={columnWidths.status} iniciar={startResizing} ajustar={ajustarAncho} />
               </div>
             </>
           )}

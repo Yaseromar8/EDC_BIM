@@ -1324,6 +1324,18 @@ table { font-variant-numeric: tabular-nums; }
 }
 
 /* --- Resizers --- */
+
+/* El tirador es `position:absolute`, asi que se ancla al ancestro POSICIONADO
+   mas cercano. Solo Nombre y la casilla lo tenian: llevan `.td-frozen-left`,
+   que es `position:sticky`. Los otros nueve se escapaban hasta `.data-header`
+   -tambien sticky- y acababan apilados en la misma franja de 5 px del extremo
+   derecho de la tabla, unos encima de otros: invisibles e inalcanzables. Por
+   eso solo Nombre se dejaba arrastrar. La celda de cabecera tiene que ser su
+   propio bloque contenedor. Las congeladas conservan su `sticky !important`. */
+.data-header .td-cell {
+  position: relative;
+}
+
 .resizer-acc {
   position: absolute;
   right: 0;
@@ -1333,10 +1345,29 @@ table { font-variant-numeric: tabular-nums; }
   cursor: col-resize;
   z-index: 100;
   transition: background 0.2s;
+  /* Sin esto, en tactil el navegador se queda el gesto para desplazar la
+     tabla y el arrastre no llega a empezar. */
+  touch-action: none;
 }
 
 .resizer-acc:hover {
   background: var(--accent);
+}
+
+/* Con teclado hay que VER cual se esta ajustando: el tirador es invisible
+   hasta que se toca, asi que sin esto el foco caia en la nada. */
+.resizer-acc:focus-visible {
+  outline: none;
+  background: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+/* Un dedo no acierta 5 px. Donde se apunta con el dedo el area de agarre
+   crece; lo que se VE no cambia, porque el tirador solo se pinta al tocarlo. */
+@media (pointer: coarse) {
+  .resizer-acc {
+    width: 16px;
+  }
 }
 
 th {

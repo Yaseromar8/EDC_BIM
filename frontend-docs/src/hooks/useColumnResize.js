@@ -3,34 +3,87 @@
  * Refactorización Fase 1: Capa de Datos
  * Extraído de App.jsx líneas 1161-1219
  */
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
+import {
+  ANCHOS_POR_DEFECTO, leerAnchos, guardarAnchos, limitarAncho,
+} from '../utils/anchosColumnas';
+
+export const PASO_TECLADO = 16;
+export const PASO_TECLADO_GRANDE = 64;
 
 export function useColumnResize() {
-  const [columnWidths, setColumnWidths] = useState({
-    checkbox: 40, name: 400, description: 150, version: 80,
-    indicators: 150, markup: 100, issues: 80, size: 100,
-    updated: 180, user: 150, status: 120, action: 60
-  });
+  // Inicializador PEREZOSO: el almacen se lee una vez al montar, no en cada
+  // pintada.
+  const [columnWidths, setColumnWidths] = useState(() => leerAnchos());
+  const guardadoDiferido = useRef(null);
 
   const totalTableWidth = Object.values(columnWidths).reduce((a, b) => a + b, 0);
 
+  // El teclado ajusta de golpe en golpe, y mantener la flecha pulsada repite.
+  // Guardar en cada repeticion serian decenas de escrituras sincronas: se
+  // espera a que la mano pare.
+  const guardarPronto = useCallback((anchos) => {
+    clearTimeout(guardadoDiferido.current);
+    guardadoDiferido.current = setTimeout(() => guardarAnchos(anchos), 300);
+  }, []);
+
+  useEffect(() => () => clearTimeout(guardadoDiferido.current), []);
+
+  /**
+   * Arrastre del tirador. Usa PUNTEROS, no raton: el mismo camino de codigo
+   * sirve para raton, dedo y lapiz. Antes era `onMouseDown` y en tableta la
+   * tabla sencillamente no se podia ajustar.
+   */
   const startResizing = useCallback((e, column) => {
     e.preventDefault();
-    const startX = e.pageX;
-    const startWidth = columnWidths[column];
-    const onMouseMove = (moveEvent) => {
-      const currentWidth = startWidth + (moveEvent.pageX - startX);
-      setColumnWidths(prev => ({ ...prev, [column]: Math.max(currentWidth, 40) }));
+
+    // El dedo recibe captura implicita, pero el raton no: sin esto, soltar
+    // fuera de la ventana dejaba el arrastre pegado.
+    const tirador = e.currentTarget;
+    if (e.pointerId != null && tirador?.setPointerCapture) {
+      try { tirador.setPointerCapture(e.pointerId); } catch { /* sin captura */ }
+    }
+
+    const inicioX = e.pageX;
+    const anchoInicial = columnWidths[column];
+    let anchoFinal = anchoInicial;
+
+    const alMover = (mov) => {
+      anchoFinal = limitarAncho(anchoInicial + (mov.pageX - inicioX)) ?? anchoInicial;
+      setColumnWidths(prev => ({ ...prev, [column]: anchoFinal }));
     };
-    const onMouseUp = () => {
-      document.removeEventListener('mousemove', onMouseMove);
-      document.removeEventListener('mouseup', onMouseUp);
+    const alSoltar = () => {
+      document.removeEventListener('pointermove', alMover);
+      document.removeEventListener('pointerup', alSoltar);
+      document.removeEventListener('pointercancel', alSoltar);
+      // Se guarda al SOLTAR, no en cada pixel. Un arrastre dispara cientos de
+      // movimientos y `localStorage` es sincrono: escribir en cada uno
+      // convierte un arrastre suave en un tiron.
+      guardarAnchos({ ...columnWidths, [column]: anchoFinal });
     };
-    document.addEventListener('mousemove', onMouseMove);
-    document.addEventListener('mouseup', onMouseUp);
+
+    document.addEventListener('pointermove', alMover);
+    document.addEventListener('pointerup', alSoltar);
+    // `pointercancel` lo dispara el navegador cuando se queda el gesto (un
+    // desplazamiento en tactil, por ejemplo). Sin escucharlo, el arrastre no
+    // terminaba nunca y la columna seguia el dedo por toda la pantalla.
+    document.addEventListener('pointercancel', alSoltar);
   }, [columnWidths]);
 
-  return { columnWidths, setColumnWidths, totalTableWidth, startResizing };
+  /** Ajuste con TECLADO. `delta` en pixeles; `null` devuelve al ancho de fabrica. */
+  const ajustarAncho = useCallback((column, delta) => {
+    setColumnWidths(prev => {
+      const destino = delta === null
+        ? ANCHOS_POR_DEFECTO[column]
+        : limitarAncho((prev[column] ?? ANCHOS_POR_DEFECTO[column]) + delta);
+      if (destino === null || destino === prev[column]) return prev;
+      const siguiente = { ...prev, [column]: destino };
+      guardarPronto(siguiente);
+      return siguiente;
+    });
+  }, [guardarPronto]);
+
+  return { columnWidths, setColumnWidths, totalTableWidth, startResizing, ajustarAncho };
 }
 
 export function useSidebarResize(initialGlobal = 240, initialTree = 300) {

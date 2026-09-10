@@ -17,6 +17,7 @@ import { useColumnResize, useSidebarResize, useVersionPanelResize } from '../hoo
 import { API, getInitials, getAuthHeaders, formatSize, formatDate, DOCS_VISOR_SHORTCUT } from '../utils/helpers';
 import { renderFileIconSop } from '../utils/fileIcons';
 import { apiFetch } from '../utils/apiFetch';
+import { programarBusqueda } from '../utils/busquedaDiferida';
 import { reiniciarTira } from '../utils/tiraDocumentos';
 import * as campo from '../offline/captura';
 import { engancharDisparadores } from '../offline/sincronizador';
@@ -219,7 +220,7 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
     onRefresh: () => fe.triggerRefresh()
   });
   
-  const { columnWidths, totalTableWidth, startResizing } = useColumnResize();
+  const { columnWidths, totalTableWidth, startResizing, ajustarAncho } = useColumnResize();
   const { globalSidebarWidth, setGlobalSidebarWidth, treeSidebarWidth, startTreeResize, startGlobalResize } = useSidebarResize();
   const { versionPanelWidth, startVersionResize } = useVersionPanelResize();
 
@@ -286,18 +287,22 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
 
   // ── Búsqueda global del proyecto (no solo carpeta actual) ──
   const [globalResults, setGlobalResults] = React.useState(null);
-  React.useEffect(() => {
-    const q = fe.searchQuery.trim();
-    if (q.length < 3 || fe.isTrashMode || fe.sidebarView !== 'files') { setGlobalResults(null); return; }
-    const t = setTimeout(() => {
-      apiFetch(`${API}/api/docs/search?q=${encodeURIComponent(q)}&model_urn=${encodeURIComponent(fe.projectPrefix)}`)
-        .then(r => r.json())
-        .then(d => { if (d.success) setGlobalResults(d.data || []); })
-        .catch(() => {});
-    }, 350);
-    return () => clearTimeout(t);
+  // La regla —esperar, y que la ultima gane— vive en `utils/busquedaDiferida`,
+  // fuera de React, porque es una carrera y una carrera hay que ejecutarla para
+  // demostrarla. Aqui solo se dice QUE se busca y donde va el resultado.
+  React.useEffect(() => programarBusqueda({
+    consulta: fe.searchQuery,
+    habilitada: !fe.isTrashMode && fe.sidebarView === 'files',
+    buscar: async (q) => {
+      const r = await apiFetch(`${API}/api/docs/search?q=${encodeURIComponent(q)}&model_urn=${encodeURIComponent(fe.projectPrefix)}`);
+      const d = await r.json();
+      // Sin `success` no hay respuesta util: se devuelve `undefined` y la
+      // pantalla se queda como estaba.
+      return d.success ? (d.data || []) : undefined;
+    },
+    alResultado: setGlobalResults,
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fe.searchQuery, fe.isTrashMode, fe.sidebarView]);
+  }), [fe.searchQuery, fe.isTrashMode, fe.sidebarView]);
 
   // Sincronizar historial de versiones con el archivo abierto en el visor.
   // Sin esto, el dropdown de versiones mostraba el historial del último archivo
@@ -1080,7 +1085,7 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
                       isTrashMode={fe.isTrashMode} onShowVersions={vh.onShowVersions}
                       onRowMenu={(item, e) => { fe.setRightClickedId(item.id); fe.setActiveRowMenu({ item, x: e.clientX, y: e.clientY, source: 'table' }); }}
                       editingNodeId={fe.editingNodeId} setEditingNodeId={fe.setEditingNodeId} processingIds={fe.processingIds}
-                      rightClickedId={fe.rightClickedId} startResizing={startResizing} setSelected={fe.setSelected}
+                      rightClickedId={fe.rightClickedId} startResizing={startResizing} ajustarAncho={ajustarAncho} setSelected={fe.setSelected}
                       renderFileIconSop={renderFileIconSop}
                       onStatusChange={async (item, newStatus) => {
                         // Publicar exige decir PARA QUÉ queda autorizado el
