@@ -433,13 +433,18 @@ const TandemFilterPanel = ({
     // esos se muestran cualificados: el resto luce su nombre corto, como antes
     // del B4. Se mira TODA la lista, no sólo el bloque visible, para que la
     // ambigüedad no aparezca y desaparezca al paginar.
+    // «Sources» va sembrado: el bloque de modelos de arriba se llama así y no es
+    // una propiedad configurada, así que el recuento no lo vería. Sin esto,
+    // añadir `Standard::Sources` por ⚙ deja dos grupos titulados «Sources».
     const nombresRepetidos = useMemo(() => {
         const cuenta = new Map();
         for (const p of allPropertyObjects) {
             const n = p.name || p.id;
             cuenta.set(n, (cuenta.get(n) || 0) + 1);
         }
-        return new Set([...cuenta].filter(([, veces]) => veces > 1).map(([n]) => n));
+        const ambiguos = new Set([...cuenta].filter(([, veces]) => veces > 1).map(([n]) => n));
+        ambiguos.add('Sources');
+        return ambiguos;
     }, [allPropertyObjects]);
     // Shared URN normalizer for consistent comparisons
     const isUrnHidden = (urn) => hiddenModelUrns.some(u => normUrn(u) === normUrn(urn));
