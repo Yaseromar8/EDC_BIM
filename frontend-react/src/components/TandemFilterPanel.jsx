@@ -679,17 +679,18 @@ const TandemFilterPanel = ({
           .tandem-group-header:hover { background: #35383d; }
           .tandem-cb-container { display: inline-flex; cursor: pointer; flex-shrink: 0; margin-right: 8px; }
           .tandem-cb-wrap { position: relative; display: flex; align-items: center; justify-content: center; }
-          .tandem-cb-box { width: 18px; height: 18px; border-radius: 3px; display: flex; align-items: center; justify-content: center; transition: background 0.15s, border-color 0.15s; border: 1.5px solid #555; background: #2a2d31; }
+          .tandem-cb-box { width: 18px; height: 18px; border-radius: 0; display: flex; align-items: center; justify-content: center; transition: background 0.15s, border-color 0.15s; border: 1.5px solid #555; background: #2a2d31; }
           .tandem-cb-container:hover .tandem-cb-box { border-color: #888; background: #353840; }
           .tandem-cb-box.checked { background: #4e5258; border-color: #4e5258; }
           .tandem-cb-container:hover .tandem-cb-box.checked { background: #5e6268; border-color: #5e6268; }
           .tandem-cb-box.checked.active { background: #2d8fa5; border-color: #2d8fa5; }
           .tandem-cb-container:hover .tandem-cb-box.checked.active { background: #35a0b8; border-color: #35a0b8; }
-          .tandem-cb-icon { width: 16px; height: 16px; }
+          .tandem-cb-container:hover input:disabled ~ .tandem-cb-wrap .tandem-cb-box { border-color: #555; background: #2a2d31; }
+          .tandem-cb-icon { width: 18px; height: 18px; }
           .facet-search-input { width: 100%; background: #1a1a1a; border: 1px solid #444; color: #e0e0e0; padding: 5px 8px; font-size: 12px; border-radius: 2px; outline: none; }
           .tandem-group-info { flex: 1; display: flex; align-items: baseline; gap: 8px; overflow: hidden; }
           .tandem-group-title { font-weight: 600; color: #ffffff; white-space: nowrap; font-size: 13px; text-shadow: 0 1px 2px rgba(0,0,0,0.8); }
-          .tandem-group-count { color: #ccc; font-size: 11px; }
+          .tandem-group-count { color: #ccc; font-size: 12px; }
           .tandem-actions { display: flex; gap: 2px; opacity: 0.8; transition: opacity 0.2s; }
           .tandem-group-header:hover .tandem-actions { opacity: 1; }
           .tandem-action-btn { background: none; border: none; color: #999; cursor: pointer; padding: 4px; display: flex; align-items: center; justify-content: center; border-radius: 4px; }
