@@ -206,5 +206,28 @@ await test('A · pintar todo marcado NO desbloquea filas mientras se calcula', (
     ui.dispose();
 });
 
+await test('A · una seleccion con valores que ya no existen sigue siendo parcial', () => {
+    const ui = componentHost(panelFile, { exports: categoryExport });
+    // Un refresco dejo fuera del bucket el valor elegido: `length` iguala al
+    // total sin que este todo incluido. Contar habria dicho «todo».
+    const tree = ui.render(categoria({
+        bucket: { values: [{ value: 'Ejecutado', count: 3 }] },
+        selectedValues: ['Desaparecida'],
+    }));
+    const caja = cajas(tree)[0];
+    assert.equal(nodes(caja, n => n.type === 'line').length, 1, 'guion: la restriccion existe');
+    assert.ok(caja.props.className.includes('active'), 'y es del usuario, asi que va en azul');
+    ui.dispose();
+});
+
+await test('A · marcar TODOS los valores no se dibuja como «sin restriccion»', () => {
+    const ui = componentHost(panelFile, { exports: categoryExport });
+    const tree = ui.render(categoria({ selectedValues: ['Ejecutado', 'Pendiente', 'Vacia'] }));
+    const caja = cajas(tree)[0];
+    assert.equal(nodes(caja, n => n.type === 'path').length, 1, 'palomita: esta todo incluido');
+    assert.ok(caja.props.className.includes('active'), 'pero lo eligio el usuario: azul, no gris');
+    ui.dispose();
+});
+
 console.log(JSON.stringify({ suite: 'hotfixPostRelease', pass, fail }));
 if (fail) process.exit(1);

@@ -45,7 +45,15 @@ const FilterCategory = React.memo(({
     // si no hubiera nada incluido, cuando en realidad estaba todo.
     const sinRestriccion = selectedValues.length === 0;
     const total = bucket?.values.length || 0;
-    const parcial = !sinRestriccion && selectedValues.length < total;
+    // «Todo seleccionado» no es contar: una selección puede arrastrar valores
+    // que ya NO están en el bucket --el que desapareció tras un refresco-- y
+    // entonces `length` iguala o supera al total sin que esté todo incluido.
+    // El `length ===` va primero a propósito: corta el recorrido salvo en el
+    // único caso donde hace falta.
+    const todoSeleccionado = total > 0 && selectedValues.length === total
+        && (() => { const s = new Set(selectedValues); return (bucket?.values || []).every(v => s.has(v.value)); })();
+    const parcial = !sinRestriccion && !todoSeleccionado;   // guion en vez de palomita
+    const conRestriccion = !sinRestriccion;                 // azul, el mismo criterio que las filas
     const [renderLimit, setRenderLimit] = useState(100);
     // Los valores sin coincidencias se ocultan, como en baseline; buscar los
     // vuelve a mostrar. El conmutador «Mostrar valores no disponibles» era
@@ -92,7 +100,7 @@ const FilterCategory = React.memo(({
                     aria-checked={parcial ? 'mixed' : 'true'} role="checkbox"
                     onClick={e => { e.stopPropagation(); togglePropertyAll(prop.id); }}>
                     <div className="tandem-cb-wrap">
-                        <div className={`tandem-cb-box checked ${parcial ? 'active' : ''}`}>
+                        <div className={`tandem-cb-box checked ${conRestriccion ? 'active' : ''}`}>
                             <svg viewBox="0 0 24 24" preserveAspectRatio="xMidYMid meet" className="tandem-cb-icon">
                                 {parcial
                                     ? <line x1="6" y1="12" x2="18" y2="12" stroke="#fff" strokeWidth="3" />
