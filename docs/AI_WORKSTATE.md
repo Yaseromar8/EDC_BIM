@@ -586,12 +586,38 @@ autorreferencial del presente documento. Consultar HEAD real por separado.
 
 ## EXACT NEXT ACTION
 
-Entregar el candidato local POPOUT SCALE a Claude/propietario para preparar el
-reensayo HOST autorizado, con frontend y backend del mismo SHA. El entorno real
-conserva 82ae5d9 y los cinco snapshots: no repetir migración/reextracción.
-No ejecutar H1–H6 ni actualizar servicios en esta tarea; esperar instrucción.
+**Ninguna.** El release y su hotfix están en producción.
 
-### Handoff vigente — POPOUT SCALE
+```
+FILTERS CORE = PRODUCTION GREEN
+PRODUCTION RC (backend) = 0864878a985b9b30ea6a8e6859eda92b9031e5b6
+P0..P9 PASS — evidencia: docs/filters/RELEASE_EJECUTADO.md
+
+FILTERS POST-RELEASE HOTFIX — desplegado SOLO a ALEPHIA View
+A · UX ............... ARREGLADO — presentación de baseline restituida
+B · LATENCIA ......... ARREGLADO — 1402 ms -> 60 ms (baseline 3e413cd = 21 ms)
+C · FLUJO DE DATOS ... CERRADO por el propietario
+D · COLOR ............ EXPECTED · sin persistencia en ninguno de los dos sistemas
+    + STATE/UI INCONSISTENCY en la LINEA DE ESTADO · ARREGLADA
+evidencia: docs/filters/HOTFIX_POST_RELEASE.md
+```
+
+El hotfix toca `TandemFilterPanel.jsx`, `aps/utils/model.js`,
+`lib/filterVisualDriver.js` y `lib/filterRuntimeBridge.js`, más el banco nuevo
+`pruebas/filtersCore.hotfixPostRelease.prueba.mjs` y siete oráculos reapuntados
+en `filtersCore.b4` / `filtersCore.b4Adversarial`. Backend, Docs, PostgreSQL y
+migraciones: **sin tocar**.
+
+> **AVISO — pérdida de este fichero, 9-sep-2026.** Al cerrar el hotfix truncué
+> `AI_WORKSTATE.md` a 0 bytes con un script mío mal escrito y hubo que
+> restaurarlo desde `0864878`. Se perdieron los hunks de handoff **sin commit**
+> del release (P0–P9, delta gate, ventana pública, barrera P2). **No se perdió
+> evidencia**: todo eso vive versionado en `docs/filters/RELEASE_EJECUTADO.md`,
+> `P0_PRECHECK.md`, `P1_BACKUP_RESTORE.md` y `RC_DELTA_GATE.md`. Las secciones
+> anteriores de este fichero describen el estado **previo al release** y hay que
+> leerlas con esa fecha en la mano.
+
+### Handoff histórico — POPOUT SCALE (previo al release; superado)
 
 [WIP HANDOFF]
 TAREA: HOST DEFECT — POPOUT SCALE; código terminado, validación real pendiente.

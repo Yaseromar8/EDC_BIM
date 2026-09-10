@@ -180,12 +180,15 @@ await test('A6 · con dos propiedades de color, la prioridad que anuncia el pane
     const result = calculateFilterResult(f.state, f.snapshot(), 1);
     const driver = createFilterVisualDriver({ viewer: f.viewer, models: () => f.models, window: f.host, yieldFrame: async () => {} });
     await driver.apply(result, f.state, () => true);
-    // Prioridad tal y como la calcula y la enuncia el panel.
-    const panel = src(panelFile);
-    const expr = panel.match(/const colorPriority = ([^;]+);/);
-    assert.ok(expr, 'localizador real de la prioridad del panel');
-    const colorPriority = new Function('filterColors', 'return ' + expr[1])(f.state.filterColors);
-    const ganadora = colorPriority[0];
+    // El bloque que ENUNCIABA la prioridad en el panel se retiro por decision
+    // del propietario. La prioridad no era del panel: vive en el driver
+    // --`active` ordenado y «last color wins»--, y de ahi se lee ahora. El
+    // oraculo queda mas fuerte, no mas debil: se compara contra la fuente.
+    const driverSrc = src('lib/filterVisualDriver.js');
+    const expr = driverSrc.match(/const active=(Object\.keys\(state\.filterColors\|\|\{\}\)[^;]+);/);
+    assert.ok(expr, 'localizador real de la prioridad del driver');
+    const active = new Function('state', 'return ' + expr[1])({ filterColors: f.state.filterColors });
+    const ganadora = active[active.length - 1];
     for (const fila of f.host.postgresInventory) {
         const dbId = f.host.rosettaToDbId.m1[fila.dbId];
         const real = f.models[0].colors.get(dbId);
@@ -266,7 +269,9 @@ await test('A1 · buscar no toca conteos ni el bucket, y limpiar devuelve el dom
             'buscar no puede cambiar el conteo de ' + li.props['data-test-id']);
     }
     assert.equal(JSON.stringify(bucket), congelado, 'la presentación no muta el FilterResult');
-    nodes(tree, n => n.type === 'button' && text(n) === 'Limpiar búsqueda')[0].props.onClick();
+    // El boton «Limpiar busqueda» se retiro; limpiar es la × nativa del input
+    // type=search, que emite onChange con cadena vacia.
+    label(tree, 'Buscar valores de G::Estado').props.onChange(event(''));
     tree = ui.render(p);
     assert.deepEqual(p.selectedValues, ['V399'], 'limpiar conserva la selección');
     assert.ok(nodes(tree, n => n.props['data-test-id']?.startsWith('facet-value:')).length > 0);
@@ -360,7 +365,10 @@ await test('A7 · un valor seleccionado fuera del bloque visible sigue contando 
     p.setFacetSearch = updater => { p.searchConfig = updater({ [p.prop.id]: p.searchConfig })[p.prop.id]; };
     let tree = ui.render(p);
     assert.ok(nodes(tree, n => n.type === 'input' && n.props.type === 'checkbox').length <= 5, 'DOM acotado');
-    assert.ok(text(tree).includes('1 seleccionados'), 'el panel declara la selección aunque no la pinte');
+    // El bloque «N seleccionados» de B4 se retiró; la declaración vuelve a ser
+    // la cuenta `(x of y)` de la cabecera, que es la presentación de baseline.
+    const cuenta = text(nodes(tree, n => n.props.className === 'tandem-group-count')[0]).replace(/\s+/g, ' ');
+    assert.equal(cuenta, '( 1 of 6000 )', 'el panel declara la selección aunque no la pinte');
     const items = presentation.facetItems(bucket, ['V5999']);
     assert.equal(items.length, 6000, 'la selección no duplica ni pierde valores del dominio');
     assert.equal(items.find(x => x.value === 'V5999').selected, true);

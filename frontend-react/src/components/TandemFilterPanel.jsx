@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import HeatmapConfigPanel from './HeatmapConfigPanel';
-import { facetItems, searchFacetItems, propertyMatches, filterFeedback, filterValueColor } from '../lib/filterPresentation';
+import { facetItems, searchFacetItems, filterFeedback, filterValueColor } from '../lib/filterPresentation';
 import {
     GearIcon,
     RevertIcon,
@@ -31,11 +31,18 @@ const FilterCategory = React.memo(({
     const validItems = useMemo(() => {
         return facetItems(bucket, selectedValues);
     }, [bucket, selectedValues]);
+    // La casilla nativa sigue en el árbol --estado, `disabled` y nombre
+    // accesible-- pero sin dibujarse. No es `display:none`: eso la sacaría del
+    // foco por teclado. `.tandem-cb-*` no tiene CSS en ninguna hoja, así que el
+    // estilo va aquí y no en App.css.
+    const CASILLA_INVISIBLE = { position: 'absolute', opacity: 0, width: 16, height: 16, margin: 0, cursor: 'pointer' };
     const searchQuery = searchConfig?.query || '';
-    const [showUnavailable, setShowUnavailable] = useState(false);
     const [renderLimit, setRenderLimit] = useState(100);
+    // Los valores sin coincidencias se ocultan, como en baseline; buscar los
+    // vuelve a mostrar. El conmutador «Mostrar valores no disponibles» era
+    // chrome añadido y se retiró: la conducta que gobernaba sigue aquí.
     const searchedItems = useMemo(() => searchFacetItems(validItems, searchQuery)
-        .filter(item => showUnavailable || searchQuery.trim() || !item.disabled), [validItems, searchQuery, showUnavailable]);
+        .filter(item => searchQuery.trim() || !item.disabled), [validItems, searchQuery]);
     const limit = expanded ? renderLimit : DEFAULT_VISIBLE_VALUES;
     const filteredVisibleItems = searchedItems.slice(0, limit);
     const hasMore = searchedItems.length > limit;
@@ -76,6 +83,7 @@ const FilterCategory = React.memo(({
                     onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setExpandedFilters(prev => ({ ...prev, [prop.id]: !prev[prop.id] })); } }}
                     onClick={() => setExpandedFilters(prev => ({ ...prev, [prop.id]: !prev[prop.id] }))}>
                     <span className="tandem-group-title" title={prop.id}>{prop.id}</span>
+                    <span className="tandem-group-count">({selectedValues.length} of {bucket?.values.length || 0})</span>
                 </div>
                 <div className="tandem-actions" style={{ gap: '4px', alignItems: 'center' }}>
                     <button className={`tandem-action-btn ${searchConfig?.open ? 'active' : ''}`} title="Search" onClick={() => setFacetSearch(prev => ({ ...prev, [prop.id]: { open: !prev[prop.id]?.open, query: '' } }))}>
@@ -98,14 +106,6 @@ const FilterCategory = React.memo(({
                     </button>
                 </div>
             </div>
-            <div style={{ padding: '0 16px 6px 36px', color: '#bbb' }}>
-                {selectedValues.length ? `${selectedValues.length} seleccionados · quitar el último vuelve a Todos` : 'Todos · sin restricción'}
-                {prop.unavailable ? ' · propiedad no disponible' : ''}
-                <button className="tandem-action-btn" aria-pressed={showUnavailable} onClick={() => setShowUnavailable(v => !v)}>
-                    {showUnavailable ? 'Ocultar' : 'Mostrar'} valores no disponibles (0)
-                </button>
-            </div>
-
             {searchConfig?.open && (
                 <div style={{ padding: '4px 16px 4px 36px' }}>
                     <input
@@ -117,7 +117,6 @@ const FilterCategory = React.memo(({
                         value={searchQuery}
                         onChange={handleSearchChange}
                     />
-                    {searchQuery && <button onClick={() => setFacetSearch(prev => ({ ...prev, [prop.id]: { ...prev[prop.id], query: '' } }))}>Limpiar búsqueda</button>}
                 </div>
             )}
 
@@ -145,10 +144,15 @@ const FilterCategory = React.memo(({
                         <li key={item.value} className="tandem-item" data-test-id={`facet-value:${item.value}`}>
                             <label className="tandem-item-label">
                                 <span className="tandem-cb-container">
-                                    <input type="checkbox" aria-label={`${prop.id}: ${item.value}`} checked={isChecked}
+                                    {/* La casilla real se conserva --es la que da el estado, el
+                                        `disabled` y el nombre accesible-- pero vuelve a ser
+                                        invisible: lo que se ve es la caja con estilo de Tandem,
+                                        como en baseline. El `label` que las envuelve hace que
+                                        pulsar la caja marque la casilla. */}
+                                    <input type="checkbox" style={CASILLA_INVISIBLE} aria-label={`${prop.id}: ${item.value}`} checked={isChecked}
                                         disabled={!isChecked && (!ready || item.disabled)}
                                         onChange={() => handleValueToggle(prop.id, item.value)} />
-                                    <div className="tandem-cb-wrap" aria-hidden="true" style={{ display: 'none' }}>
+                                    <div className="tandem-cb-wrap" aria-hidden="true">
                                         <div className={`tandem-cb-box ${isChecked ? 'checked' : ''} ${selectedValues.length > 0 ? 'active' : ''}`}>
                                             <svg viewBox="0 0 24 24" preserveAspectRatio="xMidYMid meet" className="tandem-cb-icon">
                                                 <path fill="none" stroke={isChecked ? '#fff' : 'transparent'} d="M6,11.3 L10.3,16 L18,6.2" />
@@ -156,7 +160,7 @@ const FilterCategory = React.memo(({
                                         </div>
                                     </div>
                                 </span>
-                                <span className="tandem-item-text" title={String(item.value)}>{String(item.value) || '(vacío)'}{!ready ? (isChecked ? ' · seleccionado, pendiente' : ' · pendiente') : item.count === 0 ? (isChecked ? ' · seleccionado, 0' : ' · no disponible') : ''}</span>
+                                <span className="tandem-item-text" title={String(item.value)}>{String(item.value) || '(vacío)'}</span>
                             </label>
                             <div className="tandem-item-right">
                                 <span className="tandem-count-badge">
@@ -254,7 +258,6 @@ const FilterCategory = React.memo(({
                     </li>
                 )}
 
-                {!filteredVisibleItems.length && <li role="status" className="tandem-item">{searchQuery ? 'Sin valores que coincidan con la búsqueda.' : ready ? 'Sin valores disponibles.' : 'Valores pendientes de cálculo.'}</li>}
                 {hasMore && <li className="tandem-item"><button onClick={() => {
                     if (!expanded) setExpandedFilters(prev => ({ ...prev, [prop.id]: true }));
                     else setRenderLimit(n => n + 100);
@@ -388,11 +391,8 @@ const TandemFilterPanel = ({
     DEFAULT_VISIBLE_VALUES
 }) => {
     const feedback = filterFeedback(filterResult, filterProgress, filterScopeId);
-    const [propertySearch, setPropertySearch] = useState('');
     const [propertyLimit, setPropertyLimit] = useState(5);
-    const propertyMatchesAll = useMemo(() => allPropertyObjects.filter(p => propertyMatches(p, propertySearch)), [allPropertyObjects, propertySearch]);
-    const panelProperties = propertyMatchesAll.slice(0, propertyLimit);
-    const colorPriority = Object.keys(filterColors).filter(id => filterColors[id]).sort().reverse();
+    const panelProperties = allPropertyObjects.slice(0, propertyLimit);
     // Shared URN normalizer for consistent comparisons
     const isUrnHidden = (urn) => hiddenModelUrns.some(u => normUrn(u) === normUrn(urn));
     const visibleCount = models.filter(m => !isUrnHidden(m.urn)).length;
@@ -675,19 +675,20 @@ const TandemFilterPanel = ({
                     </button>
                 </div>
             </header>
-            <div style={{ padding: '8px 16px', borderBottom: '1px solid #444' }}>
-                <div role="status" aria-live="polite" data-filter-state={feedback.state} data-filter-revision={feedback.revision}>
-                    {feedback.text}{feedback.visual ? ' · ' + feedback.visual : ''}
+            {/* LINEA MINIMA DE ESTADO. Sólo cuando hay algo que el usuario no
+                puede deducir de la lista: los filtros aún no están calculados, o
+                fallaron. En el caso normal --resultado listo-- el panel se ve
+                como en baseline: sin banda, sin buscador de propiedades y sin
+                explicación de prioridad de color. `data-filter-*` se conserva
+                porque es el anclaje del banco de pruebas, y no dibuja nada. */}
+            {!feedback.ready && (
+                <div style={{ padding: '8px 16px', borderBottom: '1px solid #444' }}>
+                    <div role="status" aria-live="polite" data-filter-state={feedback.state} data-filter-revision={feedback.revision}>
+                        {feedback.text}
+                    </div>
+                    {feedback.state === 'error' && <button className="tandem-action-btn" onClick={() => window.dispatchEvent(new CustomEvent('recalculate-filters'))}>Reintentar</button>}
                 </div>
-                {feedback.state === 'error' && <button onClick={() => window.dispatchEvent(new CustomEvent('recalculate-filters'))}>Reintentar</button>}
-                <input type="search" aria-label="Buscar propiedades del panel" placeholder="Buscar Grupo::Propiedad"
-                    value={propertySearch} onChange={e => { setPropertySearch(e.target.value); setPropertyLimit(5); }} />
-                {propertySearch && <button onClick={() => { setPropertySearch(''); setPropertyLimit(5); }}>Limpiar búsqueda de propiedades</button>}
-                {colorPriority.length > 0 && <div style={{ marginTop: 6 }}>
-                    Color por varias propiedades. En coincidencias prevalece la primera de esta prioridad estable (no el orden del panel): {colorPriority.join(' → ')}.
-                    {feedback.visual !== 'Aplicado en el visor' ? ' Colores configurados; aplicación visual pendiente o pausada.' : ''}
-                </div>}
-            </div>
+            )}
 
             <div className="tandem-scroll">
                 {/* 1. SOURCES GROUP (Modelos) */}
@@ -854,7 +855,7 @@ const TandemFilterPanel = ({
                 {/* 2. PROPERTIES GROUPS */}
                 {panelProperties.length === 0 && (
                     <div style={{ padding: '20px', textAlign: 'center', color: '#666', fontStyle: 'italic' }}>
-                        {propertySearch ? 'Sin propiedades que coincidan con la búsqueda.' : 'No hay propiedades configuradas. Usa Configurar.'}
+                        No hay propiedades configuradas. Usa Configurar.
                     </div>
                 )}
 
@@ -880,10 +881,10 @@ const TandemFilterPanel = ({
                     />
                 ))}
 
-                {propertyMatchesAll.length > propertyLimit && (
+                {allPropertyObjects.length > propertyLimit && (
                     <div style={{ padding: '12px', textAlign: 'center' }}>
                         <button className="tandem-action-btn" style={{ width: '100%', padding: '8px', background: 'rgba(255,255,255,0.05)', borderRadius: '4px' }} onClick={() => setPropertyLimit(prev => prev + 5)}>
-                            Mostrar más propiedades ({panelProperties.length} de {propertyMatchesAll.length})
+                            Mostrar más propiedades
                         </button>
                     </div>
                 )}

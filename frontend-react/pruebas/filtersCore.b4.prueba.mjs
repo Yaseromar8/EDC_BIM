@@ -92,7 +92,10 @@ export async function runB4({ mutant = null } = {}) {
         label(tree, 'G1::Estado: Valor 6000').props.onChange();
         tree = ui.render(p);
         assert.equal(label(tree, 'G1::Estado: Valor 6000').props.checked, true);
-        nodes(tree, n => n.type === 'button' && text(n) === 'Limpiar búsqueda')[0].props.onClick();
+        // El boton «Limpiar busqueda» se retiro por decision del propietario.
+        // Limpiar es ahora lo que hace la × nativa del input type=search:
+        // emitir onChange con cadena vacia. El oraculo no cambia.
+        label(tree, 'Buscar valores de G1::Estado').props.onChange(event(''));
         tree = ui.render(p);
         assert.deepEqual(p.selectedValues, ['Valor 6000']);
         assert.ok(nodes(tree, n => n.type === 'input' && n.props.type === 'checkbox').length <= 5);
@@ -104,10 +107,13 @@ export async function runB4({ mutant = null } = {}) {
         const tree = ui.render(p);
         assert.equal(label(tree, 'G1::Estado: Desaparecida').props.disabled, false);
         assert.equal(label(tree, 'G1::Estado: Desaparecida').props.checked, true);
-        assert.ok(text(tree).includes('seleccionado, pendiente'));
-        assert.ok(!text(tree).includes('seleccionado, 0'), 'pending must not claim resolved zero');
+        // Los sufijos « · seleccionado, pendiente» / « · seleccionado, 0» eran
+        // chrome de B4 y se retiraron. El oraculo --pendiente no puede declarar
+        // un cero resuelto-- lo sostiene ahora la insignia de conteo.
+        const insignia = t => text(nodes(t, n => n.props.className === 'tandem-count-badge')[0]).trim();
+        assert.equal(insignia(tree), '—', 'pending must not claim resolved zero');
         p.ready = true;
-        assert.ok(text(ui.render(p)).includes('seleccionado, 0')); ui.dispose();
+        assert.equal(insignia(ui.render(p)), '0'); ui.dispose();
     });
     await test('zero unselected searchable but disabled; no invented count', () => {
         const ui = category(), p = categoryProps(); p.bucket = { values: [{ value: 'Incompatible', count: 0, totalCount: 9 }] }; p.searchConfig.query = 'incompatible';
@@ -157,7 +163,7 @@ export async function runB4({ mutant = null } = {}) {
         const add = nodes(tree, n => n.props.title === 'G5999::Estado')[0]; assert.ok(add); add.props.onClick();
         tree = ui.render(p); assert.ok(label(tree, 'Quitar G5999::Estado')); ui.dispose();
     });
-    await test('actual panel property search, feedback and clear preserve Sources', () => {
+    await test('actual panel bounded block, minimal feedback and clear preserve Sources', () => {
         const host = new EventTarget(), ui = componentHost(panelFile, { host });
         let resets = 0, sourceWrites = 0; host.addEventListener('filters-reset-all', () => resets++);
         const f = makeRuntimeFixture(), result = calculateFilterResult(f.state, f.snapshot(), 1);
@@ -168,12 +174,15 @@ export async function runB4({ mutant = null } = {}) {
             setFilterConfiguratorOpen() {}, setExpandedFilters() {}, setFacetSearch() {}, PALETTE: [], DEFAULT_VISIBLE_VALUES: 5 };
         let tree = ui.render(p);
         assert.equal(nodes(tree, n => n.props.prop?.id).length, 5);
-        label(tree, 'Buscar propiedades del panel').props.onChange(event('G5999::Estado')); tree = ui.render(p);
-        assert.deepEqual(nodes(tree, n => n.props.prop?.id).map(n => n.props.prop.id), ['G5999::Estado']);
-        assert.equal(nodes(tree, n => n.props['data-filter-state'])[0].props['data-filter-state'], 'no-filters');
+        // El buscador de propiedades del panel y su boton de limpiar se
+        // retiraron por decision del propietario. Con el resultado listo, el
+        // panel no dibuja banda de estado: eso es baseline.
+        assert.equal(nodes(tree, n => n.props['data-filter-state']).length, 0);
         label(tree, 'Limpiar filtros').props.onClick(); assert.equal(resets, 1); assert.equal(sourceWrites, 0);
         p.filterResult = { ...result, status: 'error', diagnostics: [{ message: 'broken' }] };
         tree = ui.render(p); assert.ok(text(tree).includes('broken')); assert.ok(nodes(tree, n => n.type === 'button' && text(n) === 'Reintentar').length);
+        assert.equal(nodes(tree, n => n.props['data-filter-state'])[0].props['data-filter-state'], 'error',
+            'el estado sigue anclado para el banco aunque no se dibuje en el caso normal');
         ui.dispose();
     });
     await test('actual App value toggles OR, clear property and restored intent edit', () => {
@@ -241,7 +250,10 @@ export async function runB4({ mutant = null } = {}) {
         await tick();
         assert.ok(f.models[0].colors.size > 0);
         p.filterResult = runtime.controller.getResult(); tree = ui.render(p);
-        assert.ok(text(tree).includes('aplicación visual pendiente o pausada'), 'old progress cannot claim current legend applied');
+        // El bloque explicativo de prioridad de color se retiro por decision del
+        // propietario. El oraculo se mantiene por el lado fuerte: con un
+        // progreso viejo, el panel NO puede afirmar que ya esta aplicado.
+        assert.ok(!text(tree).includes('Aplicado en el visor'), 'old progress cannot claim current legend applied');
         nodes(tree, n => n.props.prop?.id)[0].props.handleColorToggle('G::Estado', [], false, 'Estado');
         await tick(); assert.equal(f.models[0].colors.size, 0);
         assert.equal(runtime.controller.getState().filterColors['G::Estado'], false);

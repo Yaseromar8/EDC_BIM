@@ -8,7 +8,10 @@ export function mountFiltersRuntime({ host, viewer, getIntent, models, ready }) 
     const progress=detail=>emit('filter-progress',detail);
     const driver=createFilterVisualDriver({ viewer, models, window:host,
         onExternal:(kind,owner)=>{
-            if(kind==='visibility') controller?.request({}, {force:true});
+            // Sin dueno --el coloreo ajeno se apago-- se recalcula y se deja que
+            // el driver publique su fase real. Declarar 'paused' sin dueno dejaba
+            // la linea de estado mintiendo.
+            if(kind==='visibility' || !owner) controller?.request({}, {force:true});
             else { controller?.request({}, {force:true}); progress({revision:controller?.getResult()?.revision,phase:'paused',owner}); }
         }});
     const snapshot=state=>{

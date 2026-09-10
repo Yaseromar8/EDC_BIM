@@ -22,7 +22,16 @@ export function createFilterVisualDriver({ viewer, models, window: host,
     });
     const externalColor = () => {
         if (writing || disposed) return;
-        const owner = host.__ecdTintApplying ? 'sources' : 'external-tool';
+        // APAGAR el coloreo por Source pasa por el MISMO camino que encenderlo:
+        // `_applySourceTint(urn, null)` tambien levanta `__ecdTintApplying` y
+        // llama a clearThemingColors. Mirando solo esa bandera, el dueno seguia
+        // siendo 'sources', el `if` de abajo era falso, no se emitia progreso y
+        // la linea de estado repetia «Control visual: sources» para siempre --con
+        // el coloreo apagado y cero fragmentos tenidos--. `__ecdSourceColorOn` ya
+        // esta fijado ANTES de pintar o borrar, asi que dice la verdad aqui.
+        const owner = host.__ecdTintApplying
+            ? (host.__ecdSourceColorOn ? 'sources' : null)
+            : 'external-tool';
         ++colorJob;
         clearOwned();
         if (foreignOwner !== owner) { foreignOwner = owner; onExternal('color',owner); }

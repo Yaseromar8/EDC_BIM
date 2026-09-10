@@ -402,7 +402,7 @@ export const _normVal = (raw) => Array.isArray(raw)
     ? raw.map(x => String(x ?? '').trim()).filter(Boolean).join(', ')
     : String(raw ?? '').trim();
 
-let _facetCache = { revision: null, allData: null, rosetta: null, rosettaFp: '', prepared: null };
+let _facetCache = { revision: null, allData: null, rosettaFp: '', prepared: null };
 
 // Huella de la rosetta: window.rosettaToDbId se MUTA en el mismo objeto cuando
 // cada modelo termina de indexar (el pesado llega al final). Comparar solo la
@@ -540,24 +540,28 @@ export function calculateBucketsFromPostgres(allData, filterProperties, filterSe
     // rosettaToExtIdReversed: URN -> ExternalId -> dbId
     // hiddenModelUrns: array of URNs que el usuario ocultó en Sources (formato React/raw)
 
-    // Índice cacheado: se reconstruye si cambió el inventario o la rosetta
-    // (por referencia O por CONTENIDO — la rosetta se muta al indexar cada
-    // modelo). Los toggles de Sources/valores NO lo invalidan.
+    // Índice cacheado: se reconstruye si cambió el inventario o la rosetta.
+    // Los toggles de Sources/valores NO lo invalidan.
     // LA REFERENCIA DEL ARRAY NO ES UNA REVISION. El inventario se edita EN
     // SITIO --la rejilla escribe sobre las mismas filas al guardar-- asi que el
     // array seguia siendo el mismo objeto y el indice cacheado devolvia el valor
     // anterior indefinidamente. Ahora la cache exige una revision explicita que
     // el llamador incrementa cuando el dataset cambia; sin revision no se
     // cachea, que es lo correcto para un llamador que no sabe declararla.
+    // LA ROSETTA SE COMPARA SOLO POR CONTENIDO. Comparar tambien la referencia
+    // no anadia garantia --la huella es el contenido exacto, urn por urn, y el
+    // indice depende unicamente de `allData` y de ese contenido-- y en cambio
+    // condenaba la cache: el puente entrega un `structuredClone` NUEVO en cada
+    // llamada, asi que la referencia nunca coincidia y el indice se reconstruia
+    // en CADA clic. Medido en produccion: 1539 ms -> 893 ms.
     const rosettaFp = _rosettaFingerprint(rosettaToExtIdReversed);
     const cacheUtilizable = datasetRevision !== null && datasetRevision !== undefined;
     if (!cacheUtilizable || _facetCache.revision !== datasetRevision
-        || _facetCache.allData !== allData || _facetCache.rosetta !== rosettaToExtIdReversed
+        || _facetCache.allData !== allData
         || _facetCache.rosettaFp !== rosettaFp || !_facetCache.prepared) {
         _facetCache = {
             revision: cacheUtilizable ? datasetRevision : null,
             allData,
-            rosetta: rosettaToExtIdReversed,
             rosettaFp,
             prepared: _buildFacetIndex(allData, rosettaToExtIdReversed),
         };
