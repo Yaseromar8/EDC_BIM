@@ -24,6 +24,7 @@ const FilterCategory = React.memo(({
     handleCustomColorChange,
     customValueColors,
     ready,
+    nombreAmbiguo,
     DEFAULT_VISIBLE_VALUES,
     PALETTE
 }) => {
@@ -43,6 +44,8 @@ const FilterCategory = React.memo(({
     // aísla un valor. El B4 dejó de dibujarlo y el panel arrancaba en gris, como
     // si no hubiera nada incluido, cuando en realidad estaba todo.
     const sinRestriccion = selectedValues.length === 0;
+    const total = bucket?.values.length || 0;
+    const parcial = !sinRestriccion && selectedValues.length < total;
     const [renderLimit, setRenderLimit] = useState(100);
     // Los valores sin coincidencias se ocultan, como en baseline; buscar los
     // vuelve a mostrar. El conmutador «Mostrar valores no disponibles» era
@@ -76,11 +79,24 @@ const FilterCategory = React.memo(({
     return (
         <div className="tandem-group" data-test-id={`facet-item:${prop.id}`}>
             <div className="tandem-group-header">
-                <button className="tandem-cb-container tandem-action-btn" title="Quitar restricción de esta propiedad" aria-label={`Limpiar ${prop.id}`} disabled={!selectedValues.length} onClick={e => { e.stopPropagation(); togglePropertyAll(prop.id); }}>
+                {/* Casilla de cabecera de TRES estados, como en baseline:
+                    palomita cuando está todo incluido, guion cuando la selección
+                    es parcial. El B4 la dejó sólo con guion y DESHABILITADA
+                    mientras no hubiera selección, así que no se podía «activar
+                    todo» desde ella. Pulsarla retira la restricción, que es
+                    exactamente eso. Azul sólo cuando el usuario ha restringido:
+                    el mismo criterio que las filas. */}
+                <button className="tandem-cb-container tandem-action-btn"
+                    title={sinRestriccion ? 'Todos los valores incluidos' : 'Quitar restricción de esta propiedad'}
+                    aria-label={`Todos los valores de ${prop.id}`}
+                    aria-checked={parcial ? 'mixed' : 'true'} role="checkbox"
+                    onClick={e => { e.stopPropagation(); togglePropertyAll(prop.id); }}>
                     <div className="tandem-cb-wrap">
-                        <div className={`tandem-cb-box ${selectedValues.length ? 'checked active' : ''}`}>
+                        <div className={`tandem-cb-box checked ${parcial ? 'active' : ''}`}>
                             <svg viewBox="0 0 24 24" preserveAspectRatio="xMidYMid meet" className="tandem-cb-icon">
-                                <line x1="6" y1="12" x2="18" y2="12" stroke={selectedValues.length ? '#fff' : 'transparent'} />
+                                {parcial
+                                    ? <line x1="6" y1="12" x2="18" y2="12" stroke="#fff" strokeWidth="3" />
+                                    : <path fill="none" stroke="#fff" strokeWidth="3" d="M6,11.3 L10.3,16 L18,6.2" />}
                             </svg>
                         </div>
                     </div>
@@ -88,8 +104,13 @@ const FilterCategory = React.memo(({
                 <div className="tandem-group-info" role="button" tabIndex={0} aria-expanded={!!expanded}
                     onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setExpandedFilters(prev => ({ ...prev, [prop.id]: !prev[prop.id] })); } }}
                     onClick={() => setExpandedFilters(prev => ({ ...prev, [prop.id]: !prev[prop.id] }))}>
-                    <span className="tandem-group-title" title={prop.id}>{prop.id}</span>
-                    <span className="tandem-group-count">({selectedValues.length} of {bucket?.values.length || 0})</span>
+                    {/* Rótulo corto, como antes del B4. El identificador completo
+                        se queda en el tooltip, y se muestra entero sólo si otra
+                        propiedad configurada se llama igual — que fue el motivo
+                        real por el que el B4 cualificó el título. */}
+                    <span className="tandem-group-title" title={prop.id}>{nombreAmbiguo ? prop.id : (prop.name || prop.id)}</span>
+                    {/* «Sin restricción» es «todos»: la cuenta lo dice. */}
+                    <span className="tandem-group-count">({sinRestriccion ? total : selectedValues.length} of {total})</span>
                 </div>
                 <div className="tandem-actions" style={{ gap: '4px', alignItems: 'center' }}>
                     <button className={`tandem-action-btn ${searchConfig?.open ? 'active' : ''}`} title="Search" onClick={() => setFacetSearch(prev => ({ ...prev, [prop.id]: { open: !prev[prop.id]?.open, query: '' } }))}>
@@ -164,7 +185,7 @@ const FilterCategory = React.memo(({
                                     <div className="tandem-cb-wrap" aria-hidden="true">
                                         <div className={`tandem-cb-box ${isChecked ? 'checked' : ''} ${selectedValues.length > 0 ? 'active' : ''}`}>
                                             <svg viewBox="0 0 24 24" preserveAspectRatio="xMidYMid meet" className="tandem-cb-icon">
-                                                <path fill="none" stroke={isChecked ? '#fff' : 'transparent'} d="M6,11.3 L10.3,16 L18,6.2" />
+                                                <path fill="none" stroke={isChecked ? '#fff' : 'transparent'} strokeWidth="3" d="M6,11.3 L10.3,16 L18,6.2" />
                                             </svg>
                                         </div>
                                     </div>
@@ -402,6 +423,18 @@ const TandemFilterPanel = ({
     const feedback = filterFeedback(filterResult, filterProgress, filterScopeId);
     const [propertyLimit, setPropertyLimit] = useState(5);
     const panelProperties = allPropertyObjects.slice(0, propertyLimit);
+    // Nombres cortos que se repiten entre las propiedades configuradas. Sólo
+    // esos se muestran cualificados: el resto luce su nombre corto, como antes
+    // del B4. Se mira TODA la lista, no sólo el bloque visible, para que la
+    // ambigüedad no aparezca y desaparezca al paginar.
+    const nombresRepetidos = useMemo(() => {
+        const cuenta = new Map();
+        for (const p of allPropertyObjects) {
+            const n = p.name || p.id;
+            cuenta.set(n, (cuenta.get(n) || 0) + 1);
+        }
+        return new Set([...cuenta].filter(([, veces]) => veces > 1).map(([n]) => n));
+    }, [allPropertyObjects]);
     // Shared URN normalizer for consistent comparisons
     const isUrnHidden = (urn) => hiddenModelUrns.some(u => normUrn(u) === normUrn(urn));
     const visibleCount = models.filter(m => !isUrnHidden(m.urn)).length;
@@ -708,8 +741,8 @@ const TandemFilterPanel = ({
                                 <div className={`tandem-cb-box ${visibleCount === models.length ? 'checked' : (visibleCount > 0 && visibleCount < models.length ? 'checked' : '')} ${visibleCount < models.length ? 'active' : ''}`}>
                                     <svg viewBox="0 0 24 24" preserveAspectRatio="xMidYMid meet" className="tandem-cb-icon">
                                         {visibleCount > 0 && visibleCount < models.length
-                                            ? <line x1="6" y1="12" x2="18" y2="12" stroke="#fff" />
-                                            : <path fill="none" stroke={visibleCount === models.length ? '#fff' : 'transparent'} d="M6,11.3 L10.3,16 L18,6.2" />
+                                            ? <line x1="6" y1="12" x2="18" y2="12" stroke="#fff" strokeWidth="3" />
+                                            : <path fill="none" stroke={visibleCount === models.length ? '#fff' : 'transparent'} strokeWidth="3" d="M6,11.3 L10.3,16 L18,6.2" />
                                         }
                                     </svg>
                                 </div>
@@ -771,7 +804,7 @@ const TandemFilterPanel = ({
                                                     <div className="tandem-cb-wrap">
                                                         <div className={`tandem-cb-box ${!isUrnHidden(model.urn) ? 'checked' : ''} ${hiddenModelUrns.length > 0 ? 'active' : ''}`}>
                                                             <svg viewBox="0 0 24 24" preserveAspectRatio="xMidYMid meet" className="tandem-cb-icon">
-                                                                <path fill="none" stroke={!isUrnHidden(model.urn) ? '#fff' : 'transparent'} d="M6,11.3 L10.3,16 L18,6.2" />
+                                                                <path fill="none" stroke={!isUrnHidden(model.urn) ? '#fff' : 'transparent'} strokeWidth="3" d="M6,11.3 L10.3,16 L18,6.2" />
                                                             </svg>
                                                         </div>
                                                     </div>
@@ -877,6 +910,7 @@ const TandemFilterPanel = ({
                         expanded={expandedFilters[prop.id]}
                         searchConfig={facetSearch[prop.id]}
                         isColorActive={filterColors[prop.id]}
+                        nombreAmbiguo={nombresRepetidos.has(prop.name || prop.id)}
                         togglePropertyAll={togglePropertyAll}
                         handleValueToggle={handleValueToggle}
                         setExpandedFilters={setExpandedFilters}

@@ -60,8 +60,13 @@ import { Network } from '@capacitor/network';
 // `Standard::Sources` NO está, y es a propósito: el bloque `Sources` de arriba
 // ya es la lista de fuentes, con sus nombres de fichero. Tenerlo además como
 // grupo de facetas mostraba lo mismo dos veces, y abajo en crudo —URNs en
-// base64 que se truncan justo por donde se diferencian—. Tandem arranca con
-// Sources + Revit Categories, y esto se alinea con eso.
+// base64 que se truncan justo por donde se diferencian—.
+//
+// Ojo con el argumento «Tandem arranca así»: Tandem arranca con VARIOS grupos
+// —Sources, Levels, Spaces, Classifications, Tandem Category y Revit
+// Categories—, comprobado el 10-sep-2026 sobre la misma obra. Lo que Tandem NO
+// tiene es un grupo de facetas que repita las fuentes. Eso es lo que se quita
+// aquí; el número de grupos con que arrancamos es decisión nuestra.
 //
 // Sigue disponible en ⚙ Configurar para quien lo quiera, la lista blanca de
 // abajo impide que se caiga si alguien lo eligió, y cada Saved View restaura su

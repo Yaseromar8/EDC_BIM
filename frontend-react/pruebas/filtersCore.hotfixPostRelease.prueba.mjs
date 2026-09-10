@@ -114,7 +114,7 @@ await test('D · un coloreo ajeno que NO es Sources sigue pausando', async () =>
 // Sin restricción el panel se ve TODO marcado, como en baseline y como en
 // Tandem. El estado lógico no cambia: `selectedValues` vacío sigue siendo
 // «sin restricción» y el motor lo trata como «Virtual All».
-const { componentHost, nodes, label, categoryExport, panelFile } = await import('./filtersCore.b4.prueba.mjs');
+const { componentHost, nodes, label, text, categoryExport, panelFile } = await import('./filtersCore.b4.prueba.mjs');
 const categoria = (over = {}) => ({
     prop: { id: 'G::Estado', name: 'Estado' },
     bucket: { values: [{ value: 'Ejecutado', count: 3 }, { value: 'Pendiente', count: 2 }, { value: 'Vacia', count: 0 }] },
@@ -149,6 +149,51 @@ await test('A · con restriccion manda la seleccion, no el estado vacio', () => 
     const tree = ui.render(categoria({ selectedValues: ['Ejecutado'] }));
     assert.equal(label(tree, 'G::Estado: Ejecutado').props.checked, true);
     assert.equal(label(tree, 'G::Estado: Pendiente').props.checked, false);
+    ui.dispose();
+});
+
+// ── A · CABECERA DE GRUPO ────────────────────────────────────────────────────
+const cajas = t => nodes(t, n => typeof n.props.className === 'string' && n.props.className.includes('tandem-cb-box'));
+const cuenta = t => text(nodes(t, n => n.props.className === 'tandem-group-count')[0]).replace(/\s+/g, ' ');
+const titulo = t => text(nodes(t, n => n.props.className === 'tandem-group-title')[0]).trim();
+
+await test('A · sin restriccion: cabecera con palomita, sin azul, y (N of N)', () => {
+    const ui = componentHost(panelFile, { exports: categoryExport });
+    const tree = ui.render(categoria());
+    const caja = cajas(tree)[0];
+    assert.ok(caja.props.className.includes('checked'), 'la cabecera debe ir marcada cuando esta todo incluido');
+    assert.ok(!caja.props.className.includes('active'), 'sin restriccion no es una eleccion del usuario: no va en azul');
+    assert.equal(nodes(caja, n => n.type === 'path').length, 1, 'palomita, no guion');
+    assert.equal(cuenta(tree), '( 3 of 3 )');
+    ui.dispose();
+});
+
+await test('A · seleccion parcial: guion, azul y (1 of 3)', () => {
+    const ui = componentHost(panelFile, { exports: categoryExport });
+    const tree = ui.render(categoria({ selectedValues: ['Ejecutado'] }));
+    const caja = cajas(tree)[0];
+    assert.ok(caja.props.className.includes('active'), 'una restriccion del usuario si va en azul');
+    assert.equal(nodes(caja, n => n.type === 'line').length, 1, 'guion, no palomita');
+    assert.equal(cuenta(tree), '( 1 of 3 )');
+    ui.dispose();
+});
+
+await test('A · la cabecera se puede pulsar aunque no haya seleccion', () => {
+    const ui = componentHost(panelFile, { exports: categoryExport });
+    let limpiados = 0;
+    const tree = ui.render(categoria({ togglePropertyAll: () => limpiados++ }));
+    const boton = label(tree, 'Todos los valores de G::Estado');
+    assert.ok(!boton.props.disabled, 'deshabilitada no se puede usar para «activar todo»');
+    boton.props.onClick({ stopPropagation() {} });
+    assert.equal(limpiados, 1);
+    ui.dispose();
+});
+
+await test('A · el titulo usa el nombre corto, y se cualifica solo si hay homonimo', () => {
+    const ui = componentHost(panelFile, { exports: categoryExport });
+    const prop = { id: 'Standard::Revit Category', name: 'Revit Category' };
+    assert.equal(titulo(ui.render(categoria({ prop }))), 'Revit Category');
+    assert.equal(titulo(ui.render(categoria({ prop, nombreAmbiguo: true }))), 'Standard::Revit Category');
     ui.dispose();
 });
 
