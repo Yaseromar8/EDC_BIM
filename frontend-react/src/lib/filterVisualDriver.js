@@ -69,6 +69,36 @@ export function createFilterVisualDriver({ viewer, models, window: host,
         }
         return retired;
     };
+    // PODAR LA SELECCION A LO QUE SIGUE VISIBLE.
+    //
+    // El visor dibuja la seleccion POR ENCIMA del fantasma, asi que un elemento
+    // seleccionado antes de filtrar se seguia viendo solido y parecia escapar
+    // del filtro. El camino viejo --`handleFiltersApply` en Viewer.jsx-- hacia
+    // `clearSelection()` entero, pero ese manejador esta muerto: nadie emite ya
+    // `filters-apply`. Al pasar el mando al runtime se quedo atras.
+    //
+    // No se repone el `clearSelection()` a secas: `apply()` corre en cada
+    // recalculo --inventario listo, rosetta lista, geometria cargada-- y borrar
+    // la seleccion ahi la haria desaparecer al cargar un modelo. Se quita SOLO
+    // lo que el filtro se ha llevado, y si no sobra nada no se toca: idempotente,
+    // que es lo que permite repetirlo sin efectos.
+    const podarSeleccion = visiblePorModelo => {
+        if (typeof viewer.getAggregateSelection !== 'function') return;
+        let sobra = false;
+        const quedan = [];
+        for (const entrada of viewer.getAggregateSelection() || []) {
+            const ids = entrada.selection || entrada.ids || [];
+            const permitidos = visiblePorModelo.get(entrada.model);
+            // Modelo oculto por Sources, o que este filtro no gobierna: no se poda.
+            if (!permitidos) { if (ids.length) quedan.push({ model: entrada.model, ids: [...ids] }); continue; }
+            const dentro = [...ids].filter(id => permitidos.has(Number(id)));
+            if (dentro.length !== ids.length) sobra = true;
+            if (dentro.length) quedan.push({ model: entrada.model, ids: dentro });
+        }
+        if (!sobra) return;
+        if (quedan.length) viewer.setAggregateSelection(quedan);
+        else if (typeof viewer.clearSelection === 'function') viewer.clearSelection();
+    };
     const hiddenOf = model => [...(viewer.getAggregateHiddenNodes?.().find(x=>x.model===model)?.selection || [])];
     const capture = model => ({ isolated:[...(viewer.getIsolatedNodes?.(model)||[])], hidden:hiddenOf(model) });
     const nativeVisibility = e => {
@@ -112,6 +142,7 @@ export function createFilterVisualDriver({ viewer, models, window: host,
             const byModel=new Map(result.matchesByModel.map(g=>[_safeUrn(g.modelUrn),g.matches.map(x=>x.dbId)]));
             const validByModel=new Map([...byModel].map(([urn,ids])=>[urn,new Set(ids)]));
             let displayed=0;
+            const visiblePorModelo=new Map();
             owned(()=>{
                 for(const model of models()) {
                     if(!current()) return;
@@ -121,6 +152,7 @@ export function createFilterVisualDriver({ viewer, models, window: host,
                         if(!base.has(model)) base.set(model,capture(model));
                         const snapshot=base.get(model);
                         const ids=allowedByBase(model,byModel.get(urn)||[],snapshot);
+                        visiblePorModelo.set(model,new Set(ids.map(Number)));
                         viewer.impl.visibilityManager.isolate(ids.length?ids:[-1],model);
                         if(!current()) return;
                         if(snapshot.hidden.length) viewer.hide(snapshot.hidden,model);
@@ -133,6 +165,7 @@ export function createFilterVisualDriver({ viewer, models, window: host,
                         base.delete(model);
                     }
                 }
+                if(current() && result.hasActivePredicates) podarSeleccion(visiblePorModelo);
                 if(current()) viewer.impl.invalidate(true,true,true);
             });
             if(!current()) return {paused:true,reason:'superseded'};

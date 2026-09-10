@@ -21,6 +21,16 @@ export function makeRuntimeFixture({ count = 3, sources = ['m1'] } = {}) {
     viewer.hide=(ids,m)=>{m.hidden=[...new Set([...m.hidden,...ids])];viewer.dispatchEvent(new Event('hide'));};
     viewer.setThemingColor=(id,color,m)=>{calls.push({op:'color',id,urn:m.getData().urn});m.setThemingColor(id,color);};
     viewer.clearThemingColors=m=>{calls.push({op:'clearColor',urn:m.getData().urn});m.colors.clear();};
+    // Seleccion federada, como la del visor: `getAggregateSelection` devuelve
+    // entradas con `.selection`, y `setAggregateSelection` recibe `.ids`.
+    viewer.getAggregateSelection=()=>models.filter(m=>m.seleccion&&m.seleccion.length)
+        .map(m=>({model:m,selection:[...m.seleccion]}));
+    viewer.setAggregateSelection=grupos=>{
+        calls.push({op:'select',grupos:grupos.map(g=>[g.model.getData().urn,[...g.ids]])});
+        models.forEach(m=>{m.seleccion=[];});
+        grupos.forEach(g=>{g.model.seleccion=[...g.ids];});
+    };
+    viewer.clearSelection=()=>{calls.push({op:'clearSelection'});models.forEach(m=>{m.seleccion=[];});};
     viewer.fitToView=()=>{throw new Error('Filters must not touch camera');};
     viewer.impl={modelQueue:()=>({getModels:()=>models}),visibilityManager:{isolate:viewer.isolate},invalidate(){}};
     host.postgresInventory=sources.flatMap(source_urn=>Array.from({length:count},(_,i)=>({

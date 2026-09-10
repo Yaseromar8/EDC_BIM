@@ -8,6 +8,7 @@
 import assert from 'node:assert/strict';
 import { calculateBucketsFromPostgres } from '../src/aps/utils/model.js';
 import { mountFiltersRuntime } from '../src/lib/filterRuntimeBridge.js';
+import { calculateFilterResult } from '../src/lib/filtersCore.js';
 import { makeRuntimeFixture, microtasks, tick } from './filtersRuntime/fixture.mjs';
 
 let pass = 0, fail = 0;
@@ -238,6 +239,45 @@ await test('A · marcar TODOS los valores no se dibuja como «sin restriccion»'
     assert.equal(nodes(caja, n => n.type === 'path').length, 1, 'palomita: esta todo incluido');
     assert.ok(caja.props.className.includes('active'), 'pero lo eligio el usuario: azul, no gris');
     ui.dispose();
+});
+
+// ── SELECCION · lo que el filtro oculta no puede seguir seleccionado ─────────
+// El visor pinta la seleccion POR ENCIMA del fantasma: un elemento seleccionado
+// antes de filtrar se veia solido y parecia escapar del filtro.
+const { createFilterVisualDriver } = await import('../src/lib/filterVisualDriver.js');
+const aplicar = async (f, patch) => {
+    const driver = createFilterVisualDriver({ viewer: f.viewer, models: () => f.models, window: f.host, yieldFrame: async () => {} });
+    const r = calculateFilterResult({ ...f.state, ...patch }, f.snapshot(), 1);
+    const salida = await driver.apply(r, { ...f.state, ...patch }, () => true);
+    return { driver, r, salida };
+};
+
+await test('SEL · lo que el filtro oculta deja de estar seleccionado', async () => {
+    const f = makeRuntimeFixture();
+    f.models[0].seleccion = [1, 2, 3];          // 2 no sobrevive a «Ejecutado»
+    const { driver, r } = await aplicar(f, { filterSelections: { 'G::Estado': ['Ejecutado'] } });
+    const vivos = new Set(r.matchesByModel[0].matches.map(m => m.dbId));
+    assert.ok(!vivos.has(2), 'la premisa: 2 queda fuera del resultado');
+    assert.deepEqual(f.models[0].seleccion, [1, 3], 'se queda solo lo que sigue visible');
+    driver.dispose();
+});
+
+await test('SEL · una seleccion que pasa el filtro NO se toca', async () => {
+    const f = makeRuntimeFixture();
+    f.models[0].seleccion = [1, 3];
+    const { driver } = await aplicar(f, { filterSelections: { 'G::Estado': ['Ejecutado'] } });
+    assert.deepEqual(f.models[0].seleccion, [1, 3]);
+    assert.equal(f.calls.filter(c => c.op === 'select' || c.op === 'clearSelection').length, 0,
+        'idempotente: si no sobra nada, no se escribe la seleccion');
+    driver.dispose();
+});
+
+await test('SEL · sin restriccion no se poda nada', async () => {
+    const f = makeRuntimeFixture();
+    f.models[0].seleccion = [1, 2, 3];
+    const { driver } = await aplicar(f, {});
+    assert.deepEqual(f.models[0].seleccion, [1, 2, 3], 'sin predicados todo sigue visible');
+    driver.dispose();
 });
 
 console.log(JSON.stringify({ suite: 'hotfixPostRelease', pass, fail }));
