@@ -116,15 +116,44 @@ export function useFolderCache(apiBase, projectPrefix) {
   }, [fetchNode]);
 
   // ── INVALIDATE: Force refetch on next expand ──
+  // QUE NODOS ACABAN DE CAMBIAR. No es un contador: es la LISTA.
+  //
+  // El arbol lateral se enteraba por una campana global (`refreshSignal`), asi
+  // que CADA carpeta expandida volvia a pedir sus hijos en cada operacion.
+  // Medido en produccion, 105 minutos de uso real: 357 listados para solo OCHO
+  // direcciones distintas, una de ellas pedida 265 veces, y hasta 10 veces la
+  // misma carpeta en 3 segundos. Con tres carpetas abiertas, subir un fichero
+  // costaba cuatro listados de 6 s.
+  //
+  // Aqui ya se sabia QUE nodo cambiaba -- las operaciones llaman a
+  // `invalidateNode` con su id, y el mover invalida origen y destino. Lo unico
+  // que faltaba era decirlo en voz alta en vez de tocar la campana.
+  const [nodosInvalidados, setNodosInvalidados] = useState({ seq: 0, ids: [] });
+  const pendientesRef = useRef(new Set());
+
   const invalidateNode = useCallback((nodeId) => {
     const key = nodeId || '__root__';
     cacheRef.current.delete(key);
+    // DOS INVALIDACIONES DEL MISMO TICK VIAJAN JUNTAS. Mover llama dos veces
+    // seguidas -- origen y destino -- y si cada una pisara a la anterior, la
+    // carpeta de origen se quedaria sin refrescar. Se acumulan y se anuncian
+    // una sola vez, al vaciarse la cola.
+    pendientesRef.current.add(key);
+    queueMicrotask(() => {
+      if (!pendientesRef.current.size) return;
+      const ids = [...pendientesRef.current];
+      pendientesRef.current.clear();
+      setNodosInvalidados(prev => ({ seq: prev.seq + 1, ids }));
+    });
     bumpCache();
   }, [bumpCache]);
 
   // ── INVALIDATE ALL: Clear entire cache (for major operations) ──
   const invalidateAll = useCallback(() => {
     cacheRef.current.clear();
+    // `null` = «todos»: aqui si es legitimo despertar al arbol entero, porque
+    // de verdad no queda nada valido en el cache.
+    setNodosInvalidados(prev => ({ seq: prev.seq + 1, ids: null }));
     bumpCache();
   }, [bumpCache]);
 
@@ -281,6 +310,6 @@ export function useFolderCache(apiBase, projectPrefix) {
 
   // Return methods + cacheVersion separately so consumers can choose
   // whether to subscribe to version changes (table sync) or not (tree nodes).
-  return { methods, cacheVersion };
+  return { methods, cacheVersion, nodosInvalidados };
 }
 

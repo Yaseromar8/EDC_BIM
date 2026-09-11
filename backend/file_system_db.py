@@ -151,6 +151,25 @@ def list_contents(parent_id, model_urn, base_path="", user=None):
             except Exception as _pe:
                 parent_eff = 'none'
 
+        # LOS HECHOS DEL USUARIO, UNA SOLA VEZ POR LISTADO.
+        #
+        # `permiso_efectivo` preguntaba en CADA fila si este usuario administra
+        # la obra y con que sujetos le alcanzan las reglas. Son respuestas
+        # identicas para las cincuenta filas de una carpeta. Medido sobre la
+        # funcion real: entre 5 y 14 consultas por fila segun lo hondo que este
+        # la carpeta, y TRES de ellas eran siempre estas -- las mismas tres.
+        #
+        # No cambia ninguna regla: las mismas consultas, hechas una vez, pasadas
+        # como argumento. El contexto muere con esta llamada.
+        ctx_permisos = None
+        if u_id and not is_admin:
+            try:
+                import permiso_documental as _pd_ctx
+                ctx_permisos = _pd_ctx.contexto_de_permisos(
+                    cursor, {'id': u_id, 'role': (user or {}).get('role')}, model_urn)
+            except Exception:
+                ctx_permisos = None            # sin contexto se resuelve como siempre
+
         for row in rows:
             (r_id, r_name, r_type, r_size, r_version, r_updated, r_gcs, r_status, r_tags,
              r_metadata, r_description, r_mime, r_created, r_u_by, r_perm, r_has_children,
@@ -187,7 +206,7 @@ def list_contents(parent_id, model_urn, base_path="", user=None):
                     import permiso_documental as _pd
                     eff = _pd.permiso_efectivo(
                         cursor, {'id': u_id, 'role': (user or {}).get('role')},
-                        model_urn, r_id)
+                        model_urn, r_id, contexto=ctx_permisos)
                 except Exception:
                     eff = 'none'                       # FAIL-CLOSED
                 perm_level = eff

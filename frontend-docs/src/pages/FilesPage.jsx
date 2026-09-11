@@ -1001,7 +1001,7 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
                 currentPath={fe.currentPath} onNavigate={fe.navigate} onReset={() => fe.setCollapseSignal(s => s+1)}
                 collapseSignal={fe.collapseSignal} projectPrefix={projectPrefix} level={0} defaultExpanded={true}
                 isAdmin={isAdmin} onTreeRefresh={() => {}} onGlobalRefresh={(p) => { fe.triggerRefresh(fe.currentPath); if (p) fe.navigate(p); }}
-                refreshSignal={fe.refreshSignal} onInitiateMove={(items) => fe.setMoveState({ step: 1, items, destPath: '' })}
+                refreshSignal={fe.refreshSignal} nodosInvalidados={fe.nodosInvalidados} onInitiateMove={(items) => fe.setMoveState({ step: 1, items, destPath: '' })}
                 onRowMenu={(item, e) => { fe.setRightClickedId(item.id); fe.setActiveRowMenu({ item, x: e.clientX, y: e.clientY, source: 'sidebar' }); }}
                 editingNodeId={fe.editingNodeId} setEditingNodeId={fe.setEditingNodeId}
                 rightClickedId={fe.rightClickedId} processingIds={fe.processingIds} setProcessingIds={fe.setProcessingIds}

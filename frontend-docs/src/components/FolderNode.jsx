@@ -15,7 +15,7 @@ const abiertas = new Set();
 export default function FolderNode({ 
   user, folder, currentPath, onNavigate, projectPrefix, level = 1, 
   defaultExpanded = false, isAdmin, onTreeRefresh, onGlobalRefresh, 
-  refreshSignal = 0, onInitiateMove, collapseSignal = 0, onReset,
+  refreshSignal = 0, nodosInvalidados = null, onInitiateMove, collapseSignal = 0, onReset,
   onRowMenu, editingNodeId, setEditingNodeId, rightClickedId,
   processingIds, setProcessingIds, creatingChildParentId, setCreatingChildParentId,
   cacheMethods
@@ -114,7 +114,18 @@ export default function FolderNode({
     }
   };
 
-  useEffect(() => { if (expanded && refreshSignal > 0 && cacheMethods) { cacheMethods.expandNode(nodeId, folderFullName); } }, [refreshSignal, expanded, cacheMethods, nodeId, folderFullName]);
+  // SOLO SI ME TOCA A MI. Antes bastaba con que subiera el contador global para
+  // que esta carpeta -- y todas las demas abiertas -- volviesen a pedir sus
+  // hijos. Ahora se mira la lista de lo que de verdad cambio. `ids === null`
+  // significa «se invalido todo», y ahi si corresponde recargar.
+  const seqInvalidacion = nodosInvalidados ? nodosInvalidados.seq : 0;
+  useEffect(() => {
+    if (!expanded || !cacheMethods || !seqInvalidacion) return;
+    const ids = nodosInvalidados?.ids;
+    const meToca = ids === null || (Array.isArray(ids) && ids.includes(nodeId || '__root__'));
+    if (meToca) cacheMethods.expandNode(nodeId, folderFullName);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [seqInvalidacion, expanded, cacheMethods, nodeId, folderFullName]);
   useEffect(() => { function handleClickOutside(event) { if (menuRef.current && !menuRef.current.contains(event.target)) setShowMenu(false); } document.addEventListener('mousedown', handleClickOutside); return () => document.removeEventListener('mousedown', handleClickOutside); }, []);
   useEffect(() => { if (defaultExpanded && !children && cacheMethods) { cacheMethods.expandNode(nodeId, folderFullName); } }, [defaultExpanded, children, cacheMethods, nodeId, folderFullName]);
   useEffect(() => {
@@ -219,7 +230,7 @@ export default function FolderNode({
             <FolderNode 
               key={child.id || child.fullName} user={user} folder={child} currentPath={currentPath} 
               onNavigate={onNavigate} projectPrefix={projectPrefix} level={level + 1} isAdmin={isAdmin}
-              onTreeRefresh={onTreeRefresh} onGlobalRefresh={onGlobalRefresh} refreshSignal={refreshSignal}
+              onTreeRefresh={onTreeRefresh} onGlobalRefresh={onGlobalRefresh} refreshSignal={refreshSignal} nodosInvalidados={nodosInvalidados}
               onInitiateMove={onInitiateMove} collapseSignal={collapseSignal} onReset={onReset} onRowMenu={onRowMenu}
               editingNodeId={editingNodeId} setEditingNodeId={setEditingNodeId} rightClickedId={rightClickedId}
               processingIds={processingIds} setProcessingIds={setProcessingIds}

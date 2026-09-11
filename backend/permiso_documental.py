@@ -178,7 +178,26 @@ def sujetos_de(cur, usuario, model_urn):
 
 # ── El resolutor ──────────────────────────────────────────────────────────
 
-def permiso_efectivo(cur, usuario, model_urn, node_id, con_motivo=False):
+def contexto_de_permisos(cur, usuario, model_urn):
+    """Los hechos del USUARIO para esta peticion. Se calcula UNA vez y se pasa.
+
+    No decide nada y no cambia ninguna regla: son exactamente las dos consultas
+    que `permiso_efectivo` hacia por su cuenta en CADA fila. Sacarlas del bucle
+    no altera precedencias, ni herencia, ni el recorrido por ancestros.
+
+    Devuelve un diccionario de usar y tirar. Quien lo guarde mas alla de la
+    peticion, o lo comparta entre usuarios, rompe el aislamiento: estos datos
+    son de UNA persona en UNA obra.
+    """
+    from administracion_de_obra import es_admin_de_obra as _adm
+    usuario = usuario or {}
+    return {
+        'es_admin': bool(_adm(cur, usuario, model_urn)),
+        'sujetos': sujetos_de(cur, usuario, model_urn),
+    }
+
+
+def permiso_efectivo(cur, usuario, model_urn, node_id, con_motivo=False, contexto=None):
     """El nivel de permiso de este principal sobre este recurso. CLOSEST-WINS.
 
     Devuelve el nombre del nivel (`none`, `viewer`, …). Con `con_motivo=True`
@@ -216,8 +235,21 @@ def permiso_efectivo(cur, usuario, model_urn, node_id, con_motivo=False):
     #
     # Lo que NO concede esta autoridad: dictar veredictos. Eso lo deciden las
     # posiciones del flujo, y ahi el administrador nunca responde por otro.
-    from administracion_de_obra import es_admin_de_obra as _adm
-    if _adm(cur, usuario, model_urn):
+    # EL CONTEXTO SON LOS HECHOS DEL USUARIO, no los del recurso: si administra
+    # esta obra, y con que sujetos le alcanzan las reglas. Son IGUALES para las
+    # cincuenta filas de una carpeta, y se recalculaban cincuenta veces -- tres
+    # consultas por fila, medido. Cuando el llamante ya los trae hechos, se usan;
+    # cuando no, se calculan aqui exactamente como siempre.
+    #
+    # El contexto viaja como ARGUMENTO y muere con la peticion. No hay cache
+    # global ni compartida entre usuarios: mezclar los hechos de dos personas es
+    # la unica forma de que este codigo conceda lo que no debe.
+    if contexto is not None and 'es_admin' in contexto:
+        _administra = bool(contexto['es_admin'])
+    else:
+        from administracion_de_obra import es_admin_de_obra as _adm
+        _administra = _adm(cur, usuario, model_urn)
+    if _administra:
         return (('admin', {'regla': 'admin_de_obra', 'carpeta_id': None,
                            'sujeto_tipo': None, 'sujeto_id': None, 'saltos': None,
                            'desplazados': [], 'desplazados_lejanos': [],
@@ -225,7 +257,8 @@ def permiso_efectivo(cur, usuario, model_urn, node_id, con_motivo=False):
                                     'de carpeta, y solo los de esta obra'})
                 if con_motivo else 'admin')
 
-    sujetos = sujetos_de(cur, usuario, model_urn)
+    sujetos = (contexto['sujetos'] if (contexto is not None and 'sujetos' in contexto)
+               else sujetos_de(cur, usuario, model_urn))
     if USER not in sujetos:
         return (('none', {'regla': 'sin_identidad', 'carpeta_id': None,
                           'sujeto_tipo': None, 'sujeto_id': None, 'saltos': None,

@@ -118,7 +118,7 @@ export function useFileExplorer(project, user) {
   const allProjectUsers = [];
 
   // ── Chunked Upload Engine ──
-  const { methods: cacheMethods, cacheVersion } = useFolderCache(API, projectPrefix);
+  const { methods: cacheMethods, cacheVersion, nodosInvalidados } = useFolderCache(API, projectPrefix);
 
   // El estado de las herramientas se pide UNA vez por obra. Si falla se queda
   // en null y el menu no esconde nada: preferimos ofrecer de mas (el servidor
@@ -670,7 +670,7 @@ export function useFileExplorer(project, user) {
     folders, setFolders, files, setFiles,
     loading, setLoading,
     selected, setSelected, toggle,
-    refreshSignal, setRefreshSignal, triggerRefresh,
+    refreshSignal, setRefreshSignal, triggerRefresh, nodosInvalidados,
     filteredFolders, filteredFiles,
     elementosSeleccionados,
     searchQuery, setSearchQuery,
