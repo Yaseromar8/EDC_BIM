@@ -452,7 +452,12 @@ export function useFileExplorer(project, user) {
     // estan moviendo ya salen apagadas en la tabla, que es donde el usuario
     // esta mirando.
     setMoveState({ step: 0, items: [], itemIds: [], destPath: '', destId: null });
-    setSelected(new Set());
+    // SOLO SALE DE LA SELECCIÓN LO QUE SE MUEVE. Antes se vaciaba entera, y
+    // eso borraba el trabajo de quien tenía cinco marcados y pulsó el botón
+    // derecho sobre un sexto que no estaba marcado: ese desplazamiento no es
+    // sobre su selección y no tiene por qué deshacerla.
+    const enMovimiento = new Set(idsToMove.map(String));
+    setSelected(prev => new Set([...prev].filter(id => !enMovimiento.has(String(id)))));
 
     const movidos = [];
     const failures = [];
@@ -512,11 +517,11 @@ export function useFileExplorer(project, user) {
 
   const handleExecuteBatchDelete = async () => {
     if (!isAdmin || selected.size === 0) return;
-    const itemsToDelete = Array.from(selected);
-    const itemIds = itemsToDelete.map(fn => {
-      const found = [...folders, ...files].find(i => i.fullName === fn);
-      return found?.id;
-    }).filter(id => id !== undefined);
+    // La selección YA son ids: no hay que traducir de ruta a id, que es donde
+    // la cuadrícula se caía -- guardaba ids y esta búsqueda los buscaba como
+    // rutas, no encontraba ninguno, y «Suprimir» se iba en silencio.
+    const presentes = new Set([...folders, ...files].map(i => String(i.id)));
+    const itemIds = Array.from(selected).filter(id => presentes.has(String(id)));
     if (itemIds.length === 0) return;
     setDeleteTask({ ids: itemIds, count: itemIds.length });
     setShowDeleteModal(true);
@@ -629,6 +634,10 @@ export function useFileExplorer(project, user) {
   const onDrop = (e) => { e.preventDefault(); setDragOver(false); if (e.dataTransfer.files) handleSopUpload(e.dataTransfer.files); };
 
   // ── Computed ──
+  // LOS OBJETOS seleccionados, no sus claves: es lo que necesita saber
+  // qué se puede hacer con ellos (tipo, permiso, acceso).
+  const elementosSeleccionados = [...folders, ...files].filter(i => selected.has(i.id));
+
   const filteredFolders = folders.filter(f => f.name.toLowerCase().includes(searchQuery.toLowerCase()));
   const filteredFiles = files.filter(f =>
     f.name.toLowerCase().includes(searchQuery.toLowerCase()) &&
@@ -655,6 +664,7 @@ export function useFileExplorer(project, user) {
     selected, setSelected, toggle,
     refreshSignal, setRefreshSignal, triggerRefresh,
     filteredFolders, filteredFiles,
+    elementosSeleccionados,
     searchQuery, setSearchQuery,
     statusFilter, setStatusFilter,
     

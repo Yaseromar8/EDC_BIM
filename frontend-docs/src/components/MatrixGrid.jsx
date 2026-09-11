@@ -21,9 +21,11 @@ import { renderFileIconSop } from '../utils/fileIcons';
 const CON_VISTA = /\.(pdfx?|jpe?g|png|webp|gif)$/i;
 
 export default function MatrixGrid({
-  folders = [], files = [], selected, toggle, navigate, setActiveFile,
+  folders = [], files = [], selected, toggle, setSelected, navigate, setActiveFile,
   onRowMenu, isAdmin, projectPrefix,
 }) {
+  const todos = [...folders, ...files];
+  const todoMarcado = todos.length > 0 && todos.every(i => selected?.has?.(i.id));
   const marcado = (id) => (selected instanceof Set ? selected.has(id) : !!selected?.[id]);
   const [urls, setUrls] = useState({});
   const [pendientes, setPendientes] = useState(0);
@@ -54,6 +56,15 @@ export default function MatrixGrid({
 
   return (
     <div className="rejilla">
+      {todos.length > 0 && setSelected && (
+        <label className="rejilla-todo">
+          <input type="checkbox" checked={todoMarcado}
+            onChange={() => setSelected(todoMarcado ? new Set() : new Set(todos.map(i => i.id)))} />
+          {/* `todos` es el conjunto resultante COMPLETO de la carpeta, no lo
+              que hay dibujado: marcar todo marca las 400, no las 12 visibles. */}
+          <span>Seleccionar todo ({todos.length})</span>
+        </label>
+      )}
       {pendientes > 0 && (
         <div className="rejilla-aviso">
           Preparando {pendientes} vista{pendientes === 1 ? '' : 's'} previa
@@ -61,10 +72,20 @@ export default function MatrixGrid({
         </div>
       )}
 
+      {/* UNA SOLA REGLA PARA LOS DOS TIPOS. Antes una carpeta necesitaba doble
+          clic y un archivo uno solo, en la misma pantalla; y la carpeta no se
+          podía marcar, así que lo seleccionado dependía de la vista. El `id`
+          viaja con la navegación: sin él se pierde el nodo actual. */}
       {folders.map(f => (
-        <div key={f.id || f.fullName} className="rejilla-tarjeta es-carpeta"
-          onDoubleClick={() => navigate(f.fullName)}
+        <div key={f.id || f.fullName}
+          className={`rejilla-tarjeta es-carpeta${marcado(f.id) ? ' esta-marcada' : ''}`}
+          onClick={() => navigate(f.fullName, f.id)}
+          onDoubleClick={() => navigate(f.fullName, f.id)}
           onContextMenu={(e) => { e.preventDefault(); onRowMenu({ ...f, type: 'folder' }, e); }}>
+          <label className="rejilla-marca" onClick={(e) => e.stopPropagation()}>
+            <input type="checkbox" checked={marcado(f.id)}
+              onChange={() => toggle(f.id)} />
+          </label>
           <div className="rejilla-lienzo">
             <svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="#8a95a1"
               strokeWidth="1.4"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
@@ -79,6 +100,7 @@ export default function MatrixGrid({
         <div key={item.id || item.fullName}
           className={`rejilla-tarjeta${marcado(item.id) ? ' esta-marcada' : ''}`}
           onClick={() => setActiveFile(item)}
+          onDoubleClick={() => setActiveFile(item)}
           onContextMenu={(e) => { e.preventDefault(); onRowMenu(item, e); }}>
           <label className="rejilla-marca" onClick={(e) => e.stopPropagation()}>
             <input type="checkbox" checked={marcado(item.id)}

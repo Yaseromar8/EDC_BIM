@@ -2,18 +2,22 @@
  * BANCO · la pantalla de Archivos, con un servidor de mentira.
  *
  * Monta la `FilesPage` REAL y le pone delante un `fetch` falso QUE RECUERDA:
- * crear una carpeta la anade al listado, desplazar un fichero lo saca. Sin esa
- * memoria el banco mentiria justo donde importa -- el refresco de fondo
- * borraria lo que la pantalla acaba de pintar.
+ * crear una carpeta la anade al listado, desplazar un fichero lo saca,
+ * restaurar lo devuelve de la papelera. Sin esa memoria el banco mentiria
+ * justo donde importa -- el refresco de fondo borraria lo que la pantalla
+ * acaba de pintar.
  *
- * Cada respuesta tarda lo que se le diga (`window.__retrasoBusqueda`,
- * `__retrasoCarpeta`, `__retrasoMover`). Eso es lo que hace util este banco:
- * los tres fallos que cubre son de TIEMPO -- una respuesta que llega tarde, un
- * dialogo que se queda mudo mientras espera, peticiones que van en fila -- y
- * eso no se ve leyendo el codigo, hay que ejecutarlo.
+ * Lo util de este banco es que aqui SI se pueden provocar las cosas que en
+ * produccion no se piden a voluntad:
  *
- * `window.__registro` deja constancia de cada peticion con su instante, para
- * poder demostrar que las de desplazar salen a la vez y no una detras de otra.
+ *   window.__retrasoBusqueda   una respuesta que llega tarde (la carrera)
+ *   window.__retrasoCarpeta    un servidor lento creando
+ *   window.__retrasoMover      lo mismo al desplazar
+ *   window.__fallarRestore     un restaurar que el servidor rechaza
+ *   window.__fallarMover       cuantos desplazamientos deben fallar
+ *
+ * Y los PERMISOS por elemento, que es lo que decide si la interfaz ofrece o
+ * apaga cada accion. El nivel viaja en cada fila igual que en produccion.
  *
  * No entra en produccion: `vite.config.js` no lo conoce.
  */
@@ -22,40 +26,53 @@ import { createRoot } from 'react-dom/client';
 import FilesPage from './pages/FilesPage';
 import './index.css';
 
-// `fullName` de una carpeta lleva BARRA FINAL, como en el servidor de verdad:
-// es lo que el arbol de destino usa para decir donde se mueve algo.
+// 400 documentos, 37 de ellos con CALA en el nombre: es lo que hace falta para
+// comprobar que «seleccionar todo» abarca el conjunto resultante y no las doce
+// filas dibujadas.
+const TOTAL = 400;
+const CON_CALA = 37;
+const NIVELES = ['admin', 'edit', 'viewer'];
+
 const CARPETAS = [
-    { id: 'f1', name: '01_COSTOS', fullName: 'banco/01_COSTOS/', updated: '2026-09-01T10:00:00Z', updated_by: 'ADMIN' },
-    { id: 'f2', name: '02_BIM', fullName: 'banco/02_BIM/', updated: '2026-09-02T10:00:00Z', updated_by: 'ADMIN' },
-    { id: 'f3', name: '03_CALIDAD', fullName: 'banco/03_CALIDAD/', updated: '2026-09-03T10:00:00Z', updated_by: 'ADMIN' },
-];
-const FICHEROS = [
-    { id: 'a1', name: 'PROTOCOLO_LIBERACION_R02.pdf', fullName: 'banco/PROTOCOLO_LIBERACION_R02.pdf', size: 2400000, version: 2, status: 'SHARED', updated: '2026-09-04T10:00:00Z', updated_by: 'ADMIN' },
-    // Seis mas, para poder seleccionar varios y ver si las peticiones de
-    // desplazar salen a la vez o siguen haciendo cola. `fullName` importa: es
-    // la clave con la que la tabla marca lo seleccionado.
-    ...Array.from({ length: 6 }, (_, i) => ({
-        id: `a${i + 2}`,
-        name: `1_Val_01_Paq_08_S1_Sinohydro_CNT-${i + 1}.pdf`,
-        fullName: `banco/1_Val_01_Paq_08_S1_Sinohydro_CNT-${i + 1}.pdf`,
-        size: 1200000, version: 1, status: 'SHARED',
-        updated: '2026-09-09T08:00:00Z', updated_by: 'ADMIN',
-    })),
+    { id: 'f1', name: '01_COSTOS', fullName: 'banco/01_COSTOS/', permission_level: 'admin', has_access: true, updated: '2026-09-01T10:00:00Z', updated_by: 'ADMIN' },
+    { id: 'f2', name: '02_BIM', fullName: 'banco/02_BIM/', permission_level: 'edit', has_access: true, updated: '2026-09-02T10:00:00Z', updated_by: 'ADMIN' },
+    { id: 'f3', name: '03_CALIDAD', fullName: 'banco/03_CALIDAD/', permission_level: 'viewer', has_access: true, updated: '2026-09-03T10:00:00Z', updated_by: 'ADMIN' },
 ];
 
-window.__retrasoBusqueda = 1500;
-window.__retrasoCarpeta = 1500;
-window.__retrasoMover = 800;
+const FICHEROS = Array.from({ length: TOTAL }, (_, i) => {
+    const cala = i < CON_CALA;
+    const nombre = cala
+        ? `CALA_${String(i + 1).padStart(3, '0')}_ensayo.pdf`
+        : `Val_${String(i + 1).padStart(3, '0')}_Paq_08.pdf`;
+    return {
+        id: `a${i + 1}`, name: nombre, fullName: `banco/${nombre}`,
+        // Los tres niveles repartidos: asi una seleccion de varios puede ser
+        // mixta de permisos, que es justo el caso que hay que apagar.
+        permission_level: NIVELES[i % NIVELES.length], has_access: true,
+        size: 1200000, version: 1, status: 'SHARED', gcs_urn: null,
+        updated: '2026-09-04T10:00:00Z', updated_by: 'ADMIN',
+    };
+});
+
+const BORRADOS = [
+    { id: 'p1', name: 'BORRADO_1.pdf', fullName: 'banco/BORRADO_1.pdf', node_type: 'FILE', deleted_by: 'ADMIN', deleted_at: '2026-09-05T10:00:00Z' },
+    { id: 'p2', name: 'BORRADO_2.pdf', fullName: 'banco/BORRADO_2.pdf', node_type: 'FILE', deleted_by: 'ADMIN', deleted_at: '2026-09-05T11:00:00Z' },
+];
+
+window.__retrasoBusqueda = 300;
+window.__retrasoCarpeta = 300;
+window.__retrasoMover = 200;
+window.__fallarRestore = false;
+window.__fallarMover = 0;
 window.__registro = [];
-const t0 = Date.now();
-const anotar = (linea) => window.__registro.push(`${String(Date.now() - t0).padStart(5)}ms  ${linea}`);
+window.__estado = { folders: [...CARPETAS], files: [...FICHEROS], borrados: [...BORRADOS] };
 
-// El servidor falso RECUERDA. `window.__estado` es su base de datos.
-window.__estado = { folders: [...CARPETAS], files: [...FICHEROS] };
+const t0 = Date.now();
+const anotar = (l) => window.__registro.push(`${String(Date.now() - t0).padStart(5)}ms  ${l}`);
 let siguienteId = 1000;
 
-const responder = (cuerpo, ms = 0) => new Promise(res => {
-    const enviar = () => res(new Response(JSON.stringify(cuerpo), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+const responder = (cuerpo, ms = 0, estado = 200) => new Promise(res => {
+    const enviar = () => res(new Response(JSON.stringify(cuerpo), { status: estado, headers: { 'Content-Type': 'application/json' } }));
     ms ? setTimeout(enviar, ms) : enviar();
 });
 
@@ -65,28 +82,22 @@ window.fetch = (url, opciones = {}) => {
     if (!u.includes('/api/')) return original(url, opciones);
     const cuerpo = opciones.body ? JSON.parse(opciones.body) : {};
 
-    // Sin esto `esAdminDeObra` es false y no hay ni boton de crear carpeta.
-    if (u.includes('/mi-administracion')) {
-        return responder({ es_admin_de_obra: true, es_entity_admin: true });
-    }
+    if (u.includes('/mi-administracion')) return responder({ es_admin_de_obra: true, es_entity_admin: true });
 
     if (u.includes('/api/docs/search')) {
         const q = decodeURIComponent((u.match(/[?&]q=([^&]*)/) || [])[1] || '');
         anotar(`sale busqueda "${q}"`);
         return responder({ success: true, data: [] }, window.__retrasoBusqueda)
-            .then(r => { anotar(`LLEGA busqueda "${q}" (0 resultados)`); return r; });
+            .then(r => { anotar(`LLEGA busqueda "${q}"`); return r; });
     }
 
     if (u.includes('/api/docs/folder') && (opciones.method || 'GET').toUpperCase() === 'POST') {
         const ruta = String(cuerpo.path || '');
-        anotar(`sale crear carpeta "${ruta}"`);
         const id = `id-${++siguienteId}`;
+        anotar(`sale crear carpeta "${ruta}"`);
         return responder({ success: true, id }, window.__retrasoCarpeta).then(r => {
-            window.__estado.folders.push({
-                id, name: ruta.replace(/\/$/, '').split('/').pop(), fullName: ruta,
-                updated: new Date().toISOString(), updated_by: 'ADMIN',
-            });
-            anotar(`LLEGA crear carpeta "${ruta}" -> ${id}`);
+            window.__estado.folders.push({ id, name: ruta.replace(/\/$/, '').split('/').pop(), fullName: ruta, permission_level: 'admin', has_access: true, updated: new Date().toISOString(), updated_by: 'ADMIN' });
+            anotar(`LLEGA crear carpeta -> ${id}`);
             return r;
         });
     }
@@ -94,12 +105,40 @@ window.fetch = (url, opciones = {}) => {
     if (u.includes('/api/docs/move')) {
         const id = String(cuerpo.node_id);
         anotar(`sale desplazar ${id}`);
-        return responder({ success: true }, window.__retrasoMover).then(r => {
+        return responder({}, window.__retrasoMover).then(() => {
+            if (window.__fallarMover > 0) {
+                window.__fallarMover -= 1;
+                anotar(`LLEGA desplazar ${id} -> RECHAZADO`);
+                return new Response(JSON.stringify({ success: false, error: 'Sin permiso en el destino' }), { status: 403, headers: { 'Content-Type': 'application/json' } });
+            }
             window.__estado.files = window.__estado.files.filter(f => String(f.id) !== id);
             window.__estado.folders = window.__estado.folders.filter(f => String(f.id) !== id);
-            anotar(`LLEGA desplazar ${id}`);
-            return r;
+            anotar(`LLEGA desplazar ${id} -> OK`);
+            return new Response(JSON.stringify({ success: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
         });
+    }
+
+    if (u.includes('/api/docs/restore')) {
+        const id = String(cuerpo.id);
+        if (window.__fallarRestore) {
+            anotar(`restaurar ${id} -> RECHAZADO`);
+            return responder({ success: false, error: 'No se pudo restaurar.' }, 150, 403);
+        }
+        window.__estado.borrados = window.__estado.borrados.filter(b => String(b.id) !== id);
+        anotar(`restaurar ${id} -> OK`);
+        return responder({ success: true }, 150);
+    }
+
+    if (u.includes('/api/docs/batch')) {
+        const ids = (cuerpo.items || []).map(String);
+        window.__estado.files = window.__estado.files.filter(f => !ids.includes(String(f.id)));
+        window.__estado.folders = window.__estado.folders.filter(f => !ids.includes(String(f.id)));
+        anotar(`lote ${cuerpo.action} sobre ${ids.length}`);
+        return responder({ success: true, processed: ids.length });
+    }
+
+    if (u.includes('/api/docs/deleted')) {
+        return responder({ success: true, data: { folders: [], files: [...window.__estado.borrados] } });
     }
 
     if (u.includes('/api/docs/list')) {

@@ -254,7 +254,12 @@ const TableRow = ({ index, style, data }) => {
   if (!items || !items[index]) return null;
 
   const isFolder = item.type === 'folder';
-  const isSelected = selected.has(item.fullName);
+  // LA SELECCIÓN SE GUARDA POR `id`, no por ruta. `fullName` cambia al
+  // renombrar y al desplazar; `id` es la clave primaria y es lo que
+  // consumen TODOS los endpoints. La cuadrícula ya usaba `id`: usar dos
+  // claves distintas dejaba a la barra de acciones sin poder resolver lo
+  // seleccionado, y «Suprimir» no hacía nada.
+  const isSelected = selected.has(item.id);
   const isGrey = item.has_access === false;
 
   // Abrir elemento: carpeta navega, archivo abre el visor
@@ -338,7 +343,7 @@ const TableRow = ({ index, style, data }) => {
           checked={isSelected}
           onChange={(e) => {
             e.stopPropagation();
-            toggle(item.fullName);
+            toggle(item.id);
           }}
           onClick={(e) => e.stopPropagation()}
         />
@@ -386,7 +391,12 @@ const TableRow = ({ index, style, data }) => {
               onBlur={(e) => {
                 // Si el foco se mueve a uno de nuestros botones, no disparamos el save aquí
                 if (e.relatedTarget && e.relatedTarget.closest('.inline-edit-box')) return;
-                handleRename();
+                // PERDER EL FOCO NO CONFIRMA. Un clic fuera del campo no puede
+                // cambiar el nombre contractual de un documento: se guarda con
+                // Enter o con el ✓, y sólo con eso. Aquí se cancela, sin pedir
+                // nada al servidor.
+                setTempName(item.name || '');
+                setIsEditingName(false);
               }}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') handleRename();
@@ -627,11 +637,14 @@ const MatrixTable = ({
           <div className="td-cell checkbox-cell td-frozen-left" style={{ width: columnWidths.checkbox, left: 0 }}>
             <input
               type="checkbox"
-              checked={allItems.length > 0 && allItems.every(i => selected.has(i.fullName))}
+              checked={allItems.length > 0 && allItems.every(i => selected.has(i.id))}
               onChange={() => {
-                const allChecked = allItems.length > 0 && allItems.every(i => selected.has(i.fullName));
+                const allChecked = allItems.length > 0 && allItems.every(i => selected.has(i.id));
                 if (allChecked) setSelected(new Set());
-                else setSelected(new Set(allItems.map(i => i.fullName)));
+                // `allItems` son los conjuntos FILTRADOS completos, no la
+                // ventana dibujada: seleccionar todo abarca las 400 filas
+                // aunque haya 12 en pantalla.
+                else setSelected(new Set(allItems.map(i => i.id)));
               }}
             />
           </div>

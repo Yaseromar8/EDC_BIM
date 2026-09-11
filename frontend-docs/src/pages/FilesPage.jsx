@@ -23,6 +23,7 @@ import * as campo from '../offline/captura';
 import { engancharDisparadores } from '../offline/sincronizador';
 import { tieneSincronizacionDeCampo } from '../offline/capacidades';
 import { confirmAction } from '../utils/confirm';
+import { capacidadesDeSeleccion } from '../utils/capacidadesDeSeleccion';
 import { pedirIdoneidad } from '../utils/idoneidad';
 
 // ── Ligeros (siempre presentes en el flujo de Archivos) → carga inmediata ──
@@ -221,6 +222,7 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
   });
   
   const { columnWidths, totalTableWidth, startResizing, ajustarAncho } = useColumnResize();
+
   const { globalSidebarWidth, setGlobalSidebarWidth, treeSidebarWidth, startTreeResize, startGlobalResize } = useSidebarResize();
   const { versionPanelWidth, startVersionResize } = useVersionPanelResize();
 
@@ -232,6 +234,40 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
   //                   entidad y archivar la obra. NO son actos de proyecto, y
   //                   el servidor tampoco los trata como tales.
   const { isAdmin, esEntityAdmin, projectPrefix } = fe;
+
+  // QUÉ SE PUEDE HACER con lo que hay seleccionado. Una sola respuesta para
+  // la barra, el menú contextual y la cuadrícula: ninguna superficie decide
+  // por su cuenta, y por eso ninguna puede ofrecer algo que no actúe.
+  // C-2 · SOBRE QUÉ ACTÚA EL MENÚ CONTEXTUAL. Si el elemento pulsado forma
+  // parte de la selección, actúa sobre TODA la selección: es lo que espera
+  // quien marcó cinco y pulsa el botón derecho sobre uno. Si no forma parte,
+  // actúa sólo sobre él y la selección no se toca.
+  const objetivoMenu = React.useMemo(() => {
+    const it = fe.activeRowMenu?.item;
+    if (!it) return [];
+    return fe.selected.has(it.id) ? fe.elementosSeleccionados : [it];
+  }, [fe.activeRowMenu, fe.selected, fe.elementosSeleccionados]);
+
+  const capsMenu = React.useMemo(() => capacidadesDeSeleccion({
+    elementos: objetivoMenu, isAdmin, isTrashMode: fe.isTrashMode,
+  }), [objetivoMenu, isAdmin, fe.isTrashMode]);
+
+  // ABRIR ES IDEMPOTENTE. Un doble clic sobre el nombre dispara `onClick` dos
+  // veces y `onDoubleClick` una: TRES invocaciones, medido en banco. Hoy el
+  // efecto era uno solo porque poner el mismo objeto en el estado no cambia
+  // nada, pero eso era una coincidencia afortunada, no una garantía. Aquí se
+  // vuelve explícita: abrir lo que ya está abierto no hace nada.
+  const abrirDocumento = React.useCallback((f) => {
+    if (!f) return;
+    if (fe.activeFile && String(fe.activeFile.id) === String(f.id)) return;
+    reiniciarTira();
+    fe.setActiveFile(f);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fe.activeFile]);
+
+  const capsSeleccion = React.useMemo(() => capacidadesDeSeleccion({
+    elementos: fe.elementosSeleccionados, isAdmin, isTrashMode: fe.isTrashMode,
+  }), [fe.elementosSeleccionados, isAdmin, fe.isTrashMode]);
 
   // ── Revisiones (flujos de aprobación) ──
   const [reviewModalItems, setReviewModalItems] = React.useState(null); // null = cerrado
@@ -833,7 +869,7 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
                 )}
 
                 {!fe.isTrashMode && fe.selected.size > 0 && (() => {
-                  const selFiles = fe.files.filter(f => fe.selected.has(f.fullName));
+                  const selFiles = fe.files.filter(f => fe.selected.has(f.id));
                   if (!selFiles.length) return null;
                   return (
                     <button onClick={() => setReviewModalItems(selFiles.map(f => ({ node_id: f.id, name: f.name, version: f.version || 1, version_id: f.version_id || null })))}
@@ -851,7 +887,7 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
                 {!fe.isTrashMode && isAdmin && fe.selected.size > 0 && (() => {
                   const MODELOS = ['.rvt', '.ifc', '.nwd', '.nwc', '.dwg', '.dxf',
                                    '.dgn', '.3dm', '.skp', '.laz', '.e57', '.rcp'];
-                  const selFiles = fe.files.filter(f => fe.selected.has(f.fullName))
+                  const selFiles = fe.files.filter(f => fe.selected.has(f.id))
                     .filter(f => MODELOS.some(e => (f.name || '').toLowerCase().endsWith(e)));
                   if (selFiles.length !== 1) return null;
                   const doc = selFiles[0];
@@ -866,7 +902,7 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
                 })()}
 
                 {!fe.isTrashMode && fe.selected.size > 0 && (() => {
-                  const selFiles = fe.files.filter(f => fe.selected.has(f.fullName));
+                  const selFiles = fe.files.filter(f => fe.selected.has(f.id));
                   if (!selFiles.length) return null;
                   return (
                     <button onClick={() => setTransmittalItems(selFiles.map(f => ({ node_id: f.id, name: f.name, version: f.version || 1, version_id: f.version_id || null })))}
@@ -877,7 +913,7 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
                 })()}
 
                 {!fe.isTrashMode && fe.selected.size > 0 && (() => {
-                  const selFiles = fe.files.filter(f => fe.selected.has(f.fullName));
+                  const selFiles = fe.files.filter(f => fe.selected.has(f.id));
                   if (!selFiles.length) return null;
                   return (
                     <button onClick={() => setSetModalItems(selFiles.map(f => ({ node_id: f.id, name: f.name, version: f.version || 1, version_id: f.version_id || null })))}
@@ -887,16 +923,26 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
                   );
                 })()}
 
-                {!fe.isTrashMode && isAdmin && fe.selected.size > 0 && (
+                {!fe.isTrashMode && fe.selected.size > 0 && (
                   <>
-                    <button onClick={() => {
-                        const itemsToMove = Array.from(fe.selected);
-                        const itemIds = itemsToMove.map(fn => { const found = [...fe.folders, ...fe.files].find(i => i.fullName === fn); return found?.id; }).filter(id => id !== undefined);
-                        fe.setMoveState({ step: 1, items: itemsToMove, itemIds, destPath: '', destId: null });
-                      }} style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'none', border: 'none', color: 'var(--accent)', fontSize: 13, cursor: 'pointer', padding: '6px 8px' }}>
+                    <button
+                      disabled={!capsSeleccion.desplazar.disponible}
+                      title={capsSeleccion.desplazar.motivo || 'Desplazar a otra carpeta'}
+                      onClick={() => {
+                        if (!capsSeleccion.desplazar.disponible) return;
+                        // La selección ya son ids. Antes esto traducía de ruta
+                        // a id y en cuadrícula no encontraba nada: el diálogo se
+                        // abría con la selección vacía y moría al final, mudo.
+                        const itemIds = fe.elementosSeleccionados.map(i => i.id);
+                        fe.setMoveState({ step: 1, items: fe.elementosSeleccionados.map(i => i.name), itemIds, destPath: '', destId: null });
+                      }} style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'none', border: 'none', color: capsSeleccion.desplazar.disponible ? 'var(--accent)' : 'var(--text-muted, #aaa)', fontSize: 13, cursor: capsSeleccion.desplazar.disponible ? 'pointer' : 'not-allowed', padding: '6px 8px' }}>
                       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path><path d="M12 11l3 3-3 3"></path><path d="M9 14h6"></path></svg> Desplazar
                     </button>
-                    <button onClick={fe.handleExecuteBatchDelete} style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'none', border: 'none', color: '#ff4d4d', fontSize: 13, cursor: 'pointer', padding: '6px 8px' }}>
+                    <button
+                      disabled={!capsSeleccion.suprimir.disponible}
+                      title={capsSeleccion.suprimir.motivo || 'Mover a la papelera'}
+                      onClick={fe.handleExecuteBatchDelete}
+                      style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'none', border: 'none', color: capsSeleccion.suprimir.disponible ? '#ff4d4d' : 'var(--text-muted, #aaa)', fontSize: 13, cursor: capsSeleccion.suprimir.disponible ? 'pointer' : 'not-allowed', padding: '6px 8px' }}>
                       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M3 6h18"></path><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg> Suprimir
                     </button>
                   </>
@@ -1037,20 +1083,42 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
                     <div style={{ padding: 40, textAlign: 'center' }}><div className="adsk-spinner" style={{ margin: '0 auto' }} /></div>
                 ) : fe.isTrashMode ? (
                     <DeletedTable items={fe.deletedItems} selectedIds={fe.selectedDeletedIds} onToggle={fe.setSelectedDeletedIds}
-                      onRestore={(id) => { fe.setRestoringIds(prev => ({ ...prev, [id]: true })); setTimeout(async () => { try { const res = await apiFetch(`${API}/api/docs/restore`, { method: 'POST', headers: getAuthHeaders(), body: JSON.stringify({ id, model_urn: projectPrefix, user: user.name }) }); if (!res.ok) { const errData = await res.json().catch(() => ({})); toast.error(errData.error || "No se pudo restaurar."); } } catch(e) { toast.error("Error de conexión al restaurar"); } fe.setDeletedItems(prev => prev.filter(it => it.id !== id)); fe.setSelectedDeletedIds(prev => prev.filter(x => x !== id)); fe.setRestoringIds(prev => { const c = {...prev}; delete c[id]; return c; }); fe.triggerRefresh(fe.currentPath); }, 1000); }}
+                      onRestore={async (id) => {
+                        // LA FILA NO SE RETIRA HASTA QUE EL SERVIDOR CONFIRMA.
+                        // Antes el filtrado estaba FUERA del try/catch: un
+                        // restaurar que fallaba sacaba el aviso de error Y
+                        // quitaba la fila igual, así que el fallo tenía cara de
+                        // éxito y no se podía reintentar.
+                        //
+                        // Tampoco se espera un segundo antes de pedir nada: esa
+                        // pausa no servía a nadie.
+                        fe.setRestoringIds(prev => ({ ...prev, [id]: true }));
+                        let restaurado = false;
+                        try {
+                          const res = await apiFetch(`${API}/api/docs/restore`, { method: 'POST', headers: getAuthHeaders(), body: JSON.stringify({ id, model_urn: projectPrefix, user: user.name }) });
+                          if (res.ok) { restaurado = true; toast.success('Restaurado.'); }
+                          else { const errData = await res.json().catch(() => ({})); toast.error(errData.error || 'No se pudo restaurar.'); }
+                        } catch { toast.error('Error de conexión al restaurar'); }
+                        fe.setRestoringIds(prev => { const c = { ...prev }; delete c[id]; return c; });
+                        if (restaurado) {
+                          fe.setDeletedItems(prev => prev.filter(it => it.id !== id));
+                          fe.setSelectedDeletedIds(prev => prev.filter(x => x !== id));
+                          fe.triggerRefresh(fe.currentPath);
+                        }
+                      }}
                       getInitials={getInitials} restoringIds={fe.restoringIds} />
                 ) : vistaCarpeta === 'cuadricula' ? (
                     <Suspense fallback={<div style={{ padding: 40, textAlign: 'center', color: '#888', fontSize: 13 }}>Cargando…</div>}>
                       <MatrixGrid folders={fe.filteredFolders} files={fe.filteredFiles}
-                        selected={fe.selected} toggle={fe.toggle} navigate={fe.navigate}
-                        setActiveFile={(f) => { reiniciarTira(); fe.setActiveFile(f); }} isAdmin={isAdmin}
+                        selected={fe.selected} toggle={fe.toggle} setSelected={fe.setSelected} navigate={fe.navigate}
+                        setActiveFile={abrirDocumento} isAdmin={isAdmin}
                         projectPrefix={projectPrefix}
                         onRowMenu={(item, e) => { fe.setRightClickedId(item.id); fe.setActiveRowMenu({ item, x: e.clientX, y: e.clientY, source: 'table' }); }} />
                     </Suspense>
                 ) : (
                     <MatrixTable folders={fe.filteredFolders} files={fe.filteredFiles} selected={fe.selected}
                       columnWidths={columnWidths} totalTableWidth={totalTableWidth} toggle={fe.toggle} navigate={fe.navigate}
-                      setActiveFile={(f) => { reiniciarTira(); fe.setActiveFile(f); }}
+                      setActiveFile={abrirDocumento}
                       onUpdateDescription={async (item, newDesc) => { if (item.type === 'folder') fe.setFolders(prev => prev.map(f => f.id === item.id ? { ...f, description: newDesc } : f)); else fe.setFiles(prev => prev.map(f => f.id === item.id ? { ...f, description: newDesc } : f)); try { const res = await apiFetch(`${API}/api/docs/description`, { method: 'POST', body: JSON.stringify({ node_id: item.id, description: newDesc, model_urn: projectPrefix }) }); if (res.ok) fe.triggerRefresh(fe.currentPath); else { toast.error('No se pudo guardar la descripción.'); fe.triggerRefresh(fe.currentPath); } } catch (e) { toast.error('Error de conexión al guardar la descripción.'); fe.triggerRefresh(fe.currentPath); } }}
                       onRename={async (item, newName) => {
                         // COHERENCIA TABLA ↔ ÁRBOL: al renombrar una carpeta desde la
@@ -1139,14 +1207,19 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
         projectPrefix={projectPrefix} isAdmin={isAdmin} onClose={() => vh.setTableShowVersions(false)} onPromote={vh.handlePromote} />
 
       <ContextMenu activeRowMenu={fe.activeRowMenu} menuRef={fe.menuRef} isAdmin={isAdmin} projectPrefix={projectPrefix}
+        capacidades={capsMenu} objetivo={objetivoMenu}
         user={user} onRefresh={() => fe.triggerRefresh(fe.currentPath)}
         onClose={() => { fe.setActiveRowMenu(null); fe.setRightClickedId(null); }}
         onCreateChild={(id) => fe.setCreatingChildParentId(id)}
         onOpenPermissions={(item) => fe.setPermissionsFolder(item)}
         onRename={(data) => fe.setEditingNodeId(data)}
         onShare={(item) => { fe.setShareTarget(item); fe.setShowShareModal(true); }}
-        onMove={(item) => fe.setMoveState({ step: 1, items: [item.name], itemIds: [item.id || item.fullName], destPath: '', destId: null })}
-        onDelete={(fullName, id) => { fe.setDeleteTask({ ids: [], count: 1, single: { fullName, id } }); fe.setShowDeleteModal(true); }}
+        onMove={() => fe.setMoveState({ step: 1, items: objetivoMenu.map(i => i.name), itemIds: objetivoMenu.map(i => i.id), destPath: '', destId: null })}
+        onDelete={(fullName, id) => {
+          if (objetivoMenu.length > 1) fe.setDeleteTask({ ids: objetivoMenu.map(i => i.id), count: objetivoMenu.length });
+          else fe.setDeleteTask({ ids: [], count: 1, single: { fullName, id } });
+          fe.setShowDeleteModal(true);
+        }}
         onAttributes={(item) => setAttributesItem(item)} />
 
       {attributesItem && (

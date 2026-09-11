@@ -1323,6 +1323,36 @@ table { font-variant-numeric: tabular-nums; }
   border-radius: 4px;
 }
 
+/* Una acción que no se puede usar SE DICE: apagada y con su motivo en el
+   título, nunca activa e inerte. Antes «Suprimir» y «Desplazar» se ofrecían
+   sobre selecciones que la barra no sabía resolver: se pulsaba y no ocurría
+   nada -- ni diálogo, ni aviso, ni error. */
+.menu-apagado,
+.row-context-menu button:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+}
+
+.row-context-menu button:disabled:hover {
+  background: none;
+}
+
+/* Seleccionar todo, en la cuadrícula. La lista ya lo tenía en su cabecera. */
+.rejilla-todo {
+  /* `.rejilla` es FLEX con wrap, no CSS Grid (lo dice su propio comentario:
+     con Grid las filas aplastaban las miniaturas). Ocupar la línea entera aquí
+     es `flex-basis: 100%`, no `grid-column`. */
+  flex: 0 0 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 2px 10px;
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  user-select: none;
+}
+
 /* --- Resizers --- */
 
 /* El tirador es `position:absolute`, asi que se ancla al ancestro POSICIONADO

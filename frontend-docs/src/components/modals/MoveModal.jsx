@@ -78,7 +78,9 @@ export default function MoveModal({ moveState, setMoveState, projectPrefix, proj
       <div className="acc-modal-box" onClick={e => e.stopPropagation()} style={{ width: 500, borderRadius: 2, padding: 0 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 24px', borderBottom: '1px solid #eee' }}>
           <h3 style={{ margin: 0, fontSize: 18, fontWeight: 300 }}>
-            {moveState.step === 1 ? (moveState.items.length > 1 ? '¿Mover elementos?' : '¿Mover carpeta?') : 'Seleccionar carpeta de destino'}
+            {moveState.step === 1
+              ? (moveState.items.length > 1 ? `¿Mover ${moveState.items.length} elementos?` : '¿Mover carpeta?')
+              : (moveState.items.length > 1 ? `Destino para ${moveState.items.length} elementos` : 'Seleccionar carpeta de destino')}
           </h3>
           <button onClick={close} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: '#999' }}>✕</button>
         </div>

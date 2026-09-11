@@ -18,7 +18,12 @@ export default function DeleteModal({ isOpen, deleteTask, onConfirm, onClose }) 
           <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 20, color: '#666', cursor: 'pointer' }}>×</button>
         </div>
         <div className="modal-body" style={{ padding: '24px 16px', fontSize: 13, color: '#3c3c3c' }}>
-          Los elementos seleccionados se suprimirán del proyecto.
+          {/* CUÁNTOS y A DÓNDE. «Se suprimirán del proyecto» sonaba definitivo
+              sin serlo: van a la papelera y se pueden recuperar, y saberlo
+              cambia la decisión de quien está a punto de pulsar. */}
+          {deleteTask.count === 1
+            ? 'Este elemento pasa a la papelera. Puedes recuperarlo desde allí.'
+            : `Estos ${deleteTask.count} elementos pasan a la papelera. Puedes recuperarlos desde allí.`}
         </div>
         <div className="modal-footer" style={{ padding: '16px', display: 'flex', justifyContent: 'flex-end', gap: 12, background: '#fcfcfc', borderTop: '1px solid #eee' }}>
           <button 

@@ -13,6 +13,8 @@ export default function ContextMenu({
   activeRowMenu,
   menuRef,
   isAdmin,
+  capacidades = {},
+  objetivo = [],
   projectPrefix,
   user,
   onRefresh,
@@ -29,12 +31,24 @@ export default function ContextMenu({
   if (!activeRowMenu) return null;
 
   const item = activeRowMenu.item;
-  // La lista YA dice qué puede hacer cada quien con cada fila
-  // (`permission_level`, escalera de folder_permissions). Se usa para no
-  // ofrecer acciones que el servidor rechazaría.
-  const NIVELES = { none: -1, viewer: 0, view_download: 1, view_markup: 2, edit: 3, admin: 4 };
-  const nivel = NIVELES[item.permission_level] ?? (isAdmin ? 4 : 0);
-  const puedeEditar = isAdmin || nivel >= NIVELES.edit;
+
+  // QUÉ SE PUEDE HACER lo decide `capacidadesDeSeleccion`, la misma respuesta
+  // que usa la barra. Aquí no se decide nada: se pinta.
+  //
+  // Y actúa sobre `objetivo`, que es el elemento pulsado, o TODA la selección
+  // si ese elemento forma parte de ella (C-2). Por eso los rótulos dicen
+  // cuántos: suprimir cinco desde el botón derecho no puede parecer suprimir uno.
+  const varios = objetivo.length > 1;
+  const sufijo = varios ? ` (${objetivo.length})` : '';
+  const cap = (nombre) => capacidades[nombre] || { disponible: true };
+  /** ¿Se dibuja? Oculta significa que anunciarla ya diría demasiado. */
+  const visible = (nombre) => { const c = cap(nombre); return c.disponible || c.mostrar !== 'oculta'; };
+  const props = (nombre) => ({
+    disabled: !cap(nombre).disponible,
+    title: cap(nombre).motivo || undefined,
+    className: cap(nombre).disponible ? undefined : 'menu-apagado',
+  });
+  const puedeEditar = cap('reservar').disponible;
   // Altura estimada del menú según acciones visibles (para no salirse por abajo)
   // Alto estimado: se CUENTAN las acciones visibles en vez de suponerlas. Con
   // el número fijo, un menú corto se pegaba al borde inferior sin necesidad.
@@ -79,8 +93,9 @@ export default function ContextMenu({
             · no miraba el permiso, y reservar exige `edit`: a un lector le
               ofrecía un botón que terminaba en 403.
           La regla del producto es no ofrecer lo que el servidor va a negar. */}
-      {item.type !== 'folder' && puedeEditar && (
-        <button onClick={async () => {
+      {item.type !== 'folder' && visible('reservar') && (
+        <button {...props('reservar')} onClick={async () => {
+          if (!cap('reservar').disponible) return;
           onClose();
           const tengoYo = item.bloqueado_por && item.bloqueado_por === (user?.email || user?.name);
           try {
@@ -103,20 +118,20 @@ export default function ContextMenu({
           {item.bloqueado_por ? 'Liberar reserva' : 'Reservar para editar'}
         </button>
       )}
-      {isAdmin && (
-        <button onClick={() => { onClose(); onRename({ id: item.id || item.fullName, source: activeRowMenu.source }); }}>
+      {visible('renombrar') && (
+        <button {...props('renombrar')} onClick={() => { if (!cap('renombrar').disponible) return; onClose(); onRename({ id: item.id || item.fullName, source: activeRowMenu.source }); }}>
           <div className="menu-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg></div>
           Cambiar nombre
         </button>
       )}
-      {isAdmin && (
-        <button onClick={() => { onClose(); onShare(item); }}>
+      {visible('compartir') && (
+        <button {...props('compartir')} onClick={() => { if (!cap('compartir').disponible) return; onClose(); onShare(item); }}>
           <div className="menu-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line></svg></div>
           Compartir
         </button>
       )}
-      {item.type !== 'folder' && onAttributes && (
-        <button onClick={() => { onClose(); onAttributes(item); }}>
+      {item.type !== 'folder' && onAttributes && visible('atributos') && (
+        <button {...props('atributos')} onClick={() => { if (!cap('atributos').disponible) return; onClose(); onAttributes(item); }}>
           <div className="menu-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg></div>
           Atributos
         </button>
@@ -144,32 +159,40 @@ export default function ContextMenu({
             // lector— y se abre esa: caduca sola y no lleva identidad dentro.
             if (!item.gcs_urn) { toast.error('Este documento no tiene fichero asociado.'); return; }
             const ventana = window.open('', '_blank', 'noopener');  // antes del await: si no, lo bloquea el navegador
+            // FIRMAR LA URL TARDA, y hasta ahora lo único que se veía era una
+            // pestaña en blanco: ni señal de que el clic hubiera entrado, ni de
+            // qué se estaba esperando. La carpeta ya avisaba con su conteo; el
+            // documento suelto, no.
+            const aviso = toast.loading(`Preparando "${item.name}"…`);
             try {
               const r = await apiFetch(`${API}/api/docs/signed-url?urn=${encodeURIComponent(item.gcs_urn)}&model_urn=${encodeURIComponent(projectPrefix)}`);
               const d = await r.json().catch(() => ({}));
               if (!r.ok || !d.success || !d.url) throw new Error(d.error || 'No se pudo preparar la descarga.');
               if (ventana) ventana.location = d.url; else window.open(d.url, '_blank', 'noopener');
+              toast.success('Descarga lista.', { id: aviso });
             } catch (e) {
               if (ventana) ventana.close();
-              toast.error(e.message || 'No se pudo descargar.');
+              toast.error(e.message || 'No se pudo descargar.', { id: aviso });
             }
         }}>
           <div className="menu-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg></div>
           Descargar Archivo
         </button>
       )}
-      {isAdmin && (
-        <button onClick={() => { onClose(); onMove(item); }}>
+      {visible('desplazar') && (
+        <button {...props('desplazar')} onClick={() => { if (!cap('desplazar').disponible) return; onClose(); onMove(item); }}>
            <div className="menu-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path><path d="M12 11l3 3-3 3"></path><path d="M9 14h6"></path></svg></div>
-          Desplazar
+          Desplazar{sufijo}
         </button>
       )}
-      {isAdmin && (
+      {visible('suprimir') && (
         <>
           <div className="menu-divider" />
-          <button className="delete" onClick={() => { onClose(); onDelete(item.fullName, item.id); }}>
+          <button {...props('suprimir')}
+            className={cap('suprimir').disponible ? 'delete' : 'delete menu-apagado'}
+            onClick={() => { if (!cap('suprimir').disponible) return; onClose(); onDelete(item.fullName, item.id); }}>
             <div className="menu-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg></div>
-            Suprimir
+            Suprimir{sufijo}
           </button>
         </>
       )}
