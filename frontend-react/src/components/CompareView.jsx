@@ -7,11 +7,12 @@ import { loadAlignedModels } from '../aps/utils/loadAlignedModels';
  *
  *  - Setup minimalista: modelo/documento + VERSION ACC por lado (como el dialogo
  *    "Comparar documentos" de ACC), con swap A<->B.
- *  - Diff de DATOS en PostgreSQL por external_id (+ diff 5D valorizado).
+ *  - Diff de DATOS en PostgreSQL por external_id. SIN importes: este
+ *    comparador responde a que se agrego, que se quito y que cambio.
  *  - Si una version historica no esta extraida, se extrae automaticamente a un
  *    scope temporal ('__cmp__') sin tocar el inventario del frente real.
  *  - Vista: dos visores LMV sincronizados; verde agregado / rojo eliminado /
- *    ambar modificado; hover = tooltip 5D; click = seleccion espejo.
+ *    ambar modificado; hover = identifica el elemento; click = seleccion espejo.
  */
 
 const COLORS = {
@@ -60,7 +61,40 @@ const createEmptySide = () => ({
     pickerVersions: [],
     pickerVUrn: '',
     pickerLoadingV: false,
+    // QUE VISTA DEL MODELO SE MIRA. Vacio = la que marque Autodesk, que es el
+    // comportamiento de siempre. No cambia QUE se compara -- el diff lo calcula
+    // Postgres sobre los elementos extraidos -- sino desde donde se mira.
+    pickerViews: [],
+    pickerViewGuid: '',
+    pickerLoadingViews: false,
     links: [],
+});
+
+// Las vistas 3D de una version, leidas de su manifiesto. Solo 3D a proposito:
+// el pintado del diff trabaja sobre dbId de geometria y no esta comprobado que
+// una lamina 2D los tenga, asi que ofrecerla seria cargar el dibujo sin colores.
+//
+// Si algo falla -- sin SDK, sin manifiesto, sin red -- devuelve lista vacia y el
+// selector se queda en «Vista por defecto»: nunca deja al usuario sin comparar.
+const vistas3DDe = (urn) => new Promise((resolve) => {
+    const A = window.Autodesk?.Viewing;
+    if (!A?.Document?.load || !urn) return resolve([]);
+    const esTresD = (n) => (typeof n.is3D === 'function' ? n.is3D() : n?.data?.role === '3d');
+    try {
+        A.Document.load(
+            String(urn).startsWith('urn:') ? String(urn) : `urn:${urn}`,
+            (doc) => {
+                try {
+                    const geos = doc.getRoot().search({ type: 'geometry' }) || [];
+                    resolve(geos.filter(esTresD).map(n => ({
+                        guid: n.data.guid,
+                        name: n.data.name || 'Sin nombre',
+                    })));
+                } catch { resolve([]); }
+            },
+            () => resolve([]),
+        );
+    } catch { resolve([]); }
 });
 
 const modelKey = (model) => {
@@ -82,17 +116,13 @@ export default function CompareView({ BACKEND_URL, projectId, onExit }) {
     const [status, setStatus] = useState('');
     const [busy, setBusy] = useState(false);
     const [diff, setDiff] = useState(null);
-    const [fiveD, setFiveD] = useState(null);
     const [activeList, setActiveList] = useState(null);
     const [detail, setDetail] = useState(null);
     const [tip, setTip] = useState(null);
     const contA = useRef(null);
     const contB = useRef(null);
     const tipEl = useRef(null);
-    const fiveDRef = useRef(null);
     const scopesRef = useRef(null);
-    const hoverFiveDCacheRef = useRef({});
-    const hoverFetchRef = useRef({ timer: null, seq: 0, pendingExt: null });
     const vs = useRef({ a: null, b: null, maps: {}, rev: {}, syncing: false, selSyncing: false });
 
     useEffect(() => {
@@ -143,7 +173,11 @@ export default function CompareView({ BACKEND_URL, projectId, onExit }) {
                 pickerSel: val,
                 pickerVersions: [],
                 pickerVUrn: '',
-                pickerLoadingV: val && !val.startsWith('frente:')
+                pickerLoadingV: val && !val.startsWith('frente:'),
+                // Otro modelo, otras vistas: la lista anterior ya no aplica.
+                pickerViews: [],
+                pickerViewGuid: '',
+                pickerLoadingViews: false
             }
         }));
         if (!val || val.startsWith('frente:')) return;
@@ -154,17 +188,28 @@ export default function CompareView({ BACKEND_URL, projectId, onExit }) {
             .then(d => {
                 const versions = d.versions || [{ versionNumber: m.versionNumber, urn: m.urn, isCurrent: true }];
                 const current = versions.find(v => v.isCurrent) || versions[0];
-                setSide(prev => ({
-                    ...prev,
-                    [key]: {
-                        ...prev[key],
-                        pickerVersions: versions,
-                        pickerVUrn: current ? current.urn : m.urn,
-                        pickerLoadingV: false
-                    }
-                }));
+                setSide(prev => {
+                    // LA RESPUESTA PUEDE LLEGAR TARDE. Pedir versiones tarda, y con
+                    // varios modelos por lado se cambia de modelo antes de que
+                    // conteste el anterior: esa respuesta caia igual en el selector
+                    // y se veian las versiones de OTRO modelo. Si ya no es el modelo
+                    // seleccionado, esta respuesta no interesa a nadie.
+                    if (prev[key].pickerSel !== val) return prev;
+                    return {
+                        ...prev,
+                        [key]: {
+                            ...prev[key],
+                            pickerVersions: versions,
+                            pickerVUrn: current ? current.urn : m.urn,
+                            pickerLoadingV: false
+                        }
+                    };
+                });
+                // Se llama siempre: si esta respuesta era tardia, el pestillo de
+                // dentro la descarta sola.
+                enumerarVistas(key, current ? current.urn : m.urn);
             })
-            .catch(() => setSide(prev => ({
+            .catch(() => setSide(prev => (prev[key].pickerSel !== val ? prev : {
                 ...prev,
                 [key]: {
                     ...prev[key],
@@ -175,7 +220,47 @@ export default function CompareView({ BACKEND_URL, projectId, onExit }) {
             })));
     };
 
-    const pickVersion = (key, vUrn) => setSide(prev => ({ ...prev, [key]: { ...prev[key], pickerVUrn: vUrn } }));
+    // Al cambiar de version, su lista de vistas deja de valer: se borra y se
+    // vuelve a leer. Solo la del lado que cambio; el otro lado no se toca.
+    const enumerarVistas = (key, urn) => {
+        // El pestillo se comprueba contra el ESTADO, no contra una bandera de
+        // fuera: el actualizador de `setSide` no corre necesariamente en el
+        // instante de llamarlo, asi que cualquier bandera que se lea despues
+        // puede estar todavia sin poner. Aqui se decide donde se sabe la verdad.
+        setSide(prev => (prev[key].pickerVUrn !== urn ? prev : {
+            ...prev,
+            [key]: { ...prev[key], pickerViews: [], pickerViewGuid: '', pickerLoadingViews: !!urn },
+        }));
+        if (!urn) return;
+        vistas3DDe(urn).then(vistas => setSide(prev => (
+            // La version pudo cambiar otra vez mientras se leia el manifiesto:
+            // si ya no es la que se pidio, esta respuesta llega tarde y se tira.
+            prev[key].pickerVUrn !== urn
+                ? prev
+                : { ...prev, [key]: { ...prev[key], pickerViews: vistas, pickerLoadingViews: false } }
+        )));
+    };
+
+    const pickVersion = (key, vUrn) => {
+        setSide(prev => ({ ...prev, [key]: { ...prev[key], pickerVUrn: vUrn } }));
+        enumerarVistas(key, vUrn);
+    };
+
+    // EMPAREJAR SIN ADIVINAR. Al elegir vista en A, si en B hay UNA sola con ese
+    // nombre se selecciona sola. Si no hay ninguna, o hay varias con el mismo
+    // nombre, B se deja como estaba: preferimos que el usuario elija a acertar
+    // por casualidad y que luego compare dos vistas distintas sin saberlo.
+    const pickView = (key, guid) => {
+        setSide(prev => {
+            const siguiente = { ...prev, [key]: { ...prev[key], pickerViewGuid: guid } };
+            if (key !== 'a' || !guid) return siguiente;
+            const nombre = (prev.a.pickerViews.find(v => v.guid === guid) || {}).name;
+            if (!nombre) return siguiente;
+            const candidatas = prev.b.pickerViews.filter(v => v.name === nombre);
+            if (candidatas.length !== 1) return siguiente;
+            return { ...siguiente, b: { ...siguiente.b, pickerViewGuid: candidatas[0].guid } };
+        });
+    };
     const addLink = (key) => {
         setSide(prev => {
             const s = prev[key];
@@ -189,11 +274,15 @@ export default function CompareView({ BACKEND_URL, projectId, onExit }) {
                 const m = models.find(x => String(x.id) === s.pickerSel);
                 if (!m || !s.pickerVUrn) return prev;
                 const v = s.pickerVersions.find(x => x.urn === s.pickerVUrn);
+                // La vista viaja CON el vinculo, no con el selector: el selector
+                // se limpia al agregar, y lo que se carga despues es el vinculo.
+                const vista = s.pickerViews.find(x => x.guid === s.pickerViewGuid);
                 link = {
                     type: 'source',
                     value: s.pickerVUrn,
                     modelId: m.id,
-                    label: `${m.name}${v && v.versionNumber ? ` · v${v.versionNumber}` : ''}`,
+                    viewGuid: vista ? vista.guid : null,
+                    label: `${m.name}${v && v.versionNumber ? ` · v${v.versionNumber}` : ''}${vista ? ` · ${vista.name}` : ''}`,
                 };
             }
 
@@ -211,6 +300,9 @@ export default function CompareView({ BACKEND_URL, projectId, onExit }) {
                     pickerVersions: [],
                     pickerVUrn: '',
                     pickerLoadingV: false,
+                    pickerViews: [],
+                    pickerViewGuid: '',
+                    pickerLoadingViews: false,
                 }
             };
         });
@@ -311,6 +403,12 @@ export default function CompareView({ BACKEND_URL, projectId, onExit }) {
     }, []);
 
     const wireHover = useCallback(() => {
+        // SIN 5D. Antes cada elemento bajo el raton disparaba una peticion a
+        // `/api/compare/element-metrados` para enseñar metrados y precios por
+        // partida. Este comparador responde a una sola pregunta -- que se
+        // agrego, que se quito y que cambio -- y el dinero y las cantidades no
+        // forman parte de ella. El globo solo identifica el elemento; no hay
+        // peticion de red al pasar el raton.
         const Av = window.Autodesk.Viewing;
         ['a', 'b'].forEach(k => {
             const v = vs.current[k];
@@ -321,57 +419,11 @@ export default function CompareView({ BACKEND_URL, projectId, onExit }) {
                 const rev = vs.current.rev[k];
                 const revByModel = rev && ev.model ? rev.byModel?.[modelKey(ev.model)] : null;
                 const ext = revByModel?.[dbId] || rev?.flat?.[dbId];
-                if (!dbId || dbId <= 0 || !ext) {
-                    hoverFetchRef.current.seq += 1;
-                    hoverFetchRef.current.pendingExt = null;
-                    if (hoverFetchRef.current.timer) {
-                        clearTimeout(hoverFetchRef.current.timer);
-                        hoverFetchRef.current.timer = null;
-                    }
-                    setTip(null);
-                    return;
-                }
-                const cached = hoverFiveDCacheRef.current[ext];
-                if (cached) {
-                    hoverFetchRef.current.pendingExt = null;
-                    setTip({ side: k, ext, data: cached, loading: false });
-                    return;
-                }
-                if (hoverFetchRef.current.pendingExt === ext) {
-                    return;
-                }
-
-                hoverFetchRef.current.seq += 1;
-                const fetchSeq = hoverFetchRef.current.seq;
-                hoverFetchRef.current.pendingExt = ext;
-                if (hoverFetchRef.current.timer) clearTimeout(hoverFetchRef.current.timer);
-                setTip(null);
-
-                hoverFetchRef.current.timer = setTimeout(async () => {
-                    try {
-                        const scopes = scopesRef.current;
-                        if (!scopes) return;
-                        const res = await apiFetch(`${BACKEND_URL}/api/compare/element-metrados`, {
-                            method: 'POST',
-                            body: JSON.stringify({ external_id: ext, a: scopes.a, b: scopes.b })
-                        });
-                        const data = await res.json();
-                        if (!res.ok) throw new Error(data.error || 'No se pudo obtener el diff 5D del elemento');
-                        const byElement = { a: data.a || {}, b: data.b || {} };
-                        hoverFiveDCacheRef.current[ext] = byElement;
-                        if (hoverFetchRef.current.seq !== fetchSeq) return;
-                        hoverFetchRef.current.pendingExt = null;
-                        setTip({ side: k, ext, data: byElement });
-                    } catch (e) {
-                        console.warn('[Compare] hover 5D:', e);
-                        if (hoverFetchRef.current.seq !== fetchSeq) return;
-                        hoverFetchRef.current.pendingExt = null;
-                        setTip(null);
-                    }
-                }, 120);
+                if (!dbId || dbId <= 0 || !ext) { setTip(null); return; }
+                setTip({ side: k, ext });
             });
         });
-    }, [BACKEND_URL]);
+    }, []);
 
     const wireMirror = useCallback(() => {
         const Av = window.Autodesk.Viewing;
@@ -466,14 +518,7 @@ export default function CompareView({ BACKEND_URL, projectId, onExit }) {
         const sb = scopeOf(side.b);
         if (!sa || !sb) return;
         scopesRef.current = { a: sa, b: sb };
-        hoverFiveDCacheRef.current = {};
-        hoverFetchRef.current.seq += 1;
-        hoverFetchRef.current.pendingExt = null;
-        if (hoverFetchRef.current.timer) {
-            clearTimeout(hoverFetchRef.current.timer);
-            hoverFetchRef.current.timer = null;
-        }
-        setBusy(true); setDiff(null); setFiveD(null); fiveDRef.current = null;
+        setBusy(true); setDiff(null);
         setDetail(null); setActiveList(null); setTip(null);
         setPhase('view');
         await new Promise(r => setTimeout(r, 60));            // esperar el render de los panes
@@ -505,8 +550,15 @@ export default function CompareView({ BACKEND_URL, projectId, onExit }) {
                 if (!vs.current.b) vs.current.b = makeViewer(contB.current);
                 // Cargar A primero para conocer su globalOffset (cercano al modelo),
                 // y cargar B con EL MISMO offset -> alineados y sin perder precision.
-                const offset = await loadAlignedModels(vs.current.a, urnsA);
-                await loadAlignedModels(vs.current.b, urnsB, { sharedOffset: offset });
+                // El GUID de vista se resuelve APARTE del scope: `sa`/`sb` son lo
+                // que se manda al backend para calcular el diff y no deben cambiar
+                // de forma. Aqui solo se decide desde donde se mira.
+                const conVista = (s, urns) => urns.map(u => {
+                    const l = (s.links || []).find(x => x.type === 'source' && x.value === u);
+                    return { urn: u, viewGuid: (l && l.viewGuid) || null };
+                });
+                const offset = await loadAlignedModels(vs.current.a, conVista(side.a, urnsA));
+                await loadAlignedModels(vs.current.b, conVista(side.b, urnsB), { sharedOffset: offset });
                 wireSync();
 
                 const lookupA = await buildExternalLookups(vs.current.a);
@@ -528,19 +580,15 @@ export default function CompareView({ BACKEND_URL, projectId, onExit }) {
                 setStatus(`⚠ El lado ${sideEmpty} no tiene datos extraídos en PostgreSQL — el diff no es representativo (no se pintó). Revisa que esa versión se haya extraído bien.`);
             }
 
-            // 4) Diff 5D valorizado
-            setStatus('Calculando diff 5D (metrados y precios)…');
-            try {
-                const r5 = await apiFetch(`${BACKEND_URL}/api/compare/metrados`, {
-                    method: 'POST', body: JSON.stringify({ a: sa, b: sb })
-                });
-                const d5 = await r5.json();
-                if (r5.ok) { setFiveD(d5); fiveDRef.current = d5; }
-            } catch (e5) { console.warn('[Compare] 5D no disponible:', e5); }
+            // SIN IMPORTES. Aqui se pedia `/api/compare/metrados` para pintar un
+            // panel valorizado en soles. Por decision del dueno este comparador
+            // responde a UNA pregunta -- que elementos se agregaron, se quitaron o
+            // cambiaron -- y el dinero no forma parte de ella. El endpoint sigue
+            // existiendo en el backend; simplemente ya no se llama desde aqui.
 
             if (!sideEmpty) {
                 setStatus(both3D
-                    ? 'Listo. Pasa el mouse por un elemento para ver su metrado; haz clic para resaltarlo en ambos lados.'
+                    ? 'Listo. Pasa el mouse por un elemento para identificarlo; haz clic para resaltarlo en ambos lados.'
                     : 'Diff de datos listo. El 3D se activa comparando dos modelos individuales.');
             }
         } catch (e) {
@@ -553,7 +601,7 @@ export default function CompareView({ BACKEND_URL, projectId, onExit }) {
     const editSelection = () => {
         ['a', 'b'].forEach(k => { try { vs.current[k] && vs.current[k].finish(); } catch (e) { /* noop */ } });
         vs.current = { a: null, b: null, maps: {}, rev: {}, syncing: false, selSyncing: false };
-        setDiff(null); setFiveD(null); fiveDRef.current = null; setDetail(null); setActiveList(null); setTip(null);
+        setDiff(null); setDetail(null); setActiveList(null); setTip(null);
         setStatus('');
         setPhase('setup');
     };
@@ -611,29 +659,9 @@ export default function CompareView({ BACKEND_URL, projectId, onExit }) {
     openDetailRef.current = openDetail;
 
     useEffect(() => () => {
-        hoverFetchRef.current.seq += 1;
-        if (hoverFetchRef.current.timer) clearTimeout(hoverFetchRef.current.timer);
         ['a', 'b'].forEach(k => { try { vs.current[k] && vs.current[k].finish(); } catch (e) { /* noop */ } });
     }, []);
 
-    const puMap = useMemo(() => {
-        const m = {};
-        ((fiveD && fiveD.partidas) || []).forEach(p => { if (p.precio_unitario != null) m[p.codigo] = p.precio_unitario; });
-        return m;
-    }, [fiveD]);
-    const fmtMoney = (v) => (v == null ? '—' : (v < 0 ? '−' : '+') + 'S/ ' + Math.abs(v).toLocaleString('es-PE', { maximumFractionDigits: 2 }));
-    const fmtNum = (v) => Number(v || 0).toLocaleString('es-PE', { maximumFractionDigits: 3 });
-    const tipRows = useMemo(() => {
-        if (!tip || !tip.data) return [];
-        const cods = [...new Set([...Object.keys(tip.data.a || {}), ...Object.keys(tip.data.b || {})])];
-        return cods.map(c => {
-            const ma = (tip.data.a && tip.data.a[c]) || 0;
-            const mb = (tip.data.b && tip.data.b[c]) || 0;
-            const delta = mb - ma;
-            const pu = puMap[c];
-            return { c, ma, mb, delta, dp: pu != null ? delta * pu : null };
-        });
-    }, [tip, puMap]);
 
     const listData = (diff && activeList && Array.isArray(diff[activeList])) ? diff[activeList] : [];
 
@@ -693,6 +721,22 @@ export default function CompareView({ BACKEND_URL, projectId, onExit }) {
                 </select>
                 <div style={{ fontSize: 11.5, color: T.faint, minHeight: 16 }}>
                     {s.pickerVersions.length > 1 && 'Las versiones historicas se extraen automaticamente al comparar.'}
+                </div>
+                <div style={{ ...S.label, marginTop: 4 }}>Vista 3D</div>
+                <select
+                    style={{ ...S.select, opacity: s.pickerVUrn ? 1 : 0.5 }}
+                    value={s.pickerViewGuid}
+                    disabled={!s.pickerVUrn || s.pickerLoadingViews}
+                    onChange={e => pickView(key, e.target.value)}
+                >
+                    <option value="">Vista por defecto</option>
+                    {s.pickerViews.map(v => (
+                        <option key={v.guid} value={v.guid}>{v.name}</option>
+                    ))}
+                </select>
+                <div style={{ fontSize: 11.5, color: T.faint, minHeight: 16 }}>
+                    {s.pickerLoadingViews && 'Leyendo las vistas de esta version...'}
+                    {!s.pickerLoadingViews && !!s.pickerVUrn && !s.pickerViews.length && 'Esta version no declara vistas 3D: se usara la de por defecto.'}
                 </div>
                 <button
                     type="button"
@@ -851,40 +895,15 @@ export default function CompareView({ BACKEND_URL, projectId, onExit }) {
                                 <button style={S.pill(T.magenta, activeList === 'modified')} onClick={() => { setActiveList('modified'); isolate('a', diff.modified); isolate('b', diff.modified); }}>
                                     <span style={S.dot(T.magenta)} />{diff.summary.modified.toLocaleString()} modificados
                                 </button>
-                                {fiveD && fiveD.partidas && fiveD.partidas.length > 0 && (
-                                    <button style={S.pill(T.accent, activeList === '5d')} onClick={() => setActiveList('5d')}>
-                                        <span style={S.dot(T.accent)} />5D · {fmtMoney(fiveD.totals.delta_precio_total)}
-                                    </button>
-                                )}
                                 <span style={{ fontSize: 11, color: T.faint, paddingLeft: 2 }}>{diff.summary.unchanged.toLocaleString()} sin cambio</span>
                             </div>
 
                             <div style={S.list}>
                                 {activeList === null && <div style={{ color: T.faint, padding: 8 }}>Selecciona una categoría para listar y aislar sus elementos.</div>}
-                                {activeList === '5d' && fiveD && (
-                                    <>
-                                        <div style={{ display: 'grid', gridTemplateColumns: '90px 1fr 72px 72px 76px 92px', gap: 4, padding: '3px 6px', color: T.faint, fontWeight: 600, fontSize: 11, position: 'sticky', top: 0, background: T.panel }}>
-                                            <span>Partida</span><span>Descripción</span><span style={{ textAlign: 'right' }}>A</span><span style={{ textAlign: 'right' }}>B</span><span style={{ textAlign: 'right' }}>Δ metrado</span><span style={{ textAlign: 'right' }}>Δ S/</span>
-                                        </div>
-                                        {fiveD.partidas.slice(0, 200).map(p => (
-                                            <div key={p.codigo} style={{ display: 'grid', gridTemplateColumns: '90px 1fr 72px 72px 76px 92px', gap: 4, padding: '3px 6px', borderBottom: T.borderSoft, fontSize: 12 }}>
-                                                <span style={{ color: T.muted }}>{p.codigo}</span>
-                                                <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: T.text }} title={p.descripcion || ''}>{p.descripcion || '—'}</span>
-                                                <span style={{ textAlign: 'right', color: T.muted }}>{fmtNum(p.metrado_a)}</span>
-                                                <span style={{ textAlign: 'right', color: T.muted }}>{fmtNum(p.metrado_b)}</span>
-                                                <span style={{ textAlign: 'right', color: p.delta > 0 ? T.green : p.delta < 0 ? T.red : T.faint }}>{fmtNum(p.delta)}{p.unidad ? ` ${p.unidad}` : ''}</span>
-                                                <span style={{ textAlign: 'right', color: (p.delta_precio || 0) > 0 ? T.green : (p.delta_precio || 0) < 0 ? T.red : T.faint }}>{p.delta_precio == null ? '—' : fmtMoney(p.delta_precio)}</span>
-                                            </div>
-                                        ))}
-                                        <div style={{ padding: '6px', fontSize: 11, color: T.faint }}>
-                                            {fiveD.totals.con_precio}/{fiveD.totals.partidas} partidas con precio · Total <strong style={{ color: T.accent }}>{fmtMoney(fiveD.totals.delta_precio_total)}</strong>
-                                        </div>
-                                    </>
-                                )}
-                                {activeList !== '5d' && listData.slice(0, 500).map(it => (
+                                {listData.slice(0, 500).map(it => (
                                     <div key={it.id} style={S.listItem} title={it.id} onClick={() => openDetail(it)}>{it.name || it.id}</div>
                                 ))}
-                                {activeList !== '5d' && listData.length > 500 && <div style={{ color: T.faint, padding: 6 }}>… y {listData.length - 500} más</div>}
+                                {listData.length > 500 && <div style={{ color: T.faint, padding: 6 }}>… y {listData.length - 500} más</div>}
                             </div>
 
                             <div style={S.detail}>
@@ -907,31 +926,19 @@ export default function CompareView({ BACKEND_URL, projectId, onExit }) {
                 </>
             )}
 
-            {/* Tooltip 5D de hover */}
+            {/* Globo de hover: QUE elemento es y en que lado. Nada mas. */}
             <div
                 ref={tipEl}
                 style={{
                     position: 'fixed', zIndex: 9500, pointerEvents: 'none', display: tip ? 'block' : 'none',
                     background: 'rgba(18,22,27,0.97)', border: T.border, borderRadius: T.radius,
-                    padding: '9px 12px', maxWidth: 280, fontSize: 12,
+                    padding: '7px 11px', maxWidth: 280, fontSize: 12,
                 }}
             >
                 {tip && (
-                    <>
-                        <div style={{ fontWeight: 600, marginBottom: 4 }}>
-                            …{String(tip.ext).slice(-10)} <span style={{ fontWeight: 400, color: T.faint }}>({tip.side === 'a' ? 'A' : 'B'})</span>
-                        </div>
-                        {tipRows.length === 0 && <div style={{ color: T.faint }}>Sin parámetros de partida (DSI).</div>}
-                        {tipRows.map(r => (
-                            <div key={r.c} style={{ marginBottom: 3 }}>
-                                <div style={{ color: T.accent, fontSize: 11.5 }}>{r.c}</div>
-                                <div style={{ color: T.muted }}>
-                                    {fmtNum(r.ma)} → {fmtNum(r.mb)} · <span style={{ color: r.delta > 0 ? T.green : r.delta < 0 ? T.red : T.faint }}>Δ {fmtNum(r.delta)}</span>
-                                    {r.dp != null && <span style={{ color: r.dp > 0 ? T.green : r.dp < 0 ? T.red : T.faint }}> · {fmtMoney(r.dp)}</span>}
-                                </div>
-                            </div>
-                        ))}
-                    </>
+                    <div style={{ fontWeight: 600 }}>
+                        …{String(tip.ext).slice(-10)} <span style={{ fontWeight: 400, color: T.faint }}>({tip.side === 'a' ? 'A' : 'B'})</span>
+                    </div>
                 )}
             </div>
         </div>
