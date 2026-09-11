@@ -8,17 +8,58 @@ import { renderFileIconSop } from '../../utils/fileIcons';
 import { formatSizeDetailed } from '../../utils/helpers';
 import { confirmAction } from '../../utils/confirm';
 
+/**
+ * ACTIVIDAD Y PROGRESO, SEPARADOS.
+ *
+ * Antes había una barra que se llenaba con el porcentaje real. El porcentaje
+ * real NO avanza de forma regular -- llega a saltos, y entre trozo y trozo hay
+ * viajes de ida y vuelta en los que no se mueve nada -- así que la barra pegaba
+ * tirones y se quedaba congelada. Medido en ACC sobre una subida de 9,1 MB: su
+ * porcentaje salta igual que el nuestro (4-7 puntos cada ~330 ms, y un salto de
+ * 55 a 77 tras 1,9 s parado), y por eso ACC NO dibuja barra: pone un girador
+ * continuo al lado del número. El girador dice «esto sigue vivo», el número dice
+ * «cuánto llevas», y ninguna de las dos señales estropea a la otra.
+ *
+ * Aquí se adopta ese principio y se conserva lo que ya teníamos de más: los
+ * bytes transferidos sobre el total, el motivo real de cada espera y Cancelar.
+ * Nada se simula ni se interpola: todo sale de los estados que expone
+ * `useChunkedUpload`.
+ */
+
+/** ¿Sigue pasando algo? Sólo donde el motor está realmente trabajando o esperando él. */
+function hayActividad(item) {
+  if (['queued', 'init', 'uploading', 'confirming'].includes(item.status)) return true;
+  // `paused` son DOS cosas distintas: la cuenta atrás de un reintento (el motor
+  // espera solo) y «hace falta el fichero» (espera a una persona). Girar en el
+  // segundo caso sería mentir: ahí no avanza nada hasta que alguien actúe.
+  return item.status === 'paused' && !item.needsFile;
+}
+
 function uploadStatusLabel(item, formatSize) {
   switch (item.status) {
     case 'queued': return 'En cola…';
     case 'init': return 'Preparando la carga segura…';
-    case 'uploading': return `Subiendo… ${item.progress}% · ${formatSize(item.bytesUploaded || 0)} de ${formatSize(item.sizeBytes || 0)}`;
-    case 'confirming': return 'Guardando en Documentos…';
+    // El porcentaje REAL, y los bytes reales: el dato se conserva entero, sólo
+    // deja de dibujarse como barra.
+    case 'uploading': return `Subiendo · ${item.progress}% · ${formatSize(item.bytesUploaded || 0)} de ${formatSize(item.sizeBytes || 0)}`;
+    // Transferencia terminada, confirmación pendiente.
+    case 'confirming': return 'Procesando archivo…';
+    // El texto del motor, tal cual: «Reintentando en 2s... (1/3)» o «Archivo
+    // necesario para reanudar». Lleva los números reales del reintento.
     case 'paused': return item.statusText || 'Conexión interrumpida';
     case 'completed': return item.statusText || 'Archivo listo';
     case 'cancelled': return 'Cancelado';
     default: return item.statusText || 'Esperando…';
   }
+}
+
+/** Girador pequeño y continuo. Su velocidad no depende del progreso. */
+function Girador({ tam = 10 }) {
+  return (
+    <div className="acc-mini-spinner" aria-hidden="true"
+         style={{ width: tam, height: tam, flexShrink: 0, border: '2px solid var(--accent)',
+                  borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1.5s linear infinite' }} />
+  );
 }
 
 export default function UploadModal({
@@ -63,9 +104,17 @@ export default function UploadModal({
                   {item.status === 'completed' ? (
                     <span style={{ fontSize: 11, color: '#33691e' }}>{uploadStatusLabel(item, formatSize)}</span>
                   ) : item.status === 'error' ? (
-                    <span style={{ fontSize: 11, color: '#d32f2f' }}>Error</span>
+                    // EL MISMO MOTIVO QUE ARRIBA. Aquí ponía «Error» a secas, así
+                    // que minimizar la ventana te quitaba la razón del fallo:
+                    // «No tienes permiso para subir aquí» pasaba a ser «Error».
+                    <span style={{ fontSize: 11, color: '#d32f2f' }}>{item.statusText || 'Error'}</span>
                   ) : (
-                    <span style={{ fontSize: 11, color: '#666' }}>{uploadStatusLabel(item, formatSize)}</span>
+                    // La misma señal que en el modal grande: si las dos
+                    // superficies se escriben por separado acaban divergiendo.
+                    <>
+                      {hayActividad(item) && <Girador tam={9} />}
+                      <span style={{ fontSize: 11, color: item.status === 'paused' ? '#f57c00' : '#666' }}>{uploadStatusLabel(item, formatSize)}</span>
+                    </>
                   )}
                   <span style={{ fontSize: 11, color: '#999' }}>| {formatSize(item.sizeBytes || 0)}</span>
                 </div>
@@ -146,40 +195,26 @@ export default function UploadModal({
                         </div>
                       ) : item.status === 'error' ? (
                         <div style={{ color: '#d32f2f', fontSize: 11 }}>{item.statusText}</div>
-                      ) : item.status === 'paused' ? (
-                        <div style={{ color: '#f57c00', fontSize: 11 }}>{item.statusText}</div>
                       ) : (
-                        <>
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                              {(item.status === 'confirming' || item.status === 'init') && (
-                                <div className="acc-mini-spinner" style={{ width: 10, height: 10, border: '2px solid var(--accent)', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1.5s linear infinite' }} />
-                              )}
-                              <span style={{ fontSize: 11, color: '#666' }}>
-                                {uploadStatusLabel(item, formatSize)}
-                              </span>
-                            </div>
-                            {item.status === 'uploading' && <span style={{ fontSize: 11, color: 'var(--accent)', fontWeight: 600 }}>{item.progress}%</span>}
-                          </div>
-                          <div
-                            className="acc-progress-container"
-                            role="progressbar"
-                            aria-label={`Progreso de ${item.filename}`}
-                            aria-valuemin={0}
-                            aria-valuemax={100}
-                            aria-valuenow={item.status === 'confirming' ? 100 : item.status === 'uploading' ? item.progress : undefined}
-                            aria-busy={item.status === 'init' || item.status === 'confirming'}
-                            style={{ marginTop: 6, height: 6, background: '#e8e8e8', borderRadius: 3, overflow: 'hidden' }}
-                          >
-                            {item.status === 'init' ? (
-                              <div className="acc-progress-bar indeterminate" style={{ height: '100%', borderRadius: 3 }} />
-                            ) : item.status === 'confirming' ? (
-                              <div className="acc-progress-bar" style={{ width: '100%', height: '100%', borderRadius: 3, background: 'var(--accent)' }} />
-                            ) : (
-                              <div className="acc-progress-bar" style={{ width: `${item.progress}%`, height: '100%', borderRadius: 3, transition: 'width 0.3s ease', background: item.status === 'paused' ? '#ff9800' : 'var(--accent)' }} />
-                            )}
-                          </div>
-                        </>
+                        // SIN BARRA. El papel de «progressbar» se conserva en la
+                        // línea de texto: el rol describe la semántica, no el
+                        // dibujo, así que un lector de pantalla sigue recibiendo
+                        // el porcentaje aunque ya no haya nada que llenar.
+                        <div
+                          role="progressbar"
+                          aria-label={`Progreso de ${item.filename}`}
+                          aria-valuemin={0}
+                          aria-valuemax={100}
+                          aria-valuenow={item.status === 'confirming' ? 100 : item.status === 'uploading' ? item.progress : undefined}
+                          aria-valuetext={uploadStatusLabel(item, formatSize)}
+                          aria-busy={hayActividad(item)}
+                          style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+                        >
+                          {hayActividad(item) && <Girador />}
+                          <span style={{ fontSize: 11, color: item.status === 'paused' ? '#f57c00' : '#666' }}>
+                            {uploadStatusLabel(item, formatSize)}
+                          </span>
+                        </div>
                       )}
                     </div>
                   </div>

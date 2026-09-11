@@ -26,6 +26,7 @@ export default (env) => {
         banco: 'probar-lector.html',
         tabla: 'probar-tabla.html',
         busqueda: 'probar-busqueda.html',
+        subida: 'probar-subida.html',
       },
     },
   }
