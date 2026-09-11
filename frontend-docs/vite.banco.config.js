@@ -27,6 +27,7 @@ export default (env) => {
         tabla: 'probar-tabla.html',
         busqueda: 'probar-busqueda.html',
         subida: 'probar-subida.html',
+        cad: 'probar-cad.html',
       },
     },
   }

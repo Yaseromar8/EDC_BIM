@@ -82,7 +82,50 @@ function formatoReloj(segundos) {
 // alli la rueda ya se comporta como debe.
 const RUEDA_INVERTIDA = true;   // si algun dia sobra, se pone en false
 
-function interceptarRueda(contenedor) {
+// ── QUÉ ES CADA VISTA, según lo que el documento DICE de verdad ─────────────
+//
+// Antes se clasificaba por el NOMBRE: todo lo que no fuera `role === '3d'` se
+// llamaba «Lámina». Volcando los dos archivos reales se ve que el nombre no es
+// la identidad:
+//
+//   DWG   «2D View»  role 2d  is2D() true   padre «Model»  viewableID «Model»
+//         «3D View»  role 3d  is3D() true   padre «Model»  viewableID «Model-3D»
+//   RVT   «{3D}»     role 3d  is3D() true   padre «Vista 3D»
+//
+// O sea: en un DWG, la vista del espacio modelo NO se llama «Model» -- se llama
+// «2D View» y es su PADRE el que se llama «Model». Por eso la regla anterior
+// («abre la vista llamada Model») no encontraba nada y caía a la 3D, y por eso
+// el espacio modelo salía rotulado como «Lámina».
+//
+// Aquí sólo se afirma lo demostrado: 2D o 3D con los métodos del propio nodo, y
+// «espacio modelo» cuando el documento lo identifica como tal. Lo demás
+// conserva su nombre real: no se inventa «Layout» ni «Lámina» para subtipos que
+// no se han podido comprobar.
+const ID_ESPACIO_MODELO = 'Model';
+
+function esEspacioModelo(n) {
+  return String(n?.data?.viewableID || '') === ID_ESPACIO_MODELO && esVista2D(n);
+}
+function esVista2D(n) {
+  if (typeof n?.is2D === 'function') return n.is2D();
+  return n?.data?.role === '2d';            // respaldo si el nodo no trae el método
+}
+function esVista3D(n) {
+  if (typeof n?.is3D === 'function') return n.is3D();
+  return n?.data?.role === '3d';
+}
+function describirVista(n) {
+  return {
+    guid: n.data.guid,
+    nombre: n.data.name || 'Sin nombre',
+    es2D: esVista2D(n),
+    es3D: esVista3D(n),
+    // Etiqueta SÓLO cuando el dato la sostiene. `null` = sin etiqueta.
+    etiqueta: esEspacioModelo(n) ? 'Espacio modelo' : null,
+  };
+}
+
+function interceptarRueda(contenedor, dameVisor) {
   if (!contenedor || !RUEDA_INVERTIDA) return () => {};
 
   // SE LE CAMBIA EL SIGNO AL EVENTO, NO SE FABRICA OTRO.
@@ -104,8 +147,34 @@ function interceptarRueda(contenedor) {
   //
   // Se sombrean tambien las lecturas antiguas (wheelDelta*) porque no todo el
   // codigo del visor lee `deltaY`.
+  // ── PERO NO SIEMPRE. AQUÍ ESTABA EL FALLO CON REVIT ──────────────────────
+  //
+  // El visor NO trae la misma convención para todos los archivos: aplica un
+  // PERFIL según el modelo, y ese perfil decide el sentido de la rueda.
+  // Medido en producción sobre los dos archivos:
+  //
+  //     DWG  ->  perfil «Default»,  reverseDolly = false
+  //     RVT  ->  perfil «AEC»,      reverseDolly = true
+  //
+  // Invirtiendo siempre, el DWG salía bien y el Revit quedaba invertido DOS
+  // veces. (Esto explica también por qué los cinco intentos anteriores de
+  // pelear con la bandera «no cambiaban nada»: se probaban sobre un DWG, donde
+  // ya valía `false`.)
+  //
+  // La regla del producto es una sola, y es la del usuario, no la del
+  // dispositivo: EMPUJAR LA RUEDA HACIA ADELANTE ACERCA. Así que sólo se
+  // corrige cuando hace falta; si el visor ya invierte por su perfil, se le
+  // deja hacer. No se toca su estado: la bandera se LEE, nunca se escribe, y
+  // por eso el zoom por arrastre, la órbita, el encuadre y el ajuste siguen
+  // exactamente como están.
+  const yaInvierteElVisor = () => {
+    try { return dameVisor?.()?.navigation?.getReverseZoomDirection?.() === true; }
+    catch { return false; }   // ante la duda, el comportamiento de siempre
+  };
+
   const alRodar = (e) => {
     if (e.__alephiaGirada) return;
+    if (yaInvierteElVisor()) return;
     try {
       Object.defineProperty(e, '__alephiaGirada', { value: true });
       const opuestos = {
@@ -129,6 +198,84 @@ function interceptarRueda(contenedor) {
   // navegador nunca tiene que esperarnos para desplazar.
   contenedor.addEventListener('wheel', alRodar, { capture: true, passive: true });
   return () => contenedor.removeEventListener('wheel', alRodar, { capture: true });
+}
+
+/**
+ * PanelContenido — qué hay dentro del archivo, y cómo ir a ello.
+ *
+ * No decide nada: recibe las vistas ya descritas y devuelve el `guid` elegido.
+ * El filtro es local sobre lo que ya está cargado -- ni una petición más.
+ */
+function PanelContenido({ vistas, vistaActiva, onElegir }) {
+  const dosD = vistas.filter(v => v.es2D);
+  const tresD = vistas.filter(v => v.es3D);
+  // La pestaña abierta es la de la vista que se está viendo: abrir en la otra
+  // obligaría a buscar dónde está uno.
+  const laDeLaActiva = tresD.some(v => v.guid === vistaActiva) ? '3D' : '2D';
+  const [pestana, setPestana] = React.useState(dosD.length ? laDeLaActiva : '3D');
+  const [filtro, setFiltro] = React.useState('');
+
+  const termino = filtro.trim().toLowerCase();
+  const lista = (pestana === '3D' ? tresD : dosD)
+    .filter(v => !termino || v.nombre.toLowerCase().includes(termino));
+
+  const pestanita = (id, n) => (
+    <button key={id} onClick={() => setPestana(id)} disabled={!n}
+      style={{ flex: 1, padding: '6px 0', fontSize: 12, fontWeight: 600, cursor: n ? 'pointer' : 'default',
+               background: 'none', border: 'none', color: !n ? '#c2c8d0' : pestana === id ? 'var(--accent)' : '#6b7480',
+               borderBottom: `2px solid ${pestana === id && n ? 'var(--accent)' : 'transparent'}` }}>
+      {id}{n ? ` (${n})` : ''}
+    </button>
+  );
+
+  return (
+    <div style={{ position: 'absolute', top: 12, left: 12, zIndex: 20, width: 236,
+                  background: '#fff', border: '1px solid #e2e6ea', borderRadius: 6,
+                  boxShadow: '0 4px 16px rgba(16,24,40,0.12)', overflow: 'hidden',
+                  fontSize: 13, color: '#333' }}>
+      <div style={{ padding: '8px 12px', fontWeight: 600, fontSize: 12.5, borderBottom: '1px solid #eef1f4' }}>
+        Contenido
+      </div>
+      <div style={{ display: 'flex', borderBottom: '1px solid #eef1f4' }}>
+        {pestanita('2D', dosD.length)}
+        {pestanita('3D', tresD.length)}
+      </div>
+      <div style={{ padding: '8px 10px 6px' }}>
+        <input
+          value={filtro}
+          onChange={(e) => setFiltro(e.target.value)}
+          placeholder="Buscar por nombre…"
+          style={{ width: '100%', boxSizing: 'border-box', padding: '5px 8px', fontSize: 12.5,
+                   border: '1px solid #dfe3e8', borderRadius: 4, outline: 'none' }}
+        />
+      </div>
+      <div style={{ maxHeight: 260, overflowY: 'auto', padding: '0 6px 8px' }}>
+        {lista.length === 0 ? (
+          <div style={{ padding: '10px 6px', fontSize: 12, color: '#8b939e' }}>
+            {termino ? 'Ninguna vista con ese nombre.' : 'Sin vistas en esta pestaña.'}
+          </div>
+        ) : lista.map(v => {
+          const activa = v.guid === vistaActiva;
+          return (
+            <button key={v.guid} onClick={() => onElegir(v.guid)} title={v.nombre}
+              style={{ display: 'block', width: '100%', textAlign: 'left', padding: '6px 8px',
+                       marginBottom: 2, border: 'none', borderRadius: 4, cursor: 'pointer',
+                       background: activa ? '#eaf2fa' : 'transparent',
+                       color: activa ? 'var(--accent)' : '#333',
+                       fontWeight: activa ? 600 : 400, fontSize: 12.5 }}>
+              <span style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {v.nombre}
+              </span>
+              {/* Sólo se rotula lo que el documento sostiene. */}
+              {v.etiqueta && (
+                <span style={{ display: 'block', fontSize: 11, color: '#8b939e', fontWeight: 400 }}>{v.etiqueta}</span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
 }
 
 export default function CadViewer({ file, projectPrefix = '', urnDirecto = null }) {
@@ -203,7 +350,10 @@ export default function CadViewer({ file, projectPrefix = '', urnDirecto = null 
         viewerRef.current = viewer;
         // La rueda, corregida en el borde (ver interceptarRueda).
         if (soltarRueda.current) soltarRueda.current();
-        soltarRueda.current = interceptarRueda(containerRef.current);
+        // Se le pasa una FORMA DE PREGUNTAR por el visor, no el visor: el
+        // perfil se aplica al cargar el modelo, después de esta línea, y puede
+        // cambiar al cambiar de vista. La decisión se toma en cada rueda.
+        soltarRueda.current = interceptarRueda(containerRef.current, () => viewerRef.current);
         Autodesk.Viewing.Document.load(
           `urn:${urn}`,
           (doc) => {
@@ -217,19 +367,23 @@ export default function CadViewer({ file, projectPrefix = '', urnDirecto = null 
             const raiz = doc.getRoot();
             const todas = raiz.search({ type: 'geometry' }) || [];
             documentoRef.current = doc;
-            setVistas(todas.map(v => ({
-              guid: v.data.guid,
-              nombre: v.data.name || 'Sin nombre',
-              tipo: v.data.role === '3d' ? '3D' : 'Lámina',
-            })));
+            setVistas(todas.map(v => describirVista(v)));
 
-            // MODEL PRIMERO (peticion del dueno). En un DWG de Civil, "Model"
-            // es el espacio donde esta el dibujo de verdad; las demas vistas
-            // son presentaciones. Autodesk suele marcar por defecto una
+            // MODEL PRIMERO (peticion del dueno). En un DWG de Civil, el
+            // espacio modelo es donde esta el dibujo de verdad; las demas
+            // vistas son presentaciones. Autodesk suele marcar por defecto una
             // lamina —a menudo la caratula—, y se abria el membrete.
-            // Orden: Model > cualquier 3D > lo que marque Autodesk.
+            //
+            // La regla buscaba una vista LLAMADA «Model» y en el DWG real no
+            // existe tal nombre, asi que nunca acertaba y se caia al 3D: por
+            // eso un plano abria en tres dimensiones. Ahora se busca por lo que
+            // el documento declara (`viewableID === 'Model'` y 2D), que es lo
+            // medido. Detras se conserva ENTERA la cadena anterior, asi que un
+            // archivo donde esto no aplique se comporta igual que hasta hoy --
+            // y un Revit, que no tiene espacio modelo, sigue abriendo en 3D.
             const esModel = (v) => /^\s*model\s*$/i.test(v.data.name || '');
-            const node = todas.find(esModel)
+            const node = todas.find(esEspacioModelo)
+                      || todas.find(esModel)
                       || todas.find(v => v.data.role === '3d')
                       || raiz.getDefaultGeometry();
             if (!node) return fail('La traducción no produjo ninguna vista visible.');
@@ -355,33 +509,30 @@ export default function CadViewer({ file, projectPrefix = '', urnDirecto = null 
         </div>
       )}
 
-      {/* Selector de vista. Solo aparece si hay mas de una: en un plano suelto
-          estorbaria. */}
+      {/* CONTENIDO. Solo aparece si hay mas de una vista: en un plano suelto
+          estorbaria.
+
+          Era un <select>. Un desplegable esconde lo que hay dentro: para saber
+          si un modelo trae laminas hay que abrirlo, y con veinte vistas no se
+          puede buscar. Esto es lo minimo que lo arregla -- separar 2D de 3D,
+          poder filtrar por nombre, y ver la lista entera -- sin cambiar NADA
+          de como se carga: el clic llama al mismo `loadDocumentNode` que
+          llamaba el desplegable. */}
       {phase === 'listo' && vistas.length > 1 && (
-        <select
-          value={vistaActiva || ''}
-          onChange={(e) => {
-            const v = vistas.find(x => x.guid === e.target.value);
+        <PanelContenido
+          vistas={vistas}
+          vistaActiva={vistaActiva}
+          onElegir={(guid) => {
             const doc = documentoRef.current;
             const viewer = viewerRef.current;
-            if (!v || !doc || !viewer) return;
+            if (!doc || !viewer) return;
             const node = (doc.getRoot().search({ type: 'geometry' }) || [])
-              .find(n => n.data.guid === v.guid);
+              .find(n => n.data.guid === guid);
             if (!node) return;
-            setVistaActiva(v.guid);
+            setVistaActiva(guid);
             viewer.loadDocumentNode(doc, node);
           }}
-          style={{
-            position: 'absolute', top: 12, left: 12, zIndex: 20, maxWidth: 380,
-            padding: '6px 10px', fontSize: 13, borderRadius: 5,
-            border: '1px solid rgba(255,255,255,0.25)', background: 'rgba(28,32,38,0.94)',
-            color: '#dfe3e9', cursor: 'pointer',
-          }}
-        >
-          {vistas.map(v => (
-            <option key={v.guid} value={v.guid}>{v.tipo} · {v.nombre}</option>
-          ))}
-        </select>
+        />
       )}
 
       {phase !== 'listo' && (
