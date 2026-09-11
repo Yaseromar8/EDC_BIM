@@ -283,6 +283,83 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fe.activeFile]);
 
+  // ── RESTAURAR: UNA SOLA MANERA, DOS BOTONES ──────────────────────────────
+  //
+  // La papelera tiene dos superficies -- el botón de cada fila y el
+  // «Restaurar (N)» de la barra -- y estaban escritas por separado, así que no
+  // se comportaban igual: la de la barra NO DECÍA NADA cuando salía bien, y
+  // sacaba las filas de la papelera hubiera aceptado el servidor o no. Las dos
+  // llaman ahora aquí, y por eso no pueden volver a divergir.
+
+  // EL NOMBRE DE LA RAÍZ ES UN DATO DEL SERVIDOR, no un adorno. La ruta de la
+  // papelera llega como «Archivos de proyecto / 01_COSTOS / plano.pdf»: la
+  // arma `list_deleted_contents` empezando en el nodo PROJECT_ROOT, cuyo
+  // nombre es ese (`file_system_db.py`, ROOT_NAME). Ese primer tramo ES la
+  // raíz, no una carpeta dentro de ella: sin retirarlo se navega a
+  // «<proyecto>/Archivos de proyecto/01_COSTOS/», que no existe.
+  const RAIZ_SERVIDOR = 'Archivos de proyecto';
+
+  // A qué carpeta vuelve un elemento, o `null` si no se puede AFIRMAR: se
+  // exige que la ruta sea la suya (su último tramo es su nombre) y que empiece
+  // en la raíz conocida. Sin las dos cosas no se ofrece enlace. Un aviso sin
+  // acción es mejor que llevar a alguien a una carpeta que no existe.
+  const carpetaDeRegreso = (fila) => {
+    const trozos = String(fila?.fullName || '').split(' / ').map(t => t.trim()).filter(Boolean);
+    if (!fila || trozos.length < 2) return null;
+    if (trozos[trozos.length - 1] !== fila.name) return null;
+    if (trozos[0] !== RAIZ_SERVIDOR) return null;
+    const carpetas = trozos.slice(1, -1);
+    return projectPrefix + '/' + (carpetas.length ? carpetas.join('/') + '/' : '');
+  };
+
+  const avisarRestaurado = (ruta, cuantos) => {
+    const texto = cuantos > 1 ? `${cuantos} elementos restaurados.` : 'Restaurado.';
+    if (!ruta) { toast.success(texto); return; }
+    toast.success(t => (
+      <span style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        {texto}
+        <button
+          onClick={() => { toast.dismiss(t.id); fe.switchMode(false); fe.navigate(ruta, null); }}
+          style={{ background: 'none', border: 'none', padding: 0, color: 'var(--accent)', fontWeight: 600, cursor: 'pointer', fontSize: 'inherit' }}>
+          Ver en Archivos
+        </button>
+      </span>
+    ), { duration: 6000 });
+  };
+
+  const restaurarElementos = async (ids) => {
+    if (!ids?.length) return;
+    // Sin espera artificial: la pausa de un segundo que había antes de pedir
+    // nada no servía a nadie.
+    fe.setRestoringIds(prev => { const n = { ...prev }; ids.forEach(id => { n[id] = true; }); return n; });
+    const filas = new Map(fe.deletedItems.map(it => [it.id, it]));
+    const aceptados = [], errores = [];
+    await Promise.all(ids.map(async (id) => {
+      try {
+        const res = await apiFetch(`${API}/api/docs/restore`, { method: 'POST', headers: getAuthHeaders(), body: JSON.stringify({ id, model_urn: projectPrefix, user: user.name }) });
+        if (res.ok) aceptados.push(id);
+        else { const d = await res.json().catch(() => ({})); errores.push(d.error || 'No se pudo restaurar.'); }
+      } catch { errores.push('Error de conexión al restaurar'); }
+    }));
+    fe.setRestoringIds(prev => { const c = { ...prev }; ids.forEach(id => { delete c[id]; }); return c; });
+
+    if (aceptados.length) {
+      // SÓLO SALE DE LA PAPELERA LO QUE EL SERVIDOR CONFIRMÓ. Lo rechazado
+      // sigue a la vista, que es lo único que permite reintentarlo.
+      fe.setDeletedItems(prev => prev.filter(it => !aceptados.includes(it.id)));
+      fe.setSelectedDeletedIds(prev => prev.filter(x => !aceptados.includes(x)));
+      fe.triggerRefresh(fe.currentPath);
+      // El enlace, sólo si TODOS vuelven al mismo sitio. Con destinos distintos
+      // cualquier elección sería arbitraria, así que no se ofrece ninguna.
+      const rutas = aceptados.map(id => carpetaDeRegreso(filas.get(id)));
+      const mismaCarpeta = rutas.every(r => r && r === rutas[0]);
+      avisarRestaurado(mismaCarpeta ? rutas[0] : null, aceptados.length);
+    }
+    if (errores.length) {
+      toast.error(ids.length > 1 ? `${errores.length} de ${ids.length} sin restaurar. ${errores[0]}` : errores[0]);
+    }
+  };
+
   // SOLTAR FICHEROS SOBRE LA SUPERFICIE. El motor de subida no se toca: esto
   // es cableado. `handleSopUpload` ya sube a `currentPath`, con sus trozos, su
   // reanudación, su progreso y su cancelación.
@@ -1033,14 +1110,7 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
                 )}
 
                 {fe.isTrashMode && fe.selectedDeletedIds.length > 0 && (
-                  <button onClick={() => {
-                      const ids = [...fe.selectedDeletedIds];
-                      const newRestoring = { ...fe.restoringIds }; ids.forEach(id => { newRestoring[id] = true; }); fe.setRestoringIds(newRestoring);
-                      setTimeout(async () => {
-                        try { const res = await Promise.all(ids.map(id => apiFetch(`${API}/api/docs/restore`, { method: 'POST', body: JSON.stringify({ id, model_urn: projectPrefix, user: user.name }) }))); if (!res.every(r => r.ok)) toast.error("No se pudieron restaurar algunos archivos."); } catch(e) { toast.error("Error de conexión al restaurar"); }
-                        fe.setDeletedItems(prev => prev.filter(it => !ids.includes(it.id))); fe.setSelectedDeletedIds([]); fe.setRestoringIds(prev => { const c = {...prev}; ids.forEach(id => { delete c[id]; }); return c; }); fe.triggerRefresh(fe.currentPath);
-                      }, 1000);
-                    }} style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#fff', border: '1px solid #747775', borderRadius: 4, color: '#1f1f1f', fontSize: 13, fontWeight: 500, padding: '6px 12px', cursor: 'pointer' }}>
+                  <button onClick={() => restaurarElementos([...fe.selectedDeletedIds])} style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#fff', border: '1px solid #747775', borderRadius: 4, color: '#1f1f1f', fontSize: 13, fontWeight: 500, padding: '6px 12px', cursor: 'pointer' }}>
                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 14l-4-4 4-4"/><path d="M5 10h11a4 4 0 1 1 0 8h-1"/></svg> Restaurar ({fe.selectedDeletedIds.length})
                   </button>
                 )}
@@ -1202,59 +1272,7 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
                     <div style={{ padding: 40, textAlign: 'center' }}><div className="adsk-spinner" style={{ margin: '0 auto' }} /></div>
                 ) : fe.isTrashMode ? (
                     <DeletedTable items={fe.deletedItems} selectedIds={fe.selectedDeletedIds} onToggle={fe.setSelectedDeletedIds}
-                      onRestore={async (id) => {
-                        // LA FILA NO SE RETIRA HASTA QUE EL SERVIDOR CONFIRMA.
-                        // Antes el filtrado estaba FUERA del try/catch: un
-                        // restaurar que fallaba sacaba el aviso de error Y
-                        // quitaba la fila igual, así que el fallo tenía cara de
-                        // éxito y no se podía reintentar.
-                        //
-                        // Tampoco se espera un segundo antes de pedir nada: esa
-                        // pausa no servía a nadie.
-                        fe.setRestoringIds(prev => ({ ...prev, [id]: true }));
-                        let restaurado = false;
-                        try {
-                          const res = await apiFetch(`${API}/api/docs/restore`, { method: 'POST', headers: getAuthHeaders(), body: JSON.stringify({ id, model_urn: projectPrefix, user: user.name }) });
-                          if (res.ok) {
-                            restaurado = true;
-                            // ¿A DONDE volvió? La papelera trae `fullName`, que es la
-                            // ruta de presentación del elemento: «Carpeta / Subcarpeta /
-                            // Nombre». El padre es todo menos el último trozo.
-                            //
-                            // Sólo se ofrece el enlace si la ruta ENCAJA de verdad: que
-                            // exista y que su último trozo sea el nombre del elemento.
-                            // Si no cuadra, se avisa sin acción — antes que llevar a
-                            // alguien a una carpeta inventada.
-                            const fila = fe.deletedItems.find(it => it.id === id);
-                            const trozos = String(fila?.fullName || '').split(' / ').map(t => t.trim()).filter(Boolean);
-                            const encaja = fila && trozos.length > 0 && trozos[trozos.length - 1] === fila.name;
-                            const rutaPadre = encaja
-                              ? projectPrefix + '/' + trozos.slice(0, -1).join('/') + (trozos.length > 1 ? '/' : '')
-                              : null;
-                            if (rutaPadre) {
-                              toast.success(t => (
-                                <span style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                                  Restaurado.
-                                  <button
-                                    onClick={() => { toast.dismiss(t.id); fe.switchMode(false); fe.navigate(rutaPadre, null); }}
-                                    style={{ background: 'none', border: 'none', padding: 0, color: 'var(--accent)', fontWeight: 600, cursor: 'pointer', fontSize: 'inherit' }}>
-                                    Ver en Archivos
-                                  </button>
-                                </span>
-                              ), { duration: 6000 });
-                            } else {
-                              toast.success('Restaurado.');
-                            }
-                          }
-                          else { const errData = await res.json().catch(() => ({})); toast.error(errData.error || 'No se pudo restaurar.'); }
-                        } catch { toast.error('Error de conexión al restaurar'); }
-                        fe.setRestoringIds(prev => { const c = { ...prev }; delete c[id]; return c; });
-                        if (restaurado) {
-                          fe.setDeletedItems(prev => prev.filter(it => it.id !== id));
-                          fe.setSelectedDeletedIds(prev => prev.filter(x => x !== id));
-                          fe.triggerRefresh(fe.currentPath);
-                        }
-                      }}
+                      onRestore={(id) => restaurarElementos([id])}
                       getInitials={getInitials} restoringIds={fe.restoringIds} />
                 ) : vistaCarpeta === 'cuadricula' ? (
                     <Suspense fallback={<div style={{ padding: 40, textAlign: 'center', color: '#888', fontSize: 13 }}>Cargando…</div>}>

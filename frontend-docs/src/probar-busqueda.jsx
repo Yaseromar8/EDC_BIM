@@ -54,9 +54,20 @@ const FICHEROS = Array.from({ length: TOTAL }, (_, i) => {
     };
 });
 
+// LA FORMA REAL DEL SERVIDOR, no una simplificada. `list_deleted_contents`
+// arma `fullName` con un `string_agg(name, ' / ')` que ARRANCA EN EL NODO RAÍZ,
+// y ese nodo tiene nombre: «Archivos de proyecto» (ROOT_NAME). El banco anterior
+// omitía ese primer tramo, así que probaba mi suposición en vez del servidor:
+// «Ver en Archivos» pasó la prueba y en producción habría navegado a
+// «banco/Archivos de proyecto/01_COSTOS/», que no existe.
+const RAIZ = 'Archivos de proyecto';
 const BORRADOS = [
-    { id: 'p1', name: 'BORRADO_1.pdf', fullName: 'banco/BORRADO_1.pdf', node_type: 'FILE', deleted_by: 'ADMIN', deleted_at: '2026-09-05T10:00:00Z' },
-    { id: 'p2', name: 'BORRADO_2.pdf', fullName: 'banco/BORRADO_2.pdf', node_type: 'FILE', deleted_by: 'ADMIN', deleted_at: '2026-09-05T11:00:00Z' },
+    { id: 'p1', name: 'BORRADO_1.pdf', fullName: `${RAIZ} / 01_COSTOS / BORRADO_1.pdf`, node_type: 'FILE', deleted_by: 'ADMIN', deleted_at: '2026-09-05T10:00:00Z' },
+    { id: 'p2', name: 'BORRADO_2.pdf', fullName: `${RAIZ} / 01_COSTOS / BORRADO_2.pdf`, node_type: 'FILE', deleted_by: 'ADMIN', deleted_at: '2026-09-05T11:00:00Z' },
+    // De OTRA carpeta: con destinos distintos no puede ofrecerse enlace.
+    { id: 'p3', name: 'BORRADO_3.pdf', fullName: `${RAIZ} / 02_BIM / BORRADO_3.pdf`, node_type: 'FILE', deleted_by: 'ADMIN', deleted_at: '2026-09-05T12:00:00Z' },
+    // Directamente en la raíz: vuelve a «Archivos de proyecto», sin subcarpeta.
+    { id: 'p4', name: 'BORRADO_4.pdf', fullName: `${RAIZ} / BORRADO_4.pdf`, node_type: 'FILE', deleted_by: 'ADMIN', deleted_at: '2026-09-05T13:00:00Z' },
 ];
 
 window.__retrasoBusqueda = 300;
@@ -120,9 +131,17 @@ window.fetch = (url, opciones = {}) => {
 
     if (u.includes('/api/docs/restore')) {
         const id = String(cuerpo.id);
-        if (window.__fallarRestore) {
+        // `__fallarRestore` admite `true` (rechaza todo) o una lista de ids:
+        // hace falta para el fallo PARCIAL, que es donde se ve si la papelera
+        // conserva lo rechazado.
+        const rechazado = Array.isArray(window.__fallarRestore)
+            ? window.__fallarRestore.map(String).includes(id)
+            : !!window.__fallarRestore;
+        window.__cabecerasRestore = window.__cabecerasRestore || [];
+        window.__cabecerasRestore.push({ id, headers: { ...(opciones.headers || {}) } });
+        if (rechazado) {
             anotar(`restaurar ${id} -> RECHAZADO`);
-            return responder({ success: false, error: 'No se pudo restaurar.' }, 150, 403);
+            return responder({ success: false, error: 'Sin permiso para restaurar.' }, 150, 403);
         }
         window.__estado.borrados = window.__estado.borrados.filter(b => String(b.id) !== id);
         anotar(`restaurar ${id} -> OK`);
