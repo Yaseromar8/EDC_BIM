@@ -161,8 +161,22 @@ window.fetch = (url, opciones = {}) => {
     }
 
     if (u.includes('/api/docs/list')) {
+        // EL ARBOL TIENE FONDO. Antes se devolvian las MISMAS carpetas para
+        // cualquier ruta, asi que el panel lateral se podia expandir hasta el
+        // infinito y el navegador se quedaba colgado. Eso era del banco, no del
+        // producto: una carpeta real tiene hijos distintos, y a partir de cierto
+        // nivel no tiene ninguno.
+        const ruta = decodeURIComponent((u.match(/[?&]path=([^&]*)/) || [])[1] || '');
+        const esRaiz = !ruta || /^banco\/?$/.test(ruta);
+        const nivel = ruta.split('/').filter(Boolean).length;
+        const hijas = esRaiz
+            ? [...window.__estado.folders]
+            : (nivel <= 2 ? [{ id: `sub-${nivel}-${ruta}`, name: `SUB_${nivel}`, fullName: `${ruta.replace(/\/$/, '')}/SUB_${nivel}/`,
+                               permission_level: 'admin', has_access: true,
+                               updated: '2026-09-01T10:00:00Z', updated_by: 'ADMIN' }]
+                          : []);
         return responder({ success: true, data: {
-            folders: [...window.__estado.folders], files: [...window.__estado.files], current_node_id: 'raiz',
+            folders: hijas, files: esRaiz ? [...window.__estado.files] : [], current_node_id: esRaiz ? 'raiz' : `n-${ruta}`,
         } });
     }
     if (u.includes('/api/projects')) return responder({ success: true, data: [] });
