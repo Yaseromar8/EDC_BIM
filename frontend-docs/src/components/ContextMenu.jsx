@@ -5,6 +5,7 @@
  */
 import React from 'react';
 import { downloadFolderAsZip } from '../utils/downloadUtils';
+import { saveAs } from 'file-saver';
 import { API } from '../utils/helpers';
 import { apiFetch } from '../utils/apiFetch';
 import toast from 'react-hot-toast';
@@ -158,7 +159,15 @@ export default function ContextMenu({
             // Ahora se pide una URL FIRMADA —el mismo camino que usa el
             // lector— y se abre esa: caduca sola y no lleva identidad dentro.
             if (!item.gcs_urn) { toast.error('Este documento no tiene fichero asociado.'); return; }
-            const ventana = window.open('', '_blank', 'noopener');  // antes del await: si no, lo bloquea el navegador
+            // SIN PESTAÑA. La URL firmada se emite con `response_disposition:
+            // inline`, o sea «muéstralo», no «descárgalo»: por eso antes había que
+            // abrir otra pestaña -- si no, el fichero sustituía a ALEPHIA en la que
+            // estabas. El resultado era una pestaña en blanco mientras se firmaba,
+            // y luego un visor ajeno.
+            //
+            // Se trae el fichero y se guarda, que es EXACTAMENTE lo que ya hace la
+            // descarga de carpeta con cada uno de sus documentos: mismo `fetch` a
+            // la URL firmada, mismo `saveAs`. No se inventa un camino nuevo.
             // FIRMAR LA URL TARDA, y hasta ahora lo único que se veía era una
             // pestaña en blanco: ni señal de que el clic hubiera entrado, ni de
             // qué se estaba esperando. La carpeta ya avisaba con su conteo; el
@@ -168,10 +177,12 @@ export default function ContextMenu({
               const r = await apiFetch(`${API}/api/docs/signed-url?urn=${encodeURIComponent(item.gcs_urn)}&model_urn=${encodeURIComponent(projectPrefix)}`);
               const d = await r.json().catch(() => ({}));
               if (!r.ok || !d.success || !d.url) throw new Error(d.error || 'No se pudo preparar la descarga.');
-              if (ventana) ventana.location = d.url; else window.open(d.url, '_blank', 'noopener');
-              toast.success('Descarga lista.', { id: aviso });
+              toast.loading(`Descargando "${item.name}"…`, { id: aviso });
+              const fichero = await fetch(d.url);
+              if (!fichero.ok) throw new Error('El almacén no entregó el fichero.');
+              saveAs(await fichero.blob(), item.name);
+              toast.success('Descargado.', { id: aviso });
             } catch (e) {
-              if (ventana) ventana.close();
               toast.error(e.message || 'No se pudo descargar.', { id: aviso });
             }
         }}>

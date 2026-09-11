@@ -440,6 +440,13 @@ export function useFileExplorer(project, user) {
 
     // El destino se guarda ANTES de cerrar: cerrar vacia `moveState`.
     const destId = moveState.destId;
+    // EL AVISO TIENE QUE DECIR A DONDE. «2 movidos correctamente» deja al
+    // usuario mirando una carpeta con dos elementos menos y sin saber adonde
+    // fueron -- y si eligio mal el destino, sin enterarse.
+    const destRuta = String(moveState.destPath || '').replace(/\/+$/, '');
+    const destNombre = (!destRuta || destRuta === String(projectPrefix).replace(/\/+$/, ''))
+      ? 'Archivos de proyecto'
+      : destRuta.split('/').pop();
 
     setProcessingIds(prev => {
       const n = { ...prev };
@@ -509,9 +516,10 @@ export function useFileExplorer(project, user) {
     setRefreshSignal(s => s + 1);
     triggerRefresh();
     if (failures.length) {
-      toast.error(`${movidos.length} de ${idsToMove.length} elemento(s) movido(s). ${failures[0]}`);
+      // Conteo real, destino, y el motivo de lo que no se pudo: las tres cosas.
+      toast.error(`${movidos.length} de ${idsToMove.length} elemento(s) movido(s) a "${destNombre}". ${failures[0]}`);
     } else {
-      toast.success(`${movidos.length} elemento(s) movido(s) correctamente.`);
+      toast.success(`${movidos.length} elemento(s) movido(s) a "${destNombre}".`);
     }
   };
 

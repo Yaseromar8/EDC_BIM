@@ -87,6 +87,24 @@ const MultimediaModule = lazy(() => import('../components/MultimediaModule'));
 const FotosModule = lazy(() => import('../components/FotosModule'));
 const CuadernoModule = lazy(() => import('../components/CuadernoModule'));
 const AvanceModule = lazy(() => import('../components/AvanceModule'));
+// ALCANCE DE LA CAJA DE BÚSQUEDA.
+//
+//   'carpeta'   filtra lo que hay en la carpeta donde estás.
+//   'proyecto'  busca en todo el expediente y SUSTITUYE la tabla por una
+//               lista de resultados.
+//
+// Estaba en 'proyecto' de hecho: bastaba teclear tres letras dentro de una
+// carpeta para acabar viendo documentos de otras cinco. Y con ello se perdía
+// la superficie de tabla -- sin casillas, sin «seleccionar todo» y sin las
+// acciones de la barra -- porque la lista de resultados es otro dibujo.
+//
+// El filtro por carpeta YA existía y ya corría en cada tecla
+// (`filteredFolders` / `filteredFiles` del explorador); lo único que hacía
+// falta era dejar de taparlo. Poner esta constante en 'proyecto' devuelve el
+// comportamiento anterior tal cual: la maquinaria sigue entera y probada
+// (`utils/busquedaDiferida.js`, 17 comprobaciones).
+const ALCANCE_BUSQUEDA = 'carpeta';
+
 const MatrixGrid = lazy(() => import('../components/MatrixGrid'));
 const GatewayPanel = lazy(() => import('../components/panels/GatewayPanel'));
 const QuarantineTable = lazy(() => import('../components/panels/QuarantineTable'));
@@ -265,6 +283,72 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fe.activeFile]);
 
+  // SOLTAR FICHEROS SOBRE LA SUPERFICIE. El motor de subida no se toca: esto
+  // es cableado. `handleSopUpload` ya sube a `currentPath`, con sus trozos, su
+  // reanudación, su progreso y su cancelación.
+  //
+  // Estado PROPIO y no el del modal (`fe.dragOver`): compartirlo haría que
+  // arrastrar por detrás de un modal abierto encendiera su zona de soltar.
+  //
+  // Sólo se intercepta si el arrastre trae FICHEROS. Sin esa comprobación se
+  // secuestra cualquier arrastre de la página -- texto, un enlace -- y el
+  // navegador deja de hacer lo suyo.
+  const [arrastreEncima, setArrastreEncima] = React.useState(false);
+  const traeFicheros = (e) => Array.from(e.dataTransfer?.types || []).includes('Files');
+  const superficieDeSoltar = {
+    onDragOver: (e) => { if (!traeFicheros(e)) return; e.preventDefault(); if (!arrastreEncima) setArrastreEncima(true); },
+    // `dragleave` salta también al pasar de un hijo a otro dentro de la misma
+    // zona: sin esta comprobación el aviso parpadea mientras mueves el ratón.
+    onDragLeave: (e) => { if (e.currentTarget.contains(e.relatedTarget)) return; setArrastreEncima(false); },
+    onDrop: (e) => {
+      if (!traeFicheros(e)) return;
+      e.preventDefault();
+      setArrastreEncima(false);
+      if (e.dataTransfer.files?.length) fe.handleSopUpload(e.dataTransfer.files);
+    },
+  };
+
+  // ESCAPE LIMPIA LA SELECCIÓN, pero sólo si nadie más lo está esperando.
+  //
+  // Escape es una tecla muy pedida: la quiere el campo de renombrar para
+  // cancelar, la quiere un diálogo para cerrarse y la quiere el menú
+  // contextual. Quien tiene algo abierto manda; la selección es lo último de
+  // la cola. Sin este orden, cancelar un renombrado te borraría además la
+  // selección que tenías hecha -- dos efectos de una tecla, y uno no lo pediste.
+  //
+  // Se comprueba lo que hay EN PANTALLA en vez de enumerar diez banderas de
+  // estado: cada superficie que reclama Escape deja su marca en el DOM, y así
+  // una superficie nueva queda cubierta sin tener que acordarse de ella aquí.
+  const limpiarSeleccion = fe.setSelected;   // el actualizador de useState es estable
+  React.useEffect(() => {
+    const alPulsar = (e) => {
+      if (e.key !== 'Escape' || e.defaultPrevented) return;
+
+      // ¿alguien está ESCRIBIENDO? ese campo se queda con la tecla.
+      //
+      // «Estar en un input» no basta: al marcar una casilla, el foco se queda
+      // EN LA CASILLA, y entonces Escape no limpiaba nada -- que es justo lo
+      // que se pide. Una casilla, un botón o un radio no consumen Escape; lo
+      // consume lo que acepta texto.
+      const foco = document.activeElement;
+      const etiqueta = (foco?.tagName || '').toLowerCase();
+      const SIN_TEXTO = new Set(['checkbox', 'radio', 'button', 'submit', 'reset', 'file', 'range', 'color']);
+      const escribiendo = etiqueta === 'textarea'
+        || (etiqueta === 'input' && !SIN_TEXTO.has((foco.type || 'text').toLowerCase()))
+        || foco?.isContentEditable;
+      if (escribiendo) return;
+
+      // ¿hay una superficie abierta que la reclame?
+      if (document.querySelector('.modal-overlay, .modal-content, .acc-modal-box, .row-context-menu, .inline-edit-box')) return;
+
+      // Se pregunta por el estado AL VACIAR, no al suscribirse: así el
+      // escuchador se pone una vez y no se rehace en cada marca y desmarca.
+      limpiarSeleccion(previa => (previa.size > 0 ? new Set() : previa));
+    };
+    document.addEventListener('keydown', alPulsar);
+    return () => document.removeEventListener('keydown', alPulsar);
+  }, [limpiarSeleccion]);
+
   const capsSeleccion = React.useMemo(() => capacidadesDeSeleccion({
     elementos: fe.elementosSeleccionados, isAdmin, isTrashMode: fe.isTrashMode,
   }), [fe.elementosSeleccionados, isAdmin, fe.isTrashMode]);
@@ -328,7 +412,7 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
   // demostrarla. Aqui solo se dice QUE se busca y donde va el resultado.
   React.useEffect(() => programarBusqueda({
     consulta: fe.searchQuery,
-    habilitada: !fe.isTrashMode && fe.sidebarView === 'files',
+    habilitada: ALCANCE_BUSQUEDA === 'proyecto' && !fe.isTrashMode && fe.sidebarView === 'files',
     buscar: async (q) => {
       const r = await apiFetch(`${API}/api/docs/search?q=${encodeURIComponent(q)}&model_urn=${encodeURIComponent(fe.projectPrefix)}`);
       const d = await r.json();
@@ -1012,8 +1096,33 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
                   ? fe.currentPath.slice(projectPrefix.length).replace(/^\/+|\/+$/g, '')
                   : '';
                 const segments = rel ? rel.split('/') : [];
+                // SUBIR UN NIVEL. Es el mismo viaje que ya hacen las migas hacia
+                // un ancestro -- `navigate(ruta, null)` --, sólo que sin tener que
+                // apuntar a la miga correcta. En la raíz no hay padre, así que el
+                // botón se apaga en vez de desaparecer: que esté y no se pueda usar
+                // dice dónde estás; que no esté, no dice nada.
+                //
+                // NO es `onBack`: eso sigue significando salir de la obra.
+                const enRaiz = segments.length === 0;
+                const rutaDelPadre = segments.length > 1
+                  ? projectPrefix + '/' + segments.slice(0, -1).join('/') + '/'
+                  : projectPrefix + '/';
                 return (
                   <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 4, padding: '8px 16px', fontSize: 13, background: '#fafbfc', borderBottom: '1px solid #f0f0f0', flexShrink: 0 }}>
+                    <button
+                      onClick={() => { if (!enRaiz) fe.navigate(rutaDelPadre, null); }}
+                      disabled={enRaiz}
+                      title={enRaiz ? 'Ya estás en la raíz del proyecto' : 'Subir a la carpeta anterior'}
+                      aria-label="Subir a la carpeta anterior"
+                      style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 24, height: 24, marginRight: 4,
+                               background: 'none', border: 'none', borderRadius: 4, padding: 0,
+                               color: enRaiz ? 'var(--text-muted, #b8bfc7)' : 'var(--accent)',
+                               cursor: enRaiz ? 'default' : 'pointer' }}
+                    >
+                      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M12 19V5" /><path d="M5 12l7-7 7 7" />
+                      </svg>
+                    </button>
                     <span
                       onClick={() => fe.navigate(projectPrefix + '/', null)}
                       style={{ cursor: segments.length ? 'pointer' : 'default', color: segments.length ? 'var(--accent)' : '#333', fontWeight: segments.length ? 500 : 600 }}
@@ -1039,7 +1148,17 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
                 );
               })()}
 
-              <div style={{ flex: 1, overflow: 'hidden' }}>
+              <div
+                {...(!fe.isTrashMode ? superficieDeSoltar : {})}
+                className={arrastreEncima ? 'dropzone-active' : undefined}
+                style={{ flex: 1, overflow: 'hidden', position: 'relative' }}>
+                {arrastreEncima && (
+                  <div style={{ position: 'absolute', inset: 0, zIndex: 5, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                pointerEvents: 'none', background: 'rgba(244,246,249,0.82)', color: 'var(--accent)',
+                                fontSize: 14, fontWeight: 600 }}>
+                    Suelta para subir a esta carpeta
+                  </div>
+                )}
                 {globalResults !== null && !fe.isTrashMode ? (
                   <div style={{ height: '100%', overflowY: 'auto', background: '#fff' }}>
                     <div style={{ padding: '10px 16px', fontSize: 12, color: '#888', borderBottom: '1px solid #eee', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -1096,7 +1215,37 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
                         let restaurado = false;
                         try {
                           const res = await apiFetch(`${API}/api/docs/restore`, { method: 'POST', headers: getAuthHeaders(), body: JSON.stringify({ id, model_urn: projectPrefix, user: user.name }) });
-                          if (res.ok) { restaurado = true; toast.success('Restaurado.'); }
+                          if (res.ok) {
+                            restaurado = true;
+                            // ¿A DONDE volvió? La papelera trae `fullName`, que es la
+                            // ruta de presentación del elemento: «Carpeta / Subcarpeta /
+                            // Nombre». El padre es todo menos el último trozo.
+                            //
+                            // Sólo se ofrece el enlace si la ruta ENCAJA de verdad: que
+                            // exista y que su último trozo sea el nombre del elemento.
+                            // Si no cuadra, se avisa sin acción — antes que llevar a
+                            // alguien a una carpeta inventada.
+                            const fila = fe.deletedItems.find(it => it.id === id);
+                            const trozos = String(fila?.fullName || '').split(' / ').map(t => t.trim()).filter(Boolean);
+                            const encaja = fila && trozos.length > 0 && trozos[trozos.length - 1] === fila.name;
+                            const rutaPadre = encaja
+                              ? projectPrefix + '/' + trozos.slice(0, -1).join('/') + (trozos.length > 1 ? '/' : '')
+                              : null;
+                            if (rutaPadre) {
+                              toast.success(t => (
+                                <span style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                                  Restaurado.
+                                  <button
+                                    onClick={() => { toast.dismiss(t.id); fe.switchMode(false); fe.navigate(rutaPadre, null); }}
+                                    style={{ background: 'none', border: 'none', padding: 0, color: 'var(--accent)', fontWeight: 600, cursor: 'pointer', fontSize: 'inherit' }}>
+                                    Ver en Archivos
+                                  </button>
+                                </span>
+                              ), { duration: 6000 });
+                            } else {
+                              toast.success('Restaurado.');
+                            }
+                          }
                           else { const errData = await res.json().catch(() => ({})); toast.error(errData.error || 'No se pudo restaurar.'); }
                         } catch { toast.error('Error de conexión al restaurar'); }
                         fe.setRestoringIds(prev => { const c = { ...prev }; delete c[id]; return c; });
