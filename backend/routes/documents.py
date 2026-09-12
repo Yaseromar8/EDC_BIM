@@ -28,6 +28,31 @@ documents_bp = Blueprint('documents', __name__)
 print("[DEBUG] documents_bp loaded from routes/documents.py")
 
 
+# ── GATE 04 · CRONOMETRO DE CONEXION · TEMPORAL ───────────────────────────
+# Dos ganchos en vez de editar cada endpoint: el acumulador se pone a cero al
+# entrar y se emite al salir. Solo etiquetas tecnicas y milisegundos. Envuelto
+# entero: un cronometro no puede tumbar una peticion.
+@documents_bp.before_request
+def _gate04_inicio():
+    try:
+        import diagnostico_gate04 as _g4
+        _g4.reiniciar()
+    except Exception:
+        pass
+
+
+@documents_bp.after_request
+def _gate04_fin(respuesta):
+    try:
+        import diagnostico_gate04 as _g4
+        cab = _g4.cabecera()
+        if cab:
+            respuesta.headers['Server-Timing'] = cab
+    except Exception:
+        pass
+    return respuesta
+
+
 # ── RBAC: Control de Acceso Basado en Roles (ISO 19650) ──────────────
 # ── RBAC: Control de Acceso Basado en Roles (ISO 19650) ──────────────
 from folder_permissions import check_folder_permission
@@ -925,7 +950,9 @@ def list_documents():
             else:
                 parent_id = None
 
-        contents = list_contents(parent_id, model_urn, path, user=user)
+        from diagnostico_gate04 import Tramo as _T4    # GATE 04 · temporal
+        with _T4('lc_total'):
+            contents = list_contents(parent_id, model_urn, path, user=user)
 
         # El enlace firmado SALE DE LA PLATAFORMA: funciona sin sesion, se puede
         # reenviar por WhatsApp y no queda registrado en el log de descargas.
