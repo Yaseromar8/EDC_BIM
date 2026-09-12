@@ -102,35 +102,26 @@ def _configure_inventory_path(conn):
     Session scope survives caller commits/rollbacks. Missing migration is an
     error, never a fallback to public.inventory_assets. No DDL or role change.
     """
-    from diagnostico_gate04 import Tramo as _T      # GATE 04 · temporal
     if conn.status != psycopg2.extensions.STATUS_READY:
         conn.rollback()
     original_autocommit = conn.autocommit
     try:
         conn.autocommit = True
         with conn.cursor() as cur:
-            with _T('inv1_user'):
-                cur.execute('SELECT current_user')
-                _quien = cur.fetchone()[0]
-            if _quien == 'ecd_migrator':
-                with _T('inv2_setpath'):
-                    cur.execute('SET SESSION search_path TO public,pg_catalog,pg_temp')
+            cur.execute('SELECT current_user')
+            if cur.fetchone()[0] == 'ecd_migrator':
+                cur.execute('SET SESSION search_path TO public,pg_catalog,pg_temp')
                 return
-            with _T('inv2_setpath'):
-                cur.execute('SET SESSION search_path TO pg_catalog,inventory_identity_b1,public,pg_temp')
-            with _T('inv3_migracion'):
-                cur.execute("""SELECT to_regclass('inventory_assets') =
-                    to_regclass('inventory_identity_b1.inventory_assets'),
-                    EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
-                        WHERE n.nspname='inventory_identity_b1' AND c.relname='inventory_assets'
-                          AND c.relkind='v')""")
-                _equiv = cur.fetchone()
-            if _equiv != (True, True):
+            cur.execute('SET SESSION search_path TO pg_catalog,inventory_identity_b1,public,pg_temp')
+            cur.execute("""SELECT to_regclass('inventory_assets') =
+                to_regclass('inventory_identity_b1.inventory_assets'),
+                EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+                    WHERE n.nspname='inventory_identity_b1' AND c.relname='inventory_assets'
+                      AND c.relkind='v')""")
+            if cur.fetchone() != (True, True):
                 raise RuntimeError('Inventory canonical schema unavailable: apply migration 31 as ecd_migrator')
-            with _T('inv4_grant'):
-                cur.execute("SELECT has_table_privilege(current_user,'inventory_identity_b1.inventory_assets','SELECT')")
-                _puede = cur.fetchone()[0]
-            if _puede is not True:
+            cur.execute("SELECT has_table_privilege(current_user,'inventory_identity_b1.inventory_assets','SELECT')")
+            if cur.fetchone()[0] is not True:
                 raise RuntimeError('Inventory canonical SELECT grant missing; no legacy fallback')
     finally:
         conn.autocommit = original_autocommit
@@ -157,14 +148,10 @@ def get_db_connection():
     
     for attempt in range(max_retries):
         try:
-            from diagnostico_gate04 import Tramo as _T   # GATE 04 · temporal
-            with _T('pool_getconn'):
-                conn = db_pool.getconn()
-
+            conn = db_pool.getconn()
+            
             # ── HEALTH CHECK: Verificar que la conexión está viva ──
-            with _T('conn_alive'):
-                _vive = _is_conn_alive(conn)
-            if not _vive:
+            if not _is_conn_alive(conn):
                 print(f"[DB] Conexión stale detectada (intento {attempt+1}/{max_retries}), descartando...")
                 try:
                     db_pool.putconn(conn, close=True)  # Cerrar y descartar
@@ -188,9 +175,7 @@ def get_db_connection():
         raise Exception("No se pudo obtener una conexión sana del pool después de reintentos.")
 
     try:
-        from diagnostico_gate04 import Tramo as _T2   # GATE 04 · temporal
-        with _T2('inv_total'):
-            _configure_inventory_path(conn)
+        _configure_inventory_path(conn)
         yield conn
     except Exception as e:
         conn_is_good = False
@@ -204,12 +189,10 @@ def get_db_connection():
         if conn and db_pool:
             try:
                 if conn_is_good and not conn.closed:
-                    from diagnostico_gate04 import Tramo as _T3   # GATE 04 · temporal
                     # Resetear la conexión a estado limpio antes de devolverla
-                    with _T3('devolver'):
-                        if conn.status != psycopg2.extensions.STATUS_READY:
-                            conn.rollback()
-                        db_pool.putconn(conn)
+                    if conn.status != psycopg2.extensions.STATUS_READY:
+                        conn.rollback()
+                    db_pool.putconn(conn)
                 else:
                     # Conexión dañada — cerrar y descartar
                     db_pool.putconn(conn, close=True)
@@ -899,20 +882,17 @@ def log_activity(model_urn, action, entity_type, entity_id=None, entity_name=Non
     operacion que describe. Si un contrato EXIGE el evento, usa
     `registrar_actividad` dentro de la transaccion de la operacion.
     """
-    from diagnostico_gate04 import Tramo as _T          # GATE 04 · temporal
     try:
         with get_db_connection() as conn:
             cursor = conn.cursor()
-            with _T('audit_insert'):
-                registrar_actividad(cursor, model_urn, action, entity_type, entity_id,
-                                    entity_name, performed_by, details)
+            registrar_actividad(cursor, model_urn, action, entity_type, entity_id,
+                                entity_name, performed_by, details)
             # El encadenado se hace DENTRO del propio INSERT, en
             # `registrar_actividad`. Aqui vivia un segundo sellado por UPDATE
             # que, con la identidad de aplicacion separada, no solo fallaba:
             # abortaba la transaccion y se llevaba el INSERT por delante. El
             # evento no quedaba sin sellar, desaparecia.
-            with _T('audit_commit'):
-                conn.commit()
+            conn.commit()
     except Exception as e:
         # No romper la operacion principal si el log falla
         print(f"[ActivityLog] Warning: no se pudo registrar actividad: {e}")

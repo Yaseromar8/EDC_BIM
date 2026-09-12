@@ -34,18 +34,14 @@ def resolve_path_to_node_id(path, model_urn, created_by=None, auto_create=True):
     if not p_path or p_path == m_urn:
         return None
 
-    from diagnostico_gate04 import Tramo as _T          # GATE 04 · temporal
     with get_db_connection() as conn:
         cursor = conn.cursor()
-        with _T('rp_execute'):
-            cursor.execute(
-                "SELECT resolve_folder_path(%s, %s, %s, %s)",
-                (p_path, model_urn, created_by, auto_create)
-            )
-        with _T('rp_fetch'):
-            row = cursor.fetchone()
-        with _T('rp_commit'):
-            conn.commit()
+        cursor.execute(
+            "SELECT resolve_folder_path(%s, %s, %s, %s)",
+            (p_path, model_urn, created_by, auto_create)
+        )
+        row = cursor.fetchone()
+        conn.commit()
         return row[0] if row else None
 
 
