@@ -888,15 +888,8 @@ def list_documents():
     # para que ese atajo conceda rol admin sin login. Un modo de desarrollo no se
     # deduce de la IP; para eso ya esta ALLOW_DEMO_TOKEN, explicito y por entorno.
 
-    # GATE 03 · CRONOMETRO TEMPORAL. Solo mide; se retira al cerrar el gate.
-    from flask import make_response as _mr
-    from diagnostico_gate03 import Cronometro as _Crono, emitir as _emitir
-    _c = _Crono('GET /api/docs/list')
-    _fin = lambda cuerpo, cod: _emitir(_mr(cuerpo, cod), _c, cod)
-
     if not verify_project_access(user, model_urn):
-        return _fin(jsonify({"success": False, "error": "No tienes acceso a este proyecto."}), 403)
-    _c.marca('acceso')
+        return jsonify({"success": False, "error": "No tienes acceso a este proyecto."}), 403
 
     try:
         from file_system_db import resolve_path_to_node_id, list_contents, ensure_project_root_node
@@ -924,17 +917,15 @@ def list_documents():
                 if parent_id:
                     model_urn = 'global'
             if not parent_id and not is_project_root:
-                return _fin(jsonify({"success": True, "data": {"folders": [], "files": [], "current_node_id": None}}), 200)
+                return jsonify({"success": True, "data": {"folders": [], "files": [], "current_node_id": None}}), 200
         else:
             # Empty path: use project root node if available
             if model_urn and model_urn != 'global':
                 parent_id = ensure_project_root_node(model_urn)
             else:
                 parent_id = None
-        _c.marca('raiz')
 
         contents = list_contents(parent_id, model_urn, path, user=user)
-        _c.marca('listado')
 
         # El enlace firmado SALE DE LA PLATAFORMA: funciona sin sesion, se puede
         # reenviar por WhatsApp y no queda registrado en el log de descargas.
@@ -959,9 +950,8 @@ def list_documents():
             for f in contents['files']:
                 if f.get('gcs_urn'):
                     f['mediaLink'] = generate_signed_url(f['gcs_urn'])
-        _c.marca('firmado')
 
-        return _fin(jsonify({"success": True, "data": {**contents, "current_node_id": str(parent_id) if parent_id else None}}), 200)
+        return jsonify({"success": True, "data": {**contents, "current_node_id": str(parent_id) if parent_id else None}}), 200
     except Exception as e:
         import traceback
         traceback.print_exc()
@@ -1051,12 +1041,6 @@ def promote_document_version():
 @documents_bp.route('/api/docs/folder', methods=['POST'])
 def create_folder():
     """Crea una carpeta virtual en base de datos PostgreSQL."""
-    # GATE 03 · CRONOMETRO TEMPORAL. Solo mide; se retira al cerrar el gate.
-    from flask import make_response as _mr
-    from diagnostico_gate03 import Cronometro as _Crono, emitir as _emitir
-    _c = _Crono('POST /api/docs/folder')
-    _fin = lambda cuerpo, cod: _emitir(_mr(cuerpo, cod), _c, cod)
-
     data = request.get_json()
     if not data or 'path' not in data:
         return jsonify({"success": False, "error": "No path provided"}), 400
@@ -1064,15 +1048,13 @@ def create_folder():
     folder_path = data['path']
     model_urn = data.get('model_urn', 'global')
     performed_by = _autor_verificado()
-    _c.marca('autor')
 
     # ── TENANT ISOLATION ──
     from flask import g
     user = getattr(g, 'current_user', None)
     if not verify_project_access(user, model_urn):
-        return _fin(jsonify({"success": False, "error": "No tienes acceso a este proyecto."}), 403)
-    _c.marca('acceso')
-
+        return jsonify({"success": False, "error": "No tienes acceso a este proyecto."}), 403
+        
     import os
     from file_system_db import resolve_path_to_node_id
 
@@ -1080,36 +1062,31 @@ def create_folder():
     # folder_path = 'ARCHIVOS_01/01/nuevo' -> parent_path = 'ARCHIVOS_01/01'
     parent_path = os.path.dirname(folder_path.rstrip('/'))
     parent_node_id = resolve_path_to_node_id(parent_path, model_urn, auto_create=False)
-    _c.marca('padre')
-
+    
     rbac = check_folder_permission(user, parent_node_id, model_urn, 'edit', 'crear carpetas')
-    _c.marca('permiso')
     if rbac: return rbac
 
     # ── VALIDACIONES ENTERPRISE (Estilo ACC / ISO 19650) ──
     # Extraer solo el nombre de la carpeta nueva (última parte del path)
     folder_name = folder_path.rstrip('/').split('/')[-1]
-
+    
     from folder_validators import validate_folder_creation
     validation = validate_folder_creation(folder_name, parent_node_id, model_urn)
-    _c.marca('valida')
     if not validation['valid']:
-        return _fin(jsonify({
-            "success": False,
-            "error": validation['message'],
+        return jsonify({
+            "success": False, 
+            "error": validation['message'], 
             "code": validation['code']
-        }), 422)
+        }), 422
 
     try:
         from db import log_activity
         node_id = resolve_path_to_node_id(folder_path, model_urn, created_by=performed_by)
-        _c.marca('nodo')
         log_activity(model_urn, 'create_folder', 'folder',
                      entity_name=folder_path, entity_id=str(node_id) if node_id else None, performed_by=performed_by)
-        _c.marca('audit')
-        return _fin(jsonify({"success": True, "id": str(node_id) if node_id else None, "message": f"Folder '{folder_path}' created"}), 201)
+        return jsonify({"success": True, "id": str(node_id) if node_id else None, "message": f"Folder '{folder_path}' created"}), 201
     except Exception as e:
-        return _fin(jsonify({"success": False, "error": str(e)}), 500)
+        return jsonify({"success": False, "error": str(e)}), 500
 
 
 @documents_bp.route('/api/docs/upload', methods=['POST'])
@@ -1259,49 +1236,37 @@ def delete_document():
     if not data or 'fullName' not in data:
         return jsonify({"success": False, "error": "No fullName provided"}), 400
 
-    # GATE 03 · CRONOMETRO TEMPORAL. Solo mide; se retira al cerrar el gate.
-    from flask import make_response as _mr
-    from diagnostico_gate03 import Cronometro as _Crono, emitir as _emitir
-    _c = _Crono('DELETE /api/docs/delete')
-    _fin = lambda cuerpo, cod: _emitir(_mr(cuerpo, cod), _c, cod)
-
     node_path = data['fullName']
     node_id = data.get('id')
     model_urn = data.get('model_urn', 'global')
     performed_by = _autor_verificado()
-    _c.marca('autor')
 
     # ── TENANT ISOLATION: Verificar acceso al proyecto ──
     from flask import g
     user = getattr(g, 'current_user', None)
     if not verify_project_access(user, model_urn):
-        return _fin(jsonify({"success": False, "error": "No tienes acceso a este proyecto."}), 403)
-    _c.marca('acceso')
+        return jsonify({"success": False, "error": "No tienes acceso a este proyecto."}), 403
     rbac = check_folder_permission(user, node_id, model_urn, 'admin', 'eliminar archivos')
-    _c.marca('permiso')
     if rbac: return rbac
 
     try:
         from file_system_db import soft_delete_node, resolve_path_to_node_id
         from db import log_activity
-
+        
         target_id = node_id
         if not target_id:
             target_id = resolve_path_to_node_id(node_path, model_urn, auto_create=False)
-        _c.marca('resolver')
 
         if target_id:
             success = soft_delete_node(target_id, model_urn, performed_by=performed_by)
-            _c.marca('borrado')
             if success:
                 log_activity(model_urn, 'delete', 'file_or_folder',
                              entity_id=str(target_id),
                              entity_name=node_path, performed_by=performed_by)
-                _c.marca('audit')
-                return _fin(jsonify({"success": True, "message": "Moved to Trash (soft delete)"}), 200)
-        return _fin(jsonify({"success": False, "error": "Node not found or already deleted"}), 404)
+                return jsonify({"success": True, "message": "Moved to Trash (soft delete)"}), 200
+        return jsonify({"success": False, "error": "Node not found or already deleted"}), 404
     except Exception as e:
-        return _fin(jsonify({"success": False, "error": str(e)}), 500)
+        return jsonify({"success": False, "error": str(e)}), 500
 
 
 @documents_bp.route('/api/docs/rename', methods=['POST', 'PUT'])
