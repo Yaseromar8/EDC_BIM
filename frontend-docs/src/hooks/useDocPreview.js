@@ -2,6 +2,7 @@ import { useState } from 'react';
 import toast from 'react-hot-toast';
 import { API } from '../utils/helpers';
 import { apiFetch } from '../utils/apiFetch';
+import { previsualizacion } from '../utils/vistaPrevia';
 
 // Abre la VERSIÓN entregada, no necesariamente el documento vivo. Los
 // elementos históricos sin version_id conservan el comportamiento legacy.
@@ -16,10 +17,9 @@ export default function useDocPreview(projectPrefix) {
       const r = await apiFetch(`${API}/api/docs/signed-url?model_urn=${encodeURIComponent(projectPrefix)}&id=${encodeURIComponent(it.node_id)}${porVersion}`);
       const d = await r.json();
       if (!d.success || !d.url) throw new Error(d.error || 'No se pudo abrir');
-      const etiqueta = it.version_id
-        ? ` · v${it.version_number || it.version || '?'}`
-        : ' · versión actual';
-      setPreview({ name: (it.name || '') + etiqueta, url: d.url, nodeId: it.node_id });
+      // Nombre intacto y versión aparte (`versionLabel`): el visor decide el
+      // formato por la extensión del nombre. Ver utils/vistaPrevia.js.
+      setPreview(previsualizacion(it, d.url));
     } catch (e) {
       toast.error(e.message || 'No se pudo abrir el documento');
     }

@@ -2,14 +2,19 @@
 // Recibe { name, url, nodeId } ya resuelto (signed URL) y muestra PDF/imagen/video.
 import React from 'react';
 import PDFViewer from './PDFViewer';
+import { tipoDeVista } from '../utils/vistaPrevia';
 
 export default function DocQuickView({ file, projectPrefix, onClose,
                                        versionLabel = null, versionInfo = null }) {
   if (!file) return null;
-  const lower = file.name.toLowerCase();
-  const isPdf = lower.endsWith('.pdf');
-  const isImage = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg'].some(e => lower.endsWith(e));
-  const isVideo = ['.mp4', '.webm', '.ogg'].some(e => lower.endsWith(e));
+  // El formato sale del NOMBRE, que llega intacto; la versión viaja aparte.
+  // Quien pasa `versionLabel` manda (panel de versiones); si no, la trae el
+  // propio fichero (useDocPreview). Ver utils/vistaPrevia.js.
+  versionLabel = versionLabel ?? file.versionLabel ?? null;
+  const tipo = tipoDeVista(file.name);
+  const isPdf = tipo === 'pdf';
+  const isImage = tipo === 'imagen';
+  const isVideo = tipo === 'video';
 
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 12000, background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }} onClick={onClose}>

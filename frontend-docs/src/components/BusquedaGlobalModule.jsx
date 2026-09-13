@@ -179,7 +179,12 @@ export default function BusquedaGlobalModule({ project }) {
             <div style={{ display: 'flex', alignItems: 'center',
                           justifyContent: 'space-between', padding: '12px 16px',
                           borderBottom: '1px solid #eee' }}>
-              <div style={{ fontWeight: 600, fontSize: 14 }}>{preview.name}</div>
+              <div style={{ fontWeight: 600, fontSize: 14 }}>
+                {preview.name}
+                {preview.versionLabel && (
+                  <span style={{ color: '#9aa0a6', fontWeight: 400 }}> · {preview.versionLabel}</span>
+                )}
+              </div>
               <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
                 <a href={preview.url} target="_blank" rel="noreferrer"
                    style={{ fontSize: 12, color: 'var(--accent)' }}>Abrir aparte</a>
