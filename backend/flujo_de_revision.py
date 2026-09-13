@@ -396,8 +396,9 @@ def estado_del_flujo(cur, rev, project_id=None):
     """('ACTIVA'|'BLOQUEADA'|'CERRADA', motivo) de una revision.
 
     BLOQUEADA es el caso que motivo esta pieza: el revisor del paso actual ya no
-    puede actuar --se fue de la obra, o su cuenta se desactivo-- y la revision se
-    queda parada sin que nada lo diga. NO es un estado nuevo del ciclo de vida:
+    puede actuar --se fue de la obra, su cuenta se desactivo, o le retiraron el
+    acceso a los documentos de la revision-- y la revision se queda parada sin
+    que nada lo diga. NO es un estado nuevo del ciclo de vida:
     se CALCULA al mirarla, no se guarda. Anadir un estado obligaria a mantenerlo
     al dia, y un estado que puede quedarse viejo es peor que no tenerlo.
 
@@ -428,4 +429,181 @@ def estado_del_flujo(cur, rev, project_id=None):
     if not cur.fetchone():
         return 'BLOQUEADA', ('%s ya no pertenece a esta obra, asi que nadie puede '
                              'actuar en el paso %d' % (etiqueta_del_paso(paso), i + 1))
+
+    # SEGUIR EN LA OBRA NO BASTA. `/act` exige poder consultar todos los
+    # documentos de la revision; si al revisor del paso actual se los retiraron,
+    # nadie puede actuar en ese paso y la revision queda parada igual que si se
+    # hubiera ido. Se dice aqui para que la salida sea la de siempre: devolverle
+    # el acceso o sustituirlo. El motivo nombra el paso, no documentos. Solo se
+    # evalua con los `items` a la vista: sin ellos no hay que consultar.
+    items = rev.get('items')
+    if items and not puede_consultar_la_revision(cur, persona(cur, uid),
+                                                 rev.get('model_urn'), items):
+        return 'BLOQUEADA', ('el revisor del paso %d no tiene acceso a todos los '
+                             'documentos de la revision: hay que devolverselo o '
+                             'sustituirlo' % (i + 1))
     return 'ACTIVA', ''
+
+
+# ══ QUIEN PUEDE CONSULTAR LO QUE SE JUZGA ══════════════════════════════════
+#
+# UNA sola respuesta para cinco preguntas que no pueden discrepar: que
+# revisiones ve alguien en el listado, si puede actuar en `/act`, si se le puede
+# asignar un paso, si su paso esta BLOQUEADO, y cuanto le cuentan de la revision
+# su bandeja y su correo. Vive aqui --en el dominio del flujo, no en una ruta--
+# para que `routes/reviews.py`, `routes/directorio.py` y `encargos.py` la usen
+# sin importarse entre ellos.
+#
+# La regla es la documental de siempre (`permiso_documental`), preguntada por
+# cada documento y por el dueno de cada version fijada, porque la version tambien
+# nombra un documento. Si falla UNO, la respuesta es no. Asignar no concede nada,
+# y consultar no es publicar: aqui se pide `viewer`; lo que exija el cierre final
+# lo sigue exigiendo el cierre.
+
+def _uuid_canonico(valor):
+    import uuid as _uuid
+    try:
+        return str(_uuid.UUID(str(valor).strip()))
+    except (TypeError, ValueError, AttributeError):
+        return None
+
+
+def persona(cur, uid):
+    """Lo que la politica documental necesita de un usuario ACTIVO, o None."""
+    try:
+        cur.execute('SELECT id, email, name, role FROM users WHERE id = %s AND is_active',
+                    (int(uid),))
+    except (TypeError, ValueError):
+        return None
+    fila = cur.fetchone()
+    if not fila:
+        return None
+    return {'id': fila[0], 'email': fila[1], 'name': fila[2], 'role': fila[3]}
+
+
+def puede_consultar_la_revision(cur, usuario, model_urn, items, contexto=None, vistos=None):
+    """¿Puede esta persona consultar TODOS los documentos de esta revision?
+
+    `contexto` y `vistos` son de UNA persona en UNA obra y UNA peticion: quien
+    los pase los reutiliza entre revisiones; quien no, se calculan aqui. Sin
+    usuario la respuesta es no. El administrador de la obra pasa porque la
+    politica documental ya le reconoce atravesar los permisos de carpeta de ESA
+    obra, no por una regla de aqui.
+    """
+    if not usuario or not usuario.get('id'):
+        return False
+    import permiso_documental as pd
+    from folder_permissions import PERMISSION_LEVELS
+
+    if contexto is None:
+        contexto = pd.contexto_de_permisos(cur, usuario, model_urn)
+    if contexto.get('es_admin'):
+        return True
+    vistos = {} if vistos is None else vistos
+    minimo = PERMISSION_LEVELS['viewer']
+
+    def puede(nodo):
+        if nodo not in vistos:
+            nivel = pd.permiso_efectivo(cur, usuario, model_urn, nodo, contexto=contexto)
+            vistos[nodo] = PERMISSION_LEVELS.get(nivel, -1) >= minimo
+        return vistos[nodo]
+
+    for it in (items or []):
+        nodo = it.get('node_id') if isinstance(it, dict) else it
+        if not nodo or not puede(str(nodo)):
+            return False
+        version = it.get('version_id') if isinstance(it, dict) else None
+        if version in (None, ''):
+            continue
+        version = _uuid_canonico(version)
+        if not version:
+            return False
+        cur.execute("SELECT file_node_id::text FROM file_versions WHERE id = %s::uuid",
+                    (version,))
+        fila = cur.fetchone()
+        if not fila or not fila[0] or not puede(fila[0]):
+            return False
+    return True
+
+
+def asunto_sin_acceso(revision_id, asunto_guardado=None):
+    """Lo que se dice de una revision a quien no puede consultar sus documentos.
+
+    Nada del titulo: que existe, cual es y en que paso, para que la obligacion
+    siga a la vista sin contar lo que se juzga. Del asunto guardado solo se lee
+    el numero de su «(paso N)» final; si no esta, el paso no se dice.
+    """
+    import re
+    try:
+        texto = 'Revisión RV-%03d' % int(revision_id)
+    except (TypeError, ValueError):
+        texto = 'Revisión'
+    m = re.search(r'\(paso (\d+)\)\s*$', asunto_guardado or '')
+    if m:
+        texto += ' · paso %s' % m.group(1)
+    return texto + ' · sin acceso a todos sus documentos'
+
+
+def encargos_presentables(cur, usuario, pendientes):
+    """«Mi Trabajo» sin contar de una revision lo que su destinatario no puede ver.
+
+    El encargo se conserva: la obligacion existe y tiene que verse. Cambia su
+    `asunto` EN LA RESPUESTA cuando la persona no puede consultar todos los
+    documentos de esa revision. Lo guardado no se toca. Si no se puede comprobar,
+    se trata como si no pudiera: lo dudoso no se ensena.
+    """
+    pendientes = list(pendientes or [])
+    ids = set()
+    for p in pendientes:
+        if p.get('objeto_tipo') == 'REVIEW':
+            try:
+                ids.add(int(p.get('objeto_id')))
+            except (TypeError, ValueError):
+                pass
+    datos = {}
+    if ids:
+        cur.execute('SELECT id, model_urn, items FROM doc_reviews WHERE id = ANY(%s)',
+                    (sorted(ids),))
+        datos = {f[0]: (f[1], f[2]) for f in cur.fetchall()}
+    contextos, vistos, salida = {}, {}, []
+    for p in pendientes:
+        if p.get('objeto_tipo') != 'REVIEW':
+            salida.append(p)
+            continue
+        puede = False
+        try:
+            urn, items = datos.get(int(p.get('objeto_id')), (None, None))
+            if urn is not None:
+                if urn not in contextos:
+                    import permiso_documental as pd
+                    contextos[urn] = pd.contexto_de_permisos(cur, usuario, urn)
+                    vistos[urn] = {}
+                puede = puede_consultar_la_revision(cur, usuario, urn, items or [],
+                                                    contextos[urn], vistos[urn])
+        except Exception as e:
+            logger.warning('mi trabajo: acceso a la revision %s no comprobado (%s)',
+                           p.get('objeto_id'), e)
+            puede = False
+        salida.append(p if puede else dict(
+            p, asunto=asunto_sin_acceso(p.get('objeto_id'), p.get('asunto'))))
+    return salida
+
+
+def texto_del_aviso(cur, revision_id, destinatario_uid, asunto):
+    """El texto del aviso de una revision, decidido POR DESTINATARIO al enviarlo.
+
+    El asunto guardado lleva el titulo. Solo se usa si esa persona puede
+    consultar AHORA todos los documentos de la revision; si no puede, o no se
+    puede comprobar --sin destinatario, sin revision, un fallo--, sale neutro.
+    """
+    try:
+        usuario = persona(cur, destinatario_uid) if destinatario_uid else None
+        if usuario:
+            cur.execute('SELECT model_urn, items FROM doc_reviews WHERE id = %s',
+                        (int(revision_id),))
+            fila = cur.fetchone()
+            if fila and puede_consultar_la_revision(cur, usuario, fila[0], fila[1] or []):
+                return asunto
+    except Exception as e:
+        logger.warning('aviso de la revision %s: acceso no comprobado (%s)', revision_id, e)
+    return asunto_sin_acceso(revision_id, asunto)

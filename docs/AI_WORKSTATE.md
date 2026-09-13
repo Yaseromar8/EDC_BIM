@@ -471,6 +471,48 @@ NO queda WIP propio B4 esperado tras el commit. Siguen exactamente los cinco
 M ajenos y los untracked históricos declarados; Viewer queda +48/-0.
 Los dos KNOWN_FAIL de B4 ahora son PASS, sin modificar expected históricos.
 
+### Unidad REVIEWS incorporada — dos commits sobre a325745, SIN DESPLEGAR
+
+Esta tarea entra en DOS commits, en este orden, sobre
+`a32574544b9c8f50fb3cda53572c4394b98fa7b7`; tras ellos no queda WIP propio de la
+tarea. Al empezarla el worktree ya traía, además de los ajenos de arriba,
+`.claude/launch.json` y `frontend-docs/src/pages/FilesPage.jsx` modificados:
+ajenos, no tocados, y siguen igual.
+
+A · `fix(reviews)` — seguridad de Reviews (versión fijada, visibilidad y acceso documental):
+- `backend/routes/reviews.py`
+- `backend/flujo_de_revision.py`
+- `backend/encargos.py`
+- `backend/routes/directorio.py`
+- `frontend-docs/src/components/ReviewsModule.jsx`
+- `backend/tests/test_r01_motor_por_contrato.py`
+- `backend/tests/test_r01_contrato_de_revision.py` (el ensayo nuevo entra en `ESCRITORES`)
+- `backend/herramientas/ensayo_de_revisiones.py`
+- `backend/herramientas/ensayo_de_contrato_r01.py`
+- `docs/AI_WORKSTATE.md` (sólo el aviso de CURRENT TASK y esta sección)
+- nuevo `backend/tests/test_revision_version_y_visibilidad.py`
+- nuevo `backend/tests/test_revision_acceso_documental.py`
+- nuevo `backend/herramientas/ensayo_de_version_y_visibilidad.py`
+
+B · `fix(docs)` — vista previa por versión (defecto preexistente desde b671559):
+- `frontend-docs/src/hooks/useDocPreview.js`
+- `frontend-docs/src/components/DocQuickView.jsx`
+- `frontend-docs/src/components/BusquedaGlobalModule.jsx`
+- nuevo `frontend-docs/src/utils/vistaPrevia.js`
+- nuevo `frontend-docs/pruebas/vistaPrevia.prueba.mjs`
+
+[WIP HANDOFF]
+TAREA:                REVIEWS · lote correctivo (versión fijada, visibilidad, acceso documental para actuar y para asignar, confidencialidad de Mi Trabajo y avisos) y, aparte, la vista previa por versión: COMMITTED en dos commits (A y luego B), SIN DESPLEGAR.
+IMPLEMENTADO:         A) alta con version_id válido del mismo documento y obra; AT sin asociación válida no aprueba; la excepción «sin version_id» del cierre sólo para PRE; GET /api/reviews filtrado por permiso_documental; `/act` exige que el actor pueda consultar todos los documentos, para aprobar y para rechazar, en cualquier paso y contrato (403 SIN_PERMISO_DOCUMENTAL antes de cualquier escritura); alta manual, alta de plantilla y sustitución rechazan a quien no puede consultarlos (400 REVISOR_SIN_ACCESO_DOCUMENTAL); perder el acceso deja la revisión PENDIENTE y BLOQUEADA (causa nueva de `estado_del_flujo`, también en la conciliación) y la sustitución de siempre la desbloquea; Mi Trabajo (global y por obra) y el cuerpo de los avisos de revisión se deciden por destinatario, con asunto neutro «Revisión RV-### · paso N · sin acceso a todos sus documentos»; una sola regla en `flujo_de_revision.puede_consultar_la_revision`. B) `useDocPreview` entrega el nombre intacto y la versión en `versionLabel`; `DocQuickView` decide el formato por el nombre.
+PENDIENTE:            1) publicación: antes de cualquier push, confirmar en el panel de Render el Auto-Deploy de todos los servicios que siguen `main` — `visor-ecd-backend-va` (Virginia, creado el 12-sep) no figura en `deploy/render.yaml` y el del backend de Oregón consta como NO VERIFICADO (solo observado); con todos apagados, push normal, sin forzar; 2) planificar el despliegue manual: destino web Virginia y frontend-docs, verificando cada uno por `/api/health` y por contenido; 3) antes, confirmar si Oregón sigue activo y accesible con las rutas anteriores, y que el propietario decida expresamente entre actualizarlo o retirarlo.
+ARCHIVOS MODIFICADOS: propios: ninguno pendiente, todo está en A y B. Ajenos, no tocados: .claude/launch.json, docs/filters/evidencias/IDENTIDAD_4D_5D.json, frontend-docs/src/pages/FilesPage.jsx, frontend-react/src/aps/extensions/LOB4DExtension.js, frontend-react/src/components/Viewer.jsx, frontend-react/src/components/ViewerLabelsBar.jsx, frontend-react/src/lib/predictBim.js y todos los untracked históricos.
+TESTS EJECUTADOS:     `python -m pytest -q -p no:cacheprovider` desde la raíz → 1777 passed / 1 failed (test_capacidades_con_puerta, preexistente); `python herramientas/ensayo_de_version_y_visibilidad.py` contra base desechable como ecd_app → 67/67 (incluye A8: versión inexistente con quien administra asignado, y A9: independencia tras sustituir); `herramientas/ensayo_de_revisiones.py` → 50/50; `herramientas/ensayo_de_contrato_r01.py` en base nueva parada en la 26, como ecd_migrator → 59/59; `npm test` en frontend-docs → 4 bancos en verde (vistaPrevia 9/9); build de frontend-docs OK; banco de interfaz con el ReviewsView real y un usuario ficticio: el PDF válido se dibuja con nombre y versión separados, y la asociación inválida no abre nada.
+TESTS PENDIENTES:     activación por teclado (Enter/Espacio) del botón de un documento válido: pendiente de UAT humana; rendimiento con volumen: no medido; validación en producción: pendiente del despliegue; medición o reparación de revisiones reales de producción: no autorizadas.
+FALLO CONOCIDO:       test_capacidades_con_puerta (preexistente, /api/docs/miniaturas/preparar). La independencia al sustituir compara el correo/nombre guardado del autor con el del paso, no el user_id: A9 prueba el caso cubierto, no todos los cambios posibles de identidad. Una AT ya guardada con un version_id inexistente sólo la puede ver o actuar quien administra la obra; sustituir al revisor por esa persona permite gestionarla y rechazarla, pero NO aprobarla: la integridad de versión la sigue bloqueando (A8). Las AT mal formadas existentes no se reparan ni se rechazan automáticamente.
+NEXT EXACT ACTION:    confirmar en Render el Auto-Deploy de los servicios que siguen `main` (sobre todo `visor-ecd-backend-va`); si todos están apagados, push normal de A y B, sin forzar; después, planificar con el propietario el despliegue manual.
+DO NOT TOUCH:         el WIP ajeno listado; las revisiones reales de producción; la guarda de cierre por versión nueva; el contrato R01 (PRE / AUTORIDAD_TERMINAL); no desplegar Virginia, no desplegar ni reactivar Oregón, no suspender ni eliminar servicios, y no cambiar Cloud SQL, redes, APS ni frontends desplegados.
+COMMIT/HEAD REF:      a32574544b9c8f50fb3cda53572c4394b98fa7b7
+
 ## FROZEN / DO NOT REOPEN
 
 - **Saved Views 2.0 está cerrado.** No se reabre la arquitectura salvo
@@ -534,6 +576,13 @@ Observaciones reales, ya conocidas y aceptadas. Ninguna bloquea nada.
    **decisión de producto pendiente y queda FUERA de B1** por decisión del
    propietario (7-sep-2026). No bloquea B1.
 ## CURRENT TASK
+
+**12-sep-2026 · REVIEWS · versión fijada, visibilidad y acceso documental — COMMITTED, SIN DESPLEGAR.**
+Dos commits sobre `a325745`: A (seguridad de Reviews) y, a continuación, B (vista
+previa por versión). Antes de publicarlos hay que confirmar el Auto-Deploy de
+Render; el despliegue es manual y aún no está planificado. Ver `[WIP HANDOFF]` en
+EXPECTED WORKTREE → «Unidad REVIEWS incorporada». Lo que sigue en esta sección es
+el estado anterior de Filters.
 
 **HOST DEFECT — POPOUT SCALE / CODE/TEST GREEN — pendiente validación HOST**
 

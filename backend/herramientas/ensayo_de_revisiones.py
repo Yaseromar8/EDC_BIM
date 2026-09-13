@@ -89,7 +89,15 @@ def montar(cur, ref):
     cur.execute("INSERT INTO file_nodes (model_urn, node_type, name, status) "
                 "VALUES (%s,'FILE','PLANO-001.pdf','WIP') RETURNING id::text", (OBRA,))
     nodo = cur.fetchone()[0]
-    return {'autor': autor, 'r1': r1, 'r2': r2, 'tocayo': tocayo, 'nodo': nodo}
+    # Su version VIGENTE: un alta nueva tiene que fijar que version somete a
+    # revision, asi que el documento de ensayo necesita tener una.
+    cur.execute("INSERT INTO file_versions (file_node_id, version_number, gcs_urn) "
+                "VALUES (%s::uuid, 1, %s) RETURNING id::text", (nodo, PREFIJO + 'plano-001-v1'))
+    version = cur.fetchone()[0]
+    cur.execute("UPDATE file_nodes SET current_version_id=%s::uuid, version_number=1 "
+                " WHERE id=%s::uuid", (version, nodo))
+    return {'autor': autor, 'r1': r1, 'r2': r2, 'tocayo': tocayo, 'nodo': nodo,
+            'version': version}
 
 
 def cliente_como(usuario):
@@ -160,7 +168,8 @@ def main():
         print('1 · SE CREA CON PLAZO POR PASO')
         r = cli.post('/api/reviews', json={
             'model_urn': OBRA, 'title': 'Revision del PLANO-001',
-            'items': [{'node_id': g['nodo'], 'name': 'PLANO-001.pdf'}],
+            'items': [{'node_id': g['nodo'], 'name': 'PLANO-001.pdf',
+                       'version_id': g['version']}],
             'steps': [{'user_id': g['r1'], 'email': PREFIJO + 'r1@ensayo.test',
                        'name': 'Revisor Uno', 'dias': 3},
                       {'user_id': g['r2'], 'email': PREFIJO + 'r2@ensayo.test',

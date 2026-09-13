@@ -295,7 +295,15 @@ def mi_trabajo():
             return negativa
     try:
         with get_db_connection() as conn:
-            pendientes = enc.mi_trabajo(conn.cursor(), u['id'], obra)
+            cur = conn.cursor()
+            pendientes = enc.mi_trabajo(cur, u['id'], obra)
+            # UN ENCARGO DE REVISION NO CUENTA MAS DE LO QUE SU DESTINATARIO PUEDE
+            # VER. Su asunto lleva el titulo, y el titulo suele nombrar documentos:
+            # quien no puede consultarlos todos recibe el encargo con un asunto
+            # neutro. El encargo sigue ahi --la obligacion existe-- y lo guardado
+            # no se toca. La regla vive en el dominio del flujo, no en otra ruta.
+            import flujo_de_revision as flujo_rev
+            pendientes = flujo_rev.encargos_presentables(cur, u, pendientes)
         return jsonify({'pendientes': pendientes, 'total': len(pendientes)}), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500

@@ -361,6 +361,7 @@ ESCRITORES = [
     ('herramientas/ensayo_de_revisiones.py', 3),
     ('herramientas/ensayo_de_participantes.py', 1),
     ('herramientas/ensayo_del_expediente.py', 1),
+    ('herramientas/ensayo_de_version_y_visibilidad.py', 1),
 ]
 
 

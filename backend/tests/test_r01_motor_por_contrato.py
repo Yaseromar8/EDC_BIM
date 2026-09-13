@@ -33,7 +33,10 @@ import pytest
 from flask import Flask
 
 OBRA = 'zz_urn_r01'
-DOC = 'nodo-r01'
+# Con forma de UUID: el alta y `/act` validan la version fijada de cada documento
+# antes de preguntar a la base, y un texto cualquiera ya no llega a ella.
+DOC = '0b5a3c52-7f1e-4d1a-9c3e-4e6f2a9b8d01'
+VERSION = '5c2d8e41-3a6b-4f0c-8d7e-1b9a6c4e2f02'
 
 # Orden EXACTO de las columnas que piden las tres consultas de doc_reviews.
 # `contrato` va al final: por eso una columna nueva no desplaza nada.
@@ -46,7 +49,8 @@ COLUMNAS = ('id', 'model_urn', 'title', 'items', 'steps', 'current_step', 'statu
 def fila(contrato, pasos, current_step=0, status='pending', history=None,
          items=None, rid=77):
     return (rid, OBRA, 'Revisión de ensayo',
-            items if items is not None else [{'node_id': DOC, 'name': 'P-01.pdf'}],
+            items if items is not None else [{'node_id': DOC, 'name': 'P-01.pdf',
+                                              'version_id': VERSION}],
             pasos, current_step, status, 'SHARED', history or [],
             'autor@obra.pe', None, None, None, None, None, None, None, contrato)
 
@@ -77,6 +81,10 @@ class Cursor:
             self._u = (1,)
         elif s.startswith('SELECT NAME, EMAIL FROM USERS'):
             self._u = ('Usuario', 'u@obra.pe')
+        elif s.startswith('SELECT 1 FROM FILE_VERSIONS'):
+            # La version fijada: existe y es de ESE documento en ESTA obra solo si
+            # coinciden los tres. El doble no concede nada que la base no concederia.
+            self._u = (1,) if params and tuple(params[:3]) == (VERSION, DOC, OBRA) else None
         elif 'INSERT INTO DOC_REVIEWS' in s:
             self._u = (77,)
         elif 'INSERT INTO ACTIVITY_LOG' in s:
@@ -174,6 +182,13 @@ def motor(monkeypatch):
     monkeypatch.setattr(rd, 'verify_project_access', lambda usuario, urn: True)
     import folder_permissions as fp
     monkeypatch.setattr(fp, 'check_folder_permission', lambda *a, **k: None)
+    # El acceso documental del actor y de los participantes se aparta igual que
+    # el permiso de carpeta: tiene su propia suite (`test_revision_acceso_documental`)
+    # y se mide contra PostgreSQL en `herramientas/ensayo_de_version_y_visibilidad.py`.
+    # Aqui concede por defecto; las pruebas de acceso lo niegan a proposito.
+    monkeypatch.setattr(flujo, 'puede_consultar_la_revision', lambda *a, **k: True)
+    monkeypatch.setattr(flujo, 'persona', lambda cur, uid: {
+        'id': uid, 'email': 'u%s@obra.pe' % uid, 'name': 'Usuario', 'role': 'editor'})
     import estados_ecd as ecd
     monkeypatch.setattr(ecd, 'transicionar_recorriendo',
                         lambda *a, **k: estado['transiciones'].append(a) or [])
@@ -193,7 +208,8 @@ def motor(monkeypatch):
 
 def crear(m, pasos, **extra):
     cuerpo = {'model_urn': OBRA, 'title': 'Revisión', 'final_status': 'SHARED',
-              'items': [{'node_id': DOC, 'name': 'P-01.pdf'}], 'steps': pasos}
+              'items': [{'node_id': DOC, 'name': 'P-01.pdf', 'version_id': VERSION}],
+              'steps': pasos}
     cuerpo.update(extra)
     return m['cli'].post('/api/reviews', json=cuerpo)
 
@@ -633,3 +649,53 @@ def test_reasignar_no_consulta_el_contrato():
     assert 'acto_permitido' not in cuerpo
     assert 'cierra_positivamente' not in cuerpo
     assert "rev['contrato']" not in cuerpo
+
+
+# ══ QUIEN FIRMA TIENE QUE PODER VER LO QUE FIRMA ═══════════════════════════
+#
+# Por la ruta real y contando escrituras. La regla documental se NIEGA aqui a
+# proposito --en el resto del fichero concede--: lo que se mide es que el
+# manejador para antes de tocar nada, con cualquier acto, paso y contrato. La
+# regla en si se mide contra PostgreSQL en el ensayo.
+
+@pytest.mark.parametrize('contrato', ['AUTORIDAD_TERMINAL', 'PRE'])
+@pytest.mark.parametrize('accion', ['approve', 'reject'])
+@pytest.mark.parametrize('indice', [0, 1])
+def test_sin_acceso_documental_no_hay_acto_ni_escritura(motor, monkeypatch, contrato,
+                                                        accion, indice):
+    flujo = motor['flujo']
+    monkeypatch.setattr(flujo, 'puede_consultar_la_revision', lambda *a, **k: False)
+    if contrato == flujo.AUTORIDAD_TERMINAL:
+        pasos = [paso(1, 'REVISA'), paso(2, 'APRUEBA')]
+    else:
+        pasos = [paso(1), paso(2)]
+    r = actuar(motor, contrato, pasos, accion, current_step=indice)
+    d = r.get_json()
+    assert r.status_code == 403, d
+    assert d['code'] == 'SIN_PERMISO_DOCUMENTAL'
+    assert 'P-01' not in d['error'] and 'Revisión de ensayo' not in d['error']
+    assert escrituras(motor['estado']) == []
+    assert motor['estado']['commits'] == 0
+    assert not any('ENCARGOS' in s for s, _ in motor['estado']['sql'])
+    assert motor['estado']['transiciones'] == [] and motor['estado']['actividad'] == []
+
+
+def test_con_acceso_documental_el_acto_sigue_su_contrato(motor):
+    flujo = motor['flujo']
+    r = actuar(motor, flujo.AUTORIDAD_TERMINAL, [paso(1, 'REVISA'), paso(2, 'APRUEBA')],
+               'approve', current_step=0)
+    assert r.status_code == 200, r.get_json()
+    assert any('UPDATE DOC_REVIEWS' in s for s in escrituras(motor['estado']))
+
+
+def test_el_alta_con_un_participante_sin_acceso_no_crea_nada(motor, monkeypatch):
+    flujo = motor['flujo']
+    monkeypatch.setattr(flujo, 'puede_consultar_la_revision',
+                        lambda cur, usuario, *a, **k: bool(usuario) and usuario['id'] != 2)
+    r = crear(motor, [paso(1, 'REVISA'), paso(2, 'APRUEBA')])
+    d = r.get_json()
+    assert r.status_code == 400, d
+    assert d['code'] == 'REVISOR_SIN_ACCESO_DOCUMENTAL'
+    assert 'paso 2' in d['error'] and 'P-01' not in d['error']
+    assert escrituras(motor['estado']) == []
+    assert busca_el_testigo(motor['estado']) is None

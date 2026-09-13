@@ -8,6 +8,7 @@ from esquema_congelado import solo_con_ddl
 import json
 import logging
 import traceback
+import uuid
 from datetime import datetime, timezone
 from flask import Blueprint, request, jsonify, g
 from db import (get_db_connection, log_activity, registrar_actividad,
@@ -242,6 +243,191 @@ def _puede_con_estos_documentos(user, model_urn, items, nivel, accion):
     return None
 
 
+def _uuid(valor):
+    """El identificador en su forma canonica, o None si no es un UUID.
+
+    Se valida ANTES de preguntar a la base: un texto cualquiera en `version_id`
+    no puede llegar a un `::uuid` y convertirse en un 500.
+    """
+    try:
+        return str(uuid.UUID(str(valor).strip()))
+    except (TypeError, ValueError, AttributeError):
+        return None
+
+
+def _posiciones(numeros):
+    return ', '.join(str(n) for n in numeros)
+
+
+def _versiones_fijadas(cur, model_urn, items, para_alta):
+    """(sin_version, no_validas): posiciones, desde 1, de los documentos cuya
+    version fijada no se sostiene.
+
+    QUE SE FIJA, Y POR QUE AQUI
+    ---------------------------
+    Una revision somete a juicio UNA VERSION CONCRETA de cada documento, y la
+    guarda del cierre compara esa version con la vigente para no sellar lo que
+    nadie miro. Esa guarda solo protege si la version esta de verdad fijada: con
+    `version_id` ausente se saltaba en silencio, y con la version de OTRO
+    documento la revision nombraba uno y la previsualizacion ensenaba otro.
+
+      sin_version  el item no dice que version se somete (falta, null o vacio)
+      no_validas   el item no es un documento, la version no existe, no es de ESE
+                   documento, o ese documento no es de ESTA obra
+
+    Las causas de `no_validas` se devuelven JUNTAS a proposito: distinguirlas le
+    diria a quien pregunta si un identificador ajeno existe.
+
+    `para_alta` exige ademas que el documento siga vivo en el arbol: no se abre
+    una revision sobre algo que esta en la papelera. Para revisiones ya guardadas
+    no se exige, para no cambiar lo que ya pasaba con un documento borrado.
+    """
+    sin_version, no_validas = [], []
+    for n, it in enumerate(items or [], start=1):
+        if not isinstance(it, dict) or not it.get('node_id'):
+            no_validas.append(n)
+            continue
+        if it.get('version_id') in (None, ''):
+            sin_version.append(n)
+            continue
+        nodo, version = _uuid(it.get('node_id')), _uuid(it.get('version_id'))
+        if not nodo or not version:
+            no_validas.append(n)
+            continue
+        cur.execute(
+            "SELECT 1 FROM file_versions v JOIN file_nodes n ON n.id = v.file_node_id "
+            " WHERE v.id = %s::uuid AND n.id = %s::uuid AND n.model_urn = %s"
+            + (" AND n.node_type = 'FILE' AND COALESCE(n.is_deleted, FALSE) = FALSE"
+               if para_alta else ""),
+            (version, nodo, model_urn))
+        if not cur.fetchone():
+            no_validas.append(n)
+    return sin_version, no_validas
+
+
+def _documentos_con_version_fijada(cur, model_urn, items):
+    """None si cada documento del alta fija una version SUYA; (respuesta, codigo) si no.
+
+    NO se rellena una version ausente con la vigente. Elegirla aqui seria decidir
+    DESPUES que se sometio a revision, que es justo lo que no puede pasar: quien
+    manda a revisar dice que version manda, y si no lo dice, no se abre.
+
+    Los mensajes nombran POSICIONES, nunca documentos: si un item apunta a una
+    version ajena, el nombre de ese documento no tiene por que salir de aqui.
+    """
+    sin_version, no_validas = _versiones_fijadas(cur, model_urn, items, para_alta=True)
+    if sin_version:
+        return jsonify({
+            "success": False,
+            "error": ("El documento %s de la revisión no dice qué versión se somete a "
+                      "revisión. Vuelve a seleccionarlo en Archivos."
+                      % _posiciones(sin_version)),
+            "code": "VERSION_NO_DECLARADA",
+        }), 400
+    if no_validas:
+        return jsonify({
+            "success": False,
+            "error": ("La versión indicada para el documento %s no es una versión de ese "
+                      "documento en esta obra." % _posiciones(no_validas)),
+            "code": "VERSION_NO_VALIDA",
+        }), 400
+    return None
+
+
+def _asociacion_invalida(posiciones):
+    """La negativa para una AUTORIDAD_TERMINAL cuya version fijada no se sostiene."""
+    return jsonify({
+        "success": False,
+        "error": ("Esta revisión no puede aprobarse: el documento %s no tiene fijada una "
+                  "versión válida de ese documento. Se puede rechazar; no se puede "
+                  "avanzar ni emitir." % _posiciones(posiciones)),
+        "code": "ASOCIACION_DOCUMENTAL_INVALIDA",
+    }), 409
+
+
+def _puede_ver_la_revision(cur, usuario, model_urn, items, contexto, vistos):
+    """¿Puede este usuario abrir TODOS los documentos de esta revision?
+
+    UNA REVISION DICE QUE PLANOS HAY Y QUIEN LOS APRUEBA
+    ----------------------------------------------------
+    El listado solo comprobaba la obra, asi que un miembro sin permiso sobre una
+    carpeta reservada recibia el nombre de sus documentos, sus identificadores,
+    quien los revisa y los comentarios de cada paso: lo mismo que el indice del
+    expediente y el listado de carpetas ya le negaban.
+
+    La regla es la documental de siempre (`permiso_documental`), preguntada por
+    cada documento y por el dueno de cada version fijada, porque la version
+    tambien nombra un documento. Si falla UNO, la revision no se devuelve:
+    ocultar solo `items` dejaria el titulo, el historial y los comentarios.
+
+    Sin excepcion por estar asignado: asignar no concede permiso documental. El
+    administrador de la obra pasa porque la politica documental ya le reconoce
+    atravesar los permisos de carpeta de ESA obra, no por una regla de aqui.
+    """
+    import flujo_de_revision as flujo
+    # La regla vive en el dominio del flujo: la misma que decide `/act`, las
+    # asignaciones, el bloqueo y lo que cuentan la bandeja y el correo.
+    return flujo.puede_consultar_la_revision(cur, usuario, model_urn, items,
+                                             contexto, vistos)
+
+
+def _participantes_con_acceso(cur, model_urn, steps, items):
+    """None si cada persona del flujo puede consultar TODOS los documentos; si no,
+    la negativa.
+
+    QUIEN FIRMA TIENE QUE PODER VER LO QUE FIRMA
+    --------------------------------------------
+    `/act` ya lo exige al actuar; comprobarlo tambien al asignar evita que una
+    revision nazca con un paso que nadie podra ejercer. NO sustituye a la puerta
+    de `/act`: el acceso puede retirarse despues.
+
+    Se pregunta por las personas FINALMENTE resueltas --escritas a mano o
+    expandidas de una plantilla--, con la misma regla que el listado. No se
+    concede ni se sustituye a nadie: se dice que paso no se sostiene y lo decide
+    quien crea. El mensaje nombra pasos, no documentos ni permisos.
+    """
+    import flujo_de_revision as flujo
+    sin_acceso, por_persona = [], {}
+    for n, paso in enumerate(steps or [], start=1):
+        uid, _motivo = flujo.revisor_del_paso(cur, paso)
+        if uid not in por_persona:
+            por_persona[uid] = bool(uid) and flujo.puede_consultar_la_revision(
+                cur, flujo.persona(cur, uid), model_urn, items)
+        if not por_persona[uid]:
+            sin_acceso.append(n)
+    if sin_acceso:
+        return jsonify({
+            "success": False,
+            "error": ("La persona del paso %s no puede consultar todos los documentos de "
+                      "esta revisión. Pide que le den acceso o elige a otra persona."
+                      % _posiciones(sin_acceso)),
+            "code": "REVISOR_SIN_ACCESO_DOCUMENTAL",
+        }), 400
+    return None
+
+
+def _con_asociacion_documental(cur, rev):
+    """Marca EN LA RESPUESTA los documentos de una AUTORIDAD_TERMINAL cuya version
+    fijada no se sostiene. La revision guardada no se toca.
+
+    Sin la marca, la pantalla ofrecia abrirlos y la previsualizacion, que resuelve
+    por la version, ensenaba al dueno de ESA version con el nombre del otro. PRE
+    no se marca: sus items historicos no fijaban version y su semantica se
+    conserva tal cual.
+    """
+    import flujo_de_revision as flujo
+    if rev.get('contrato') != flujo.AUTORIDAD_TERMINAL:
+        return rev
+    sin_version, no_validas = _versiones_fijadas(cur, rev['model_urn'], rev['items'],
+                                                 para_alta=False)
+    malas = set(sin_version) | set(no_validas)
+    if malas:
+        rev['items'] = [dict(it, asociacion_valida=False)
+                        if isinstance(it, dict) and n in malas else it
+                        for n, it in enumerate(rev['items'] or [], start=1)]
+    return rev
+
+
 def _row_to_dict(r):
     return {
         "id": r[0], "model_urn": r[1], "title": r[2], "items": r[3],
@@ -306,7 +492,19 @@ def list_reviews():
                                   contrato
                            FROM doc_reviews WHERE model_urn = %s ORDER BY id DESC LIMIT 200""",
                         (model_urn,))
-            data = [_con_estado_del_flujo(cur, _row_to_dict(r)) for r in cur.fetchall()]
+            filas = cur.fetchall()
+            # QUIEN VE CADA REVISION: la regla documental, no solo la obra (ver
+            # `_puede_ver_la_revision`). Los hechos del usuario se calculan UNA vez.
+            import permiso_documental as pd
+            usuario = _user()
+            contexto = pd.contexto_de_permisos(cur, usuario, model_urn)
+            vistos, data = {}, []
+            for r in filas:
+                rev = _row_to_dict(r)
+                if not _puede_ver_la_revision(cur, usuario, model_urn, rev['items'],
+                                              contexto, vistos):
+                    continue
+                data.append(_con_estado_del_flujo(cur, _con_asociacion_documental(cur, rev)))
         return jsonify({"success": True, "reviews": data})
     except Exception as e:
         traceback.print_exc()
@@ -455,6 +653,22 @@ def create_review():
             if negado:
                 return negado
 
+            # QUE VERSION DE CADA DOCUMENTO SE SOMETE A REVISION. Vale para los dos
+            # caminos de alta --a mano y de plantilla--, porque los `items` llegan
+            # igual por los dos. Va antes del INSERT: si no se sostiene, no nace la
+            # revision, ni su encargo, ni su aviso.
+            negado = _documentos_con_version_fijada(cur, d['model_urn'], items)
+            if negado:
+                return negado
+
+            # QUIEN FIRMA TIENE QUE PODER VER LO QUE FIRMA. Con los pasos ya
+            # resueltos --a mano o de plantilla-- y las versiones ya validadas,
+            # cada persona del flujo tiene que poder consultar todos los
+            # documentos. Tambien antes del INSERT: si no se sostiene, no nace nada.
+            negado = _participantes_con_acceso(cur, d['model_urn'], steps, items)
+            if negado:
+                return negado
+
             actor = u.get('email') or u.get('name')
             historia = [{"event": "created", "by": actor,
                          "at": datetime.now(timezone.utc).isoformat()}]
@@ -570,6 +784,28 @@ def act_on_review(rid):
                                 "error": "Este paso corresponde a %s"
                                          % flujo.etiqueta_del_paso(step)}), 403
 
+            # ── ¿PUEDE CONSULTAR LO QUE VA A JUZGAR? ─────────────────────────
+            #
+            # Ser el revisor del paso no basta: la asignacion no concede permiso
+            # documental. Dar conformidad, aprobar o rechazar exige poder consultar
+            # TODOS los documentos de la revision --y el dueno de cada version
+            # fijada-- con la regla documental de siempre. Vale para `approve` y
+            # para `reject`, en cualquier paso y con cualquier contrato: es una
+            # condicion del actor, no del contrato. Una PRE no cambia de semantica;
+            # cambia quien puede ejercerla.
+            #
+            # Antes de la primera escritura, como las puertas de abajo. El mensaje
+            # no nombra documentos: quien lo recibe no puede verlos. La salida es
+            # la de siempre: devolverle el acceso, o que un administrador sustituya
+            # al revisor.
+            if not flujo.puede_consultar_la_revision(cur, u, rev['model_urn'], rev['items']):
+                return jsonify({
+                    "success": False,
+                    "error": ("No puedes actuar en esta revisión: no tienes acceso a todos "
+                              "sus documentos. Pide a quien administra la obra que te lo "
+                              "devuelva o que sustituya al revisor."),
+                    "code": "SIN_PERMISO_DOCUMENTAL"}), 403
+
             # ── ¿PERMITE EL CONTRATO ESTE ACTO? (REVIEWS-R01) ─────────────
             #
             # VA AQUI, Y NO MAS ABAJO, POR UNA RAZON MECANICA: el primer efecto
@@ -594,6 +830,20 @@ def act_on_review(rid):
             if not permitido:
                 return jsonify({"success": False, "error": motivo_contrato,
                                 "code": "CONTRATO_NO_PERMITE_EL_ACTO"}), 409
+
+            # ¿SE SABE QUE VERSION DE CADA DOCUMENTO SE ESTA REVISANDO?
+            #
+            # Mismo sitio que la puerta anterior y por la misma razon: aun no se
+            # ha escrito nada. Una AUTORIDAD_TERMINAL sin version fijada, o con una
+            # version que no es de su documento, no avanza en positivo ni emite:
+            # su historial afirmaria haber revisado algo que no se puede decir que
+            # se reviso. Rechazar sigue permitido --es la salida-- y PRE queda
+            # fuera: su contrato historico nunca fijo version.
+            if action == 'approve' and rev['contrato'] == flujo.AUTORIDAD_TERMINAL:
+                sin_version, no_validas = _versiones_fijadas(
+                    cur, rev['model_urn'], rev['items'], para_alta=False)
+                if sin_version or no_validas:
+                    return _asociacion_invalida(sorted(set(sin_version) | set(no_validas)))
 
             # CON FECHA. Cada acto de aprobacion o rechazo tiene que quedar
             # fechado: es la primera pregunta de una supervision, y hasta ahora la
@@ -670,14 +920,19 @@ def act_on_review(rid):
                 # ¿Sigue siendo la misma versión que se mandó a revisar?
                 # Antes se aprobaba el node_id a secas, así que se sellaba «apto
                 # para construcción» sobre lo que hubiera subido en ese momento,
-                # que podía no ser lo que nadie miró. Sólo se puede comprobar en
-                # las revisiones creadas ya con version_id; las anteriores pasan
-                # (no hay con qué compararlas) y eso queda dicho aquí a propósito.
+                # que podía no ser lo que nadie miró. Sin version_id no hay con qué
+                # comparar, y eso sólo se acepta en las revisiones PRE históricas,
+                # que nacieron sin fijarla. Una AUTORIDAD_TERMINAL sin versión ya la
+                # para la puerta de arriba; esta es la segunda llave, para que faltar
+                # `version_id` no vuelva a bastar para pasar por aquí.
                 cambiados = []
-                for it in rev['items']:
+                for n, it in enumerate(rev['items'], start=1):
                     esperada = it.get('version_id')
                     if not esperada or not it.get('node_id'):
-                        continue
+                        if rev['contrato'] == flujo.PRE:
+                            continue
+                        conn.rollback()
+                        return _asociacion_invalida([n])
                     cur.execute("SELECT current_version_id, name, version_number "
                                 "FROM file_nodes WHERE id = %s", (it['node_id'],))
                     fila = cur.fetchone()
@@ -835,6 +1090,18 @@ def reasignar_revisor(rid):
                     "error": "%s no pertenece a esta obra. Añádelo a la obra antes de "
                              "asignarle la revisión." % (nuevo['name'] or nuevo['email']),
                     "code": "REVISOR_FUERA_DE_LA_OBRA"}), 400
+
+            # Y tiene que poder CONSULTAR todos los documentos: se le va a pedir
+            # que los juzgue, y `/act` se lo exigira. Sustituir por alguien que no
+            # puede verlos solo cambiaria quien esta bloqueado. No se concede nada.
+            if not flujo.puede_consultar_la_revision(cur, flujo.persona(cur, nuevo['id']),
+                                                     rev['model_urn'], rev['items']):
+                return jsonify({
+                    "success": False,
+                    "error": "%s no puede consultar todos los documentos de esta revisión. "
+                             "Dale acceso antes de asignársela o elige a otra persona."
+                             % (nuevo['name'] or nuevo['email']),
+                    "code": "REVISOR_SIN_ACCESO_DOCUMENTAL"}), 400
 
             indice = rev['current_step'] or 0
             pasos, entrada = flujo.sustituir_revisor(

@@ -451,12 +451,20 @@ export function ReviewsView({ projectPrefix, user, isAdmin }) {
             </div>
             <div style={{ padding: '10px 16px', fontSize: 12, color: '#666', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8 }}>
               <span>📄 {rev.items.length} documento{rev.items.length !== 1 ? 's' : ''}:</span>
-              {rev.items.map(i => (
+              {rev.items.map(i => (i.asociacion_valida === false ? (
+                // El backend marca así un documento cuya versión fijada no es de ESE
+                // documento. No se ofrece abrirlo: la previsualización resuelve por la
+                // versión y enseñaría otro documento con este nombre.
+                <span key={i.node_id} title="Esta revisión no tiene fijada una versión válida de este documento"
+                  style={{ background: '#fff1f2', border: '1px solid #fecdd3', color: '#9f1239', padding: '3px 10px', borderRadius: 12, fontSize: 12, fontWeight: 600 }}>
+                  {i.name} · sin versión válida
+                </span>
+              ) : (
                 <button key={i.node_id} onClick={() => openDoc(i)} title="Abrir para revisar"
                   style={{ background: '#f0f7fc', border: '1px solid #cfe7f5', color: 'var(--accent)', padding: '3px 10px', borderRadius: 12, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
                   {i.name} (V{i.version || 1}) ↗
                 </button>
-              ))}
+              )))}
             </div>
             <div style={{ padding: '4px 16px 12px', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
               {rev.steps.map((s, i) => {

@@ -296,13 +296,13 @@ def avisar(cur, encargo_id, enlace=None, es_recordatorio=False):
     """
     try:
         cur.execute("""SELECT project_id, asunto, destino_usuario, destino_funcion,
-                              objeto_tipo, vence_en, destino_empresa
+                              objeto_tipo, vence_en, destino_empresa, objeto_id
                          FROM encargos WHERE id = %s AND estado = 'abierto'""",
                     (encargo_id,))
         fila = cur.fetchone()
         if not fila:
             return 0
-        obra, asunto, uid, funcion, tipo, vence, empresa = fila
+        obra, asunto, uid, funcion, tipo, vence, empresa, objeto_id = fila
 
         correos = []
         if uid:
@@ -327,6 +327,15 @@ def avisar(cur, encargo_id, enlace=None, es_recordatorio=False):
 
         import mailer
         cuerpo = asunto
+        if tipo == 'REVIEW':
+            # El asunto guardado lleva el titulo de la revision, y el titulo suele
+            # nombrar documentos. Se decide AHORA y para ESTE destinatario si puede
+            # leerlo: si no puede consultar todos los documentos --o no se puede
+            # comprobar-- el aviso sale neutro. Los avisos de revision van a una
+            # persona (`uid`); sin ella no hay a quien comprobar y tambien sale
+            # neutro. El encargo guardado no se toca.
+            import flujo_de_revision as _flujo
+            cuerpo = _flujo.texto_del_aviso(cur, objeto_id, uid, asunto)
         if vence:
             # «dias calendario», dicho asi de claro: no hay calendario de
             # feriados, de modo que un plazo de 3 dias vence en 3 dias
@@ -973,10 +982,14 @@ def _faltantes(cur):
     import flujo_de_revision as _flujo
 
     # Revisiones vivas: el revisor del paso actual deberia tener su encargo.
-    cur.execute("SELECT id, model_urn, title, current_step, steps, status, paso_vence_en "
-                "  FROM doc_reviews WHERE status = 'pending'")
-    for rid, urn, titulo, paso, steps, status, vence in cur.fetchall():
-        rev = {'model_urn': urn, 'steps': steps, 'current_step': paso, 'status': status}
+    # Con `items`: sin ellos no se sabria si el revisor sigue pudiendo consultar
+    # los documentos, y la conciliacion y el listado discreparian sobre si la
+    # revision esta BLOQUEADA.
+    cur.execute("SELECT id, model_urn, title, current_step, steps, status, paso_vence_en, "
+                "       items FROM doc_reviews WHERE status = 'pending'")
+    for rid, urn, titulo, paso, steps, status, vence, items in cur.fetchall():
+        rev = {'model_urn': urn, 'steps': steps, 'current_step': paso, 'status': status,
+               'items': items}
         estado, motivo = _flujo.estado_del_flujo(cur, rev)
         if estado == 'BLOQUEADA':
             # NO es una divergencia reparable: es un asunto que necesita a una

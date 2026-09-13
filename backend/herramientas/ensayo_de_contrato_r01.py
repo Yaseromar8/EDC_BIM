@@ -102,6 +102,10 @@ def limpiar(cur):
     cur.execute("DELETE FROM users WHERE email LIKE %s", (PREFIJO + '%',))
 
 
+# La version vigente de cada documento de ensayo, para que las altas la fijen.
+VERSIONES = {}
+
+
 def montar(cur, ref):
     cur.execute("SELECT id FROM hubs LIMIT 1")
     fila = cur.fetchone()
@@ -126,6 +130,13 @@ def montar(cur, ref):
     cur.execute("INSERT INTO file_nodes (model_urn, node_type, name, status) "
                 "VALUES (%s,'FILE','PLANO-R01.pdf','WIP') RETURNING id::text", (OBRA,))
     nodo = cur.fetchone()[0]
+    # Su version VIGENTE: un alta nueva tiene que fijar que version somete a
+    # revision, asi que el documento de ensayo necesita tener una.
+    cur.execute("INSERT INTO file_versions (file_node_id, version_number, gcs_urn) "
+                "VALUES (%s::uuid, 1, %s) RETURNING id::text", (nodo, PREFIJO + 'plano-r01-v1'))
+    VERSIONES[nodo] = cur.fetchone()[0]
+    cur.execute("UPDATE file_nodes SET current_version_id=%s::uuid, version_number=1 "
+                " WHERE id=%s::uuid", (VERSIONES[nodo], nodo))
     return {'autor': autor, 'r1': r1, 'r2': r2, 'nodo': nodo}
 
 
@@ -197,7 +208,8 @@ def sesion(cur, uid):
 def crear(cliente, pasos, titulo, nodo):
     return cliente.post('/api/reviews', json={
         'model_urn': OBRA, 'title': titulo, 'final_status': 'SHARED',
-        'items': [{'node_id': nodo, 'name': 'PLANO-R01.pdf'}],
+        'items': [{'node_id': nodo, 'name': 'PLANO-R01.pdf',
+                   'version_id': VERSIONES.get(nodo)}],
         'steps': pasos})
 
 
