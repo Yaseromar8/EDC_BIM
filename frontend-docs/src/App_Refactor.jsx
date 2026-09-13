@@ -26,6 +26,7 @@ import { Toaster } from 'react-hot-toast';
 import { useUser } from './hooks/useUser';
 import { API } from './utils/helpers';
 import { apiFetch } from './utils/apiFetch';
+import { leerEnlace, conRevision, CLAVE_DEL_ENLACE_PENDIENTE } from './utils/revisiones';
 
 // ── Pages ──
 import HubPage from './pages/HubPage';
@@ -85,6 +86,81 @@ export default function App() {
   // Volver al Hub (clic en el logo): el Hub es la ÚNICA puerta entre productos —
   // dentro de Docs no hay puentes directos al visor (sin fugas de navegación).
   const backToHub = () => { sessionStorage.removeItem('ecd_entered_docs'); setEnteredDocs(false); };
+
+  // ── ENLACE A UNA REVISIÓN: `/?obra=<id>&revision=<id>`, o desde Mi Trabajo ──
+  //
+  // Lleva directamente a Documentos → esa obra → Revisiones → el detalle. Se guarda
+  // también en sessionStorage porque el login puede limpiar la URL, y el enlace no
+  // tiene que perderse por iniciar sesión. La obra se busca entre las obras de
+  // ESTA persona: si no está, se avisa y se sigue como siempre. Entrar en la obra
+  // no concede nada: el detalle vuelve a pasar por las guardias del servidor.
+  const [enlace, setEnlace] = useState(() => {
+    const deLaUrl = leerEnlace(window.location.search);
+    if (deLaUrl?.obra) {
+      sessionStorage.setItem(CLAVE_DEL_ENLACE_PENDIENTE, JSON.stringify(deLaUrl));
+      return deLaUrl;
+    }
+    try {
+      const guardado = JSON.parse(sessionStorage.getItem(CLAVE_DEL_ENLACE_PENDIENTE) || 'null');
+      return guardado?.obra && guardado?.revision ? guardado : null;
+    } catch { return null; }
+  });
+  const [avisoDeEnlace, setAvisoDeEnlace] = useState(null);
+
+  const abrirRevision = ({ obra, revision }) => {
+    const numero = Number(revision);
+    if (!obra || !Number.isSafeInteger(numero) || numero < 1) return;
+    const destino = { obra: String(obra), revision: numero };
+    sessionStorage.setItem(CLAVE_DEL_ENLACE_PENDIENTE, JSON.stringify(destino));
+    window.history.pushState(null, '', window.location.pathname
+      + conRevision(window.location.search, destino.obra, destino.revision));
+    setEnlace(destino);
+  };
+
+  useEffect(() => {
+    if (!user || !enlace) return undefined;
+    let cancelado = false;
+    const quitarDeLaUrl = () => window.history.replaceState(null, '', window.location.pathname
+      + conRevision(window.location.search, null, null));
+    (async () => {
+      // La URL dice la revisión que se va a ver, también si el enlace volvió de sessionStorage.
+      window.history.replaceState(null, '', window.location.pathname
+        + conRevision(window.location.search, enlace.obra, enlace.revision));
+      try {
+        let obra = null;
+        const guardada = JSON.parse(localStorage.getItem('selected_project') || 'null');
+        if (guardada && String(guardada.id) === String(enlace.obra)) {
+          obra = guardada;
+        } else {
+          const r = await apiFetch(`${API}/api/projects?user_id=${user.id}&role=${user.role}`);
+          const d = r.ok ? await r.json() : null;
+          const lista = Array.isArray(d) ? d : (d?.projects || []);
+          obra = lista.find(p => String(p.id) === String(enlace.obra)) || null;
+        }
+        if (cancelado) return;
+        if (obra) {
+          localStorage.setItem('selected_project', JSON.stringify(obra));
+          setSelectedProject(obra);
+          sessionStorage.setItem('ecd_entered_docs', '1');
+          setEnteredDocs(true);
+        } else {
+          quitarDeLaUrl();
+          setAvisoDeEnlace('No tienes acceso a la obra de esa revisión, o ya no existe.');
+        }
+      } catch {
+        if (!cancelado) {
+          quitarDeLaUrl();
+          setAvisoDeEnlace('No se pudo abrir la revisión: no se pudo cargar la lista de obras.');
+        }
+      } finally {
+        if (!cancelado) {
+          sessionStorage.removeItem(CLAVE_DEL_ENLACE_PENDIENTE);
+          setEnlace(null);
+        }
+      }
+    })();
+    return () => { cancelado = true; };
+  }, [user, enlace]);
 
   // SSO de vuelta (Visor -> Hub): el visor manda un ticket efímero de un solo
   // uso en el URL; aquí se canjea por la sesión y se aterriza en el Hub sin
@@ -229,20 +305,49 @@ export default function App() {
     );
   }
 
+  // Un enlace a una revisión se resuelve ANTES de pintar ninguna página: así el
+  // explorador nace ya en la obra del enlace y no en la que estaba guardada.
+  if (enlace) {
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center',
+                    justifyContent: 'center', gap: 12, color: '#555', fontSize: 14 }}>
+        <div className="adsk-spinner" /> Abriendo la revisión…
+      </div>
+    );
+  }
+
+  // Si el enlace no se pudo abrir, se dice encima de la página a la que se llega.
+  const conAviso = (pagina) => (!avisoDeEnlace ? pagina : (
+    <>
+      <div role="alert" style={{ position: 'fixed', top: 14, left: '50%', transform: 'translateX(-50%)',
+                                 zIndex: 30000, background: '#fff1f2', color: '#9f1239',
+                                 border: '1px solid #fecdd3', borderRadius: 8, padding: '10px 14px',
+                                 fontSize: 13, boxShadow: '0 8px 24px rgba(0,0,0,.15)',
+                                 display: 'flex', gap: 10, alignItems: 'center' }}>
+        {avisoDeEnlace}
+        <button type="button" onClick={() => setAvisoDeEnlace(null)} aria-label="Cerrar aviso"
+                style={{ background: 'none', border: 'none', color: '#9f1239', fontSize: 16,
+                         cursor: 'pointer' }}>×</button>
+      </div>
+      {pagina}
+    </>
+  ));
+
   // Hub de producto: SIEMPRE tras el login (hasta elegir Documentos en esta
   // sesión). "Visor 3D" navega fuera (a la otra app) llevando la sesión.
   if (!enteredDocs) {
-    return (
+    return conAviso(
       <HubPage
         user={user}
         onChooseDocs={chooseDocs}
         onLogout={logoutFull}
+        onAbrirRevision={abrirRevision}
       />
     );
   }
 
   if (!selectedProject) {
-    return (
+    return conAviso(
       <ErrorBoundary scope="proyectos" title="No se pudo mostrar la lista de proyectos">
         <SecureProjectsPage
           user={user}
@@ -256,7 +361,7 @@ export default function App() {
 
   // Cada ruta va envuelta: un fallo de render muestra un aviso con salida,
   // en vez de dejar la PANTALLA EN BLANCO sin explicación.
-  return (
+  return conAviso(
     <ErrorBoundary scope="documentos" title="No se pudo mostrar el explorador de documentos">
       <FilesPage
         project={selectedProject}

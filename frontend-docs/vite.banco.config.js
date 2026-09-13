@@ -28,6 +28,7 @@ export default (env) => {
         busqueda: 'probar-busqueda.html',
         subida: 'probar-subida.html',
         cad: 'probar-cad.html',
+        revisiones: 'probar-revisiones.html',
       },
     },
   }

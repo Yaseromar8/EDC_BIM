@@ -1,16 +1,12 @@
 // ReviewsModule.jsx — Flujos de revisión y aprobación (ISO 19650, estilo ACC Reviews)
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import toast from 'react-hot-toast';
 import { API, formatDate, getInitials } from '../utils/helpers';
 import { apiFetch } from '../utils/apiFetch';
-import DocQuickView from './DocQuickView';
-import useDocPreview from '../hooks/useDocPreview';
-
-const STATUS_CHIP = {
-  pending: { label: 'En revisión', bg: '#fff7e0', color: '#b26a00' },
-  approved: { label: 'Aprobada', bg: '#dcfce7', color: '#15803d' },
-  rejected: { label: 'Rechazada', bg: '#fee2e2', color: '#b91c1c' },
-};
+import RevisionDetalle from './RevisionDetalle';
+import {
+  FILTROS, leerEnlace, conRevision, chipDeEstado, codigoDe, mensajeDeError,
+} from '../utils/revisiones';
 
 // ── Modal: enviar documentos a revisión ──
 export function ReviewModal({ isOpen, onClose, items, projectPrefix, onCreated }) {
@@ -301,241 +297,181 @@ export function ReviewModal({ isOpen, onClose, items, projectPrefix, onCreated }
   );
 }
 
-// ── Vista: listado de revisiones + aprobar/rechazar ──
-function SustituirRevisor({ rev, projectPrefix, onCerrar, onHecho }) {
-  /* Sustituir al revisor de un paso BLOQUEADO.
-   *
-   * El motivo es obligatorio, igual que en el backend: una sustitución sin
-   * explicación deja el historial contando QUÉ pasó y no POR QUÉ, que es la
-   * mitad inútil de una trazabilidad. Y el revisor anterior no desaparece:
-   * queda en el paso y en el historial.
-   */
-  const [users, setUsers] = useState([]);
-  const [elegido, setElegido] = useState('');
-  const [motivo, setMotivo] = useState('');
-  const [guardando, setGuardando] = useState(false);
-  const paso = rev.steps[rev.current_step] || {};
+// ── Vista: listado de revisiones y detalle (REVIEWS · E1) ──
+//
+// La lista llega del servidor ya filtrada y por páginas: el permiso documental se
+// aplica allí, antes de cortar la página. Abrir una revisión la pone en la URL
+// (`?obra=<id>&revision=<id>`), así el enlace se puede compartir y atrás/adelante
+// funcionan. Los actos viven en el detalle, donde se ve qué se aprueba y qué
+// consecuencia tiene.
+const LIMITE = 20;
 
-  useEffect(() => {
-    apiFetch(`${API}/api/users`).then(r => r.json())
-      .then(d => setUsers(d.users || d || [])).catch(() => setUsers([]));
-  }, []);
+const TONO_DE_LISTA = {
+  exito: { background: '#dcfce7', color: '#15803d' },
+  peligro: { background: '#fee2e2', color: '#b91c1c' },
+  aviso: { background: '#fff7e0', color: '#b26a00' },
+  neutro: { background: '#f3f4f6', color: '#4b5563' },
+};
 
-  const enviar = async () => {
-    if (!elegido) { toast.error('Elige al nuevo revisor'); return; }
-    if (!motivo.trim()) { toast.error('Explica por qué se sustituye'); return; }
-    setGuardando(true);
-    try {
-      const r = await apiFetch(`${API}/api/reviews/${rev.id}/reasignar`, {
-        method: 'POST',
-        body: JSON.stringify({ user_id: Number(elegido), motivo: motivo.trim() }),
-      });
-      const d = await r.json();
-      if (!d.success) throw new Error(d.error);
-      toast.success('Revisor sustituido');
-      onHecho?.(); onCerrar();
-    } catch (e) { toast.error(e.message || 'No se pudo sustituir'); }
-    finally { setGuardando(false); }
-  };
-
+function FilaDeRevision({ rev, onAbrir }) {
+  const chip = chipDeEstado(rev);
+  const pasos = rev.steps || [];
+  const paso = pasos[rev.current_step] || {};
+  const documentos = (rev.items || []).length;
   return (
-    <div className="modal-overlay" style={{ position: 'fixed', inset: 0, zIndex: 11000, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={onCerrar}>
-      <div onClick={e => e.stopPropagation()} style={{ width: 460, background: '#fff', borderRadius: 8, boxShadow: '0 10px 40px rgba(0,0,0,0.25)' }}>
-        <div style={{ padding: '14px 20px', borderBottom: '1px solid #eee', fontSize: 15, fontWeight: 600 }}>
-          Sustituir al revisor del paso {rev.current_step + 1}
-        </div>
-        <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14, fontSize: 13 }}>
-          <div style={{ background: '#fff1f2', border: '1px solid #fecdd3', borderRadius: 6, padding: '8px 10px', color: '#9f1239', fontSize: 12 }}>
-            {rev.flujo_motivo || 'La revisión está bloqueada.'}
-          </div>
-          <div>
-            <label style={{ display: 'block', color: '#666', marginBottom: 6, fontWeight: 600 }}>
-              Revisor actual
-            </label>
-            <div style={{ color: '#555' }}>{paso.name || paso.email || `usuario ${paso.user_id}`}</div>
-            <div style={{ color: '#999', fontSize: 11, marginTop: 2 }}>Se conserva en el historial de la revisión.</div>
-          </div>
-          <div>
-            <label style={{ display: 'block', color: '#666', marginBottom: 6, fontWeight: 600 }}>Nuevo revisor</label>
-            <select value={elegido} onChange={e => setElegido(e.target.value)}
-              style={{ width: '100%', padding: '7px 10px', border: '1px solid #ddd', borderRadius: 4, fontSize: 13 }}>
-              <option value="">Elige a un miembro de la obra…</option>
-              {users.filter(u => String(u.id) !== String(paso.user_id)).map(u => (
-                <option key={u.id} value={u.id}>{u.name || u.email}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label style={{ display: 'block', color: '#666', marginBottom: 6, fontWeight: 600 }}>Motivo</label>
-            <textarea value={motivo} onChange={e => setMotivo(e.target.value)} rows={2}
-              placeholder="Por ejemplo: dejó la obra el 15 de agosto"
-              style={{ width: '100%', padding: '7px 10px', border: '1px solid #ddd', borderRadius: 4, fontSize: 13, resize: 'vertical' }} />
-          </div>
-        </div>
-        <div style={{ padding: '12px 20px', borderTop: '1px solid #eee', display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-          <button onClick={onCerrar} style={{ padding: '7px 14px', background: 'none', border: '1px solid #ddd', borderRadius: 4, fontSize: 13, cursor: 'pointer' }}>Cancelar</button>
-          <button onClick={enviar} disabled={guardando}
-            style={{ padding: '7px 16px', background: '#b91c1c', color: '#fff', border: 'none', borderRadius: 4, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
-            {guardando ? 'Sustituyendo…' : 'Sustituir'}
-          </button>
-        </div>
-      </div>
-    </div>
+    <li style={{ marginBottom: 10 }}>
+      <button type="button" onClick={onAbrir} title="Abrir la revisión"
+        style={{ width: '100%', textAlign: 'left', background: '#fff', border: '1px solid #e8e8e8', borderRadius: 8,
+                 padding: '12px 16px', cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: 6,
+                 font: 'inherit', color: 'inherit' }}>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 12, width: '100%' }}>
+          <span style={{ fontSize: 12, color: '#999', fontWeight: 700 }}>{rev.codigo || codigoDe(rev.id)}</span>
+          <span style={{ fontSize: 14, fontWeight: 600, color: '#333', flex: 1 }}>{rev.title}</span>
+          {rev.me_toca && (
+            <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 12,
+                           background: '#e0ecff', color: '#1a56a8' }}>Te toca</span>
+          )}
+          <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 12,
+                         ...TONO_DE_LISTA[chip.tono] }}>{chip.etiqueta}</span>
+        </span>
+        <span style={{ fontSize: 12, color: '#666', display: 'flex', flexWrap: 'wrap', gap: 12, width: '100%' }}>
+          <span>{documentos} documento{documentos !== 1 ? 's' : ''}</span>
+          {rev.status === 'pending' && pasos.length > 0 && (
+            <span>Paso {rev.current_step + 1} de {pasos.length}: {paso.name || paso.email || '—'}</span>
+          )}
+          {rev.status === 'pending' && rev.paso_vence_en && <span>Plazo {formatDate(rev.paso_vence_en)}</span>}
+          <span style={{ marginLeft: 'auto', color: '#aaa' }}>{rev.created_by} · {formatDate(rev.created_at)}</span>
+        </span>
+      </button>
+    </li>
   );
 }
 
-
-export function ReviewsView({ projectPrefix, user, isAdmin }) {
+export function ReviewsView({ projectPrefix }) {
+  const [filtro, setFiltro] = useState('todas');
   const [reviews, setReviews] = useState(null);
-  const [comments, setComments] = useState({}); // { reviewId: texto }
-  const [acting, setActing] = useState(null);
-  const [sustituyendo, setSustituyendo] = useState(null);
-  const [preview, openDoc, closePreview] = useDocPreview(projectPrefix);
+  const [siguiente, setSiguiente] = useState(null);
+  const [obraId, setObraId] = useState(null);
+  const [cargandoMas, setCargandoMas] = useState(false);
+  const [error, setError] = useState(null);
+  const [abierta, setAbierta] = useState(() => leerEnlace(window.location.search)?.revision || null);
+  const peticion = useRef(0);
 
-  const load = () => {
-    apiFetch(`${API}/api/reviews?model_urn=${encodeURIComponent(projectPrefix)}`)
-      .then(r => r.json()).then(d => setReviews(d.success ? d.reviews : []))
-      .catch(() => setReviews([]));
-  };
-  useEffect(load, [projectPrefix]);
-
-  const act = async (rev, action) => {
-    setActing(rev.id);
+  const cargar = useCallback(async (antesDe = null) => {
+    const n = ++peticion.current;
+    const q = new URLSearchParams({ model_urn: projectPrefix, filtro, limite: String(LIMITE) });
+    if (antesDe) { q.set('antes_de', String(antesDe)); setCargandoMas(true); }
     try {
-      const r = await apiFetch(`${API}/api/reviews/${rev.id}/act`, {
-        method: 'POST',
-        body: JSON.stringify({ action, comment: comments[rev.id] || '' })
-      });
-      const d = await r.json();
-      if (!d.success) throw new Error(d.error);
-      toast.success(action === 'approve' ? 'Paso aprobado' : 'Revisión rechazada');
-      setComments(prev => ({ ...prev, [rev.id]: '' }));
-      load();
-    } catch (e) { toast.error(e.message || 'No se pudo registrar la acción'); }
-    finally { setActing(null); }
+      const r = await apiFetch(`${API}/api/reviews?${q.toString()}`);
+      let d = null;
+      try { d = await r.json(); } catch { d = null; }
+      if (n !== peticion.current) return;
+      if (!r.ok || !d?.success) {
+        setError(mensajeDeError(r.status, d).texto);
+        if (!antesDe) setReviews([]);
+        return;
+      }
+      setError(null);
+      setObraId(d.obra_id || null);
+      setReviews(prev => (antesDe ? [...(prev || []), ...(d.reviews || [])] : (d.reviews || [])));
+      setSiguiente(d.siguiente ?? null);
+    } catch {
+      if (n === peticion.current) {
+        setError(mensajeDeError(0, null).texto);
+        if (!antesDe) setReviews([]);
+      }
+    } finally {
+      if (antesDe) setCargandoMas(false);
+    }
+  }, [projectPrefix, filtro]);
+
+  useEffect(() => { setReviews(null); setSiguiente(null); cargar(); }, [cargar]);
+
+  // Atrás/adelante abren y cierran el detalle; al salir de Revisiones, el enlace
+  // deja de describir lo que se ve y se quita de la URL.
+  useEffect(() => {
+    const alNavegar = () => setAbierta(leerEnlace(window.location.search)?.revision || null);
+    window.addEventListener('popstate', alNavegar);
+    return () => {
+      window.removeEventListener('popstate', alNavegar);
+      if (leerEnlace(window.location.search)) {
+        window.history.replaceState(null, '', window.location.pathname
+          + conRevision(window.location.search, null, null));
+      }
+    };
+  }, []);
+
+  const abrir = (rev) => {
+    const obra = obraId || leerEnlace(window.location.search)?.obra || null;
+    window.history.pushState({ revision: rev.id }, '', window.location.pathname
+      + conRevision(window.location.search, obra, rev.id));
+    setAbierta(rev.id);
   };
+
+  const volver = () => {
+    // Abierta desde esta lista: atrás deja la historia del navegador como estaba.
+    if (window.history.state && window.history.state.revision) {
+      window.history.back();
+      return;
+    }
+    // Abierta por un enlace: no hay lista detrás en la historia.
+    window.history.replaceState(null, '', window.location.pathname
+      + conRevision(window.location.search, null, null));
+    setAbierta(null);
+  };
+
+  if (abierta) {
+    return (
+      <RevisionDetalle key={abierta} rid={abierta} projectPrefix={projectPrefix}
+                       onVolver={volver} onCambio={() => cargar()} />
+    );
+  }
 
   return (
     <div style={{ padding: 32, flex: 1, overflowY: 'auto' }}>
-      <DocQuickView file={preview} projectPrefix={projectPrefix} onClose={closePreview} />
       <div style={{ fontSize: 24, fontWeight: 300, marginBottom: 4 }}>Revisiones</div>
-      <div style={{ fontSize: 13, color: '#888', marginBottom: 20 }}>
+      <div style={{ fontSize: 13, color: '#888', marginBottom: 16 }}>
         Flujos de aprobación: selecciona archivos en Archivos y pulsa "Enviar a revisión".
       </div>
+      <div role="group" aria-label="Filtrar revisiones"
+           style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 16 }}>
+        {FILTROS.map(f => {
+          const activo = filtro === f.id;
+          return (
+            <button key={f.id} type="button" aria-pressed={activo} onClick={() => setFiltro(f.id)}
+              style={{ padding: '5px 12px', borderRadius: 14, fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                       border: activo ? '1px solid var(--accent)' : '1px solid #dcdcdc',
+                       background: activo ? 'var(--accent)' : '#fff', color: activo ? '#fff' : '#444' }}>
+              {f.etiqueta}
+            </button>
+          );
+        })}
+      </div>
+      {error && (
+        <div role="alert" style={{ marginBottom: 12, padding: '9px 12px', borderRadius: 6, background: '#fff1f2',
+                                   border: '1px solid #fecdd3', color: '#9f1239', fontSize: 12 }}>
+          {error}
+        </div>
+      )}
       {reviews === null ? (
         <div style={{ textAlign: 'center', padding: 48 }}><div className="adsk-spinner" style={{ margin: '0 auto' }} /></div>
       ) : reviews.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: 48, color: '#999', fontSize: 13 }}>No hay revisiones aún.</div>
-      ) : reviews.map(rev => {
-        const bloqueada = rev.status === 'pending' && rev.flujo === 'BLOQUEADA';
-        const chip = bloqueada
-          ? { label: 'Bloqueada', bg: '#fee2e2', color: '#b91c1c' }
-          : (STATUS_CHIP[rev.status] || STATUS_CHIP.pending);
-        const step = rev.steps[rev.current_step] || {};
-        // La interfaz usa la misma autoridad que el backend. Si el paso nuevo
-        // trae user_id, correo y nombre son solo etiquetas históricas y nunca
-        // deciden quién puede actuar. El respaldo se conserva sólo para pasos
-        // legacy que todavía no tienen identidad estructurada.
-        const pasoEsMio = step.user_id
-          ? String(user?.id || '') === String(step.user_id)
-          : (step.email
-              ? String(user?.email || '').toLowerCase() === String(step.email).toLowerCase()
-              : Boolean(step.name && user?.name && step.name === user.name));
-        const myTurn = rev.status === 'pending' && !bloqueada && (pasoEsMio || isAdmin);
-        return (
-          <div key={rev.id} style={{ background: '#fff', border: '1px solid #e8e8e8', borderRadius: 8, marginBottom: 14, overflow: 'hidden' }}>
-            <div style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 12, borderBottom: '1px solid #f3f3f3' }}>
-              <span style={{ fontSize: 12, color: '#999', fontWeight: 700 }}>RV-{String(rev.id).padStart(3, '0')}</span>
-              <span style={{ fontSize: 14, fontWeight: 600, color: '#333', flex: 1 }}>{rev.title}</span>
-              <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 12, background: chip.bg, color: chip.color }}>{chip.label}</span>
-            </div>
-            <div style={{ padding: '10px 16px', fontSize: 12, color: '#666', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8 }}>
-              <span>📄 {rev.items.length} documento{rev.items.length !== 1 ? 's' : ''}:</span>
-              {rev.items.map(i => (i.asociacion_valida === false ? (
-                // El backend marca así un documento cuya versión fijada no es de ESE
-                // documento. No se ofrece abrirlo: la previsualización resuelve por la
-                // versión y enseñaría otro documento con este nombre.
-                <span key={i.node_id} title="Esta revisión no tiene fijada una versión válida de este documento"
-                  style={{ background: '#fff1f2', border: '1px solid #fecdd3', color: '#9f1239', padding: '3px 10px', borderRadius: 12, fontSize: 12, fontWeight: 600 }}>
-                  {i.name} · sin versión válida
-                </span>
-              ) : (
-                <button key={i.node_id} onClick={() => openDoc(i)} title="Abrir para revisar"
-                  style={{ background: '#f0f7fc', border: '1px solid #cfe7f5', color: 'var(--accent)', padding: '3px 10px', borderRadius: 12, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
-                  {i.name} (V{i.version || 1}) ↗
-                </button>
-              )))}
-            </div>
-            <div style={{ padding: '4px 16px 12px', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-              {rev.steps.map((s, i) => {
-                const done = rev.status === 'approved' || i < rev.current_step;
-                const active = rev.status === 'pending' && i === rev.current_step;
-                const failed = rev.status === 'rejected' && i === rev.current_step;
-                return (
-                  <React.Fragment key={i}>
-                    {i > 0 && <span style={{ color: '#ccc' }}>→</span>}
-                    <span title={s.email} style={{
-                      fontSize: 12, padding: '3px 10px', borderRadius: 12, fontWeight: 600,
-                      background: done ? '#dcfce7' : failed ? '#fee2e2' : active ? '#eef2f7' : '#f3f4f6',
-                      color: done ? '#15803d' : failed ? '#b91c1c' : active ? '#1a56a8' : '#888'
-                    }}>
-                      {done ? '✓ ' : failed ? '✕ ' : active ? '● ' : ''}{s.name || s.email}
-                    </span>
-                  </React.Fragment>
-                );
-              })}
-              <span style={{ marginLeft: 'auto', fontSize: 11, color: '#aaa' }}>{rev.created_by} · {formatDate(rev.created_at)}</span>
-            </div>
-            {rev.status === 'pending' && rev.paso_vence_en && (
-              <div style={{ padding: '0 16px 10px', fontSize: 12, color: '#6b7280' }}>
-                Plazo del paso actual: <b>{formatDate(rev.paso_vence_en)}</b>
-              </div>
-            )}
-            {bloqueada && (
-              <div role="alert" style={{ margin: '0 16px 12px', padding: '9px 11px', borderRadius: 6, background: '#fff1f2', border: '1px solid #fecdd3', color: '#9f1239', fontSize: 12 }}>
-                <b>La revisión no puede avanzar.</b>{rev.flujo_motivo ? ` ${rev.flujo_motivo}` : ''}
-                {/* La salida sólo aparece para quien puede tomarla, y sólo
-                    aquí: sustituir a un revisor no es administrar el flujo, es
-                    desatascar uno concreto que está parado. */}
-                {isAdmin && (
-                  <div style={{ marginTop: 8 }}>
-                    <button onClick={() => setSustituyendo(rev)}
-                      style={{ padding: '5px 12px', background: '#b91c1c', color: '#fff', border: 'none', borderRadius: 4, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
-                      Sustituir revisor…
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
-            {rev.history.filter(h => h.comment).length > 0 && (
-              <div style={{ padding: '0 16px 10px', fontSize: 12, color: '#777' }}>
-                {rev.history.filter(h => h.comment).map((h, i) => (
-                  <div key={i}>💬 <b>{h.by}</b> ({h.event === 'approve' ? 'aprobó' : 'rechazó'}): {h.comment}</div>
-                ))}
-              </div>
-            )}
-            {myTurn && (
-              <div style={{ padding: '10px 16px', borderTop: '1px solid #f3f3f3', background: '#fafcff', display: 'flex', gap: 8, alignItems: 'center' }}>
-                <input value={comments[rev.id] || ''} onChange={e => setComments(prev => ({ ...prev, [rev.id]: e.target.value }))}
-                  placeholder="Comentario (opcional)…"
-                  style={{ flex: 1, padding: '7px 10px', border: '1px solid #ddd', borderRadius: 4, fontSize: 12, outline: 'none' }} />
-                <button onClick={() => act(rev, 'approve')} disabled={acting === rev.id}
-                  style={{ padding: '7px 16px', background: '#16a34a', color: '#fff', border: 'none', borderRadius: 4, fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>Aprobar</button>
-                <button onClick={() => act(rev, 'reject')} disabled={acting === rev.id}
-                  style={{ padding: '7px 16px', background: '#dc2626', color: '#fff', border: 'none', borderRadius: 4, fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>Rechazar</button>
-              </div>
-            )}
-          </div>
-        );
-      })}
-
-      {sustituyendo && (
-        <SustituirRevisor
-          rev={sustituyendo}
-          projectPrefix={projectPrefix}
-          onCerrar={() => setSustituyendo(null)}
-          onHecho={load}
-        />
+        <div style={{ textAlign: 'center', padding: 48, color: '#999', fontSize: 13 }}>
+          {filtro === 'todas' ? 'No hay revisiones aún.' : 'No hay revisiones en este filtro.'}
+        </div>
+      ) : (
+        <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+          {reviews.map(rev => <FilaDeRevision key={rev.id} rev={rev} onAbrir={() => abrir(rev)} />)}
+        </ul>
+      )}
+      {siguiente && reviews?.length > 0 && (
+        <div style={{ textAlign: 'center', marginTop: 8 }}>
+          <button type="button" onClick={() => cargar(siguiente)} disabled={cargandoMas}
+            style={{ padding: '7px 18px', background: '#fff', border: '1px solid #dcdcdc', borderRadius: 4,
+                     fontSize: 13, cursor: cargandoMas ? 'wait' : 'pointer' }}>
+            {cargandoMas ? 'Cargando…' : 'Cargar más'}
+          </button>
+        </div>
       )}
     </div>
   );

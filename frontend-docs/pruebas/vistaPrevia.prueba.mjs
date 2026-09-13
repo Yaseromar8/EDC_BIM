@@ -66,7 +66,8 @@ await test('el visor rapido decide por el nombre y toma la etiqueta del fichero'
 });
 
 await test('Revisiones y Conjuntos pasan el fichero entero al visor rapido', () => {
-    for (const rel of ['components/ReviewsModule.jsx', 'components/SetsModule.jsx']) {
+    // En Revisiones, la vista previa vive en el detalle de la revision (E1).
+    for (const rel of ['components/RevisionDetalle.jsx', 'components/SetsModule.jsx']) {
         assert.match(fuente(rel), /<DocQuickView file=\{preview\}/, rel);
     }
 });

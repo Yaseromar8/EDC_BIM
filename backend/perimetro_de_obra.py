@@ -109,6 +109,10 @@ RUTAS_POR_RECURSO = {
     # sus propias comprobaciones, y una revision parada se quedaba sin
     # la unica via que tiene para desatascarse.
     'reasignar_revisor':  ('doc_reviews', 'rid'),
+    # El DETALLE de una revision, abierto por su enlace o desde Mi Trabajo.
+    # Solo recibe el id, asi que su obra sale de la fila -- igual que `act`.
+    # Sin esta linea, bajo ENFORCE el enlace devolveria 403 PROJECT_UNRESOLVED.
+    'get_review':         ('doc_reviews', 'rid'),
     'delete_set':         ('doc_sets', 'set_id'),
     'get_set_items':      ('doc_sets', 'set_id'),
     'add_set_items':      ('doc_sets', 'set_id'),

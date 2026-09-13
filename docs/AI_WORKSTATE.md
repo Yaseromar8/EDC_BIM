@@ -471,7 +471,15 @@ NO queda WIP propio B4 esperado tras el commit. Siguen exactamente los cinco
 M ajenos y los untracked históricos declarados; Viewer queda +48/-0.
 Los dos KNOWN_FAIL de B4 ahora son PASS, sin modificar expected históricos.
 
-### Unidad REVIEWS incorporada — dos commits sobre a325745, SIN DESPLEGAR
+### Unidad REVIEWS incorporada — dos commits sobre a325745, PUBLICADA Y DESPLEGADA (13-sep)
+
+> **Actualización del 13-sep-2026: el handoff de esta unidad está superado.**
+> - **Auto-Deploy:** comprobado en `Off` en el panel de Render para `visor-ecd-backend-va`, `visor-ecd-portal`, `visor-ecd-frontend` y `visor-ecd-backend` (Oregón). Los cuatro siguen `Yaseromar8/EDC_BIM`, rama `main`, y no hay más servicios.
+> - **Push:** lo hizo el propietario (`origin/main` = `596776013ddb01ddb23104cb41f78e9d679b7227`) y no arrancó ningún despliegue. Hashes finales, sin trailer de coautoría: A = `b913e8a`, B = `5967760`.
+> - **Despliegue manual del propietario:**
+>   - backend de Virginia: `/api/health` → `version 596776013ddb`;
+>   - portal: sirve el lote (el chunk `ReviewsModule-*.js` contiene «sin versión válida»).
+> - **Oregón:** sigue en `cdf7837`. Actualizarlo o retirarlo es una decisión de infraestructura aparte (D9) que no bloquea Reviews.
 
 Esta tarea entra en DOS commits, en este orden, sobre
 `a32574544b9c8f50fb3cda53572c4394b98fa7b7`; tras ellos no queda WIP propio de la
@@ -512,6 +520,27 @@ FALLO CONOCIDO:       test_capacidades_con_puerta (preexistente, /api/docs/minia
 NEXT EXACT ACTION:    confirmar en Render el Auto-Deploy de los servicios que siguen `main` (sobre todo `visor-ecd-backend-va`); si todos están apagados, push normal de A y B, sin forzar; después, planificar con el propietario el despliegue manual.
 DO NOT TOUCH:         el WIP ajeno listado; las revisiones reales de producción; la guarda de cierre por versión nueva; el contrato R01 (PRE / AUTORIDAD_TERMINAL); no desplegar Virginia, no desplegar ni reactivar Oregón, no suspender ni eliminar servicios, y no cambiar Cloud SQL, redes, APS ni frontends desplegados.
 COMMIT/HEAD REF:      a32574544b9c8f50fb3cda53572c4394b98fa7b7
+
+### Unidad REVIEWS · E1 (detalle, navegación y semántica) — COMMITTED sobre 5967760, SIN PUSH, 13-sep
+
+Programa y decisiones aprobadas: `docs/reviews/00_PROGRAMA_Y_DECISIONES.md`. Contrato:
+`docs/reviews/E1_CONTRATO_DE_ACEPTACION.md`. Informe: `docs/reviews/E1_INFORME_DE_CIERRE.md`.
+La unidad anterior (A y B) ya está publicada: `origin/main` = `5967760`, desplegada por el
+propietario en Virginia y en el portal el 13-sep.
+E1 entra en un único commit sobre `5967760` con los 20 ficheros propios de la lista de abajo; tras
+él no queda WIP propio de E1 y siguen exactamente los siete M ajenos y los untracked históricos.
+
+[WIP HANDOFF]
+TAREA:                REVIEWS · E1 (detalle, navegación y semántica) — dictamen del propietario `E1 CODE/TEST GREEN LOCAL = PASS`; COMMITTED en un único commit sobre 5967760, SIN PUSH, SIN DESPLEGAR.
+IMPLEMENTADO:         GET /api/reviews/<rid> (solo lectura, puertas, `acciones` con las reglas de /act, pasos y versión vigente); GET /api/reviews con filtros y paginación por cursor (permiso antes de cortar la página, tope de 1000 filas, `obra_id`); `get_review` en RUTAS_POR_RECURSO; pantalla RevisionDetalle; lista con filtros y «Cargar más»; enlace `/?obra=&revision=` (router, persistencia tras el login, aviso si la obra no es del usuario); Mi Trabajo abre revisiones; «Dar conformidad» ≠ «Aprobar»; confirmación y mensajes.
+PENDIENTE:            1) push, con su propia autorización (NO autorizado todavía); 2) despliegue manual, con su propia autorización (sin migraciones: backend de Virginia y portal); 3) E2 (anular y archivar), NO autorizado todavía; Oregón, sin cambios.
+ARCHIVOS MODIFICADOS: propios, los 20 en el commit de E1: backend/routes/reviews.py, backend/perimetro_de_obra.py, frontend-docs/src/App_Refactor.jsx, frontend-docs/src/components/MiTrabajo.jsx, frontend-docs/src/components/ReviewsModule.jsx, frontend-docs/src/hooks/useFileExplorer.js, frontend-docs/src/pages/HubPage.jsx, frontend-docs/vite.banco.config.js, frontend-docs/pruebas/vistaPrevia.prueba.mjs, docs/AI_WORKSTATE.md; nuevos: backend/tests/test_revision_detalle_y_listado.py, backend/herramientas/ensayo_de_detalle_de_revision.py, frontend-docs/src/components/RevisionDetalle.jsx, frontend-docs/src/utils/revisiones.js, frontend-docs/pruebas/revisiones.prueba.mjs, frontend-docs/probar-revisiones.html, frontend-docs/src/probar-revisiones.jsx, docs/reviews/00_PROGRAMA_Y_DECISIONES.md, docs/reviews/E1_CONTRATO_DE_ACEPTACION.md, docs/reviews/E1_INFORME_DE_CIERRE.md. Ajenos, no tocados (sha256 iguales): .claude/launch.json, docs/filters/evidencias/IDENTIDAD_4D_5D.json, frontend-docs/src/pages/FilesPage.jsx, frontend-react/src/aps/extensions/LOB4DExtension.js, frontend-react/src/components/Viewer.jsx, frontend-react/src/components/ViewerLabelsBar.jsx, frontend-react/src/lib/predictBim.js y los untracked históricos.
+TESTS EJECUTADOS:     desde backend `python -m pytest -q -p no:cacheprovider tests` → 1808 passed / 1 failed (test_capacidades_con_puerta, preexistente); `herramientas/ensayo_de_detalle_de_revision.py` en base desechable con ENFORCE → 25/25; `ensayo_de_version_y_visibilidad.py` → 67/67; `ensayo_de_revisiones.py` sin `.env` → 50/50; `npm test` en frontend-docs → 5 bancos en verde (repetido tras quitar una directiva eslint-disable sobrante); `npx eslint` desde frontend-docs sobre los 11 ficheros JS de E1 → 0 errores / 0 avisos; `npx vite build --outDir <fuera del repo>` → OK; banco `probar-revisiones` y E2E local con backend real → PASS (detalle en el informe); sha256 de los 7 M ajenos iguales a la referencia.
+TESTS PENDIENTES:     UAT humana (Enter/Espacio, pantalla ancha, lector de pantalla) = PENDING; rendimiento con volumen = NOT MEASURED; validación en producción tras el despliegue. El E2E con backend real e identidad inyectada es evidencia válida de la sesión del 13-sep, no un arnés versionado: su servidor quedó en el scratchpad.
+FALLO CONOCIDO:       test_capacidades_con_puerta (preexistente). `npm run build` en sitio falla por EPERM sobre frontend-docs/dist/assets (entorno). Con ENFORCE, una revisión inexistente responde 403 PROJECT_UNRESOLVED del middleware, no el 404 de la ruta.
+NEXT EXACT ACTION:    esperar la autorización del propietario para el push de E1 y, aparte, para su despliegue manual; sin ella: ni push, ni deploy, ni migraciones, ni E2.
+DO NOT TOUCH:         el WIP ajeno listado; el contrato R01 (PRE / AUTORIDAD_TERMINAL); /act, el alta, la sustitución y las plantillas; producción y Oregón. `acciones` del detalle es información para presentación: `/act` sigue siendo la autoridad de ejecución y debe revalidar siempre.
+COMMIT/HEAD REF:      596776013ddb01ddb23104cb41f78e9d679b7227 (padre del commit de E1; el hash del propio commit no se escribe aquí, se consulta con `git log`)
 
 ## FROZEN / DO NOT REOPEN
 
@@ -577,12 +606,21 @@ Observaciones reales, ya conocidas y aceptadas. Ninguna bloquea nada.
    propietario (7-sep-2026). No bloquea B1.
 ## CURRENT TASK
 
-**12-sep-2026 · REVIEWS · versión fijada, visibilidad y acceso documental — COMMITTED, SIN DESPLEGAR.**
-Dos commits sobre `a325745`: A (seguridad de Reviews) y, a continuación, B (vista
-previa por versión). Antes de publicarlos hay que confirmar el Auto-Deploy de
-Render; el despliegue es manual y aún no está planificado. Ver `[WIP HANDOFF]` en
-EXPECTED WORKTREE → «Unidad REVIEWS incorporada». Lo que sigue en esta sección es
-el estado anterior de Filters.
+**13-sep-2026 · REVIEWS · E1 (detalle, navegación y semántica) — COMMITTED sobre `5967760`, SIN PUSH, SIN DESPLEGAR.**
+Dictamen del propietario: `E1 CODE/TEST GREEN LOCAL = PASS`. Push, deploy, migraciones, E2 y
+cambios en Oregón: NO autorizados todavía.
+Primera entrega del programa funcional de Reviews que aprobó el propietario
+(`docs/reviews/00_PROGRAMA_Y_DECISIONES.md`, decisiones D1–D9). Contrato e informe:
+`docs/reviews/E1_CONTRATO_DE_ACEPTACION.md` y `docs/reviews/E1_INFORME_DE_CIERRE.md`.
+Ver `[WIP HANDOFF]` en EXPECTED WORKTREE → «Unidad REVIEWS · E1». E2–E5 no han
+empezado.
+
+La unidad anterior (A `b913e8a` + B `5967760`) está en `origin/main` desde el 13-sep:
+push del propietario, con Auto-Deploy comprobado en `Off` en los cuatro servicios
+que siguen `main`. El propietario la desplegó a mano en el backend de Virginia y en
+el portal. Oregón sigue en `cdf7837`; qué hacer con él es una decisión de
+infraestructura aparte. Lo que sigue en esta sección es el estado anterior de
+Filters.
 
 **HOST DEFECT — POPOUT SCALE / CODE/TEST GREEN — pendiente validación HOST**
 
@@ -635,7 +673,19 @@ autorreferencial del presente documento. Consultar HEAD real por separado.
 
 ## EXACT NEXT ACTION
 
-**Ninguna.** El release y su hotfix están en producción.
+**REVIEWS · E1 (13-sep-2026):** E1 está commiteado sobre `5967760`, con el dictamen del
+propietario `E1 CODE/TEST GREEN LOCAL = PASS`. Esperar su autorización para el push y, aparte,
+para el despliegue manual. Sin ella: ni push, ni deploy, ni migraciones, ni E2, ni cambios en
+Oregón.
+
+Producción medida el 13-sep-2026, tras el lote REVIEWS A+B:
+- backend de Virginia (`visor-ecd-backend-va`): `/api/health` → `version 596776013ddb`;
+- portal: sirve el lote (verificado por contenido);
+- Oregón (`visor-ecd-backend`): en `cdf7837`.
+
+Lo que sigue es el cierre de Filters del 10-sep; sus SHA son de esa fecha.
+
+**Filters (10-sep-2026): ninguna.** El release y su hotfix están en producción.
 
 **LOS DOS SHA DESPLEGADOS SON DISTINTOS Y ESO ES DELIBERADO.**
 

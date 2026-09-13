@@ -12,6 +12,10 @@
  * función contractual —«la Supervisión»— sólo aparece si además se pertenece a
  * esa obra. Abrir cualquiera de estos elementos vuelve a pasar por los guardias
  * de siempre.
+ *
+ * ABRIR UNA REVISIÓN (REVIEWS · E1). Con `onAbrir`, las filas de tipo Revisión
+ * llevan a su detalle. Una fila con asunto neutro también se abre: el detalle
+ * dice que no hay acceso a todos sus documentos, sin nombrar ninguno.
  */
 import React, { useEffect, useState } from 'react';
 import { apiFetch } from '../utils/apiFetch';
@@ -34,7 +38,7 @@ function diasPara(iso) {
   return Math.ceil(ms / 86400000);
 }
 
-export default function MiTrabajo({ compacto = false }) {
+export default function MiTrabajo({ compacto = false, onAbrir = null }) {
   const [estado, setEstado] = useState('cargando');
   const [pendientes, setPendientes] = useState([]);
 
@@ -80,8 +84,9 @@ export default function MiTrabajo({ compacto = false }) {
           {pendientes.slice(0, compacto ? 5 : 50).map((p) => {
             const dias = diasPara(p.vence_en);
             const vencido = dias !== null && dias < 0;
-            return (
-              <li key={p.id} style={S.fila}>
+            const abrible = Boolean(onAbrir) && p.objeto_tipo === 'REVIEW' && p.objeto_id && p.project_id;
+            const contenido = (
+              <>
                 <span style={{ ...S.tipo, ...(vencido ? S.tipoVencido : {}) }}>
                   {ETIQUETA[p.objeto_tipo] || p.objeto_tipo}
                 </span>
@@ -97,6 +102,16 @@ export default function MiTrabajo({ compacto = false }) {
                     {vencido ? `vencido hace ${-dias} d` : `en ${dias} d`}
                   </span>
                 )}
+              </>
+            );
+            return (
+              <li key={p.id} style={abrible ? S.filaAbrible : S.fila}>
+                {abrible ? (
+                  <button type="button" style={S.boton} title="Abrir la revisión"
+                          onClick={() => onAbrir({ obra: p.project_id, revision: p.objeto_id })}>
+                    {contenido}
+                  </button>
+                ) : contenido}
               </li>
             );
           })}
@@ -117,6 +132,10 @@ const S = {
   lista: { listStyle: 'none', margin: 0, padding: 0 },
   fila: { display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0',
           borderTop: '1px solid rgba(255,255,255,.06)' },
+  filaAbrible: { borderTop: '1px solid rgba(255,255,255,.06)' },
+  boton: { display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', width: '100%',
+           background: 'none', border: 'none', color: 'inherit', font: 'inherit',
+           textAlign: 'left', cursor: 'pointer' },
   tipo: { fontSize: 11, fontWeight: 700, letterSpacing: .4, textTransform: 'uppercase',
           background: 'rgba(255,255,255,.07)', borderRadius: 6, padding: '3px 8px',
           minWidth: 92, textAlign: 'center' },

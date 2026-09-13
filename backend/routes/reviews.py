@@ -428,6 +428,17 @@ def _con_asociacion_documental(cur, rev):
     return rev
 
 
+# LAS COLUMNAS QUE LEEN EL LISTADO Y EL DETALLE, en el orden que espera
+# `_row_to_dict`. Una sola definicion para las dos lecturas: si manana se anade
+# una columna, no puede quedar una de las dos pantallas leyendo otra forma.
+# `/act` y la sustitucion conservan la suya, con FOR UPDATE.
+_COLUMNAS_DE_REVISION = """id, model_urn, title, items, steps, current_step, status,
+                                  final_status, history, created_by, created_at,
+                                  codigo_idoneidad, cerrada_en, paso_vence_en,
+                                  plantilla_id, plantilla_nombre, plantilla_version,
+                                  contrato"""
+
+
 def _row_to_dict(r):
     return {
         "id": r[0], "model_urn": r[1], "title": r[2], "items": r[3],
@@ -472,8 +483,208 @@ def _con_estado_del_flujo(cur, rev):
     return rev
 
 
+# ── LECTURA: LISTADO FILTRADO Y DETALLE (REVIEWS · E1) ───────────────────────
+#
+# Solo leen. Lo que ensenan sobre QUIEN puede actuar y COMO se llama lo que
+# puede hacer sale de las MISMAS funciones que usa `/act`, para que la pantalla
+# no ofrezca un boton que el servidor va a negar ni esconda uno que acepta.
+# `/act` lo vuelve a comprobar todo: esto es presentacion, no autoridad.
+
+FILTROS_DEL_LISTADO = ('todas', 'me_toca', 'en_curso', 'bloqueadas', 'terminadas',
+                       'iniciadas_por_mi')
+_LIMITE_POR_DEFECTO = 20
+_LIMITE_MAXIMO = 100
+_LOTE_DE_LECTURA = 100
+# Tope de filas EXAMINADAS por peticion. El permiso documental se pregunta fila
+# a fila y ANTES de cortar la pagina; sin tope, alguien que no ve casi nada haria
+# recorrer la obra entera en cada peticion. Al alcanzarlo se devuelve `siguiente`
+# para continuar desde ahi.
+_TOPE_DE_FILAS_EXAMINADAS = 1000
+
+
+def _codigo_de_revision(rid):
+    return 'RV-%03d' % int(rid)
+
+
+def _me_toca(usuario, rev):
+    """¿Tiene que actuar esta persona AHORA? La misma identidad que decide `/act`."""
+    import flujo_de_revision as flujo
+    if rev.get('status') != 'pending' or rev.get('flujo') != 'ACTIVA':
+        return False
+    return flujo.puede_actuar(usuario, flujo.paso_en(rev.get('steps'), rev.get('current_step')))
+
+
+def _con_versiones_vigentes(cur, rev):
+    """Anade a cada documento su version VIGENTE, para poder decir «hay una nueva».
+
+    La revision no se toca: juzga la version fijada. Y la comparacion es la de la
+    guarda del cierre -- `file_nodes.current_version_id` distinta de la fijada --,
+    asi que lo que aqui se ve como «version nueva» es exactamente lo que va a
+    impedir cerrar. Los documentos cuya asociacion no se sostiene no se miran.
+    """
+    nodos = sorted({_uuid(it.get('node_id')) for it in (rev.get('items') or [])
+                    if isinstance(it, dict) and it.get('asociacion_valida') is not False
+                    and _uuid(it.get('node_id'))})
+    if not nodos:
+        return rev
+    cur.execute("SELECT id::text, current_version_id::text, version_number FROM file_nodes "
+                " WHERE id = ANY(%s::uuid[]) AND model_urn = %s", (nodos, rev['model_urn']))
+    vigentes = {f[0]: (f[1], f[2]) for f in cur.fetchall()}
+    items = []
+    for it in rev.get('items') or []:
+        if isinstance(it, dict) and it.get('asociacion_valida') is not False:
+            vigente = vigentes.get(_uuid(it.get('node_id')) or '')
+            if vigente:
+                fijada = _uuid(it.get('version_id'))
+                it = dict(it, version_vigente_numero=vigente[1],
+                          es_version_vigente=(None if not fijada else
+                                              not (vigente[0] and vigente[0] != fijada)))
+        items.append(it)
+    rev['items'] = items
+    return rev
+
+
+def _pasos_para_mostrar(rev):
+    """Los pasos como se ensenan: papel, estado, acto registrado y sustituciones.
+
+    Se DERIVAN de `steps`, `current_step`, `status` e `history`; no se guarda nada
+    nuevo. El papel es el que declara el paso (`decision`): una PRE historica
+    puede no tenerlo, y entonces no se inventa.
+    """
+    import flujo_de_revision as flujo
+    pasos = rev.get('steps') or []
+    actual = rev.get('current_step') or 0
+    estado_de_la_revision = rev.get('status')
+    historia = [h for h in (rev.get('history') or []) if isinstance(h, dict)]
+    salida = []
+    for i, paso in enumerate(pasos):
+        paso = paso if isinstance(paso, dict) else {}
+        if estado_de_la_revision == 'approved':
+            estado = 'hecho'
+        elif estado_de_la_revision == 'rejected':
+            estado = ('hecho' if i < actual else 'rechazado' if i == actual
+                      else 'no_alcanzado')
+        else:
+            estado = 'hecho' if i < actual else 'actual' if i == actual else 'pendiente'
+        actos = [h for h in historia if h.get('event') in ('approve', 'reject')
+                 and h.get('step') == i]
+        inicios = [h for h in historia if h.get('event') == 'step_started'
+                   and h.get('step') == i]
+        salida.append({
+            'numero': i + 1,
+            'etiqueta': paso.get('etiqueta'),
+            'persona': flujo.etiqueta_del_paso(paso),
+            'user_id': paso.get('user_id'),
+            'decision': flujo.decision_del_paso(paso),
+            'terminal': flujo.es_paso_terminal(pasos, i),
+            'dias': paso.get('dias'),
+            'estado': estado,
+            'acto': ({k: actos[-1].get(k) for k in ('event', 'by', 'at', 'comment', 'emitido')}
+                     if actos else None),
+            'inicio': inicios[-1].get('at') if inicios else None,
+            'vence': (rev.get('paso_vence_en') if estado == 'actual'
+                      else (inicios[-1].get('due') if inicios else None)),
+            'sustituciones': [{k: h.get(k) for k in ('from', 'to', 'by', 'reason', 'at')}
+                              for h in historia
+                              if h.get('event') == 'step_reassigned' and h.get('step') == i],
+        })
+    return salida
+
+
+def _acciones_para(cur, usuario, rev):
+    """Que puede hacer ESTA persona ahora mismo con esta revision.
+
+    Las mismas preguntas, en el mismo orden, que `/act`: si el paso le toca, si
+    puede consultar todos los documentos, que permite el contrato PERSISTIDO y,
+    para aprobar, la asociacion de versiones y la guarda de version nueva del
+    cierre. No cambia ninguna regla ni decide nada: `/act` lo vuelve a comprobar.
+
+    Espera la revision marcada por `_con_asociacion_documental`,
+    `_con_versiones_vigentes` y `_con_estado_del_flujo`.
+    """
+    import flujo_de_revision as flujo
+    acciones = {
+        'aprobar': {'disponible': False, 'tipo': None, 'motivo_no': '',
+                    'siguiente_paso': None, 'destino': None},
+        'rechazar': {'disponible': False, 'motivo_no': ''},
+        'sustituir': False,
+        'motivo': '',
+    }
+    if rev.get('status') != 'pending':
+        acciones['motivo'] = 'La revisión ya terminó.'
+        return acciones
+    if rev.get('flujo') == 'BLOQUEADA':
+        acciones['motivo'] = 'La revisión no puede avanzar: %s.' % (
+            rev.get('flujo_motivo') or 'está bloqueada')
+        # La unica salida, con la puerta de `/reasignar`: rol GLOBAL de administrador.
+        acciones['sustituir'] = (usuario or {}).get('role') == 'admin'
+        return acciones
+
+    pasos = rev.get('steps') or []
+    indice = rev.get('current_step') or 0
+    paso = flujo.paso_en(pasos, indice)
+    if not flujo.puede_actuar(usuario, paso):
+        acciones['motivo'] = 'Este paso le corresponde a %s.' % flujo.etiqueta_del_paso(paso)
+        return acciones
+    if not flujo.puede_consultar_la_revision(cur, usuario, rev['model_urn'], rev['items']):
+        acciones['motivo'] = ('No puedes actuar en esta revisión: no tienes acceso a todos '
+                              'sus documentos.')
+        return acciones
+    contrato = rev.get('contrato')
+    if not flujo.contrato_conocido(contrato):
+        acciones['motivo'] = ('Esta revisión declara un contrato que este motor no entiende, '
+                              'así que no se toca.')
+        return acciones
+
+    puede_rechazar, motivo_rechazo = flujo.acto_permitido(contrato, pasos, indice, 'reject')
+    acciones['rechazar'] = {'disponible': puede_rechazar,
+                            'motivo_no': '' if puede_rechazar else motivo_rechazo}
+
+    puede_aprobar, motivo_no = flujo.acto_permitido(contrato, pasos, indice, 'approve')
+    cierra = puede_aprobar and flujo.cierra_positivamente(contrato, pasos, indice)
+    if cierra:
+        tipo = 'aprobar_y_cerrar'
+    elif contrato == flujo.AUTORIDAD_TERMINAL and flujo.decision_del_paso(paso) == plt.REVISA:
+        tipo = 'conformidad'
+    else:
+        tipo = 'aprobar'
+    items = [it for it in (rev.get('items') or []) if isinstance(it, dict)]
+    if (puede_aprobar and contrato == flujo.AUTORIDAD_TERMINAL
+            and any(it.get('asociacion_valida') is False for it in items)):
+        puede_aprobar = False
+        motivo_no = ('Un documento no tiene fijada una versión válida: no se puede aprobar; '
+                     'se puede rechazar.')
+    if puede_aprobar and cierra:
+        nuevas = [it for it in items
+                  if it.get('version_id') and it.get('es_version_vigente') is False]
+        if nuevas:
+            puede_aprobar = False
+            motivo_no = ('Hay una versión nueva de %s: aprobar cerraría la revisión sobre algo '
+                         'que nadie revisó. Hay que volver a mandarlo a revisión.'
+                         % ', '.join(it.get('name') or 'un documento' for it in nuevas[:5]))
+    siguiente = None
+    if not cierra and indice + 1 < len(pasos):
+        siguiente = {'numero': indice + 2,
+                     'persona': flujo.etiqueta_del_paso(flujo.paso_en(pasos, indice + 1))}
+    acciones['aprobar'] = {'disponible': puede_aprobar, 'tipo': tipo,
+                           'motivo_no': '' if puede_aprobar else motivo_no,
+                           'siguiente_paso': siguiente,
+                           'destino': rev.get('final_status') if cierra else None}
+    return acciones
+
+
 @reviews_bp.route('/api/reviews', methods=['GET'])
 def list_reviews():
+    """Las revisiones de una obra que esta persona puede ver, filtradas y por paginas.
+
+    FILTROS: todas · me_toca (en curso, activa y es quien actua) · en_curso ·
+    bloqueadas · terminadas · iniciadas_por_mi (`created_by`, correo o nombre).
+
+    PAGINAS POR CURSOR: `antes_de` es un id y el orden es descendente. El permiso
+    documental y el filtro se aplican ANTES de cortar la pagina, asi que una
+    pagina no sale corta por revisiones que no se pueden ver -- salvo al llegar
+    al tope de filas examinadas, que devuelve `siguiente` para continuar.
+    """
     model_urn = request.args.get('model_urn')
     if not model_urn:
         return jsonify({"success": False, "error": "Falta model_urn"}), 400
@@ -482,30 +693,135 @@ def list_reviews():
     from routes.documents import verify_project_access
     if not verify_project_access(_user(), model_urn):
         return jsonify({"success": False, "error": "No tienes acceso a esta obra."}), 403
+    filtro = (request.args.get('filtro') or 'todas').strip().lower()
+    if filtro not in FILTROS_DEL_LISTADO:
+        return jsonify({"success": False, "error": "Ese filtro de revisiones no existe.",
+                        "code": "FILTRO_DESCONOCIDO"}), 400
+    try:
+        limite = int(request.args.get('limite') or _LIMITE_POR_DEFECTO)
+        antes_de = request.args.get('antes_de')
+        antes_de = int(antes_de) if antes_de not in (None, '') else None
+    except (TypeError, ValueError):
+        limite, antes_de = 0, None
+    if not 1 <= limite <= _LIMITE_MAXIMO or (antes_de is not None and antes_de < 1):
+        return jsonify({"success": False, "error": "La paginación pedida no es válida.",
+                        "code": "PAGINACION_NO_VALIDA"}), 400
+
+    usuario = _user()
+    condiciones, parametros = ['model_urn = %s'], [model_urn]
+    if filtro in ('me_toca', 'en_curso', 'bloqueadas'):
+        condiciones.append("COALESCE(status, 'pending') = 'pending'")
+    elif filtro == 'terminadas':
+        condiciones.append("COALESCE(status, 'pending') <> 'pending'")
+    elif filtro == 'iniciadas_por_mi':
+        quien = sorted({(x or '').strip().lower() for x in
+                        (usuario.get('email'), usuario.get('name')) if (x or '').strip()})
+        if not quien:
+            return jsonify({"success": True, "reviews": [], "siguiente": None,
+                            "filtro": filtro, "limite": limite})
+        condiciones.append('LOWER(created_by) = ANY(%s)')
+        parametros.append(quien)
     try:
         with get_db_connection() as conn:
             cur = conn.cursor()
-            cur.execute("""SELECT id, model_urn, title, items, steps, current_step, status,
-                                  final_status, history, created_by, created_at,
-                                  codigo_idoneidad, cerrada_en, paso_vence_en,
-                                  plantilla_id, plantilla_nombre, plantilla_version,
-                                  contrato
-                           FROM doc_reviews WHERE model_urn = %s ORDER BY id DESC LIMIT 200""",
-                        (model_urn,))
-            filas = cur.fetchall()
             # QUIEN VE CADA REVISION: la regla documental, no solo la obra (ver
             # `_puede_ver_la_revision`). Los hechos del usuario se calculan UNA vez.
             import permiso_documental as pd
-            usuario = _user()
             contexto = pd.contexto_de_permisos(cur, usuario, model_urn)
-            vistos, data = {}, []
-            for r in filas:
-                rev = _row_to_dict(r)
-                if not _puede_ver_la_revision(cur, usuario, model_urn, rev['items'],
-                                              contexto, vistos):
-                    continue
-                data.append(_con_estado_del_flujo(cur, _con_asociacion_documental(cur, rev)))
-        return jsonify({"success": True, "reviews": data})
+            vistos, data, siguiente = {}, [], None
+            cursor_id, examinadas, ultima = antes_de, 0, None
+            while True:
+                donde = condiciones + (['id < %s'] if cursor_id else [])
+                cur.execute('SELECT ' + _COLUMNAS_DE_REVISION + ' FROM doc_reviews WHERE '
+                            + ' AND '.join(donde) + ' ORDER BY id DESC LIMIT %s',
+                            tuple(parametros + ([cursor_id] if cursor_id else [])
+                                  + [_LOTE_DE_LECTURA]))
+                filas = cur.fetchall()
+                for r in filas:
+                    examinadas += 1
+                    ultima = r[0]
+                    rev = _row_to_dict(r)
+                    if not _puede_ver_la_revision(cur, usuario, model_urn, rev['items'],
+                                                  contexto, vistos):
+                        continue
+                    rev = _con_estado_del_flujo(cur, _con_asociacion_documental(cur, rev))
+                    rev['me_toca'] = _me_toca(usuario, rev)
+                    if filtro == 'me_toca' and not rev['me_toca']:
+                        continue
+                    if filtro == 'bloqueadas' and rev.get('flujo') != 'BLOQUEADA':
+                        continue
+                    if len(data) >= limite:
+                        # Hay al menos una mas que ensenar: la lista continua.
+                        siguiente = data[-1]['id']
+                        break
+                    rev['codigo'] = _codigo_de_revision(rev['id'])
+                    data.append(rev)
+                if siguiente is not None or len(filas) < _LOTE_DE_LECTURA:
+                    break
+                cursor_id = ultima
+                if examinadas >= _TOPE_DE_FILAS_EXAMINADAS:
+                    siguiente = data[-1]['id'] if len(data) >= limite else ultima
+                    break
+        # `obra_id` es lo que lleva el enlace de cada revision (`?obra=`).
+        return jsonify({"success": True, "reviews": data, "siguiente": siguiente,
+                        "filtro": filtro, "limite": limite,
+                        "obra_id": resolve_project_id(model_urn)})
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@reviews_bp.route('/api/reviews/<int:rid>', methods=['GET'])
+def get_review(rid):
+    """El detalle de UNA revision: documentos y versiones, pasos, historial y lo
+    que esta persona puede hacer ahora. Solo lectura.
+
+    Se abre por su enlace (`/?obra=<id>&revision=<rid>`) o desde Mi Trabajo, con
+    las mismas puertas que el listado: la obra de la FILA guardada y poder
+    consultar TODOS sus documentos. Si no, 403 sin titulo ni nombres: el enlace
+    solo confirma que la revision existe, que es lo que Mi Trabajo ya dice con su
+    asunto neutro. `model_urn`, si llega, es el ambito de la pantalla que la pide:
+    una revision de otra obra no se ensena dentro de esta.
+    """
+    usuario = _user()
+    try:
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            cur.execute('SELECT ' + _COLUMNAS_DE_REVISION + ' FROM doc_reviews WHERE id = %s',
+                        (rid,))
+            fila = cur.fetchone()
+            if not fila:
+                return jsonify({"success": False, "error": "Esa revisión no existe.",
+                                "code": "REVISION_NO_ENCONTRADA"}), 404
+            rev = _row_to_dict(fila)
+            # La obra sale de la revision guardada, no de lo que mande el cliente.
+            from routes.documents import verify_project_access
+            if not verify_project_access(usuario, rev['model_urn']):
+                return jsonify({"success": False, "error": "No tienes acceso a esta obra.",
+                                "code": "SIN_ACCESO_A_LA_OBRA"}), 403
+            obra = resolve_project_id(rev['model_urn'])
+            ambito = request.args.get('model_urn')
+            destino = resolve_project_id(ambito) if ambito else None
+            if destino and obra and destino != obra:
+                return jsonify({"success": False, "error": "Esa revisión es de otra obra.",
+                                "code": "REVISION_DE_OTRA_OBRA"}), 404
+            import permiso_documental as pd
+            contexto = pd.contexto_de_permisos(cur, usuario, rev['model_urn'])
+            if not _puede_ver_la_revision(cur, usuario, rev['model_urn'], rev['items'],
+                                          contexto, {}):
+                return jsonify({
+                    "success": False,
+                    "error": ("No puedes ver esta revisión: no tienes acceso a todos sus "
+                              "documentos. Pide acceso a quien administra la obra."),
+                    "code": "SIN_PERMISO_DOCUMENTAL"}), 403
+            rev = _con_versiones_vigentes(cur, _con_asociacion_documental(cur, rev))
+            rev = _con_estado_del_flujo(cur, rev)
+            rev['codigo'] = _codigo_de_revision(rev['id'])
+            rev['obra_id'] = obra
+            rev['me_toca'] = _me_toca(usuario, rev)
+            rev['pasos'] = _pasos_para_mostrar(rev)
+            rev['acciones'] = _acciones_para(cur, usuario, rev)
+        return jsonify({"success": True, "revision": rev})
     except Exception as e:
         traceback.print_exc()
         return jsonify({"success": False, "error": str(e)}), 500

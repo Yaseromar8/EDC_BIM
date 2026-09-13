@@ -96,7 +96,10 @@ export function useFileExplorer(project, user) {
 
   // ── Misc UI State ──
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
-  const [sidebarView, setSidebarView] = useState('files');
+  // Un enlace a una revisión (`?revision=<id>`) abre directamente Revisiones;
+  // `ReviewsView` lee el mismo parámetro para mostrar su detalle.
+  const [sidebarView, setSidebarView] = useState(() => (
+    /[?&]revision=\d+(&|$)/.test(window.location.search) ? 'reviews' : 'files'));
 
   // CAPA 16 · TOOL ACTIVATION: que herramientas EXISTEN en esta obra. Lo lee
   // el menu para no ofrecer lo que el servidor va a negar. No autoriza nada:
