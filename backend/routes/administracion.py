@@ -186,8 +186,13 @@ def candidatos_de_obra(project_id):
     la misma tensión que ACC resuelve dándole al Project Admin el directorio
     de la cuenta SOLO en el acto de añadir miembros. Esto es eso: visible
     únicamente para quien pasa `guardia_administrativa`, y devuelve solo lo
-    incorporable (activos, no miembros ya, sin Entity Admins — que alcanzan
-    todas las obras sin membresía).
+    incorporable: activos y que no sean ya miembros.
+
+    EL ADMINISTRADOR DE LA ENTIDAD TAMBIÉN (E1.1). Administra todas las obras
+    sin membresía, y eso no cambia. Pero participar es otra cosa: para revisar
+    un documento o recibir un encargo en ESTA obra hay que estar en su equipo
+    --lo exige el alta de revisiones--, y hasta ahora no había forma de ponerle
+    en él. Sale con su `role` para que la pantalla lo distinga.
 
     Los PENDIENTES sí salen (con su marca): incorporar a un invitado antes
     de que active es el flujo normal de arranque de una obra.
@@ -207,18 +212,17 @@ def candidatos_de_obra(project_id):
                 return negativa
             cur.execute("""
                 SELECT u.id, u.name, u.email, c.name, u.company_id,
-                       (u.activated_at IS NULL) AS pendiente
+                       (u.activated_at IS NULL) AS pendiente, u.role
                   FROM users u
              LEFT JOIN companies c ON c.id = u.company_id
                  WHERE COALESCE(u.is_active, TRUE)
-                   AND u.role <> 'admin'
                    AND u.id NOT IN (SELECT user_id FROM project_users
                                      WHERE project_id = %s)
                  ORDER BY u.name NULLS LAST, u.email
             """, (obra,))
             gente = [{'id': r[0], 'name': r[1], 'email': r[2],
                       'empresa': r[3], 'company_id': r[4],
-                      'pendiente': bool(r[5])} for r in cur.fetchall()]
+                      'pendiente': bool(r[5]), 'role': r[6]} for r in cur.fetchall()]
         return jsonify({'project_id': obra, 'candidatos': gente}), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -238,6 +242,13 @@ def incorporar_miembro(project_id):
     carpeta, ni concede administración. Solo nace la fila de membresía
     (es_admin FALSE, assigned_at ahora) — el resto de la cadena se decide en
     sus propios controles.
+
+    UN ADMINISTRADOR DE LA ENTIDAD SÍ SE INCORPORA (E1.1). Antes se rechazaba
+    con ENTITY_ADMIN_SIN_MEMBRESIA: «su alcance no sale de la fila». Es verdad
+    para el ACCESO, que sigue sin depender de ella (todas las comprobaciones
+    miran antes si administra la entidad). Pero la fila también dice quién
+    PARTICIPA, y eso lo exigen el alta de revisiones, los encargos y Mi
+    Trabajo: sin ella, el mensaje «añádelo a la obra» pedía algo imposible.
     """
     obra = resolve_project_id(project_id)
     if not obra:
@@ -264,15 +275,6 @@ def incorporar_miembro(project_id):
             fila = cur.fetchone()
             if not fila:
                 return jsonify({'error': 'Esa persona no existe'}), 404
-            if fila[0] == 'admin':
-                # No es un capricho: la membresía de un Entity Admin sería una
-                # fila mentirosa — su alcance no sale de ella y retirársela no
-                # le quitaría nada.
-                return jsonify({
-                    'error': 'El Administrador de la entidad alcanza todas '
-                             'las obras sin membresía: no hay nada que '
-                             'incorporar.',
-                    'code': 'ENTITY_ADMIN_SIN_MEMBRESIA'}), 409
             if not fila[1]:
                 return jsonify({
                     'error': 'Esa cuenta está desactivada. Reactívala (o '

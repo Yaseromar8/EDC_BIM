@@ -25,6 +25,7 @@ def entorno(monkeypatch):
     estado = {
         'miembros': {10, 11, 12},     # membresía actual de la obra
         'no_admins': {10, 11, 12, 13, 14},  # ids válidos con role != admin
+        'admins': set(),              # administradores con fila de participación (E1.1)
         'deletes': [],
         'inserts': [],
     }
@@ -42,6 +43,8 @@ def entorno(monkeypatch):
             s = (self.ultimo or ('',))[0].upper()
             if 'SELECT USER_ID FROM PROJECT_USERS' in s:
                 return [(u,) for u in sorted(estado['miembros'])]
+            if 'SELECT U.ID FROM USERS U' in s and "U.ROLE = 'ADMIN'" in s:
+                return [(u,) for u in sorted(set(self.ultimo[1][0]) & estado['admins'])]
             if 'SELECT ID FROM USERS' in s:
                 pedidos = set(self.ultimo[1][0])
                 return [(u,) for u in sorted(pedidos & estado['no_admins'])]
@@ -112,3 +115,26 @@ def test_sin_admin_no_se_guarda(entorno):
     r = c.post('/api/projects/obra-x/users', json={'user_ids': []})
     assert r.status_code in (401, 403)
     assert estado['deletes'] == [] and estado['inserts'] == []
+
+
+def test_guardar_accesos_no_borra_la_participacion_de_un_admin(entorno):
+    # E1.1. Un administrador de la entidad puede participar en una obra (para
+    # revisar o recibir encargos). Esta lista nunca lo trae, asi que guardar
+    # por diferencia lo borraba en silencio: se quedaba fuera de sus revisiones.
+    c, estado = entorno
+    estado['miembros'] = {10, 11, 12, 2}
+    estado['admins'] = {2}
+    r = c.post('/api/projects/obra-x/users', json={'user_ids': [10, 11, 12]}, headers=ADMIN)
+    assert r.status_code == 200
+    assert estado['deletes'] == [], 'borro la participacion del administrador'
+    assert r.get_json()['salieron'] == []
+
+
+def test_el_admin_se_queda_y_el_desmarcado_sale(entorno):
+    c, estado = entorno
+    estado['miembros'] = {10, 11, 12, 2}
+    estado['admins'] = {2}
+    r = c.post('/api/projects/obra-x/users', json={'user_ids': [10, 11]}, headers=ADMIN)
+    assert r.status_code == 200
+    assert len(estado['deletes']) == 1
+    assert estado['deletes'][0][1] == [12], 'debe borrar solo al que sale, no al administrador'

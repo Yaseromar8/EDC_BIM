@@ -128,8 +128,8 @@ def _pasos_validos(cur, obra, steps, contrato):
             quien = cur.fetchone() or ('', '')
             return jsonify({
                 "success": False,
-                "error": "%s no pertenece a esta obra, asi que no puede revisar "
-                         "el paso %d. Anadelo a la obra primero." % (
+                "error": "%s no pertenece a esta obra, así que no puede revisar "
+                         "el paso %d. Añádelo a la obra primero." % (
                              quien[0] or quien[1] or ('usuario %s' % uid), i + 1),
                 "code": "REVISOR_FUERA_DE_LA_OBRA",
             }), 400

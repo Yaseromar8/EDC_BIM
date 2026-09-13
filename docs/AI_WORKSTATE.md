@@ -521,26 +521,65 @@ NEXT EXACT ACTION:    confirmar en Render el Auto-Deploy de los servicios que si
 DO NOT TOUCH:         el WIP ajeno listado; las revisiones reales de producción; la guarda de cierre por versión nueva; el contrato R01 (PRE / AUTORIDAD_TERMINAL); no desplegar Virginia, no desplegar ni reactivar Oregón, no suspender ni eliminar servicios, y no cambiar Cloud SQL, redes, APS ni frontends desplegados.
 COMMIT/HEAD REF:      a32574544b9c8f50fb3cda53572c4394b98fa7b7
 
-### Unidad REVIEWS · E1 (detalle, navegación y semántica) — COMMITTED sobre 5967760, SIN PUSH, 13-sep
+### Unidad REVIEWS · E1 (detalle, navegación y semántica) — DESPLEGADA (68b14b8 en Virginia y portal), 13-sep
 
 Programa y decisiones aprobadas: `docs/reviews/00_PROGRAMA_Y_DECISIONES.md`. Contrato:
 `docs/reviews/E1_CONTRATO_DE_ACEPTACION.md`. Informe: `docs/reviews/E1_INFORME_DE_CIERRE.md`.
 La unidad anterior (A y B) ya está publicada: `origin/main` = `5967760`, desplegada por el
 propietario en Virginia y en el portal el 13-sep.
-E1 entra en un único commit sobre `5967760` con los 20 ficheros propios de la lista de abajo; tras
-él no queda WIP propio de E1 y siguen exactamente los siete M ajenos y los untracked históricos.
+E1 está en el commit `68b14b8` (padre `5967760`, 20 ficheros), aceptado (`E1 COMMIT = PASS`) y publicado en
+`origin/main` el 13-sep con push normal. Antes del push se comprobó en el panel Auto-Deploy `Off` en los
+cuatro servicios (no hay más), y el push no arrancó ningún despliegue.
+El propietario lo desplegó a mano el 13-sep, primero el backend y después el portal. Verificado: Virginia
+`/api/health` → `version 68b14b8c7d5a`; el portal (origen de Render y `alephia.com.pe`) sirve
+`index-BmVOYVjH.js`, que contiene «Dar conformidad» y «Abriendo la revisión», textos que solo existen desde
+`68b14b8`. Oregón sigue en `cdf783754574`; el visor no forma parte de E1.
+Excepción menor de alcance, registrada por el propietario: `SustituirRevisor` conserva la semántica de
+sustitución de `5967760`, pero se retiró su prop no usada `projectPrefix` (diferencia técnica, no funcional).
+La documentación que el propietario pidió no commitear aparte (el informe corregido, la guía y los
+hallazgos de la UAT) entró en el commit de E1.1. Siguen exactamente los siete M ajenos y los untracked
+históricos.
 
 [WIP HANDOFF]
-TAREA:                REVIEWS · E1 (detalle, navegación y semántica) — dictamen del propietario `E1 CODE/TEST GREEN LOCAL = PASS`; COMMITTED en un único commit sobre 5967760, SIN PUSH, SIN DESPLEGAR.
+TAREA:                REVIEWS · E1 (detalle, navegación y semántica) — `E1 CODE/TEST GREEN LOCAL = PASS` y `E1 COMMIT = PASS`; commit 68b14b8 en origin/main y DESPLEGADO por el propietario el 13-sep (backend de Virginia y portal), verificado por /api/health y por contenido.
 IMPLEMENTADO:         GET /api/reviews/<rid> (solo lectura, puertas, `acciones` con las reglas de /act, pasos y versión vigente); GET /api/reviews con filtros y paginación por cursor (permiso antes de cortar la página, tope de 1000 filas, `obra_id`); `get_review` en RUTAS_POR_RECURSO; pantalla RevisionDetalle; lista con filtros y «Cargar más»; enlace `/?obra=&revision=` (router, persistencia tras el login, aviso si la obra no es del usuario); Mi Trabajo abre revisiones; «Dar conformidad» ≠ «Aprobar»; confirmación y mensajes.
-PENDIENTE:            1) push, con su propia autorización (NO autorizado todavía); 2) despliegue manual, con su propia autorización (sin migraciones: backend de Virginia y portal); 3) E2 (anular y archivar), NO autorizado todavía; Oregón, sin cambios.
-ARCHIVOS MODIFICADOS: propios, los 20 en el commit de E1: backend/routes/reviews.py, backend/perimetro_de_obra.py, frontend-docs/src/App_Refactor.jsx, frontend-docs/src/components/MiTrabajo.jsx, frontend-docs/src/components/ReviewsModule.jsx, frontend-docs/src/hooks/useFileExplorer.js, frontend-docs/src/pages/HubPage.jsx, frontend-docs/vite.banco.config.js, frontend-docs/pruebas/vistaPrevia.prueba.mjs, docs/AI_WORKSTATE.md; nuevos: backend/tests/test_revision_detalle_y_listado.py, backend/herramientas/ensayo_de_detalle_de_revision.py, frontend-docs/src/components/RevisionDetalle.jsx, frontend-docs/src/utils/revisiones.js, frontend-docs/pruebas/revisiones.prueba.mjs, frontend-docs/probar-revisiones.html, frontend-docs/src/probar-revisiones.jsx, docs/reviews/00_PROGRAMA_Y_DECISIONES.md, docs/reviews/E1_CONTRATO_DE_ACEPTACION.md, docs/reviews/E1_INFORME_DE_CIERRE.md. Ajenos, no tocados (sha256 iguales): .claude/launch.json, docs/filters/evidencias/IDENTIDAD_4D_5D.json, frontend-docs/src/pages/FilesPage.jsx, frontend-react/src/aps/extensions/LOB4DExtension.js, frontend-react/src/components/Viewer.jsx, frontend-react/src/components/ViewerLabelsBar.jsx, frontend-react/src/lib/predictBim.js y los untracked históricos.
+PENDIENTE:            1) UAT del propietario en producción, con docs/reviews/E1_GUIA_DE_PRUEBA.md (enlace, Mi Trabajo, botones por paso; Enter/Espacio, pantalla ancha y lector de pantalla); 2) E2 (anular y archivar), NO autorizado todavía; Oregón, sin cambios.
+ARCHIVOS MODIFICADOS: la documentación pendiente (docs/reviews/E1_INFORME_DE_CIERRE.md, docs/reviews/E1_GUIA_DE_PRUEBA.md, docs/reviews/E1_UAT_HALLAZGOS.md) entró en el commit de E1.1. Propios, los 20 en el commit 68b14b8: backend/routes/reviews.py, backend/perimetro_de_obra.py, frontend-docs/src/App_Refactor.jsx, frontend-docs/src/components/MiTrabajo.jsx, frontend-docs/src/components/ReviewsModule.jsx, frontend-docs/src/hooks/useFileExplorer.js, frontend-docs/src/pages/HubPage.jsx, frontend-docs/vite.banco.config.js, frontend-docs/pruebas/vistaPrevia.prueba.mjs, docs/AI_WORKSTATE.md; nuevos: backend/tests/test_revision_detalle_y_listado.py, backend/herramientas/ensayo_de_detalle_de_revision.py, frontend-docs/src/components/RevisionDetalle.jsx, frontend-docs/src/utils/revisiones.js, frontend-docs/pruebas/revisiones.prueba.mjs, frontend-docs/probar-revisiones.html, frontend-docs/src/probar-revisiones.jsx, docs/reviews/00_PROGRAMA_Y_DECISIONES.md, docs/reviews/E1_CONTRATO_DE_ACEPTACION.md, docs/reviews/E1_INFORME_DE_CIERRE.md. Ajenos, no tocados (sha256 iguales): .claude/launch.json, docs/filters/evidencias/IDENTIDAD_4D_5D.json, frontend-docs/src/pages/FilesPage.jsx, frontend-react/src/aps/extensions/LOB4DExtension.js, frontend-react/src/components/Viewer.jsx, frontend-react/src/components/ViewerLabelsBar.jsx, frontend-react/src/lib/predictBim.js y los untracked históricos.
 TESTS EJECUTADOS:     desde backend `python -m pytest -q -p no:cacheprovider tests` → 1808 passed / 1 failed (test_capacidades_con_puerta, preexistente); `herramientas/ensayo_de_detalle_de_revision.py` en base desechable con ENFORCE → 25/25; `ensayo_de_version_y_visibilidad.py` → 67/67; `ensayo_de_revisiones.py` sin `.env` → 50/50; `npm test` en frontend-docs → 5 bancos en verde (repetido tras quitar una directiva eslint-disable sobrante); `npx eslint` desde frontend-docs sobre los 11 ficheros JS de E1 → 0 errores / 0 avisos; `npx vite build --outDir <fuera del repo>` → OK; banco `probar-revisiones` y E2E local con backend real → PASS (detalle en el informe); sha256 de los 7 M ajenos iguales a la referencia.
-TESTS PENDIENTES:     UAT humana (Enter/Espacio, pantalla ancha, lector de pantalla) = PENDING; rendimiento con volumen = NOT MEASURED; validación en producción tras el despliegue. El E2E con backend real e identidad inyectada es evidencia válida de la sesión del 13-sep, no un arnés versionado: su servidor quedó en el scratchpad.
-FALLO CONOCIDO:       test_capacidades_con_puerta (preexistente). `npm run build` en sitio falla por EPERM sobre frontend-docs/dist/assets (entorno). Con ENFORCE, una revisión inexistente responde 403 PROJECT_UNRESOLVED del middleware, no el 404 de la ruta.
-NEXT EXACT ACTION:    esperar la autorización del propietario para el push de E1 y, aparte, para su despliegue manual; sin ella: ni push, ni deploy, ni migraciones, ni E2.
+TESTS PENDIENTES:     UAT humana (Enter/Espacio, pantalla ancha, lector de pantalla) = PENDING; rendimiento con volumen = NOT MEASURED; validación funcional en producción por el propietario = PENDING (el despliegue ya está verificado por versión y por contenido). El E2E con backend real e identidad inyectada es evidencia válida de la sesión del 13-sep, no un arnés versionado: su servidor quedó en el scratchpad.
+FALLO CONOCIDO:       test_capacidades_con_puerta (preexistente). `npm run build` en sitio falla por EPERM sobre frontend-docs/dist/assets (entorno). Con ENFORCE, una revisión inexistente responde 403 PROJECT_UNRESOLVED del middleware, no el 404 de la ruta. Hallazgos de la UAT del 13-sep, ninguno introducido por E1 (docs/reviews/E1_UAT_HALLAZGOS.md): H1 un administrador de la entidad no puede ser revisor, porque la regla de participante choca con que no se le puede añadir como participante; H2 cambiar la plantilla borra los revisores; H3 la lista de revisores ofrece a no participantes y a cuentas retiradas; H4 faltan tildes en un mensaje.
+NEXT EXACT ACTION:    esperar el resultado de la UAT del propietario sobre E1 en producción y su autorización para E2; sin ella, no empezar E2 ni tocar Oregón.
 DO NOT TOUCH:         el WIP ajeno listado; el contrato R01 (PRE / AUTORIDAD_TERMINAL); /act, el alta, la sustitución y las plantillas; producción y Oregón. `acciones` del detalle es información para presentación: `/act` sigue siendo la autoridad de ejecución y debe revalidar siempre.
-COMMIT/HEAD REF:      596776013ddb01ddb23104cb41f78e9d679b7227 (padre del commit de E1; el hash del propio commit no se escribe aquí, se consulta con `git log`)
+COMMIT/HEAD REF:      68b14b8c7d5adfa32d83a10f32b33ce30707ab47 (commit de E1, igual a origin/main; su padre es 5967760)
+
+### Unidad REVIEWS · E1.1 (alta de revisiones y participantes) — COMMITTED sobre 68b14b8, SIN PUSH, 13-sep
+
+Autorizada por el propietario: «corrige, pero con criterio, sin romper la funcionalidad». Contrato:
+`docs/reviews/E1_1_CONTRATO.md`. Informe: `docs/reviews/E1_1_INFORME_DE_CIERRE.md`. Corrige H1–H4 de
+la UAT de E1 (`docs/reviews/E1_UAT_HALLAZGOS.md`).
+
+[WIP HANDOFF]
+TAREA:                REVIEWS · E1.1 — corregir H1–H4 de la UAT de E1: probado en local y COMMITTED en un único commit sobre 68b14b8 (autorizado por el propietario el 13-sep), SIN PUSH, SIN DESPLEGAR.
+IMPLEMENTADO:         H1 el administrador de la entidad se incorpora como participante (candidatos con role, incorporar sin 409 ENTITY_ADMIN_SIN_MEMBRESIA, retirar en Participantes, sin casilla de administrar la obra); «Guardar accesos» (update_project_users) no borra su participación; H2 alta: confirmar antes de sustituir revisores puestos a mano por una plantilla, «a mano» conserva los pasos, si la plantilla falla vuelven los anteriores; H3 las listas de revisores del alta y de «Sustituir revisor…» salen de /api/projects/<obra>/miembros; H4 tildes en el mensaje de REVISOR_FUERA_DE_LA_OBRA y en el motivo de BLOQUEADA.
+PENDIENTE:            1) push, con su propia autorización (NO autorizado todavía); 2) despliegue manual, con su propia autorización (backend de Virginia y portal, sin migraciones); 3) en la UAT, «Enviar a revisión» con el administrador de revisor en la app real.
+ARCHIVOS MODIFICADOS: en el commit de E1.1: backend/routes/administracion.py, backend/routes/auth.py, backend/routes/reviews.py, backend/flujo_de_revision.py, backend/tests/test_membresia_por_obra.py, backend/tests/test_accesos_por_diferencia.py, frontend-docs/src/components/ReviewsModule.jsx, frontend-docs/src/components/RevisionDetalle.jsx, frontend-docs/src/components/ParticipantesModule.jsx, frontend-docs/src/probar-revisiones.jsx; nuevos: backend/herramientas/ensayo_de_admin_participante.py, frontend-docs/src/utils/altaDeRevision.js, frontend-docs/pruebas/altaDeRevision.prueba.mjs, docs/reviews/E1_1_CONTRATO.md, docs/reviews/E1_1_INFORME_DE_CIERRE.md. Entró también la documentación pendiente: docs/reviews/E1_INFORME_DE_CIERRE.md, docs/reviews/E1_GUIA_DE_PRUEBA.md, docs/reviews/E1_UAT_HALLAZGOS.md, docs/usuarios/00_ADMIN_UNICO_Y_ELIMINAR_USUARIOS.md y este fichero. No queda WIP propio. Ajenos, no tocados (sha256 iguales): los siete M de siempre y los untracked históricos.
+TESTS EJECUTADOS:     desde backend `python -m pytest -q -p no:cacheprovider tests` → 1812 passed / 1 failed (test_capacidades_con_puerta, preexistente); `npm test` en frontend-docs → 6 bancos en verde (altaDeRevision 8/8); eslint sobre los ficheros JS tocados → 0; build fuera del repo → OK; `herramientas/ensayo_de_admin_participante.py` en base desechable con ENFORCE → 16/16; regresiones: ensayo_de_detalle_de_revision 25/25, ensayo_de_version_y_visibilidad 67/67, ensayo_de_revisiones 50/50; banco probar-revisiones (ReviewModal real) y app real con backend real (Participantes) → PASS.
+TESTS PENDIENTES:     «Enviar a revisión» en la app real: el panel del navegador de la sesión (286×307 px) no pinta la tabla; ensayo_de_administracion.py no se ejecutó porque lee el .env; UAT del propietario.
+FALLO CONOCIDO:       test_capacidades_con_puerta (preexistente). test_perimetro.py falla si corre justo después de test_accesos_por_diferencia.py (su fixture recarga routes.auth en modo estricto, igual que antes de E1.1); pasa solo y en la suite completa.
+NEXT EXACT ACTION:    esperar la autorización del propietario para el push de E1.1 (comprobando antes que origin/main sigue en 68b14b8 y que el Auto-Deploy sigue en Off) y, aparte, para su despliegue manual.
+DO NOT TOUCH:         el WIP ajeno listado; producción; E2–E5; Usuarios U2–U5; las reglas del alta en el servidor, /act y la sustitución.
+COMMIT/HEAD REF:      68b14b8c7d5adfa32d83a10f32b33ce30707ab47 (padre del commit de E1.1; el hash del propio commit no se escribe aquí, se consulta con `git log`)
+
+### Análisis de Usuarios · administrador único y eliminar usuarios — VERSIONADO con E1.1, 13-sep
+
+`docs/usuarios/00_ADMIN_UNICO_Y_ELIMINAR_USUARIOS.md` (solo análisis, versionado en el commit de E1.1). El propietario pidió
+quedar como único Entity Admin y poder eliminar usuarios. Hallazgos:
+- id 19 es el 2.º custodio decidido en el doc 76;
+- quitarle el rol ya se puede desde «Usuarios del sistema»;
+- la papelera desactiva, y el borrado físico (`?purgar=1`) existe pero no está en la interfaz;
+- varias FK con RESTRICT impiden purgar a quien tiene huella.
+Nada cambiado en código. En producción, el propietario degradó id 19 al perfil «Editar» (13-sep, desde la
+interfaz): queda un solo admin. Pendiente: sus decisiones U2–U5 (U5 = unificar «Usuarios» y «Usuarios del sistema»).
 
 ## FROZEN / DO NOT REOPEN
 
@@ -606,9 +645,10 @@ Observaciones reales, ya conocidas y aceptadas. Ninguna bloquea nada.
    propietario (7-sep-2026). No bloquea B1.
 ## CURRENT TASK
 
-**13-sep-2026 · REVIEWS · E1 (detalle, navegación y semántica) — COMMITTED sobre `5967760`, SIN PUSH, SIN DESPLEGAR.**
-Dictamen del propietario: `E1 CODE/TEST GREEN LOCAL = PASS`. Push, deploy, migraciones, E2 y
-cambios en Oregón: NO autorizados todavía.
+**13-sep-2026 · REVIEWS · E1 (detalle, navegación y semántica) — DESPLEGADA (`68b14b8` en Virginia y portal).**
+Dictámenes del propietario: `E1 CODE/TEST GREEN LOCAL = PASS` y `E1 COMMIT = PASS`; despliegue manual
+hecho por él el 13-sep y verificado. Falta su UAT en producción. E2 y cambios en Oregón: NO autorizados.
+E1.1 (corrige H1–H4 de esa UAT) está probada en local y COMMITTED sobre `68b14b8`, SIN PUSH: ver «Unidad REVIEWS · E1.1».
 Primera entrega del programa funcional de Reviews que aprobó el propietario
 (`docs/reviews/00_PROGRAMA_Y_DECISIONES.md`, decisiones D1–D9). Contrato e informe:
 `docs/reviews/E1_CONTRATO_DE_ACEPTACION.md` y `docs/reviews/E1_INFORME_DE_CIERRE.md`.
@@ -673,15 +713,17 @@ autorreferencial del presente documento. Consultar HEAD real por separado.
 
 ## EXACT NEXT ACTION
 
-**REVIEWS · E1 (13-sep-2026):** E1 está commiteado sobre `5967760`, con el dictamen del
-propietario `E1 CODE/TEST GREEN LOCAL = PASS`. Esperar su autorización para el push y, aparte,
-para el despliegue manual. Sin ella: ni push, ni deploy, ni migraciones, ni E2, ni cambios en
-Oregón.
+**REVIEWS · E1.1 (13-sep-2026):** commiteada sobre `68b14b8` con autorización del propietario. Esperar
+su autorización para el push y, aparte, para el despliegue. Sin ella: ni push, ni deploy.
 
-Producción medida el 13-sep-2026, tras el lote REVIEWS A+B:
-- backend de Virginia (`visor-ecd-backend-va`): `/api/health` → `version 596776013ddb`;
-- portal: sirve el lote (verificado por contenido);
-- Oregón (`visor-ecd-backend`): en `cdf7837`.
+**REVIEWS · E1 (13-sep-2026):** E1 (`68b14b8`) está desplegado en el backend de Virginia y en el
+portal, verificado por `/api/health` y por contenido. Esperar la UAT del propietario en producción y
+su autorización para E2. Sin ella: ni E2, ni cambios en Oregón.
+
+Producción medida el 13-sep-2026, tras E1:
+- backend de Virginia (`visor-ecd-backend-va`): `/api/health` → `version 68b14b8c7d5a`;
+- portal: sirve `index-BmVOYVjH.js`, con E1 (verificado por contenido en Render y en `alephia.com.pe`);
+- Oregón (`visor-ecd-backend`): `version cdf783754574`, sin cambios.
 
 Lo que sigue es el cierre de Filters del 10-sep; sus SHA son de esa fecha.
 

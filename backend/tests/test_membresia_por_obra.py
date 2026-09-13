@@ -5,8 +5,9 @@ Incorporar y retirar personas con la AUTORIDAD DE LA OBRA
 (`guardia_administrativa`: Entity Admin o administrador de esta obra), que es
 la figura que en ACC/Procore gestiona el padrón de su proyecto. Reglas fijas:
 
-  · el Entity Admin NO se incorpora: alcanza todas las obras sin membresía y
-    una fila suya sería mentirosa;
+  · el Entity Admin SÍ se incorpora cuando va a participar (E1.1, decisión del
+    propietario): administra todas las obras sin membresía, pero revisar o
+    recibir un encargo en ESTA obra exige estar en su equipo;
   · una cuenta desactivada NO se incorpora: primero se reactiva/reinvita;
   · RETIRAR MEMBRESÍA ≠ RETIRAR IDENTIDAD — mueren la fila (y con ella la
     administración de obra: vive en la fila) y las concesiones de carpeta de
@@ -37,7 +38,8 @@ def entorno(monkeypatch):
         'permisos_carpeta': 3,
         'autorizado': True,      # lo que responde guardia_administrativa
         'es_entity': False,
-        'candidatos': [(5, 'Ana', 'a@o.pe', 'SINOHYDRO', 4, False)],
+        'candidatos': [(5, 'Ana', 'a@o.pe', 'SINOHYDRO', 4, False, 'user'),
+                       (2, 'Admin', 'ad@o.pe', None, None, False, 'admin')],
         'sql': [], 'log': [],
     }
 
@@ -117,12 +119,18 @@ def test_candidatos_es_lo_incorporable(entorno):
     assert r.status_code == 200
     d = r.get_json()['candidatos']
     assert d == [{'id': 5, 'name': 'Ana', 'email': 'a@o.pe',
-                  'empresa': 'SINOHYDRO', 'company_id': 4, 'pendiente': False}]
-    # El filtro vive en el SQL: activos, sin Entity Admins, sin miembros ya.
+                  'empresa': 'SINOHYDRO', 'company_id': 4, 'pendiente': False,
+                  'role': 'user'},
+                 {'id': 2, 'name': 'Admin', 'email': 'ad@o.pe',
+                  'empresa': None, 'company_id': None, 'pendiente': False,
+                  'role': 'admin'}]
+    # El filtro vive en el SQL: activos y sin miembros ya.
     consulta = next(s for s in estado['sql'] if 'PENDIENTE' in s)
-    assert "ROLE <> 'ADMIN'" in consulta
     assert 'NOT IN (SELECT USER_ID FROM PROJECT_USERS' in consulta
     assert 'COALESCE(U.IS_ACTIVE, TRUE)' in consulta
+    # E1.1: el administrador de la entidad YA NO se excluye. Para revisar en
+    # esta obra tiene que poder participar en ella.
+    assert "ROLE <> 'ADMIN'" not in consulta
 
 
 # ── Incorporar ───────────────────────────────────────────────────────────────
@@ -145,13 +153,16 @@ def test_incorporar_dos_veces_no_es_error(entorno):
     assert estado['log'] == [], 'asento una incorporacion que no ocurrio'
 
 
-def test_el_entity_admin_no_se_incorpora(entorno):
+def test_el_entity_admin_se_incorpora_para_participar(entorno):
+    # E1.1. Antes daba 409 ENTITY_ADMIN_SIN_MEMBRESIA, y el alta de revisiones
+    # le decia «añadelo a la obra primero»: pedia algo imposible. Participar no
+    # le da acceso (ya lo tiene): lo pone en el equipo de la obra.
     c, estado = entorno
     estado['persona'] = ('admin', True)
     r = c.post('/api/projects/OBRA/miembros', json={'user_id': 2})
-    assert r.status_code == 409
-    assert r.get_json()['code'] == 'ENTITY_ADMIN_SIN_MEMBRESIA'
-    assert not any(s.startswith('INSERT') for s in estado['sql'])
+    assert r.status_code == 200, r.get_json()
+    assert any(s.startswith('INSERT INTO PROJECT_USERS') for s in estado['sql'])
+    assert estado['log'] == ['miembro_incorporado']
 
 
 def test_una_desactivada_no_se_incorpora(entorno):
@@ -244,3 +255,22 @@ def test_el_panel_repide_la_lista_cuando_se_invalida():
     assert 'candidatos !== null' in texto, 'sin guardia: el efecto se repetiria en bucle'
     assert '[addAbierto, obra, candidatos]' in texto, (
         'el efecto no depende de `candidatos`: invalidarla no la repide')
+
+
+def test_un_administrador_participante_se_puede_retirar():
+    # E1.1. Si puede participar, tiene que poder dejar de hacerlo: el boton de
+    # retirar ya no se oculta para el administrador de la entidad.
+    texto = _participantes()
+    boton = texto.index('<button onClick={() => retirarPersona(p)}')
+    assert "p.role !== 'admin'" not in texto[boton - 250:boton], (
+        'el boton de retirar sigue oculto para el administrador de la entidad')
+
+
+def test_al_administrador_no_se_le_ofrece_administrar_la_obra():
+    # Ya administra toda la entidad: concederle ademas la de ESTA obra no le da
+    # nada y enturbia la cuenta de administradores de obra.
+    texto = _participantes()
+    assert "candidatoElegido && candidatoElegido.role !== 'admin' && (" in texto
+    incorporar = texto[texto.index('async function incorporar'):]
+    incorporar = incorporar[:incorporar.index('async function retirarPersona')]
+    assert "addAdmin && candidatoElegido.role !== 'admin'" in incorporar

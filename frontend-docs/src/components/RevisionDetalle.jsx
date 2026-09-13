@@ -78,10 +78,15 @@ function SustituirRevisor({ rev, onCerrar, onHecho }) {
   const [guardando, setGuardando] = useState(false);
   const paso = rev.steps[rev.current_step] || {};
 
+  // SOLO PARTICIPANTES ACTIVOS DE LA OBRA DE LA REVISIÓN (E1.1 · H3b). La lista
+  // decía «Elige a un miembro de la obra» y ofrecía el padrón entero, y el
+  // servidor rechaza a quien no participa. La sustitución en sí no cambia.
+  const obraDeLaRevision = rev.obra_id || rev.model_urn;
   useEffect(() => {
-    apiFetch(`${API}/api/users`).then(r => r.json())
-      .then(d => setUsers(d.users || d || [])).catch(() => setUsers([]));
-  }, []);
+    apiFetch(`${API}/api/projects/${encodeURIComponent(obraDeLaRevision)}/miembros`)
+      .then(r => (r.ok ? r.json() : { miembros: [] }))
+      .then(d => setUsers(d.miembros || [])).catch(() => setUsers([]));
+  }, [obraDeLaRevision]);
 
   const enviar = async () => {
     if (!elegido) { toast.error('Elige al nuevo revisor'); return; }

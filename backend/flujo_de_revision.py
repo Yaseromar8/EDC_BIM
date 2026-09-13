@@ -427,7 +427,7 @@ def estado_del_flujo(cur, rev, project_id=None):
     cur.execute('SELECT 1 FROM project_users WHERE project_id = %s AND user_id = %s',
                 (str(obra), uid))
     if not cur.fetchone():
-        return 'BLOQUEADA', ('%s ya no pertenece a esta obra, asi que nadie puede '
+        return 'BLOQUEADA', ('%s ya no pertenece a esta obra, así que nadie puede '
                              'actuar en el paso %d' % (etiqueta_del_paso(paso), i + 1))
 
     # SEGUIR EN LA OBRA NO BASTA. `/act` exige poder consultar todos los

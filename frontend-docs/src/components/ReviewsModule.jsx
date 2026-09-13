@@ -3,6 +3,8 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import toast from 'react-hot-toast';
 import { API, formatDate, getInitials } from '../utils/helpers';
 import { apiFetch } from '../utils/apiFetch';
+import { confirmAction } from '../utils/confirm';
+import { cambioDeFlujo, confirmacionDePlantilla, AYUDA_PARTICIPANTES } from '../utils/altaDeRevision';
 import RevisionDetalle from './RevisionDetalle';
 import {
   FILTROS, leerEnlace, conRevision, chipDeEstado, codigoDe, mensajeDeError,
@@ -32,8 +34,14 @@ export function ReviewModal({ isOpen, onClose, items, projectPrefix, onCreated }
       .then(r => (r.ok ? r.json() : null))
       .then(d => setPlantillas((d?.plantillas || []).filter(p => p.activa)))
       .catch(() => setPlantillas([]));
-    apiFetch(`${API}/api/users`).then(r => r.json())
-      .then(d => setUsers(d.users || d || [])).catch(() => setUsers([]));
+    // SOLO QUIEN PUEDE REVISAR AQUÍ (E1.1 · H3). `/api/users` le daba a un
+    // administrador el padrón entero --gente de otras obras y cuentas retiradas--
+    // y el servidor la rechazaba al pulsar «Iniciar revisión». `/miembros`
+    // devuelve los participantes activos de ESTA obra y lo puede pedir cualquier
+    // miembro, no solo un administrador.
+    apiFetch(`${API}/api/projects/${encodeURIComponent(projectPrefix)}/miembros`)
+      .then(r => (r.ok ? r.json() : { miembros: [] }))
+      .then(d => setUsers(d.miembros || [])).catch(() => setUsers([]));
     // El catalogo de idoneidad es de la obra: lo que se audita es lo que diga
     // el plan de ejecucion BIM del proyecto, no una lista fija del programa.
     apiFetch(`${API}/api/docs/idoneidad?model_urn=${encodeURIComponent(projectPrefix)}`)
@@ -46,17 +54,37 @@ export function ReviewModal({ isOpen, onClose, items, projectPrefix, onCreated }
   // hasta resolverlas contra los miembros de ESTA obra nadie sabe en quien
   // caen. Enseñarlo antes evita descubrirlo con la revisión ya abierta y un
   // encargo circulando.
+  //
+  // Y SIN TIRAR EL TRABAJO DE NADIE (E1.1 · H2). Elegir plantilla sustituía en
+  // silencio los revisores puestos a mano, y volver a «a mano» los vaciaba.
+  // Ahora: con pasos a mano se pregunta antes; «a mano» conserva lo que haya; y
+  // si la plantilla no se puede aplicar, vuelven los pasos de antes.
   const elegirPlantilla = async (id) => {
+    const cambio = cambioDeFlujo({ plantillaActual: plantillaId, nueva: id, pasos: steps });
+    if (cambio.tipo === 'nada') return;
+    if (cambio.tipo === 'a_mano') {
+      setPlantillaId('');
+      setAvisoPlantilla(cambio.aviso);
+      return;
+    }
+    if (cambio.confirmar) {
+      const plantilla = plantillas.find(p => String(p.id) === String(id));
+      if (!await confirmAction(confirmacionDePlantilla(steps.length, plantilla?.nombre))) return;
+    }
+    const anteriores = { pasos: steps, plantilla: plantillaId };
+    const recuperar = (aviso) => {
+      setSteps(anteriores.pasos);
+      setPlantillaId(anteriores.plantilla);
+      setAvisoPlantilla(aviso);
+    };
     setPlantillaId(id);
     setAvisoPlantilla('');
-    if (!id) { setSteps([]); return; }
     try {
       const r = await apiFetch(
         `${API}/api/review-templates/${id}/resolver?model_urn=${encodeURIComponent(projectPrefix)}`);
       const d = await r.json();
       if (!r.ok) {
-        setSteps([]);
-        setAvisoPlantilla(d.error || 'No se pudo aplicar esta plantilla aquí.');
+        recuperar(d.error || 'No se pudo aplicar esta plantilla aquí.');
         return;
       }
       setSteps((d.pasos || []).map(p => ({
@@ -64,8 +92,7 @@ export function ReviewModal({ isOpen, onClose, items, projectPrefix, onCreated }
         etiqueta: p.etiqueta, decision: p.decision, de_funcion: p.de_funcion,
       })));
     } catch (e) {
-      setSteps([]);
-      setAvisoPlantilla(e.message || 'No se pudo previsualizar.');
+      recuperar(e.message || 'No se pudo previsualizar.');
     }
   };
 
@@ -244,10 +271,16 @@ export function ReviewModal({ isOpen, onClose, items, projectPrefix, onCreated }
                   style={{ padding: '7px 10px', display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', borderBottom: '1px solid #f5f5f5' }}
                   onMouseOver={e => e.currentTarget.style.background = '#f4f6f9'} onMouseOut={e => e.currentTarget.style.background = 'none'}>
                   <span style={{ width: 26, height: 26, borderRadius: '50%', background: 'var(--accent)', color: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700 }}>{getInitials(u.name || u.email)}</span>
-                  <span>{u.name || '—'} <span style={{ color: '#999', fontSize: 11 }}>{u.email}</span></span>
+                  <span>{u.name || '—'} <span style={{ color: '#999', fontSize: 11 }}>{u.email}{u.empresa ? ` · ${u.empresa}` : ''}</span>
+                    {u.pendiente && <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 600, color: '#b45309' }}>PENDIENTE</span>}
+                  </span>
                 </div>
               ))}
+              {!users.length && (
+                <div style={{ padding: '8px 10px', color: '#999', fontSize: 12 }}>No hay participantes activos en esta obra.</div>
+              )}
             </div>
+            <div style={{ marginTop: 6, fontSize: 11, color: '#999', lineHeight: 1.5 }}>{AYUDA_PARTICIPANTES}</div>
           </div>
 
           <div>

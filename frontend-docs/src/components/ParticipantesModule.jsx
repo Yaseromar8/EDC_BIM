@@ -276,7 +276,7 @@ export default function ParticipantesModule({ project, isAdmin }) {
         d = await r.json().catch(() => ({}));
         if (!r.ok) throw new Error(d.error || 'No se pudo');
       }
-      if (addAdmin) {
+      if (addAdmin && candidatoElegido.role !== 'admin') {
         paso = 'concederle la administración de esta obra';
         r = await apiFetch(`${API}/api/projects/${encodeURIComponent(obra)}/miembros/${candidatoElegido.id}/admin`, {
           method: 'PUT', headers: { 'Content-Type': 'application/json' },
@@ -299,10 +299,14 @@ export default function ParticipantesModule({ project, isAdmin }) {
   async function retirarPersona(p) {
     if (!await confirmAction({
       title: 'Retirar de esta obra',
-      message: `${p.name || p.email} deja de ser miembro (y de administrarla, si `
-             + 'administraba) y pierde sus permisos de carpeta de ESTA obra. Su '
-             + 'cuenta sigue viva y sus actos históricos —RFIs, revisiones, '
-             + 'asientos— quedan donde están.',
+      message: p.role === 'admin'
+        ? `${p.name || p.email} deja de participar en esta obra: ya no podrá revisar `
+          + 'ni recibir encargos aquí. Sigue siendo administrador de la entidad, y sus '
+          + 'actos históricos quedan donde están.'
+        : `${p.name || p.email} deja de ser miembro (y de administrarla, si `
+          + 'administraba) y pierde sus permisos de carpeta de ESTA obra. Su '
+          + 'cuenta sigue viva y sus actos históricos —RFIs, revisiones, '
+          + 'asientos— quedan donde están.',
       confirmText: 'Retirar',
       danger: true,
     })) return;
@@ -542,7 +546,8 @@ export default function ParticipantesModule({ project, isAdmin }) {
                   {candidatos.map(x => (
                     <option key={x.id} value={x.id}>
                       {(x.name || x.email) + (x.empresa ? ` — ${x.empresa}` : ' — sin empresa')
-                        + (x.pendiente ? ' · PENDIENTE' : '')}
+                        + (x.pendiente ? ' · PENDIENTE' : '')
+                        + (x.role === 'admin' ? ' · Administrador de la entidad' : '')}
                     </option>
                   ))}
                 </select>
@@ -569,7 +574,9 @@ export default function ParticipantesModule({ project, isAdmin }) {
                   </select>
                 )}
 
-                {candidatoElegido && (
+                {/* Al administrador de la entidad no se le ofrece: ya administra
+                    todas las obras, y concedérsela aquí no le daría nada. */}
+                {candidatoElegido && candidatoElegido.role !== 'admin' && (
                   <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6,
                                   fontSize: 12.5, color: '#555', cursor: 'pointer' }}>
                     <input type="checkbox" checked={addAdmin}
@@ -597,6 +604,11 @@ export default function ParticipantesModule({ project, isAdmin }) {
                 {candidatoElegido && candidatoElegido.pendiente && (
                   <span style={{ fontSize: 11.5, color: '#b45309' }}>
                     Invitación sin activar: verá la obra cuando active su cuenta.
+                  </span>
+                )}
+                {candidatoElegido && candidatoElegido.role === 'admin' && (
+                  <span style={{ fontSize: 11.5, color: '#555' }}>
+                    Ya administra toda la entidad. Participar le permite revisar y recibir encargos en esta obra.
                   </span>
                 )}
               </div>
@@ -718,14 +730,14 @@ export default function ParticipantesModule({ project, isAdmin }) {
                                    color: '#4d6a8f', cursor: 'pointer', marginRight: 6 }}>
                     Herramientas
                   </button>
-                  {/* El Entity Admin no tiene fila de membresía que retirar. */}
-                  {p.role !== 'admin' && (
-                    <button onClick={() => retirarPersona(p)}
-                            disabled={guardando === 'persona:' + p.id}
-                            title="Retirar de esta obra (la cuenta y su historia se conservan)"
-                            style={{ border: 'none', background: 'none', cursor: 'pointer',
-                                     color: '#c0392b', fontSize: 15 }}>×</button>
-                  )}
+                  {/* Todo el que sale en esta lista tiene fila de participación,
+                      también el administrador de la entidad (E1.1): se retira
+                      igual, y retirarlo no le quita la administración. */}
+                  <button onClick={() => retirarPersona(p)}
+                          disabled={guardando === 'persona:' + p.id}
+                          title="Retirar de esta obra (la cuenta y su historia se conservan)"
+                          style={{ border: 'none', background: 'none', cursor: 'pointer',
+                                   color: '#c0392b', fontSize: 15 }}>×</button>
                 </td>
               )}
             </tr>

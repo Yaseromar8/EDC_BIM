@@ -17,12 +17,16 @@
  *   window.__fallarAct = {status, body}   el próximo acto falla así (una vez)
  *   window.__registro          lo que ha pedido la pantalla, en orden
  *
+ * Y el ALTA (E1.1), con el botón «Abrir alta de revisión»: dos plantillas, una que se
+ * aplica y otra que falla (para ver que vuelven los pasos de antes), y una lista de
+ * participantes distinta del padrón (`/api/users` trae a alguien de otra obra).
+ *
  * No entra en producción: `vite.config.js` no lo conoce.
  */
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { Toaster } from 'react-hot-toast';
-import { ReviewsView } from './components/ReviewsModule';
+import { ReviewsView, ReviewModal } from './components/ReviewsModule';
 import { ConfirmHost } from './utils/confirm.jsx';
 import './index.css';
 
@@ -171,15 +175,52 @@ window.fetch = async (url, opciones = {}) => {
     return responder({ success: true }, 200, window.__retrasoAct || 0);
   }
 
+  // ── Alta de revisión (E1.1) ──
+  if (u.pathname === '/api/review-templates' && metodo === 'GET') {
+    return responder({ plantillas: [
+      { id: 7, nombre: 'PLANOS_ASBUILT', version: 1, activa: true, alcance: 'OBRA', pasos: [{}, {}] },
+      { id: 9, nombre: 'PLANTILLA_ROTA', version: 2, activa: true, alcance: 'OBRA', pasos: [{}] },
+    ] });
+  }
+  const enResolver = u.pathname.match(/^\/api\/review-templates\/(\d+)\/resolver$/);
+  if (enResolver) {
+    if (enResolver[1] === '9') {
+      return responder({ error: 'Esa plantilla designa una función que nadie ocupa en esta obra.' }, 409);
+    }
+    return responder({ pasos: [
+      { user_id: 3, name: GENTE[3].name, email: GENTE[3].email, decision: 'REVISA', etiqueta: 'Coordinación', dias: 2 },
+      { user_id: 2, name: GENTE[2].name, email: GENTE[2].email, decision: 'APRUEBA', etiqueta: 'Jefatura' },
+    ] });
+  }
+  if (/^\/api\/projects\/[^/]+\/miembros$/.test(u.pathname)) {
+    return responder({ miembros: Object.values(GENTE).map(g => ({
+      ...g, empresa: 'BANCO SAC', role: 'editor', pendiente: g.id === 3 })) });
+  }
+  if (u.pathname === '/api/docs/idoneidad') return responder({ codigos: [] });
   if (u.pathname === '/api/docs/signed-url') return responder({ success: true, url: '/_probar/plano-A.pdf' });
-  if (u.pathname === '/api/users') return responder({ users: Object.values(GENTE) });
+  if (u.pathname === '/api/users') {
+    return responder({ users: [...Object.values(GENTE), { id: 99, name: 'Persona de otra obra', email: 'otra@banco.test' }] });
+  }
   return responder({ success: false, error: 'ruta no simulada en el banco' }, 404);
 };
+
+function AltaDeBanco() {
+  const [abierta, setAbierta] = React.useState(false);
+  return (
+    <>
+      <button type="button" onClick={() => setAbierta(true)} style={{ marginLeft: 12 }}>Abrir alta de revisión</button>
+      <ReviewModal isOpen={abierta} onClose={() => setAbierta(false)} projectPrefix={PREFIJO}
+                   items={[{ node_id: 'nodo-1', name: 'DR-001.pdf', version: 2, version_id: 'version-1-2' }]}
+                   onCreated={() => {}} />
+    </>
+  );
+}
 
 createRoot(document.getElementById('root')).render(
   <>
     <div style={{ padding: '6px 32px', background: '#fffbe6', fontSize: 12, borderBottom: '1px solid #f0e2a0' }}>
       BANCO · viendo como <b>{quien().name}</b> — cambia con <code>__como(1|2|3)</code>
+      <AltaDeBanco />
     </div>
     <div style={{ display: 'flex', minHeight: 'calc(100vh - 30px)' }}>
       <ReviewsView projectPrefix={PREFIJO} />

@@ -2,9 +2,9 @@
 
 Fecha: 13-sep-2026. Base: `5967760`. Contrato: `E1_CONTRATO_DE_ACEPTACION.md`.
 
-**Estado: implementado y probado en local; dictamen del propietario `E1 CODE/TEST GREEN LOCAL = PASS` y commit único autorizado sobre `5967760`. Sin push, sin despliegue, sin migraciones.** No cambian `/act`, el alta, la sustitución ni las plantillas, y la semántica de PRE y AUTORIDAD_TERMINAL queda intacta.
+**Estado: dictámenes del propietario `E1 CODE/TEST GREEN LOCAL = PASS` y `E1 COMMIT = PASS`; commit `68b14b8` sobre `5967760`, en `origin/main` y desplegado por el propietario el 13-sep en el backend de Virginia y en el portal, sin migraciones.** No cambian `/act`, el alta, la sustitución ni las plantillas, y la semántica de PRE y AUTORIDAD_TERMINAL queda intacta.
 
-## 1 · Qué se puede hacer ahora (en local)
+## 1 · Qué se puede hacer ahora (en producción desde el 13-sep)
 
 - **Abrir una revisión por su enlace** `/?obra=<id>&revision=<id>`. Funciona también si hay que iniciar sesión antes: el enlace se guarda y se abre tras el login. Si la obra no es de quien abre el enlace, se avisa y se sigue el flujo normal.
 - **Abrir desde Mi Trabajo:** las filas de tipo Revisión llevan al detalle.
@@ -41,7 +41,7 @@ Fecha: 13-sep-2026. Base: `5967760`. Contrato: `E1_CONTRATO_DE_ACEPTACION.md`.
 - Nuevo `backend/herramientas/ensayo_de_detalle_de_revision.py`: 25 comprobaciones contra PostgreSQL.
 
 **Frontend (`frontend-docs`)**
-- Nuevo `src/components/RevisionDetalle.jsx`, con `SustituirRevisor` traído desde la lista con el mismo código que en `5967760`, salvo la prop `projectPrefix`, que no se usaba.
+- Nuevo `src/components/RevisionDetalle.jsx`, con `SustituirRevisor` traído desde la lista. La semántica de la sustitución no cambia respecto de `5967760`; solo se retiró la prop `projectPrefix`, que no se usaba.
 - `src/components/ReviewsModule.jsx`: lista nueva; `ReviewModal` sin cambios.
 - Nuevo `src/utils/revisiones.js`: enlace, nombres, historial y mensajes.
 - `src/App_Refactor.jsx`: enlace de revisión, persistencia tras el login y aviso.
@@ -107,13 +107,13 @@ Fecha: 13-sep-2026. Base: `5967760`. Contrato: `E1_CONTRATO_DE_ACEPTACION.md`.
 ## 5 · Pendiente humano
 
 - UAT: activación con Enter y Espacio, lectura en pantalla ancha y lector de pantalla.
-- Validación en producción tras el despliegue, que requiere autorización aparte: backend de Virginia y portal, sin migraciones.
+- Validación funcional en producción. E1 está desplegado desde el 13-sep: Virginia `/api/health` → `68b14b8c7d5a`, y el portal sirve `index-BmVOYVjH.js`, con E1. Falta el recorrido del propietario.
 
 ## 6 · Cierre
 
 ```
 CORRECCIONES PREVIAS = versión fijada y validada · lista filtrada por acceso · acceso documental para actuar y asignar · avisos neutros · vista previa (en producción desde el 13-sep)
-FUNCIONES NUEVAS YA UTILIZABLES = en local (commit sin push ni despliegue): detalle con documentos, versiones, pasos, responsable, plazo e historial · enlace de revisión y apertura desde Mi Trabajo · filtros y paginación · botones según actor y paso (Dar conformidad ≠ Aprobar) · confirmación y mensajes
+FUNCIONES NUEVAS YA UTILIZABLES = en producción desde el 13-sep (backend de Virginia y portal): detalle con documentos, versiones, pasos, responsable, plazo e historial · enlace de revisión y apertura desde Mi Trabajo · filtros y paginación · botones según actor y paso (Dar conformidad ≠ Aprobar) · confirmación y mensajes
 FUNCIONES DEL OBJETIVO TODAVÍA PENDIENTES = E2 anular y archivar · contrato nuevo completo (rondas, devolver al iniciador, volver al paso anterior, comentarios y decisión por archivo, cierre separado de la emisión) · E5 exportación y contadores · correo opcional por acción
 ```
 
@@ -129,5 +129,8 @@ Observaciones registradas; ninguna bloquea el commit:
 - UAT humana (Enter/Espacio, pantalla ancha, lector de pantalla): `PENDING`.
 - `acciones` del detalle es información para presentación; `/act` sigue siendo la autoridad de ejecución y
   debe revalidar siempre.
+- Excepción menor de alcance, registrada al aceptar el commit (`E1 COMMIT = PASS`): `SustituirRevisor` mantiene la
+  semántica de sustitución de `5967760`, pero se retiró la prop no usada `projectPrefix`. Es una diferencia técnica
+  respecto del padre, declarada no funcional; pruebas, lint y build siguen en verde.
 
 No autorizado todavía: push, despliegue, migraciones, E2 y cambios en Oregón.

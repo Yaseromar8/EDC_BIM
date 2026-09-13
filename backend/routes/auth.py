@@ -1592,8 +1592,8 @@ def update_project_users(project_id):
                            (project_id,))
             actuales = {r[0] for r in cursor.fetchall()}
 
-            # Solo usuarios reales y no Entity Admin (el Entity Admin no
-            # necesita membresía y el front ya lo filtra).
+            # Solo usuarios reales y no Entity Admin: esta lista no incorpora
+            # administradores (se incorporan desde Participantes, ver abajo).
             deseados = set()
             if user_ids:
                 cursor.execute('SELECT id FROM users WHERE id IN %s AND role != %s',
@@ -1602,6 +1602,18 @@ def update_project_users(project_id):
 
             salen = actuales - deseados
             entran = deseados - actuales
+
+            # LA PARTICIPACION DE UN ADMINISTRADOR DE LA ENTIDAD NO SE GOBIERNA
+            # DESDE AQUI (E1.1). Esta lista nunca los trae --la pantalla los
+            # filtra y `deseados` tambien--, asi que guardar por diferencia los
+            # borraba en silencio. Desde E1.1 un administrador puede participar
+            # en una obra para revisar o recibir encargos: entra y sale desde
+            # Participantes, y aqui su fila ni se toca.
+            if salen:
+                cursor.execute("SELECT u.id FROM users u "
+                               " WHERE u.id = ANY(%s) AND u.role = 'admin'",
+                               (list(salen),))
+                salen -= {r[0] for r in cursor.fetchall()}
 
             if salen:
                 cursor.execute('DELETE FROM project_users WHERE project_id = %s '
