@@ -18,6 +18,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 import { apiFetch } from '../utils/apiFetch';
+import { plazoValido, AVISO_PLAZO } from '../utils/altaDeRevision';
 
 const CAJA = { border: '1px solid #dfe3e8', borderRadius: 6, boxSizing: 'border-box' };
 
@@ -160,6 +161,13 @@ export default function FlujosDeRevisionModule({ project, API, user, isAdmin }) 
                   DESHABILITADO
                 </span>
               )}
+              {p.activa && p.utilizable === false && (
+                <span title={p.motivo_no_utilizable || ''}
+                      style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px',
+                               borderRadius: 10, background: '#fff4e0', color: '#8a5a12' }}>
+                  NO SE PUEDE USAR
+                </span>
+              )}
               <div style={{ flex: 1 }} />
               {/* Cuántas revisiones se abrieron con él. Es el dato que hace
                   visible que editarlo NO las cambia. */}
@@ -186,6 +194,14 @@ export default function FlujosDeRevisionModule({ project, API, user, isAdmin }) 
             {p.descripcion && (
               <div style={{ fontSize: 12.5, color: '#78838f', marginTop: 5 }}>
                 {p.descripcion}
+              </div>
+            )}
+
+            {/* E1.3 · por qué no abre revisiones nuevas aquí, en vez de dejar que se
+                descubra al pulsar «Iniciar revisión». */}
+            {p.activa && p.utilizable === false && p.motivo_no_utilizable && (
+              <div style={{ fontSize: 12.5, color: '#8a5a12', marginTop: 5 }}>
+                No se puede usar en esta obra: {p.motivo_no_utilizable}
               </div>
             )}
 
@@ -250,13 +266,17 @@ function ModalFlujo({ API, urn, catalogo, miembros, inicial, onCerrar, onGuardad
   }));
 
   const guardar = async () => {
+    // EL PLAZO SE COMPRUEBA ANTES DE MANDARLO (E1.3). Un «0» se guardaba, y el flujo
+    // fallaba después al abrir cada revisión. Vacío es «sin plazo».
+    const plazoMal = pasos.findIndex(p => (p.etiqueta || '').trim() && !plazoValido(p.dias));
+    if (plazoMal >= 0) { toast.error(`Paso ${plazoMal + 1}: ${AVISO_PLAZO}`); return; }
     const limpios = pasos
       .filter(p => (p.etiqueta || '').trim())
       .map(p => ({
         etiqueta: p.etiqueta.trim(), decision: p.decision,
         ...(p.funcion ? { funcion: p.funcion }
                       : (p.user_id ? { user_id: Number(p.user_id) } : {})),
-        ...(p.dias ? { dias: Number(p.dias) } : {}),
+        ...(String(p.dias ?? '').trim() ? { dias: Number(p.dias) } : {}),
       }));
     if (!f.nombre.trim()) { toast.error('El flujo necesita un nombre.'); return; }
     if (!limpios.length) { toast.error('Un flujo sin pasos no describe nada.'); return; }
@@ -366,7 +386,7 @@ function ModalFlujo({ API, urn, catalogo, miembros, inicial, onCerrar, onGuardad
                 <option key={x} value={x}>{x}</option>
               ))}
             </select>
-            <input type="number" min="1" value={p.dias || ''}
+            <input type="number" min="1" step="1" value={p.dias ?? ''}
                    onChange={e => cambiar(i, 'dias', e.target.value)}
                    placeholder="días"
                    style={{ ...CAJA, width: 66, height: 34, padding: '0 8px', fontSize: 12 }} />

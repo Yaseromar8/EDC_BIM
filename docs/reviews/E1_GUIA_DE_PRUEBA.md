@@ -2,9 +2,12 @@
 
 13-sep-2026, revisada tras tu prueba de la noche. **Requiere E1.2 desplegado:** backend `27e1a42` en Virginia y el portal con E1.2. Está desplegado y comprobado desde las 21:36.
 
+**Bloque H, añadido el 14-sep:** requiere E1.3 desplegado, backend y portal. Hasta entonces, sáltalo.
+
 **Si ya hiciste A–E, no las repitas.** Te faltan:
 - el bloque **F**, con un flujo creado;
-- **D4** y el bloque **G**, que comprueban lo que corrige E1.2.
+- **D4** y el bloque **G**, que comprueban lo que corrige E1.2;
+- el bloque **H**, cuando E1.3 esté desplegado: flujos que no se pueden usar, elegir persona por función y comprobaciones antes de iniciar.
 
 Lo que salió en tu prueba está en `E1_UAT_HALLAZGOS.md` (H5–H9).
 
@@ -17,10 +20,11 @@ La guía entera lleva entre 40 y 50 minutos; el bloque F, unos 15. Marca cada pa
   - **«Tú»:** tu cuenta principal (Yaser Omar).
   - **«Colega»:** «yaser omar 02», abierta en tu otro perfil de Chrome.
   - Hacen falta dos porque quien crea una revisión no puede ser su único revisor, y la misma persona no puede estar en dos pasos.
-- **Una carpeta de prueba con seis PDF recién subidos** (sirve cualquier PDF). Aquí se llaman PDF-1 a PDF-6, y **cada revisión de prueba lleva los suyos:**
+- **Una carpeta de prueba con siete PDF recién subidos** (sirve cualquier PDF). Aquí se llaman PDF-1 a PDF-7, y **cada revisión de prueba lleva los suyos:**
   - T1: PDF-1 y PDF-2;
   - T2: PDF-3 y PDF-4;
-  - T3, en el bloque F: PDF-5 y PDF-6.
+  - T3, en el bloque F: PDF-5 y PDF-6;
+  - el bloque H usa PDF-7, y solo crea revisión en H6, que es opcional.
 - **No compartas documentos entre revisiones de prueba.** Cada documento tiene un solo estado. Si dos revisiones llevan el mismo PDF, aprobar una cambia lo que la otra sigue revisando, y parecen cruzadas (H7).
 
 **Qué no hacer**
@@ -143,6 +147,21 @@ Hazlo con T3 **antes de F8**, mientras sigue en curso.
 | G2 | Tú | Mira la hora de creación de T3, en la lista y en el detalle | Es la hora a la que la creaste, no 5 horas más, y cuadra con la del Historial |
 | G3 | Tú | En Archivos selecciona **PDF-5**, pulsa **Enviar a revisión** y luego **Cancelar**, sin crear nada | Junto a PDF-5 dice «Ya está en RV-…, en curso.», con una línea que explica por qué importa |
 
+## H · Flujos creados que se pueden usar (E1.3)
+
+Requiere E1.3 desplegado, backend y portal. Aquí **no se crea ninguna revisión**, salvo en H6, que es opcional.
+
+| # | Quién | Haz esto | Debe pasar |
+|---|---|---|---|
+| H1 | Tú | **Flujos de revisión**: mira tus flujos antiguos, sobre todo el que te dio problemas | Si alguno no puede abrir revisiones en esta obra, lleva la etiqueta **NO SE PUEDE USAR** y una línea «No se puede usar en esta obra: …» con el motivo |
+| H2 | Tú | **Nuevo flujo** con un paso «Aprobación», **Aprueba**, persona tú, y **0** en días. Pulsa **Crear flujo** | No se guarda: «Paso 1: El plazo tiene que ser un número entero de días, de 1 en adelante, o quedar vacío si no tiene plazo.» |
+| H3 | Tú | Deja el plazo vacío, pon de nombre `PRUEBA E1.3 — SOLO YO` y pulsa **Crear flujo** | Se crea, y **sin** «NO SE PUEDE USAR»: si vale depende de quién inicie la revisión |
+| H4 | Tú | En Archivos selecciona **PDF-7**, pulsa **Enviar a revisión** y en «Flujo de revisión» elige `PRUEBA E1.3 — SOLO YO` | Sale «Comprobando el flujo…» y enseguida el aviso «Una revisión necesita al menos un revisor distinto de quien la crea…». El selector vuelve a «a mano» y no se ha creado nada |
+| H5 | Tú | En la misma ventana elige `PRUEBA E1 — FLUJO`, el del bloque F. Si tienes flujos que no se pueden usar, abre «… no se pueden usar aquí» | Salen sus dos pasos, sin aviso. Los flujos que no se pueden usar aparecen **apagados** en el selector, y en el desplegable se lee el motivo de cada uno. Pulsa **Cancelar** |
+| H6 (opcional) | Tú | Solo si la obra tiene una **empresa con función** (por ejemplo, Supervisión) con **dos o más personas**. Crea un flujo con el paso 1 **por función** (Revisa) y el paso 2 **Aprueba** con persona tú, y aplícalo en Enviar a revisión sobre PDF-7 | Aparece «Paso 1 · … · función …» con un desplegable de personas y «Elige quién hace el paso 1». Al elegir, salen los pasos. Si pulsas Iniciar revisión, nace con esa persona en el paso 1 y a ella le llega la tarea |
+
+No pruebes «NO SE PUEDE USAR» retirando a alguien de la obra: bloquearía sus revisiones en curso.
+
 ## Qué me devuelves
 
 Una línea por bloque. Si solo haces F, D4 y G, basta con esas. Por ejemplo:
@@ -155,6 +174,7 @@ D = OK (D4 bien)
 E = OK (E4 no probado)
 F = OK
 G = OK
+H = OK (H6 no aplica: la obra no tiene empresas con función)
 ```
 
 ## Qué no forma parte de esta prueba
@@ -163,6 +183,6 @@ G = OK
 - Del contrato nuevo (E3 y E4): rondas, «Devolver al iniciador», «Volver al paso anterior», decisión por archivo, y cierre separado de la emisión.
 - Exportación y contadores (E5).
 - Correo opcional por acción.
-- Flujos de la entidad, que designan funciones en vez de personas.
+- Flujos de la entidad en una obra sin empresas con función: H6 solo se hace si la obra las tiene.
 - La opción B de H7: impedir que un documento esté en dos revisiones en curso.
 - Usuarios: una sola pantalla de cuentas y eliminar definitivamente (U2–U5, pendientes de tu decisión).

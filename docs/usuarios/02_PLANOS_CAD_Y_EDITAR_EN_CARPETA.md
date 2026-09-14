@@ -4,7 +4,7 @@
 1. Que todos los usuarios puedan ver archivos CAD o Revit.
 2. Que quien tenga permiso de Editar pueda subir archivos o reemplazarlos.
 
-**Estado:** probado en local y commiteado con tu autorización. **Falta el push y el despliegue**, cada uno con su autorización (§5).
+**Estado:** en producción desde el 14-sep (`41d7dda`). Backend de Virginia y portal desplegados y verificados (§5).
 
 ## 1 · Qué cambia para tu equipo
 
@@ -75,8 +75,8 @@
 ## 5 · Para ponerlo en producción (autorización tuya en cada paso)
 
 1. **Commit: hecho**, sin trailer, con tu «SI». Entraron también los documentos pendientes del cierre de E1.2.
-2. **Push.**
-3. **Manual Deploy del backend** `visor-ecd-backend-va`. Después se comprueba `/api/health` y «Booting worker» en el log. Con este paso ya se ven los planos CAD.
-4. **Manual Deploy del portal** `visor-ecd-portal`. Con este paso aparecen «Cargar archivos», «Nueva carpeta» y «Subir nueva versión» a quien tiene «Editar».
+2. **Push: hecho** con tu «VAMOS», tras comprobar Auto-Deploy «Off» en los 4 servicios. No arrancó ningún despliegue solo.
+3. **Manual Deploy del backend** `visor-ecd-backend-va`: **hecho por ti**. `/api/health` responde `41d7dda3e662` y el log tiene «Booting worker» y «Listening at».
+4. **Manual Deploy del portal** `visor-ecd-portal`: **hecho por ti**. `alephia.com.pe` sirve `index-BpgqB68-.js`, que ya lleva «Subir nueva versión» y el nivel de la carpeta.
 
-El backend va primero. Mientras el portal nuevo no tenga el backend nuevo, los botones siguen escondidos como hoy; pero «Desplazar» ya se ofrecería sin la comprobación del destino.
+**Pendiente:** tu prueba en producción con una cuenta que no administre la obra.

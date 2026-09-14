@@ -25,6 +25,15 @@
  * cierre de Luis. El detalle dice «También está en…», el alta «Ya está en…», y cerrada
  * una, la consecuencia de cerrar la otra dice que los documentos ya están en su destino.
  *
+ * E1.3: el alta ofrece un flujo POR FUNCIÓN con dos personas posibles (hay que elegir;
+ * elegir a Eva, que no puede ver los documentos, bloquea con el motivo; elegir a Ana lo
+ * completa) y uno VIEJO que no se puede usar, con su motivo. La vista previa es la del
+ * servidor (`/api/reviews/previsualizar`), y se puede retrasar por flujo para ver que una
+ * respuesta tardía no pisa a la última:
+ *
+ *   window.__retrasoPrevia = { 7: 1500 }   el flujo 7 tarda 1,5 s en contestar
+ *   window.__ultimaAlta                    lo último que mandó «Iniciar revisión»
+ *
  * No entra en producción: `vite.config.js` no lo conoce.
  */
 import React from 'react';
@@ -220,22 +229,53 @@ window.fetch = async (url, opciones = {}) => {
     return responder({ success: true }, 200, window.__retrasoAct || 0);
   }
 
-  // ── Alta de revisión (E1.1) ──
+  // ── Alta de revisión (E1.1 y E1.3) ──
   if (u.pathname === '/api/review-templates' && metodo === 'GET') {
     return responder({ plantillas: [
-      { id: 7, nombre: 'PLANOS_ASBUILT', version: 1, activa: true, alcance: 'OBRA', pasos: [{}, {}] },
-      { id: 9, nombre: 'PLANTILLA_ROTA', version: 2, activa: true, alcance: 'OBRA', pasos: [{}] },
+      { id: 7, nombre: 'PLANOS_ASBUILT', version: 1, activa: true, alcance: 'OBRA', pasos: [{}, {}], utilizable: true },
+      { id: 9, nombre: 'PLANTILLA_ROTA', version: 2, activa: true, alcance: 'OBRA', pasos: [{}], utilizable: true },
+      { id: 11, nombre: 'SUPERVISION_POR_FUNCION', version: 1, activa: true, alcance: 'ENTIDAD', utilizable: true,
+        pasos: [{ etiqueta: 'Supervisión', decision: 'REVISA', funcion: 'SUPERVISION' },
+                { etiqueta: 'Jefatura', decision: 'APRUEBA', funcion: 'ENTIDAD' }] },
+      { id: 12, nombre: 'FLUJO_VIEJO', version: 3, activa: true, alcance: 'OBRA', pasos: [{}, {}], utilizable: false,
+        motivo_no_utilizable: 'El último paso de este flujo sólo revisa, así que la revisión no podría cerrarse nunca. El último paso tiene que ser de aprobación.' },
     ] });
   }
-  const enResolver = u.pathname.match(/^\/api\/review-templates\/(\d+)\/resolver$/);
-  if (enResolver) {
-    if (enResolver[1] === '9') {
-      return responder({ error: 'Esa plantilla designa una función que nadie ocupa en esta obra.' }, 409);
+  if (u.pathname === '/api/reviews/previsualizar' && metodo === 'POST') {
+    const cuerpo = JSON.parse(opciones.body || '{}');
+    const id = String(cuerpo.plantilla_id);
+    const ms = (window.__retrasoPrevia || {})[id] || 0;
+    const persona = (uid, decision, etiqueta, extra = {}) => ({
+      user_id: uid, name: GENTE[uid].name, email: GENTE[uid].email, decision, etiqueta, ...extra });
+    if (id === '9') {
+      return responder({ success: false, code: 'SIN_CANDIDATO', opciones: {},
+                         error: 'El paso 1 pide la función SUPERVISION y en esta obra no hay nadie con esa función. Añade el participante o usa otra plantilla.' }, 409, ms);
     }
-    return responder({ pasos: [
-      { user_id: 3, name: GENTE[3].name, email: GENTE[3].email, decision: 'REVISA', etiqueta: 'Coordinación', dias: 2 },
-      { user_id: 2, name: GENTE[2].name, email: GENTE[2].email, decision: 'APRUEBA', etiqueta: 'Jefatura' },
-    ] });
+    if (id === '11') {
+      const candidatos = { 0: [{ id: 1, name: GENTE[1].name, email: GENTE[1].email, empresa: 'SUPERVISA SAC' },
+                               { id: 3, name: GENTE[3].name, email: GENTE[3].email, empresa: 'SUPERVISA SAC' }] };
+      const elegido = Number((cuerpo.elecciones || {})[0] || 0);
+      if (!elegido) {
+        return responder({ success: false, code: 'ELIGE_REVISOR', opciones: candidatos,
+                           error: 'Este flujo tiene pasos con varias personas posibles: elige quién hace el paso 1.' }, 409, ms);
+      }
+      if (elegido === 3) {
+        return responder({ success: false, code: 'REVISOR_SIN_ACCESO_DOCUMENTAL',
+                           error: 'La persona del paso 1 no puede consultar todos los documentos de esta revisión. Pide que le den acceso o elige a otra persona.' }, 400, ms);
+      }
+      return responder({ success: true, comprobado: true, opciones: candidatos, pasos: [
+        persona(elegido, 'REVISA', 'Supervisión', { de_funcion: 'SUPERVISION', dias: 3 }),
+        persona(2, 'APRUEBA', 'Jefatura', { de_funcion: 'ENTIDAD' }),
+      ] }, 200, ms);
+    }
+    return responder({ success: true, comprobado: true, opciones: {}, pasos: [
+      persona(3, 'REVISA', 'Coordinación', { dias: 2 }),
+      persona(2, 'APRUEBA', 'Jefatura'),
+    ] }, 200, ms);
+  }
+  if (u.pathname === '/api/reviews' && metodo === 'POST') {
+    window.__ultimaAlta = JSON.parse(opciones.body || '{}');
+    return responder({ success: true, id: 99, contrato: 'AUTORIDAD_TERMINAL' });
   }
   if (/^\/api\/projects\/[^/]+\/miembros$/.test(u.pathname)) {
     return responder({ miembros: Object.values(GENTE).map(g => ({

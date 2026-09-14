@@ -135,6 +135,14 @@ def validar_pasos(pasos, alcance, contrato=None):
         if tiene_persona and tiene_funcion:
             return ('El paso %d designa a una persona Y una función a la vez: '
                     'al aplicar no se sabría cuál manda.' % n)
+        if tiene_persona:
+            # E1.3 · un id que no es un numero se guardaba y reventaba despues, al
+            # aplicar la plantilla, en un `int()` sin comprobar.
+            try:
+                if isinstance(paso['user_id'], bool) or int(paso['user_id']) <= 0:
+                    raise ValueError
+            except (TypeError, ValueError):
+                return 'El paso %d designa a una persona que no es válida.' % n
         if tiene_funcion and paso['funcion'] not in FUNCIONES:
             return ('El paso %d designa una función que no existe: %s.'
                     % (n, ', '.join(FUNCIONES)))
@@ -143,13 +151,17 @@ def validar_pasos(pasos, alcance, contrato=None):
                     'es de la entidad: esa persona no significa nada en otra '
                     'obra. Designa una función.' % n)
 
+        # EL PLAZO, CON LA MISMA REGLA QUE EL ALTA (E1.3). Aqui se admitia 0 y el
+        # alta lo rechaza --«mayor que cero»--, asi que se guardaba un flujo que
+        # despues no abria ninguna revision. Vacio sigue siendo «sin plazo».
         dias = paso.get('dias')
         if dias not in (None, ''):
             try:
-                if int(dias) < 0:
+                if isinstance(dias, bool) or int(dias) < 1:
                     raise ValueError
-            except (TypeError, ValueError):
-                return 'El plazo del paso %d no es un número de días.' % n
+            except (TypeError, ValueError, OverflowError):
+                return ('El plazo del paso %d tiene que ser un número entero de días, '
+                        'de 1 en adelante, o quedar vacío si no tiene plazo.' % n)
 
     # ── ¿PUEDE ESTE FLUJO CERRARSE? ────────────────────────────────────────
     # Se pregunta con la MISMA funcion que usa el motor al aprobar. Si el molde
@@ -180,9 +192,21 @@ def resolver(cur, plantilla, obra, elecciones=None):
 
     Lo que sale de aqui es una COPIA independiente. A partir de ese momento la
     plantilla no tiene nada que ver con esa revision.
+
+    `opciones` (E1.3) son los pasos por funcion con VARIAS personas posibles, y
+    quienes son, ESTEN YA ELEGIDOS O NO: la pantalla necesita la lista tambien
+    despues de elegir, para dejar cambiar la eleccion. Si falta elegir alguno, el
+    resultado es ELIGE_REVISOR; si no, los pasos, con esas mismas opciones.
+
+    Una eleccion que no es un numero, o unas elecciones que no son un
+    diccionario, son ELECCION_INVALIDA: antes reventaban en un `int()` y salian
+    como un error tecnico.
     """
+    if elecciones is not None and not isinstance(elecciones, dict):
+        return Resuelto(None, 'La elección de personas no es válida.',
+                        'ELECCION_INVALIDA', {})
     elecciones = {str(k): v for k, v in (elecciones or {}).items()}
-    pasos, opciones = [], {}
+    pasos, opciones, sin_elegir = [], {}, []
 
     for i, molde in enumerate(plantilla.get('pasos') or []):
         paso = copy.deepcopy(molde)
@@ -192,13 +216,19 @@ def resolver(cur, plantilla, obra, elecciones=None):
         if funcion:
             elegido = elecciones.get(str(i))
             candidatos = miembros_con_funcion(cur, obra, funcion)
-            if elegido:
-                if int(elegido) not in [c['id'] for c in candidatos]:
+            if len(candidatos) > 1:
+                opciones[str(i)] = candidatos
+            if elegido not in (None, ''):
+                try:
+                    elegido = None if isinstance(elegido, bool) else int(elegido)
+                except (TypeError, ValueError):
+                    elegido = None
+                if elegido is None or elegido not in [c['id'] for c in candidatos]:
                     return Resuelto(None,
                                     'La persona elegida para el paso %d no tiene la '
                                     'función %s en esta obra.' % (i + 1, funcion),
                                     'ELECCION_INVALIDA', {})
-                uid = int(elegido)
+                uid = elegido
             elif not candidatos:
                 return Resuelto(None,
                                 'El paso %d pide la función %s y en esta obra no hay '
@@ -208,22 +238,33 @@ def resolver(cur, plantilla, obra, elecciones=None):
             elif len(candidatos) == 1:
                 uid = candidatos[0]['id']
             else:
-                opciones[str(i)] = candidatos
+                sin_elegir.append(i + 1)
                 continue
 
+        try:
+            uid = None if isinstance(uid, bool) else int(uid)
+        except (TypeError, ValueError):
+            uid = None
+        if not uid:
+            return Resuelto(None,
+                            'El paso %d designa a una persona que no es válida. Hay que '
+                            'editar el flujo.' % (i + 1), 'REVISOR_INVALIDO', {})
         cur.execute('SELECT id, name, email FROM users WHERE id = %s AND is_active',
-                    (int(uid),))
+                    (uid,))
         fila = cur.fetchone()
         if not fila:
             return Resuelto(None,
-                            'El revisor del paso %d ya no tiene una cuenta activa.'
-                            % (i + 1), 'REVISOR_INACTIVO', {})
+                            'La persona del paso %d ya no tiene una cuenta activa. Hay '
+                            'que editar el flujo o usar otro.' % (i + 1),
+                            'REVISOR_INACTIVO', {})
         cur.execute('SELECT 1 FROM project_users WHERE project_id=%s AND user_id=%s',
                     (str(obra), fila[0]))
         if not cur.fetchone():
             return Resuelto(None,
-                            'El revisor del paso %d no es miembro de esta obra.'
-                            % (i + 1), 'REVISOR_NO_MIEMBRO', {})
+                            '%s, del paso %d, ya no es participante de esta obra. '
+                            'Añádelo en Administración → Participantes o edita el '
+                            'flujo.' % (fila[1] or fila[2] or 'La persona', i + 1),
+                            'REVISOR_NO_MIEMBRO', {})
 
         # `email` y `name` viajan como INSTANTANEA, igual que en un paso escrito
         # a mano: dicen a quien se le pidio y con que nombre. La identidad es
@@ -236,13 +277,12 @@ def resolver(cur, plantilla, obra, elecciones=None):
         paso['de_funcion'] = funcion or None
         pasos.append(paso)
 
-    if opciones:
+    if sin_elegir:
         return Resuelto(None,
-                        'Hay pasos con varias personas posibles: elige quién en cada '
-                        'uno. Repartir responsabilidad contractual por orden '
-                        'alfabético no es una opción.',
+                        'Este flujo tiene pasos con varias personas posibles: elige '
+                        'quién hace el paso %s.' % ', '.join(str(n) for n in sin_elegir),
                         'ELIGE_REVISOR', opciones)
-    return Resuelto(pasos, None, None, {})
+    return Resuelto(pasos, None, None, opciones)
 
 
 def miembros_con_funcion(cur, obra, funcion):
@@ -263,6 +303,33 @@ def miembros_con_funcion(cur, obra, funcion):
     """, (str(obra), funcion))
     return [{'id': r[0], 'name': r[1], 'email': r[2], 'empresa': r[3]}
             for r in cur.fetchall()]
+
+
+def motivo_no_utilizable(cur, plantilla, obra):
+    """Por que esta plantilla NO puede abrir hoy una revision en esta obra; None si puede.
+
+    E1.3 · SE DICE ANTES DE ELEGIRLA. Un flujo viejo cuyo ultimo paso solo revisa,
+    con un plazo de 0 dias o con alguien que ya no esta en la obra aparecia en el
+    selector como cualquier otro, y fallaba al pulsar «Iniciar revisión».
+
+    Se pregunta con las MISMAS funciones que el alta: `validar_pasos` con el
+    contrato vigente y `resolver` contra los miembros de ESTA obra. Tener que
+    elegir persona no la hace inutilizable: se elige al aplicarla. Lo que depende
+    de quien crea la revision y de sus documentos --independencia, acceso a los
+    documentos, versiones-- no se puede saber aqui: lo dice la vista previa del
+    alta.
+
+    Solo lee. No cambia ni la plantilla ni ninguna revision.
+    """
+    if not plantilla.get('activa', True):
+        return 'Está deshabilitada: no abre revisiones nuevas.'
+    mal = validar_pasos(plantilla.get('pasos'), plantilla.get('alcance'))
+    if mal:
+        return mal
+    res = resolver(cur, plantilla, obra)
+    if res.error and res.code != 'ELIGE_REVISOR':
+        return res.error
+    return None
 
 
 def procedencia(plantilla):

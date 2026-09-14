@@ -1,5 +1,7 @@
 # Revisiones · flujos creados que fallan y rechazo sin vuelta atrás
 
+> **Actualización del 14-sep:** E1.3 está hecho y probado en local (`E1_3_INFORME_DE_CIERRE.md`). El contrato de «Volver al paso anterior» y «Devolver al iniciador» está escrito para que lo apruebes (`E3_CONTRATO_RONDAS.md`). Lo que sigue es el diagnóstico previo.
+
 14-sep-2026. Lo que reportaste:
 1. «No se puede trabajar con flujos de revisión creados: si se elige, salen problemas.»
 2. «Si rechazan en la fase final no regresa al anterior: sale rechazado y no hay forma de volver a revisar en esa misma revisión. Así como lo hace ACC.»

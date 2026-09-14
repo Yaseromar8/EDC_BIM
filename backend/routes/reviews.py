@@ -141,7 +141,7 @@ def _pasos_validos(cur, obra, steps, contrato):
             except (TypeError, ValueError):
                 return jsonify({"success": False,
                                 "error": "El plazo del paso %d tiene que ser un "
-                                         "numero de dias mayor que cero." % (i + 1)}), 400
+                                         "número de días mayor que cero." % (i + 1)}), 400
 
     # ── EL CONTRATO DEL FLUJO ──────────────────────────────────────────────
     #
@@ -1000,8 +1000,31 @@ def _revision_independiente(user, steps):
     }), 400
 
 
+@reviews_bp.route('/api/reviews/previsualizar', methods=['POST'])
+def previsualizar_alta():
+    """«Iniciar revisión» sin crear nada (E1.3).
+
+    Recorre el alta ENTERA --la misma funcion, no una copia-- y se va justo antes
+    de la primera escritura. Por eso la vista previa y el alta no pueden
+    discrepar: lo que aqui sale bien solo puede fallar despues por lo que aun no
+    se ha rellenado (el titulo y la idoneidad) o por algo que cambie entre medias.
+
+    La vista previa anterior (`GET /api/review-templates/<id>/resolver`) solo
+    resolvia personas: la independencia, el acceso de cada persona a los
+    documentos, los plazos y el contrato saltaban al pulsar «Iniciar revisión».
+    """
+    return create_review(solo_comprobar=True)
+
+
 @reviews_bp.route('/api/reviews', methods=['POST'])
-def create_review():
+def create_review(solo_comprobar=False):
+    """Crea una revision, a mano o desde una plantilla.
+
+    Con `solo_comprobar` --lo pone `previsualizar_alta`, nunca la peticion-- hace
+    todas las comprobaciones y devuelve los pasos resueltos SIN escribir nada: ni
+    revision, ni encargo, ni aviso, ni registro. No exige titulo ni valida la
+    idoneidad, que la pantalla pide aparte y el alta de verdad comprueba siempre.
+    """
     d = request.get_json() or {}
     negativa = guardia_de_obra(d.get('model_urn'), 'crear una revision')
     if negativa:
@@ -1025,40 +1048,65 @@ def create_review():
     #
     # Y son una COPIA. La revision guarda su flujo en `steps`; la plantilla no
     # vuelve a mirarse nunca mas. Cambiarla despues no toca esta revision.
-    procedencia = None
+    procedencia, opciones = None, {}
     if d.get('plantilla_id') and not steps:
-        obra_p = resolve_project_id(d.get('model_urn') or '')
-        with get_db_connection() as _c:
-            _cur = _c.cursor()
-            _cur.execute("""SELECT id, alcance, project_id, nombre, pasos, activa, version
-                             FROM doc_review_plantillas WHERE id = %s""",
-                         (int(d['plantilla_id']),))
-            _p = _cur.fetchone()
-            if not _p:
-                return jsonify({"success": False,
-                                "error": "Esa plantilla no existe."}), 404
-            plantilla = {'id': str(_p[0]), 'alcance': _p[1], 'project_id': _p[2],
-                         'nombre': _p[3], 'pasos': _p[4] or [], 'activa': bool(_p[5]),
-                         'version': _p[6]}
-            if plantilla['alcance'] == plt.OBRA and plantilla['project_id'] != obra_p:
-                return jsonify({"success": False,
-                                "error": "Esa plantilla es de otra obra.",
-                                "code": "OTRA_OBRA"}), 409
-            if not plantilla['activa']:
-                return jsonify({
-                    "success": False,
-                    "error": "Esa plantilla está deshabilitada: no se pueden abrir "
-                             "revisiones nuevas con ella. Las que ya se abrieron "
-                             "siguen su curso.",
-                    "code": "PLANTILLA_DESACTIVADA"}), 409
-            res = plt.resolver(_cur, plantilla, obra_p, d.get('elecciones'))
-            if res.error:
-                return jsonify({"success": False, "error": res.error,
-                                "code": res.code, "opciones": res.opciones}), 409
-            steps = res.pasos
-            procedencia = plt.procedencia(plantilla)
+        # UN IDENTIFICADOR O UNA ELECCION MAL FORMADOS NO SON UN 500 (E1.3). Esta
+        # expansion estaba fuera de todo `try`: cualquier fallo salia como una
+        # pagina de error del servidor, que la pantalla no sabia leer.
+        try:
+            id_plantilla = int(str(d['plantilla_id']).strip())
+        except (TypeError, ValueError):
+            id_plantilla = None
+        if not id_plantilla:
+            return jsonify({"success": False, "error": "Esa plantilla no existe.",
+                            "code": "PLANTILLA_NO_EXISTE"}), 404
+        if d.get('elecciones') is not None and not isinstance(d.get('elecciones'), dict):
+            return jsonify({"success": False,
+                            "error": "La elección de personas no es válida.",
+                            "code": "ELECCION_INVALIDA"}), 400
+        try:
+            obra_p = resolve_project_id(d.get('model_urn') or '')
+            with get_db_connection() as _c:
+                _cur = _c.cursor()
+                _cur.execute("""SELECT id, alcance, project_id, nombre, pasos, activa, version
+                                 FROM doc_review_plantillas WHERE id = %s""",
+                             (id_plantilla,))
+                _p = _cur.fetchone()
+                if not _p:
+                    return jsonify({"success": False,
+                                    "error": "Esa plantilla no existe.",
+                                    "code": "PLANTILLA_NO_EXISTE"}), 404
+                plantilla = {'id': str(_p[0]), 'alcance': _p[1], 'project_id': _p[2],
+                             'nombre': _p[3], 'pasos': _p[4] or [], 'activa': bool(_p[5]),
+                             'version': _p[6]}
+                if plantilla['alcance'] == plt.OBRA and plantilla['project_id'] != obra_p:
+                    return jsonify({"success": False,
+                                    "error": "Esa plantilla es de otra obra.",
+                                    "code": "OTRA_OBRA"}), 409
+                if not plantilla['activa']:
+                    return jsonify({
+                        "success": False,
+                        "error": "Esa plantilla está deshabilitada: no se pueden abrir "
+                                 "revisiones nuevas con ella. Las que ya se abrieron "
+                                 "siguen su curso.",
+                        "code": "PLANTILLA_DESACTIVADA"}), 409
+                res = plt.resolver(_cur, plantilla, obra_p, d.get('elecciones'))
+                opciones = res.opciones or {}
+                if res.error:
+                    return jsonify({"success": False, "error": res.error,
+                                    "code": res.code, "opciones": res.opciones}), 409
+                steps = res.pasos
+                procedencia = plt.procedencia(plantilla)
+        except Exception:
+            traceback.print_exc()
+            return jsonify({"success": False,
+                            "error": "No se pudo leer el flujo de revisión elegido. Vuelve "
+                                     "a intentarlo; si se repite, elige otro flujo o pon "
+                                     "los pasos a mano.",
+                            "code": "PLANTILLA_NO_LEIDA"}), 500
 
-    if not d.get('model_urn') or not d.get('title') or not items or not steps:
+    if (not d.get('model_urn') or not items or not steps
+            or not (d.get('title') or solo_comprobar)):
         return jsonify({"success": False, "error": "Faltan model_urn/title/items/steps"}), 400
     final_status = d.get('final_status', ecd.SHARED)
     if final_status not in FINAL_STATUSES:
@@ -1079,11 +1127,14 @@ def create_review():
             cur = conn.cursor()
             # Se valida AL CREAR, no al aprobar: enterarse de que el código no
             # sirve cuando ya han firmado tres revisores es tarde y humillante.
-            from idoneidad import validar_para
-            vale, motivo = validar_para(cur, d['model_urn'],
-                                        d.get('codigo_idoneidad'), final_status)
-            if not vale:
-                return jsonify({"success": False, "error": motivo}), 400
+            # La vista previa no la mira: se elige en la misma pantalla, a veces
+            # despues del flujo, y el alta de verdad la comprueba siempre.
+            if not solo_comprobar:
+                from idoneidad import validar_para
+                vale, motivo = validar_para(cur, d['model_urn'],
+                                            d.get('codigo_idoneidad'), final_status)
+                if not vale:
+                    return jsonify({"success": False, "error": motivo}), 400
 
             # Una revision NUEVA exige revisor estructurado en cada paso, y bajo
             # el contrato nuevo tambien que cada paso diga QUE se le pide.
@@ -1107,6 +1158,14 @@ def create_review():
             negado = _participantes_con_acceso(cur, d['model_urn'], steps, items)
             if negado:
                 return negado
+
+            # LA VISTA PREVIA TERMINA AQUI, ANTES DE LA PRIMERA ESCRITURA (E1.3).
+            # Hasta esta linea la transaccion solo ha leido; al salir se deshace
+            # sin haber confirmado nada: no nace revision, ni encargo, ni aviso.
+            if solo_comprobar:
+                return jsonify({"success": True, "comprobado": True, "pasos": steps,
+                                "opciones": opciones, "plantilla": procedencia,
+                                "contrato": contrato})
 
             actor = u.get('email') or u.get('name')
             historia = [{"event": "created", "by": actor,
@@ -1164,9 +1223,17 @@ def create_review():
                                 details={"contrato": contrato})
             conn.commit()
         return jsonify({"success": True, "id": rid, "contrato": contrato})
-    except Exception as e:
+    except Exception:
+        # Un mensaje que se pueda leer (E1.3). El detalle va al registro del
+        # servidor, no a la pantalla, donde solo confundia.
         traceback.print_exc()
-        return jsonify({"success": False, "error": str(e)}), 500
+        return jsonify({"success": False,
+                        "error": ("No se pudo comprobar el flujo por un error del "
+                                  "servidor. Vuelve a intentarlo." if solo_comprobar else
+                                  "No se pudo crear la revisión por un error del "
+                                  "servidor. Vuelve a intentarlo; si se repite, avisa a "
+                                  "quien administra la plataforma."),
+                        "code": "ERROR_DEL_SERVIDOR"}), 500
 
 
 @reviews_bp.route('/api/reviews/<int:rid>/act', methods=['POST'])

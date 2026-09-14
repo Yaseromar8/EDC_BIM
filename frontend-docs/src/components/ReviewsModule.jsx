@@ -4,7 +4,11 @@ import toast from 'react-hot-toast';
 import { API, formatDate, getInitials } from '../utils/helpers';
 import { apiFetch } from '../utils/apiFetch';
 import { confirmAction } from '../utils/confirm';
-import { cambioDeFlujo, confirmacionDePlantilla, AYUDA_PARTICIPANTES } from '../utils/altaDeRevision';
+import {
+  cambioDeFlujo, confirmacionDePlantilla, AYUDA_PARTICIPANTES, opcionDePlantilla, pasosSinElegir,
+  eleccionesParaEnviar, plazoValido, AVISO_PLAZO, leerRespuesta, textoDeFallo, trasVistaPrevia,
+  AVISO_SIN_PLANTILLAS,
+} from '../utils/altaDeRevision';
 import RevisionDetalle from './RevisionDetalle';
 import {
   FILTROS, leerEnlace, conRevision, chipDeEstado, codigoDe, mensajeDeError,
@@ -28,15 +32,33 @@ export function ReviewModal({ isOpen, onClose, items, projectPrefix, onCreated }
   const [avisoPlantilla, setAvisoPlantilla] = useState('');
   // En qué OTRAS revisiones en curso están ya estos documentos (E1.2 · H7-A).
   const [enCurso, setEnCurso] = useState({});
+  // E1.3 · flujos creados utilizables. `opciones`: los pasos por función con varias
+  // personas posibles; `elecciones`: a quién se eligió en cada uno; `bloqueo`: por qué
+  // no se puede iniciar con el flujo elegido. `vistaPrevia` numera las comprobaciones,
+  // para que una respuesta que llega tarde no pise a la última.
+  const [errorPlantillas, setErrorPlantillas] = useState('');
+  const [opciones, setOpciones] = useState({});
+  const [elecciones, setElecciones] = useState({});
+  const [bloqueo, setBloqueo] = useState('');
+  const [previsualizando, setPrevisualizando] = useState(false);
+  const vistaPrevia = useRef(0);
 
   useEffect(() => {
     if (!isOpen) return;
     setTitle(''); setSteps([]); setFinalStatus('SHARED'); setIdoneidad('');
     setPlantillaId(''); setAvisoPlantilla('');
+    setOpciones({}); setElecciones({}); setBloqueo(''); setPrevisualizando(false);
+    vistaPrevia.current += 1;
+    setErrorPlantillas('');
+    // SI NO SE PUEDEN CARGAR LOS FLUJOS, SE DICE (E1.3). Antes el selector
+    // desaparecía sin más, y no había forma de saber que existían.
     apiFetch(`${API}/api/review-templates?model_urn=${encodeURIComponent(projectPrefix)}`)
-      .then(r => (r.ok ? r.json() : null))
-      .then(d => setPlantillas((d?.plantillas || []).filter(p => p.activa)))
-      .catch(() => setPlantillas([]));
+      .then(async r => {
+        const d = await leerRespuesta(r);
+        if (!r.ok || !d) throw new Error('sin flujos');
+        setPlantillas((d.plantillas || []).filter(p => p.activa));
+      })
+      .catch(() => { setPlantillas([]); setErrorPlantillas(AVISO_SIN_PLANTILLAS); });
     // SOLO QUIEN PUEDE REVISAR AQUÍ (E1.1 · H3). `/api/users` le daba a un
     // administrador el padrón entero --gente de otras obras y cuentas retiradas--
     // y el servidor la rechazaba al pulsar «Iniciar revisión». `/miembros`
@@ -69,6 +91,12 @@ export function ReviewModal({ isOpen, onClose, items, projectPrefix, onCreated }
 
   if (!isOpen) return null;
 
+  const plantillaElegida = plantillas.find(p => String(p.id) === String(plantillaId));
+  const noUtilizables = plantillas.filter(p => opcionDePlantilla(p).deshabilitada);
+  // Con un flujo elegido que aún no está completo, los pasos de antes no se enseñan:
+  // no son los que se van a mandar.
+  const pasosVisibles = !(plantillaId && (bloqueo || previsualizando));
+
   // Al elegir plantilla se PREVISUALIZA: una de entidad designa funciones, y
   // hasta resolverlas contra los miembros de ESTA obra nadie sabe en quien
   // caen. Enseñarlo antes evita descubrirlo con la revisión ya abierta y un
@@ -78,11 +106,59 @@ export function ReviewModal({ isOpen, onClose, items, projectPrefix, onCreated }
   // silencio los revisores puestos a mano, y volver a «a mano» los vaciaba.
   // Ahora: con pasos a mano se pregunta antes; «a mano» conserva lo que haya; y
   // si la plantilla no se puede aplicar, vuelven los pasos de antes.
+  const previsualizar = async (id, eleccionesAhora, opcionesAhora) => {
+    const n = ++vistaPrevia.current;
+    setPrevisualizando(true);
+    let r = null;
+    let d = null;
+    try {
+      // E1.3 · LA VISTA PREVIA HACE TODAS LAS COMPROBACIONES DEL ALTA: es la misma
+      // ruta del servidor, que se detiene antes de escribir. La anterior solo
+      // resolvía personas, y la independencia, el acceso a los documentos, los
+      // plazos y el contrato saltaban al pulsar «Iniciar revisión».
+      r = await apiFetch(`${API}/api/reviews/previsualizar`, {
+        method: 'POST',
+        body: JSON.stringify({
+          model_urn: projectPrefix, items, plantilla_id: id, final_status: finalStatus,
+          elecciones: eleccionesParaEnviar(opcionesAhora, eleccionesAhora),
+        }),
+      });
+      d = await leerRespuesta(r);
+    } catch {
+      r = null;
+    }
+    // Una respuesta que llega tarde --se eligió otro flujo, o se cerró la ventana--
+    // no pisa lo que se ve ahora.
+    if (n !== vistaPrevia.current) return null;
+    setPrevisualizando(false);
+    const t = trasVistaPrevia({
+      ok: Boolean(r?.ok),
+      cuerpo: d || { error: textoDeFallo(r?.status || 0, null, 'comprobar el flujo') },
+      elecciones: eleccionesAhora,
+      opcionesActuales: opcionesAhora,
+    });
+    if (t.tipo === 'pasos') {
+      setOpciones(t.opciones);
+      setBloqueo('');
+      setSteps(t.pasos.map(p => ({
+        id: p.user_id, name: p.name, email: p.email, dias: p.dias,
+        etiqueta: p.etiqueta, decision: p.decision, de_funcion: p.de_funcion,
+      })));
+    } else if (t.tipo !== 'recuperar') {
+      setOpciones(t.opciones);
+      setBloqueo(t.aviso);
+    }
+    return t;
+  };
+
   const elegirPlantilla = async (id) => {
     const cambio = cambioDeFlujo({ plantillaActual: plantillaId, nueva: id, pasos: steps });
     if (cambio.tipo === 'nada') return;
     if (cambio.tipo === 'a_mano') {
+      vistaPrevia.current += 1;
+      setPrevisualizando(false);
       setPlantillaId('');
+      setOpciones({}); setElecciones({}); setBloqueo('');
       setAvisoPlantilla(cambio.aviso);
       return;
     }
@@ -90,29 +166,20 @@ export function ReviewModal({ isOpen, onClose, items, projectPrefix, onCreated }
       const plantilla = plantillas.find(p => String(p.id) === String(id));
       if (!await confirmAction(confirmacionDePlantilla(steps.length, plantilla?.nombre))) return;
     }
-    const anteriores = { pasos: steps, plantilla: plantillaId };
+    const anteriores = { pasos: steps, plantilla: plantillaId, opciones, elecciones, bloqueo };
     const recuperar = (aviso) => {
       setSteps(anteriores.pasos);
       setPlantillaId(anteriores.plantilla);
+      setOpciones(anteriores.opciones);
+      setElecciones(anteriores.elecciones);
+      setBloqueo(anteriores.bloqueo);
       setAvisoPlantilla(aviso);
     };
     setPlantillaId(id);
     setAvisoPlantilla('');
-    try {
-      const r = await apiFetch(
-        `${API}/api/review-templates/${id}/resolver?model_urn=${encodeURIComponent(projectPrefix)}`);
-      const d = await r.json();
-      if (!r.ok) {
-        recuperar(d.error || 'No se pudo aplicar esta plantilla aquí.');
-        return;
-      }
-      setSteps((d.pasos || []).map(p => ({
-        id: p.user_id, name: p.name, email: p.email, dias: p.dias,
-        etiqueta: p.etiqueta, decision: p.decision, de_funcion: p.de_funcion,
-      })));
-    } catch (e) {
-      recuperar(e.message || 'No se pudo previsualizar.');
-    }
+    setOpciones({}); setElecciones({}); setBloqueo('');
+    const t = await previsualizar(id, {}, {});
+    if (t?.tipo === 'recuperar') recuperar(t.aviso);
   };
 
   // SI SE TOCAN LOS PASOS, YA NO ES ESA PLANTILLA. Mantener la procedencia
@@ -120,9 +187,28 @@ export function ReviewModal({ isOpen, onClose, items, projectPrefix, onCreated }
   // realidad no siguió -- y eso es peor que no citar ninguno.
   const soltarPlantilla = () => {
     if (!plantillaId) return;
+    vistaPrevia.current += 1;
+    setPrevisualizando(false);
     setPlantillaId('');
+    setOpciones({}); setElecciones({}); setBloqueo('');
     setAvisoPlantilla('Has cambiado los pasos: esta revisión ya no queda '
                     + 'registrada como aplicación de esa plantilla.');
+  };
+
+  // A QUIÉN SE ELIGE EN UN PASO POR FUNCIÓN (E1.3). El servidor pedía elegir y la
+  // pantalla no tenía dónde: ese flujo no se podía usar nunca. Con todos los pasos
+  // elegidos se vuelve a comprobar el flujo entero con esas personas.
+  const elegirPersona = async (indice, uid) => {
+    const nuevas = { ...elecciones, [indice]: uid };
+    setElecciones(nuevas);
+    const faltan = pasosSinElegir(opciones, nuevas);
+    if (faltan.length) {
+      vistaPrevia.current += 1;
+      setPrevisualizando(false);
+      setBloqueo(`Elige quién hace el paso ${faltan.join(', ')}.`);
+      return;
+    }
+    await previsualizar(plantillaId, nuevas, opciones);
   };
 
   // QUÉ SE LE PIDE A CADA PASO: revisar o aprobar (REVIEWS-R01).
@@ -142,11 +228,15 @@ export function ReviewModal({ isOpen, onClose, items, projectPrefix, onCreated }
 
   const submit = async () => {
     if (!title.trim()) { toast.error('Ponle un título a la revisión'); return; }
+    if (plantillaId && previsualizando) { toast.error('Espera un momento: se está comprobando el flujo.'); return; }
+    if (plantillaId && bloqueo) { toast.error(bloqueo); return; }
     if (!steps.length) { toast.error('Agrega al menos un revisor'); return; }
     if (steps.some(s => !s.id)) {
       toast.error('Algún revisor no se pudo identificar. Recarga la página e inténtalo de nuevo.');
       return;
     }
+    const plazoMal = steps.findIndex(s => !plazoValido(s.dias));
+    if (!plantillaId && plazoMal >= 0) { toast.error(`Paso ${plazoMal + 1}: ${AVISO_PLAZO}`); return; }
     // Publicar exige decir para que queda autorizado. Se avisa AQUI y no al
     // aprobar: enterarse cuando ya han firmado tres revisores es tarde.
     if (finalStatus === 'PUBLISHED' && !idoneidad) {
@@ -161,7 +251,7 @@ export function ReviewModal({ isOpen, onClose, items, projectPrefix, onCreated }
           // Con plantilla se manda SOLO su id y el servidor la resuelve: si se
           // mandaran los pasos previsualizados, un cambio entre la vista previa
           // y el envío pasaría inadvertido.
-          ...(plantillaId ? { plantilla_id: plantillaId } : {}),
+          ...(plantillaId ? { plantilla_id: plantillaId, elecciones: eleccionesParaEnviar(opciones, elecciones) } : {}),
           // `user_id` es la IDENTIDAD del revisor; `email` y `name` van como
           // instantanea de a quien se le pidio y con que nombre, aunque esa
           // persona se llame distinto dentro de dos anos. Antes solo se
@@ -178,8 +268,16 @@ export function ReviewModal({ isOpen, onClose, items, projectPrefix, onCreated }
           final_status: finalStatus, codigo_idoneidad: idoneidad || undefined
         })
       });
-      const d = await r.json();
-      if (!d.success) throw new Error(d.error);
+      const d = await leerRespuesta(r);
+      if (!r.ok || !d?.success) {
+        // Si entre la vista previa y el envío apareció otra persona posible en un paso
+        // por función, se vuelven a enseñar los selectores.
+        if (plantillaId && d?.code === 'ELIGE_REVISOR') {
+          setOpciones(d.opciones || {});
+          setBloqueo(d.error || '');
+        }
+        throw new Error(textoDeFallo(r.status, d, 'crear la revisión'));
+      }
       toast.success('Revisión iniciada');
       onCreated?.(); onClose();
     } catch (e) { toast.error(e.message || 'No se pudo crear la revisión'); }
@@ -229,6 +327,13 @@ export function ReviewModal({ isOpen, onClose, items, projectPrefix, onCreated }
             )}
           </div>
 
+          {errorPlantillas && (
+            <div role="alert" style={{ fontSize: 12, color: '#8a5a12', background: '#fffaf0',
+                                       border: '1px solid #f0d9a0', borderRadius: 4, padding: '6px 9px',
+                                       lineHeight: 1.5 }}>
+              {errorPlantillas}
+            </div>
+          )}
           {plantillas.length > 0 && (
             <div>
               <label style={{ display: 'block', color: '#666', marginBottom: 6, fontWeight: 600 }}>
@@ -241,13 +346,63 @@ export function ReviewModal({ isOpen, onClose, items, projectPrefix, onCreated }
                       style={{ width: '100%', padding: '8px 10px', border: '1px solid #ddd',
                                borderRadius: 4, fontSize: 13, background: '#fff' }}>
                 <option value="">— a mano, paso a paso —</option>
-                {plantillas.map(p => (
-                  <option key={p.id} value={p.id}>
-                    {p.nombre} · v{p.version} · {(p.pasos || []).length} pasos
-                    {p.alcance === 'ENTIDAD' ? ' (de la entidad)' : ''}
-                  </option>
-                ))}
+                {plantillas.map(p => {
+                  // Un flujo que no se puede usar aquí se ve, pero no se elige (E1.3).
+                  const o = opcionDePlantilla(p);
+                  return (
+                    <option key={p.id} value={p.id} disabled={o.deshabilitada} title={o.motivo}>
+                      {o.etiqueta}
+                    </option>
+                  );
+                })}
               </select>
+              {noUtilizables.length > 0 && (
+                <details style={{ marginTop: 6, fontSize: 11, color: '#8a5a12' }}>
+                  <summary style={{ cursor: 'pointer' }}>
+                    {noUtilizables.length === 1 ? 'Un flujo no se puede usar aquí'
+                      : `${noUtilizables.length} flujos no se pueden usar aquí`}
+                  </summary>
+                  <ul style={{ margin: '4px 0 0', paddingLeft: 18, lineHeight: 1.5 }}>
+                    {noUtilizables.map(p => (
+                      <li key={p.id}><b>{p.nombre}</b>: {opcionDePlantilla(p).motivo}</li>
+                    ))}
+                  </ul>
+                </details>
+              )}
+              {plantillaId && Object.keys(opciones).length > 0 && (
+                <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {Object.keys(opciones).sort((a, b) => Number(a) - Number(b)).map(i => {
+                    const molde = (plantillaElegida?.pasos || [])[Number(i)] || {};
+                    return (
+                      <label key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}>
+                        <span style={{ flex: '0 0 45%', color: '#444' }}>
+                          Paso {Number(i) + 1}{molde.etiqueta ? ` · ${molde.etiqueta}` : ''}
+                          {molde.funcion && <span style={{ color: '#999' }}> · función {molde.funcion}</span>}
+                        </span>
+                        <select value={elecciones[i] || ''} onChange={e => elegirPersona(i, e.target.value)}
+                                aria-label={`Quién hace el paso ${Number(i) + 1}`}
+                                style={{ flex: 1, padding: '6px 8px', border: '1px solid #ddd', borderRadius: 4,
+                                         fontSize: 12, background: '#fff' }}>
+                          <option value="">— elige a quién —</option>
+                          {opciones[i].map(c => (
+                            <option key={c.id} value={c.id}>{c.name || c.email}{c.empresa ? ` · ${c.empresa}` : ''}</option>
+                          ))}
+                        </select>
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
+              {plantillaId && previsualizando && (
+                <div style={{ marginTop: 6, fontSize: 12, color: '#666' }}>Comprobando el flujo…</div>
+              )}
+              {plantillaId && bloqueo && !previsualizando && (
+                <div role="alert" style={{ marginTop: 6, fontSize: 12, color: '#9f1239', background: '#fff1f2',
+                                           border: '1px solid #fecdd3', borderRadius: 4, padding: '6px 9px',
+                                           lineHeight: 1.5 }}>
+                  {bloqueo}
+                </div>
+              )}
               {avisoPlantilla && (
                 <div style={{ marginTop: 6, fontSize: 12, color: '#8a5a12',
                               background: '#fffaf0', border: '1px solid #f0d9a0',
@@ -267,8 +422,10 @@ export function ReviewModal({ isOpen, onClose, items, projectPrefix, onCreated }
               <span style={{ fontWeight: 400, color: '#999', fontSize: 11 }}> · el plazo se cuenta en días calendario (naturales)</span>
             </label>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
-              {steps.map((s, i) => (
-                <span key={s.id || s.email} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: '#eef2f7', color: '#1a56a8', padding: '4px 10px', borderRadius: 14, fontSize: 12, fontWeight: 600 }}>
+              {pasosVisibles && steps.map((s, i) => (
+                // La clave lleva la POSICIÓN (E1.3): una misma persona puede estar en dos
+                // pasos, y con la clave repetida React mezclaba sus controles.
+                <span key={`${i}-${s.id || s.email}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: '#eef2f7', color: '#1a56a8', padding: '4px 10px', borderRadius: 14, fontSize: 12, fontWeight: 600 }}>
                   {i + 1}. {s.etiqueta ? s.etiqueta + ' — ' : ''}{s.name || s.email}
                   {/* QUÉ SE LE PIDE. Editable también cuando viene de una
                       plantilla: cambiarlo suelta la procedencia igual que
@@ -299,7 +456,8 @@ export function ReviewModal({ isOpen, onClose, items, projectPrefix, onCreated }
                   <button onClick={() => { soltarPlantilla(); setSteps(prev => prev.filter((_x, j) => j !== i)); }} style={{ background: 'none', border: 'none', color: '#1a56a8', cursor: 'pointer', padding: 0, fontSize: 13 }}>×</button>
                 </span>
               ))}
-              {!steps.length && <span style={{ color: '#aaa', fontSize: 12 }}>Haz clic en un usuario para añadirlo como paso…</span>}
+              {pasosVisibles && !steps.length && <span style={{ color: '#aaa', fontSize: 12 }}>Haz clic en un usuario para añadirlo como paso…</span>}
+              {!pasosVisibles && <span style={{ color: '#aaa', fontSize: 12 }}>Los pasos del flujo aparecen aquí cuando esté completo.</span>}
             </div>
             <div style={{ maxHeight: 140, overflowY: 'auto', border: '1px solid #eee', borderRadius: 4 }}>
               {users.filter(u => !steps.find(s => s.id === u.id)).map(u => (

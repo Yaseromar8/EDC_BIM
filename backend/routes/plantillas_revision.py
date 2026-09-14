@@ -66,6 +66,46 @@ def _puede_definir(cur, alcance, obra, accion):
     return guardia_administrativa(cur, _usuario(), obra, accion)
 
 
+def _utilizable_aqui(cur, plantilla, obra):
+    """(utilizable, motivo) de una plantilla en ESTA obra, para el listado (E1.3).
+
+    `utilizable` es None si no se pudo comprobar: no se marca lo que no se sabe, y
+    el alta lo vuelve a comprobar todo igualmente. Va dentro de un SAVEPOINT
+    porque un fallo de la base aborta la transaccion entera, y el resto del
+    listado tiene que poder seguir.
+    """
+    cur.execute('SAVEPOINT utilizable_aqui')
+    try:
+        motivo = plt.motivo_no_utilizable(cur, plantilla, obra)
+        cur.execute('RELEASE SAVEPOINT utilizable_aqui')
+        return motivo is None, motivo
+    except Exception as e:
+        cur.execute('ROLLBACK TO SAVEPOINT utilizable_aqui')
+        logger.warning('no se pudo comprobar si la plantilla %s se puede usar: %s',
+                       plantilla.get('id'), e)
+        return None, None
+
+
+def _personas_fuera_de_la_obra(cur, obra, pasos):
+    """La negativa si una persona designada no es de la obra; None si todas lo son.
+
+    Solo lo comprobaba el alta de la plantilla. Editarla podia dejar en un paso a
+    alguien de fuera, y el flujo se guardaba para fallar al aplicarlo (E1.3).
+    """
+    for i, paso in enumerate(pasos or []):
+        if not paso.get('user_id'):
+            continue
+        cur.execute('SELECT 1 FROM project_users '
+                    ' WHERE project_id=%s AND user_id=%s',
+                    (obra, int(paso['user_id'])))
+        if not cur.fetchone():
+            return jsonify({
+                'error': 'El revisor del paso %d no es miembro de esta '
+                         'obra.' % (i + 1),
+                'code': 'REVISOR_NO_MIEMBRO'}), 409
+    return None
+
+
 # ── LECTURA ────────────────────────────────────────────────────────────────
 
 @plantillas_revision_bp.route('/catalogo', methods=['GET'])
@@ -102,8 +142,14 @@ def listar():
         cur.execute("""SELECT plantilla_id, count(*) FROM doc_reviews
                         WHERE plantilla_id IS NOT NULL GROUP BY plantilla_id""")
         uso = {str(k): v for k, v in cur.fetchall()}
-        return jsonify({'plantillas': [
-            _fila(r, uso.get(str(r[0]), 0)) for r in filas]})
+        # Y SI SE PUEDE USAR AQUI, CON EL MOTIVO SI NO (E1.3): la pantalla lo dice
+        # antes de elegirla, en vez de dejar que se descubra al iniciar la revision.
+        plantillas = []
+        for r in filas:
+            p = _fila(r, uso.get(str(r[0]), 0))
+            p['utilizable'], p['motivo_no_utilizable'] = _utilizable_aqui(cur, p, obra)
+            plantillas.append(p)
+        return jsonify({'plantillas': plantillas})
 
 
 @plantillas_revision_bp.route('/<int:pid>', methods=['GET'])
@@ -161,17 +207,9 @@ def crear():
             # Una persona designada tiene que estar EN la obra. Se comprueba al
             # crear: descubrirlo al aplicar seria descubrirlo tarde.
             if alcance == plt.OBRA:
-                for i, paso in enumerate(pasos):
-                    if not paso.get('user_id'):
-                        continue
-                    cur.execute('SELECT 1 FROM project_users '
-                                ' WHERE project_id=%s AND user_id=%s',
-                                (obra, int(paso['user_id'])))
-                    if not cur.fetchone():
-                        return jsonify({
-                            'error': 'El revisor del paso %d no es miembro de esta '
-                                     'obra.' % (i + 1),
-                            'code': 'REVISOR_NO_MIEMBRO'}), 409
+                corte = _personas_fuera_de_la_obra(cur, obra, pasos)
+                if corte:
+                    return corte
 
             historia = [{'event': 'created', 'by': _actor(), 'version': 1}]
             cur.execute("""INSERT INTO doc_review_plantillas
@@ -191,8 +229,13 @@ def crear():
             return jsonify(_fila(cur.fetchone(), 0)), 201
     except Exception as e:
         logger.error('crear plantilla de revision: %s', e)
-        return jsonify({'error': 'No se pudo crear la plantilla. ¿Ya existe una con '
-                                 'ese nombre?'}), 409
+        # Solo un nombre repetido es «ya existe» (E1.3): cualquier otro fallo se
+        # anunciaba igual y mandaba a buscar un duplicado que no existia.
+        if getattr(e, 'pgcode', None) == '23505':
+            return jsonify({'error': 'Ya existe un flujo con ese nombre. Elige otro nombre.',
+                            'code': 'NOMBRE_REPETIDO'}), 409
+        return jsonify({'error': 'No se pudo crear el flujo por un error del servidor. '
+                                 'Vuelve a intentarlo.'}), 500
 
 
 # ── MODIFICAR: SUBE LA VERSION, NO TOCA NINGUNA REVISION ───────────────────
@@ -228,6 +271,10 @@ def modificar(pid):
             mal = plt.validar_pasos(pasos, alcance)
             if mal:
                 return jsonify({'error': mal, 'code': 'PASOS_INVALIDOS'}), 400
+            if alcance == plt.OBRA:
+                corte = _personas_fuera_de_la_obra(cur, obra, pasos)
+                if corte:
+                    return corte
             nombre = (data.get('nombre') or nombre_viejo).strip()
 
             nueva_version = version + 1
@@ -249,7 +296,11 @@ def modificar(pid):
             return jsonify(_fila(cur.fetchone(), cur2.fetchone()[0]))
     except Exception as e:
         logger.error('modificar plantilla %s: %s', pid, e)
-        return jsonify({'error': 'No se pudo modificar.'}), 500
+        if getattr(e, 'pgcode', None) == '23505':
+            return jsonify({'error': 'Ya existe un flujo con ese nombre. Elige otro nombre.',
+                            'code': 'NOMBRE_REPETIDO'}), 409
+        return jsonify({'error': 'No se pudo guardar el flujo por un error del servidor. '
+                                 'Vuelve a intentarlo.'}), 500
 
 
 @plantillas_revision_bp.route('/<int:pid>/activa', methods=['POST'])
