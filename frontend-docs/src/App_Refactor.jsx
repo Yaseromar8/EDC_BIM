@@ -29,6 +29,10 @@ import { apiFetch } from './utils/apiFetch';
 import {
   leerEnlace, conRevision, destinoTrasNavegar, CLAVE_DEL_ENLACE_PENDIENTE,
 } from './utils/revisiones';
+import {
+  leerEnlaceDeArchivos, conArchivos, destinoDeArchivosTrasNavegar, estadoDeArchivos,
+  CLAVE_DEL_ENLACE_DE_ARCHIVOS, ENLACE_NO_DISPONIBLE,
+} from './utils/enlacesDeArchivos';
 
 // ── Pages ──
 import HubPage from './pages/HubPage';
@@ -83,11 +87,50 @@ export default function App() {
   // «ser admin de la entidad» la llave de las herramientas — administración y
   // acceso a herramientas son cosas distintas, y confundirlas dejaba a todo
   // miembro de obra sin expediente.
-  const chooseDocs = () => { sessionStorage.setItem('ecd_entered_docs', '1'); setEnteredDocs(true); };
+  // CADA ENTRADA DEL HISTORIAL SABE QUÉ PANTALLA ES (enlaces de Archivos, 14-sep-2026).
+  // La portada y la lista de obras no tienen dirección propia: se marcan en
+  // `history.state`, sin añadir pasos a Atrás, para que Atrás y Adelante puedan volver a
+  // ellas. La obra, la carpeta y el documento sí van en la dirección.
+  const marcarEntrada = (pantalla) => window.history.replaceState(
+    { alephia: pantalla }, '', window.location.href);
+  const chooseDocs = () => {
+    sessionStorage.setItem('ecd_entered_docs', '1'); setEnteredDocs(true); marcarEntrada('lista');
+  };
   const logoutFull = () => { sessionStorage.removeItem('ecd_entered_docs'); logout(); };
   // Volver al Hub (clic en el logo): el Hub es la ÚNICA puerta entre productos —
   // dentro de Docs no hay puentes directos al visor (sin fugas de navegación).
   const backToHub = () => { sessionStorage.removeItem('ecd_entered_docs'); setEnteredDocs(false); };
+  const backToHubDesdeLaLista = () => { backToHub(); marcarEntrada('hub'); };
+
+  // ── ENLACE DE ARCHIVOS: `/?obra=<id>[&carpeta=<id>[&documento=<id>[&version=<id>]]]` ──
+  //
+  // Como el de una revisión: se guarda en sessionStorage mientras se inicia sesión, y la
+  // obra se busca entre las obras de ESTA persona. Aquí solo se entra en la obra: la
+  // carpeta y el documento los abre el explorador, que vuelve a preguntar al servidor
+  // (`/api/docs/ubicacion`). Si ya se está dentro de esa obra no hay nada que resolver.
+  const [enlaceArchivos, setEnlaceArchivos] = useState(() => {
+    const search = window.location.search;
+    if (leerEnlace(search)) {
+      // La dirección trae una revisión: un enlace de Archivos que esperaba no la pisa.
+      sessionStorage.removeItem(CLAVE_DEL_ENLACE_DE_ARCHIVOS);
+      return null;
+    }
+    const deLaUrl = leerEnlaceDeArchivos(search);
+    if (deLaUrl) {
+      // Y al revés: la dirección manda sobre una revisión que esperaba el login.
+      sessionStorage.removeItem(CLAVE_DEL_ENLACE_PENDIENTE);
+      let guardada = null;
+      try { guardada = JSON.parse(localStorage.getItem('selected_project') || 'null'); } catch { guardada = null; }
+      if (user && guardada && String(guardada.id) === deLaUrl.obra
+          && sessionStorage.getItem('ecd_entered_docs') === '1') return null;
+      sessionStorage.setItem(CLAVE_DEL_ENLACE_DE_ARCHIVOS, JSON.stringify(deLaUrl));
+      return deLaUrl;
+    }
+    try {
+      const guardado = JSON.parse(sessionStorage.getItem(CLAVE_DEL_ENLACE_DE_ARCHIVOS) || 'null');
+      return guardado?.obra ? guardado : null;
+    } catch { return null; }
+  });
 
   // ── ENLACE A UNA REVISIÓN: `/?obra=<id>&revision=<id>`, o desde Mi Trabajo ──
   //
@@ -164,6 +207,58 @@ export default function App() {
     return () => { cancelado = true; };
   }, [user, enlace]);
 
+  // EL ENLACE DE ARCHIVOS: entrar en su obra. Sin la obra entre las de esta persona, el
+  // aviso neutro de siempre y la dirección limpia.
+  useEffect(() => {
+    if (!user || !enlaceArchivos) return undefined;
+    let cancelado = false;
+    let sinSesion = false;
+    const quitarDeLaUrl = () => window.history.replaceState(window.history.state, '',
+      window.location.pathname + conArchivos(window.location.search, null));
+    (async () => {
+      // La dirección dice lo que se va a ver, también si el enlace volvió de sessionStorage.
+      window.history.replaceState(window.history.state, '', window.location.pathname
+        + conArchivos(window.location.search, enlaceArchivos));
+      try {
+        let obra = null;
+        let guardada = null;
+        try { guardada = JSON.parse(localStorage.getItem('selected_project') || 'null'); } catch { guardada = null; }
+        if (guardada && String(guardada.id) === String(enlaceArchivos.obra)) {
+          obra = guardada;
+        } else {
+          const r = await apiFetch(`${API}/api/projects?user_id=${user.id}&role=${user.role}`);
+          // Sesión caducada: `apiFetch` recarga hacia el login. El enlace sigue en la
+          // dirección y en sessionStorage, y se abre después de entrar.
+          if (r.status === 401) { sinSesion = true; return; }
+          const d = r.ok ? await r.json() : null;
+          const lista = Array.isArray(d) ? d : (d?.projects || []);
+          obra = lista.find(p => String(p.id) === String(enlaceArchivos.obra)) || null;
+        }
+        if (cancelado) return;
+        if (obra) {
+          localStorage.setItem('selected_project', JSON.stringify(obra));
+          setSelectedProject(obra);
+          sessionStorage.setItem('ecd_entered_docs', '1');
+          setEnteredDocs(true);
+        } else {
+          quitarDeLaUrl();
+          setAvisoDeEnlace(ENLACE_NO_DISPONIBLE);
+        }
+      } catch {
+        if (!cancelado) {
+          quitarDeLaUrl();
+          setAvisoDeEnlace('No se pudo abrir el enlace: no se pudo cargar la lista de obras.');
+        }
+      } finally {
+        if (!cancelado && !sinSesion) {
+          sessionStorage.removeItem(CLAVE_DEL_ENLACE_DE_ARCHIVOS);
+          setEnlaceArchivos(null);
+        }
+      }
+    })();
+    return () => { cancelado = true; };
+  }, [user, enlaceArchivos]);
+
   // ATRÁS Y ADELANTE HACIA UNA REVISIÓN DE OTRA OBRA, O FUERA DE DOCUMENTOS (E1.2 · H5).
   //
   // Si el navegador devuelve a la dirección el enlace de una revisión estando en la
@@ -186,6 +281,28 @@ export default function App() {
     };
     window.addEventListener('popstate', alNavegar);
     return () => window.removeEventListener('popstate', alNavegar);
+  }, []);
+
+  // ATRÁS Y ADELANTE ENTRE OBRAS, LA LISTA Y LA PORTADA (enlaces de Archivos). Dentro de
+  // la obra que se está viendo, la carpeta y el documento los resuelve el explorador.
+  useEffect(() => {
+    const alNavegarEntreObras = () => {
+      const { user: quien, enteredDocs: dentro, selectedProject: obra } = pantalla.current;
+      if (!quien) return;
+      const destino = destinoDeArchivosTrasNavegar(window.location.search, window.history.state,
+        { enDocumentos: Boolean(dentro && obra), obraActual: obra?.id });
+      if (destino.tipo === 'enlace') {
+        setEnlaceArchivos(destino.enlace);
+      } else if (destino.tipo === 'lista' || destino.tipo === 'hub') {
+        localStorage.removeItem('selected_project');
+        setSelectedProject(null);
+        if (destino.tipo === 'lista') sessionStorage.setItem('ecd_entered_docs', '1');
+        else sessionStorage.removeItem('ecd_entered_docs');
+        setEnteredDocs(destino.tipo === 'lista');
+      }
+    };
+    window.addEventListener('popstate', alNavegarEntreObras);
+    return () => window.removeEventListener('popstate', alNavegarEntreObras);
   }, []);
 
   // SSO de vuelta (Visor -> Hub): el visor manda un ticket efímero de un solo
@@ -275,6 +392,21 @@ export default function App() {
     setSelectedProject(p);
   };
 
+  // ELEGIR UNA OBRA Y SALIR DE ELLA escriben la dirección, con su paso en Atrás.
+  const elegirObra = (p) => {
+    marcarEntrada('lista');
+    const destino = { obra: String(p.id) };
+    window.history.pushState(estadoDeArchivos(destino), '', window.location.pathname
+      + conArchivos(window.location.search, destino));
+    handleSelectProject(p);
+  };
+  const salirDeLaObra = (pantalla) => {
+    window.history.pushState({ alephia: pantalla }, '', window.location.pathname
+      + conArchivos(window.location.search, null));
+    handleSelectProject(null);
+    if (pantalla === 'hub') backToHub();
+  };
+
   // ── Route Resolution ──
   if (!user) {
     return <LoginScreen onLogin={saveUser} />;
@@ -342,6 +474,15 @@ export default function App() {
     );
   }
 
+  if (enlaceArchivos) {
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center',
+                    justifyContent: 'center', gap: 12, color: '#555', fontSize: 14 }}>
+        <div className="adsk-spinner" /> Abriendo el enlace…
+      </div>
+    );
+  }
+
   // Si el enlace no se pudo abrir, se dice encima de la página a la que se llega.
   const conAviso = (pagina) => (!avisoDeEnlace ? pagina : (
     <>
@@ -377,9 +518,9 @@ export default function App() {
       <ErrorBoundary scope="proyectos" title="No se pudo mostrar la lista de proyectos">
         <SecureProjectsPage
           user={user}
-          onSelectProject={handleSelectProject}
+          onSelectProject={elegirObra}
           onLogout={logoutFull}
-          onBackToHub={backToHub}
+          onBackToHub={backToHubDesdeLaLista}
         />
       </ErrorBoundary>
     );
@@ -392,8 +533,8 @@ export default function App() {
       <FilesPage
         project={selectedProject}
         user={user}
-        onBack={() => handleSelectProject(null)}
-        onBackToHub={() => { handleSelectProject(null); backToHub(); }}
+        onBack={() => salirDeLaObra('lista')}
+        onBackToHub={() => salirDeLaObra('hub')}
         onLogout={logoutFull}
       />
     </ErrorBoundary>

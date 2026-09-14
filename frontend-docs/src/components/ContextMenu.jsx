@@ -29,6 +29,7 @@ export default function ContextMenu({
   onDelete,
   onAttributes,
   onNuevaVersion,
+  onCopiarEnlace,
 }) {
   if (!activeRowMenu) return null;
 
@@ -60,6 +61,7 @@ export default function ContextMenu({
     (item.type !== 'folder' && onNuevaVersion && visible('nueva_version') ? 1 : 0) +
     (isAdmin ? 2 : 0) +
     (item.type !== 'folder' && onAttributes ? 1 : 0) +
+    (onCopiarEnlace && !varios ? 1 : 0) +
     1 +
     (isAdmin ? 2 : 0);
   const estHeight = 16 + acciones * 40;
@@ -141,6 +143,15 @@ export default function ContextMenu({
         <button {...props('compartir')} onClick={() => { if (!cap('compartir').disponible) return; onClose(); onShare(item); }}>
           <div className="menu-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line></svg></div>
           Compartir
+        </button>
+      )}
+      {/* COPIAR ENLACE (14-sep-2026): el enlace interno de la carpeta, o del documento
+          en su versión vigente. No concede nada --quien lo abre necesita sesión y
+          permiso-- y no es «Compartir», que crea un enlace público. */}
+      {onCopiarEnlace && !varios && (
+        <button onClick={() => { onClose(); onCopiarEnlace(item); }}>
+          <div className="menu-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg></div>
+          Copiar enlace
         </button>
       )}
       {item.type !== 'folder' && onAttributes && visible('atributos') && (

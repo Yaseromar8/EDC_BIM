@@ -289,6 +289,8 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
     if (fe.activeFile && String(fe.activeFile.id) === String(f.id)) return;
     reiniciarTira();
     fe.setActiveFile(f);
+    // Su paso en Atrás y su enlace (enlaces de Archivos, 14-sep-2026).
+    fe.anotarDocumento(f);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fe.activeFile]);
 
@@ -1397,7 +1399,8 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
           fe.setShowDeleteModal(true);
         }}
         onAttributes={(item) => setAttributesItem(item)}
-        onNuevaVersion={pedirNuevaVersion} />
+        onNuevaVersion={pedirNuevaVersion}
+        onCopiarEnlace={fe.copiarEnlace} />
       <input ref={selectorDeVersion} type="file" hidden
         onChange={(e) => {
           const fichero = e.target.files && e.target.files[0];
@@ -1417,12 +1420,12 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
 
       {fe.activeFile && fe.activeFile.type !== 'folder' && (
         <DocumentViewer file={fe.activeFile} projectPrefix={projectPrefix} versionHistory={vh.versionHistory}
-          viewedVersionInfo={fe.viewedVersionInfo} setViewedVersionInfo={fe.setViewedVersionInfo}
+          viewedVersionInfo={fe.viewedVersionInfo} setViewedVersionInfo={fe.verVersion}
           showVersions={fe.showVersions} setShowVersions={fe.setShowVersions} isAdmin={isAdmin}
           onPromote={vh.handlePromote} API={API}
           hermanos={(fe.files || []).filter(f => /\.pdfx?$/i.test(f.name || ''))}
-          onAbrirHermano={(doc) => { fe.setViewedVersionInfo(null); fe.setShowVersions(false); fe.setActiveFile(doc); }}
-          onClose={() => { fe.setActiveFile(null); fe.setShowVersions(false); fe.setViewedVersionInfo(null); }} />
+          onAbrirHermano={(doc) => { fe.setViewedVersionInfo(null); fe.setShowVersions(false); fe.setActiveFile(doc); fe.anotarDocumento(doc, { reemplazar: true }); }}
+          onClose={fe.cerrarDocumento} />
       )}
 
       <DeleteModal isOpen={fe.showDeleteModal} deleteTask={fe.deleteTask} onConfirm={fe.confirmBatchDelete} onClose={() => fe.setShowDeleteModal(false)} />

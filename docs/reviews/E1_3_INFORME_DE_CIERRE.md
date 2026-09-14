@@ -2,7 +2,7 @@
 
 14-sep-2026. Base: `41d7dda`, en producción. Pedido: «Si hago ya el arreglo de flujos creados y empiezo el contrato de volver atrás / devolver al iniciador». Diagnóstico previo: `E1_3_FLUJOS_CREADOS_Y_RECHAZO.md`. El contrato va aparte: `E3_CONTRATO_RONDAS.md`.
 
-**Estado:** probado en local y commiteado con tu autorización («HAZLO»). **Falta el push y el despliegue**, cada uno con su autorización (§7).
+**Estado:** probado en local, commiteado (`88b300f`, con tu «HAZLO») y publicado con push (tu «si»). **Falta el despliegue**, cada paso con tu autorización (§7).
 
 ## En corto
 
@@ -102,7 +102,7 @@ En la batería del servidor, `tests/test_capa16_tool_activation.py` deja encendi
    - el contrato `E3_CONTRATO_RONDAS.md`, para que lo revises (sin código);
    - la guía con el bloque H;
    - lo pendiente del despliegue de A y B: `AI_WORKSTATE.md` y el informe `02_PLANOS_CAD_Y_EDITAR_EN_CARPETA.md`.
-2. **Push normal**, tras releer Auto-Deploy «Off» en los 4 servicios.
+2. **Push: hecho** con tu «si», tras comprobar Auto-Deploy «Off» en los 4 servicios. No arrancó ningún despliegue solo.
 3. **Manual Deploy del backend** `visor-ecd-backend-va`. Luego, `/api/health` y «Booting worker» en el log. El portal de ahora sigue funcionando con él, porque la vista previa antigua no cambia.
 4. **Manual Deploy del portal** `visor-ecd-portal`, verificado por contenido: la ruta `/api/reviews/previsualizar` y «Comprobando el flujo».
 
@@ -126,8 +126,8 @@ CORRECCIONES PREVIAS = E1.3 en local, sin commit: los flujos creados se pueden u
   pasos por función; flujos no utilizables marcados con su motivo en el alta y en el editor; vista previa
   con todas las comprobaciones del alta; plazo 0 y personas de fuera ya no se guardan; errores legibles;
   respuesta tardía descartada).
-FUNCIONES NUEVAS YA UTILIZABLES = ninguna en producción todavía: lo anterior lo será tras el push y los
-  dos Manual Deploy.
+FUNCIONES NUEVAS YA UTILIZABLES = ninguna en producción todavía: lo anterior lo será tras los dos
+  Manual Deploy.
 FUNCIONES DEL OBJETIVO TODAVÍA PENDIENTES = contrato RONDAS (escrito, espera tus respuestas R1–R14 para
   congelarlo); E2 anular y archivar (sin autorizar); E3 y E4 rondas, volver al paso anterior, devolver al
   iniciador, decisión por archivo y cierre separado de la emisión; E5 exportación.

@@ -1029,6 +1029,56 @@ def get_versions():
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
 
+@documents_bp.route('/api/docs/ubicacion', methods=['GET'])
+def ubicacion_de_un_enlace():
+    """Donde esta HOY una carpeta o un documento de la obra, para abrir su enlace interno.
+
+    `?model_urn=<obra>&carpeta=<id>`, o `&documento=<id>[&version=<id>]`. El enlace no
+    concede nada: se comprueba usuario -> obra -> recurso -> permiso, y version ->
+    documento (`enlaces_de_archivos.ubicar`). Inexistente, de otra obra, en la papelera
+    o sin permiso responden EXACTAMENTE lo mismo, sin nombre ni ubicacion: distinguirlos
+    convertiria el enlace en un buscador.
+    """
+    import enlaces_de_archivos as enlaces
+    from flask import g
+    user = getattr(g, 'current_user', None)
+    if not user:
+        return jsonify({"success": False, "error": "Autenticación requerida"}), 401
+    model_urn = request.args.get('model_urn', '')
+
+    def no_disponible(motivo):
+        logger.info(f"[ENLACE] no disponible ({motivo}): user={user.get('id')} obra={model_urn}")
+        return jsonify({"success": False, "code": enlaces.CODIGO_NO_DISPONIBLE,
+                        "error": enlaces.MENSAJE_NO_DISPONIBLE}), 404
+
+    if not model_urn or model_urn == 'global' or not verify_project_access(user, model_urn):
+        return no_disponible('obra')
+    motivo = None
+    try:
+        from db import get_db_connection
+        with get_db_connection() as conn:
+            # La negativa se recoge AQUI DENTRO: si saliera por la conexion, el registro la
+            # apuntaria como un error de base de datos, y no lo es.
+            try:
+                destino = enlaces.ubicar(
+                    conn.cursor(), user, model_urn,
+                    carpeta=request.args.get('carpeta'),
+                    documento=request.args.get('documento'),
+                    version=request.args.get('version'),
+                    # La misma regla que `/api/docs/versions` para la clave de almacenamiento.
+                    puede_descargar=lambda nodo: check_folder_permission(
+                        user, nodo, model_urn, 'view_download', 'descargar') is None)
+            except enlaces.NoDisponible as e:
+                motivo = e.motivo
+    except Exception as e:
+        logger.error(f"[ENLACE] no se pudo resolver: {e}")
+        return jsonify({"success": False, "code": "ERROR_DEL_SERVIDOR",
+                        "error": "No se pudo abrir el enlace. Inténtalo de nuevo."}), 500
+    if motivo is not None:
+        return no_disponible(motivo)
+    return jsonify({"success": True, **destino}), 200
+
+
 @documents_bp.route('/api/docs/versions/promote', methods=['POST'])
 def promote_document_version():
     """Promociona una versión antigua a la actual (Crea una nueva versión con el mismo URN)."""

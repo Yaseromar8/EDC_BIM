@@ -15,6 +15,29 @@ import { useAdministracion } from './useAdministracion';
 import toast from 'react-hot-toast';
 import { arbolDocumental } from '../utils/arbolDocumental';
 import { leerEnlace, conRevision, destinoTrasNavegar } from '../utils/revisiones';
+import {
+  leerEnlaceDeArchivos, conArchivos, sinCarpetaNiDocumento, enlaceDeArchivos, estadoDeArchivos,
+  rutaDeLaCadena, pideLaVistaDeCarpetas, esIdentificador, ENLACE_NO_DISPONIBLE,
+} from '../utils/enlacesDeArchivos';
+
+// «Copiar enlace». El portapapeles moderno solo existe en contexto seguro; fuera de él,
+// el camino clásico. Si ninguno copia, se dice.
+async function copiarAlPortapapeles(texto) {
+  if (window.isSecureContext && navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(texto);
+    return;
+  }
+  const area = document.createElement('textarea');
+  area.value = texto;
+  area.setAttribute('readonly', '');
+  area.style.position = 'fixed';
+  area.style.opacity = '0';
+  document.body.appendChild(area);
+  area.select();
+  const copiado = document.execCommand('copy');
+  document.body.removeChild(area);
+  if (!copiado) throw new Error('No se pudo copiar');
+}
 import { puedeEditarEn } from '../utils/capacidadesDeSeleccion';
 
 export function useFileExplorer(project, user) {
@@ -50,10 +73,18 @@ export function useFileExplorer(project, user) {
   const [currentNodeId, setCurrentNodeId] = useState(null);
   const [projectRootId, setProjectRootId] = useState(null);
 
+  // ENLACES DE ARCHIVOS. Un enlace con carpeta o documento de esta obra se resuelve
+  // ANTES del primer listado: así no se pinta la raíz para saltar después.
+  const obraDelEnlace = project?.id != null ? String(project.id) : null;
+  const [resolviendoEnlace, setResolviendoEnlace] = useState(() => {
+    const enlace = leerEnlaceDeArchivos(window.location.search);
+    return Boolean(enlace && enlace.obra === obraDelEnlace && (enlace.carpeta || enlace.documento));
+  });
+
   // ── File/Folder Data ──
   const [folders, setFolders] = useState([]);
   const [files, setFiles] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(resolviendoEnlace);
   const [selected, setSelected] = useState(new Set());
   const [refreshSignal, setRefreshSignal] = useState(0);
 
@@ -268,6 +299,7 @@ export function useFileExplorer(project, user) {
         
         setFolders(sortedFolders);
         setFiles(sortedFiles);
+        if (!trash) alListarCarpeta.current(path, data.current_node_id, sortedFiles);
         
         // 🔥 SWR Sync: Asegurar que la tabla principal alimente la caché global para que las flechas laterales estén listas instantáneamente
         if (nodeId && cacheMethods && !trash) {
@@ -290,14 +322,20 @@ export function useFileExplorer(project, user) {
           }));
           setDeletedItems(allDel);
         }
+      } else if (!trash) {
+        alFallarListado.current(path);
       }
-    } catch (e) { console.error(e); }
+    } catch (e) {
+      console.error(e);
+      if (!trash && seq === fetchSeqRef.current) alFallarListado.current(path);
+    }
     finally { if (!silent && seq === fetchSeqRef.current) setLoading(false); }
   }, [projectPrefix, cacheMethods]);
 
   useEffect(() => {
+    if (resolviendoEnlace) return;           // primero, dónde está lo que pide la dirección
     fetchContents(currentPath, isTrashMode, false, isTrashMode ? null : currentNodeId);
-  }, [currentPath, isTrashMode, currentNodeId, fetchContents]);
+  }, [currentPath, isTrashMode, currentNodeId, fetchContents, resolviendoEnlace]);
 
   const triggerRefresh = useCallback((path = currentPath, specificNodeId = undefined) => {
     const idToUse = specificNodeId !== undefined ? specificNodeId : currentNodeId;
@@ -317,7 +355,10 @@ export function useFileExplorer(project, user) {
     return () => clearTimeout(uploadRefreshTimerRef.current);
   }, [chunkedUpload.completedCount, currentPath, triggerRefresh]);
 
-  const navigate = useCallback((path, id = null) => {
+  // `historial`: 'push' en los viajes de la persona (su paso en Atrás); 'replace' o 'nada'
+  // para lo que solo corrige o restaura. El paso se escribe cuando el listado confirma el
+  // id de la carpeta: las migas de pan llegan con la ruta, no con el id.
+  const navigate = useCallback((path, id = null, { historial = 'push' } = {}) => {
     const normalizedPath = path.replace(/\/$/, '');
     const isRoot = normalizedPath === projectPrefix;
     const finalId = isRoot ? null : id;
@@ -332,6 +373,13 @@ export function useFileExplorer(project, user) {
     setSearchQuery('');
 
     if (finalPath === currentPath && finalId === currentNodeId) return;
+
+    // La persona manda sobre un enlace que aún se estuviera resolviendo.
+    peticionDeEnlace.current += 1;
+    enlaceEnVuelo.current = false;
+    aperturaPendiente.current = null;
+    historialPendiente.current = historial === 'nada' ? null : { ruta: finalPath, accion: historial };
+    setResolviendoEnlace(false);
 
     // No vaciamos los arrays ni ponemos loading bruto, dejamos que fetchContents lo maneje con caché
     setCurrentPath(finalPath);
@@ -356,6 +404,306 @@ export function useFileExplorer(project, user) {
     setSelected(new Set());
     triggerRefresh(path, nodeId);
   }, [switchMode, triggerRefresh]);
+
+  // ═══════════════════════════════════════════════════════════════
+  // ENLACES DE ARCHIVOS: la carpeta y el documento en la dirección (14-sep-2026)
+  // ═══════════════════════════════════════════════════════════════
+  //
+  //   · entrar en una carpeta o abrir un documento añade su paso en Atrás;
+  //   · Atrás, Adelante y F5 restauran la carpeta y el documento;
+  //   · lo que llega por la dirección se valida SIEMPRE en el servidor
+  //     (`/api/docs/ubicacion`): la carpeta es contexto y el documento manda; si se
+  //     movió, se corrige la dirección sin añadir pasos;
+  //   · fuera de la vista de carpetas la dirección no dice carpeta ni documento.
+  // La papelera, la búsqueda y Compartir no cambian.
+  const peticionDeEnlace = useRef(0);
+  const enlaceEnVuelo = useRef(false);
+  const historialPendiente = useRef(null);   // { ruta, accion } hasta que llegue el listado
+  const aperturaPendiente = useRef(null);    // { ruta, carpeta, documento, version }
+  const carpetaListadaRef = useRef(null);
+  const filesRef = useRef([]);
+  const activeFileRef = useRef(activeFile);
+  const versionVistaRef = useRef(viewedVersionInfo);
+  const currentPathRef = useRef(currentPath);
+  const loadingRef = useRef(loading);
+  const isTrashModeRef = useRef(isTrashMode);
+  const vistaAnterior = useRef(sidebarView);
+  useEffect(() => { activeFileRef.current = activeFile; }, [activeFile]);
+  useEffect(() => { versionVistaRef.current = viewedVersionInfo; }, [viewedVersionInfo]);
+  useEffect(() => { currentPathRef.current = currentPath; }, [currentPath]);
+  useEffect(() => { loadingRef.current = loading; }, [loading]);
+  useEffect(() => { isTrashModeRef.current = isTrashMode; }, [isTrashMode]);
+
+  const enLaRaiz = (ruta) => ruta === projectPrefix || ruta === `${projectPrefix}/`;
+  const carpetaVisible = () => (enLaRaiz(currentPathRef.current)
+    ? null : (currentNodeIdRef.current || carpetaListadaRef.current || null));
+
+  const escribirDireccion = (enlace, accion = 'replace', extra = {}) => {
+    if (!obraDelEnlace || vistaActual.current !== 'files') return;
+    const destino = { ...enlace, obra: obraDelEnlace };
+    const url = window.location.pathname + conArchivos(window.location.search, destino);
+    const estado = estadoDeArchivos(destino, extra);
+    if (accion === 'push' && url !== window.location.pathname + window.location.search) {
+      window.history.pushState(estado, '', url);
+    } else {
+      window.history.replaceState(estado, '', url);
+    }
+  };
+
+  const cerrarVisor = () => { setActiveFile(null); setShowVersions(false); setViewedVersionInfo(null); };
+
+  // Ir a una carpeta SIN añadir pasos (restaurar, corregir). Dice si cambia lo listado.
+  const irACarpeta = (ruta, carpetaId) => {
+    const raiz = enLaRaiz(ruta);
+    const id = raiz ? null : carpetaId;
+    historialPendiente.current = null;
+    setSearchQuery('');
+    if (vistaActual.current !== 'files') {
+      vistaAnterior.current = 'files';
+      vistaActual.current = 'files';
+      fijarVista('files');
+    }
+    const misma = ruta === currentPathRef.current
+      && (raiz || id === currentNodeIdRef.current || id === carpetaListadaRef.current);
+    if (misma && !isTrashModeRef.current) return false;
+    currentPathRef.current = ruta;
+    currentNodeIdRef.current = id;
+    setCurrentPath(ruta);
+    setCurrentNodeId(id);
+    setNivelCarpetaActual(null);
+    setSelected(new Set());
+    setIsTrashMode(false);
+    return !misma;
+  };
+
+  const abrirDesdeElListado = (apertura, lista) => {
+    const doc = (lista || []).find(f => String(f.id) === String(apertura.documento));
+    if (!doc) {
+      // El servidor lo dio por bueno, pero el listado ya no lo trae: se borró o cambió
+      // entre tanto. Se dice como cualquier enlace que no se abre.
+      toast.error(ENLACE_NO_DISPONIBLE);
+      escribirDireccion({ carpeta: apertura.carpeta }, 'replace');
+      return;
+    }
+    const previo = window.history.state;
+    const abiertoAqui = Boolean(previo?.alephia === 'archivos' && previo.abiertoAqui
+      && String(previo.documento) === String(doc.id));
+    setShowVersions(false);
+    setViewedVersionInfo(apertura.version || null);
+    setActiveFile(doc);
+    activeFileRef.current = doc;
+    escribirDireccion({ carpeta: apertura.carpeta, documento: String(doc.id),
+                        version: apertura.version?.id || null }, 'replace', { abiertoAqui });
+  };
+
+  // Lo que llama `fetchContents`: siempre la versión de este render.
+  const alListarCarpeta = useRef(() => {});
+  const alFallarListado = useRef(() => {});
+  const restaurarEnlace = useRef(async () => {});
+  useEffect(() => {
+    alListarCarpeta.current = (ruta, idListado, lista) => {
+      const id = idListado && idListado !== 'null' ? String(idListado) : null;
+      const carpeta = enLaRaiz(ruta) ? null : id;
+      carpetaListadaRef.current = id;
+      filesRef.current = lista;
+      const apertura = aperturaPendiente.current;
+      if (apertura && apertura.ruta === ruta) {
+        aperturaPendiente.current = null;
+        abrirDesdeElListado(apertura, lista);
+        return;
+      }
+      const pendiente = historialPendiente.current;
+      if (pendiente) {
+        if (pendiente.ruta !== ruta) return;
+        historialPendiente.current = null;
+        escribirDireccion({ carpeta }, pendiente.accion);
+        return;
+      }
+      // Sin viaje pendiente --se suprimió la carpeta abierta, por ejemplo-- la dirección
+      // sigue a lo que se ve, sin añadir pasos.
+      if (enlaceEnVuelo.current || activeFileRef.current || aperturaPendiente.current) return;
+      const enlace = leerEnlaceDeArchivos(window.location.search);
+      if (enlace && enlace.obra === obraDelEnlace && ((enlace.carpeta || null) !== carpeta || enlace.documento)) {
+        escribirDireccion({ carpeta }, 'replace');
+      }
+    };
+
+    alFallarListado.current = (ruta) => {
+      if (aperturaPendiente.current?.ruta === ruta) {
+        aperturaPendiente.current = null;
+        toast.error('No se pudo abrir el documento: no se pudo cargar su carpeta.');
+      }
+      if (historialPendiente.current?.ruta === ruta) historialPendiente.current = null;
+    };
+
+    restaurarEnlace.current = async (enlace, { inicial = false } = {}) => {
+      const n = ++peticionDeEnlace.current;
+      enlaceEnVuelo.current = true;
+      const q = new URLSearchParams({ model_urn: projectPrefix });
+      ['carpeta', 'documento', 'version'].forEach((clave) => { if (enlace[clave]) q.set(clave, enlace[clave]); });
+      let r = null;
+      let d = null;
+      try {
+        r = await apiFetch(`${API}/api/docs/ubicacion?${q.toString()}`);
+        d = await r.json().catch(() => null);
+      } catch { r = null; }
+      if (n !== peticionDeEnlace.current) return;
+      enlaceEnVuelo.current = false;
+      if (r && r.status === 401) return;          // `apiFetch` ya recarga hacia el login
+      if (!r || !r.ok || !d?.success) {
+        aperturaPendiente.current = null;
+        cerrarVisor();
+        if (r) {
+          // Inexistente, de otra obra, en la papelera o sin permiso: lo mismo, sin nombres.
+          toast.error(ENLACE_NO_DISPONIBLE);
+          irACarpeta(`${projectPrefix}/`, null);
+          escribirDireccion({ carpeta: null }, 'replace');
+        } else {
+          toast.error('No se pudo abrir el enlace: no se pudo conectar con el servidor.');
+        }
+        if (inicial) setResolviendoEnlace(false);
+        return;
+      }
+      const ruta = rutaDeLaCadena(projectPrefix, d.ruta);
+      const carpeta = d.carpeta || null;
+      if (d.documento) {
+        aperturaPendiente.current = { ruta, carpeta, documento: String(d.documento), version: d.version || null };
+        const cambia = irACarpeta(ruta, carpeta);
+        if (!cambia && !inicial && !loadingRef.current) {
+          const apertura = aperturaPendiente.current;
+          aperturaPendiente.current = null;
+          abrirDesdeElListado(apertura, filesRef.current);
+        }
+      } else {
+        aperturaPendiente.current = null;
+        cerrarVisor();
+        irACarpeta(ruta, carpeta);
+        escribirDireccion({ carpeta }, 'replace');
+      }
+      if (inicial) setResolviendoEnlace(false);
+    };
+  });
+
+  // Al montar: el enlace de la dirección, o la dirección de la obra.
+  useEffect(() => {
+    const enlace = leerEnlaceDeArchivos(window.location.search);
+    if (enlace && enlace.obra === obraDelEnlace && (enlace.carpeta || enlace.documento)) {
+      restaurarEnlace.current(enlace, { inicial: true });
+    } else if (vistaActual.current === 'files' && !leerEnlace(window.location.search)) {
+      escribirDireccion({ carpeta: null }, 'replace');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ATRÁS Y ADELANTE dentro de la obra. Las revisiones las resuelve `alNavegar`, y otra
+  // obra, la lista y la portada, `App_Refactor`.
+  useEffect(() => {
+    const alNavegarEnArchivos = () => {
+      const enlace = leerEnlaceDeArchivos(window.location.search);
+      if (!enlace || enlace.obra !== obraDelEnlace) return;
+      if (vistaActual.current !== 'files' && !pideLaVistaDeCarpetas(enlace, obraDelEnlace)) return;
+      historialPendiente.current = null;
+      if (!enlace.carpeta && !enlace.documento) {
+        peticionDeEnlace.current += 1;
+        enlaceEnVuelo.current = false;
+        aperturaPendiente.current = null;
+        cerrarVisor();
+        irACarpeta(`${projectPrefix}/`, null);
+        return;
+      }
+      const visible = carpetaVisible();
+      const abierto = activeFileRef.current;
+      const enCarpetas = vistaActual.current === 'files' && !isTrashModeRef.current;
+      if (enCarpetas && !enlace.documento && enlace.carpeta === visible) {
+        // Cerrar el documento: su carpeta ya es la que se ve.
+        peticionDeEnlace.current += 1;
+        enlaceEnVuelo.current = false;
+        aperturaPendiente.current = null;
+        cerrarVisor();
+        return;
+      }
+      const versionVista = versionVistaRef.current?.id ? String(versionVistaRef.current.id) : null;
+      if (enCarpetas && enlace.documento && abierto && String(abierto.id) === enlace.documento
+          && (enlace.carpeta || null) === visible && (enlace.version || null) === versionVista) return;
+      restaurarEnlace.current(enlace);
+    };
+    window.addEventListener('popstate', alNavegarEnArchivos);
+    return () => window.removeEventListener('popstate', alNavegarEnArchivos);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [obraDelEnlace, projectPrefix]);
+
+  // Fuera de la vista de carpetas la dirección no dice carpeta ni documento; al volver,
+  // dice otra vez la carpeta que se ve. Ninguno de los dos añade pasos a Atrás.
+  useEffect(() => {
+    const antes = vistaAnterior.current;
+    vistaAnterior.current = sidebarView;
+    if (sidebarView !== 'files') {
+      historialPendiente.current = null;
+      const search = window.location.search;
+      const limpia = sinCarpetaNiDocumento(search);
+      if (limpia !== search) window.history.replaceState(null, '', window.location.pathname + limpia);
+      return;
+    }
+    if (antes !== 'files') escribirDireccion({ carpeta: carpetaVisible() }, 'replace');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sidebarView]);
+
+  // Abrir desde la tabla o la cuadrícula: su paso en Atrás. Pasar al siguiente dentro
+  // del lector solo cambia la dirección.
+  const anotarDocumento = (doc, { reemplazar = false } = {}) => {
+    if (!doc?.id || !esIdentificador(doc.id)) return;
+    const abiertoAqui = reemplazar ? Boolean(window.history.state?.abiertoAqui) : true;
+    escribirDireccion({ carpeta: carpetaVisible(), documento: String(doc.id) },
+                      reemplazar ? 'replace' : 'push', { abiertoAqui });
+  };
+
+  // Cerrar vuelve a la dirección de su carpeta: con Atrás si el paso lo dio abrirlo aquí,
+  // y si llegó por un enlace, sin tocar la historia de antes.
+  const cerrarDocumento = () => {
+    const previo = window.history.state;
+    const abierto = activeFileRef.current;
+    cerrarVisor();
+    activeFileRef.current = null;
+    if (vistaActual.current !== 'files') return;
+    if (previo?.alephia === 'archivos' && previo.abiertoAqui && abierto
+        && String(previo.documento) === String(abierto.id)) {
+      window.history.back();
+      return;
+    }
+    escribirDireccion({ carpeta: carpetaVisible() }, 'replace');
+  };
+
+  // Elegir una versión en el lector: la vigente no lleva `version`; otra, sí. Sin pasos.
+  const verVersion = (version) => {
+    setViewedVersionInfo(version);
+    const doc = activeFileRef.current;
+    if (!doc?.id || !esIdentificador(doc.id)) return;
+    const fija = version?.id && String(version.id) !== String(doc.version_id || '') ? String(version.id) : null;
+    escribirDireccion({ carpeta: carpetaVisible(), documento: String(doc.id), version: fija }, 'replace',
+                      { abiertoAqui: Boolean(window.history.state?.abiertoAqui) });
+  };
+
+  // «Copiar enlace»: al documento vigente, no a una versión congelada.
+  const copiarEnlace = async (item) => {
+    let enlace = null;
+    if (item?.type === 'folder') {
+      const raiz = String(item.id) === String(projectRootId) || enLaRaiz(item.fullName || '');
+      if (raiz) enlace = { obra: obraDelEnlace };
+      else if (esIdentificador(item.id)) enlace = { obra: obraDelEnlace, carpeta: String(item.id) };
+    } else if (item && esIdentificador(item.id)) {
+      enlace = { obra: obraDelEnlace, carpeta: carpetaVisible(), documento: String(item.id) };
+    }
+    if (!enlace?.obra) {
+      toast.error('Este elemento todavía no tiene enlace. Inténtalo en un momento.');
+      return;
+    }
+    try {
+      await copiarAlPortapapeles(enlaceDeArchivos(window.location.origin, enlace));
+      toast.success('Enlace copiado');
+    } catch {
+      toast.error('No se pudo copiar el enlace.');
+    }
+  };
 
   // ═══════════════════════════════════════════════════════════════
   // CRUD OPERATIONS
@@ -742,6 +1090,7 @@ export function useFileExplorer(project, user) {
     currentPath, setCurrentPath, currentNodeId, setCurrentNodeId,
     projectRootId,
     navigate, handleFolderClick, switchMode,
+    anotarDocumento, cerrarDocumento, verVersion, copiarEnlace,
     
     // Data
     folders, setFolders, files, setFiles,
