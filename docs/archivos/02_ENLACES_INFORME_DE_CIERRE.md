@@ -2,7 +2,7 @@
 
 14-sep-2026. Base: `88b300f` (E1.3, publicado y sin desplegar). Pedido: tu «ARCHIVOS · DEEP LINKS — CONTRATO FINAL BASADO EN ACC». Diagnóstico previo: `01_ENLACES_POR_CARPETA_Y_DOCUMENTO.md`.
 
-**Estado:** probado en local: servidor, PostgreSQL y la app real del banco. Revisado por ti («DEEP LINKS ARCHIVOS CODE/TEST GREEN LOCAL = PASS») y **commiteado** con tu autorización sobre `88b300f`. **Sin push ni despliegue**: cada uno necesita la suya (§9).
+**Estado:** probado en local: servidor, PostgreSQL y la app real del banco. Revisado por ti («DEEP LINKS ARCHIVOS CODE/TEST GREEN LOCAL = PASS») y **commiteado** con tu autorización sobre `88b300f`. **Push hecho** por ti (`9dd13e8` en GitHub), tras comprobar Auto-Deploy «Off» en los 4 servicios. **Sin despliegue** (§9).
 
 ## En corto
 
@@ -150,9 +150,26 @@ Identidades ficticias. El servidor del banco pone la identidad en cada petición
    - los ficheros de §8;
    - lo pendiente del último handoff (`AI_WORKSTATE.md` y el informe de E1.3);
    - de `FilesPage.jsx`, solo sus tres bloques.
-2. **Push normal**, tras releer Auto-Deploy «Off» en los 4 servicios.
-3. **Manual Deploy del backend** `visor-ecd-backend-va`, con `/api/health` y «Booting worker». Lleva la ruta nueva y también E1.3 (`88b300f`), que sigue sin desplegar.
+2. **Push: hecho** por ti desde tu terminal (a mí me lo bloqueó el permiso de Claude Code), tras comprobar Auto-Deploy «Off» en los 4 servicios. Después, producción seguía en `88b300f` y el portal sin la ruta nueva.
+3. **Manual Deploy del backend** `visor-ecd-backend-va`, con `/api/health` y «Booting worker». Lleva la ruta nueva; E1.3 (`88b300f`) ya está desplegado.
 4. **Manual Deploy del portal**, verificado por contenido: `/api/docs/ubicacion` y «Copiar enlace».
+
+## 10 · Corrección tras el despliegue (14-sep)
+
+**Lo que viste en producción:** tras F5 en una carpeta (`…/GEOTECNICA/PDF`), el árbol de la izquierda se quedaba en «Archivos de proyecto» sin carpetas debajo, aunque la tabla y las migas estaban bien. Pulsar la raíz no lo arreglaba.
+
+**Causa:** el explorador tomaba el identificador de la raíz de la **primera** carpeta que listaba. Entrando por un enlace o con F5, la primera es la del enlace, así que el árbol usaba la carpeta PDF como raíz. Antes de los enlaces la primera carpeta siempre era la raíz y no se notaba.
+
+**Riesgo que tenía:** «Desplazar» usa ese mismo identificador para «Archivos de proyecto». Tras un F5 dentro de una carpeta, mover algo a la raíz lo habría llevado a la carpeta del enlace.
+
+**Arreglo, solo en el portal:** el identificador de la raíz solo se toma de un listado de la raíz. Si se entra por un enlace, se pide aparte una vez.
+
+**Probado en el banco:**
+- F5 en `01_WIP / Planos`: el árbol muestra la raíz con 01_WIP y 02_SHA_Compartido y abre el camino hasta Planos, marcada.
+- El registro del servidor muestra que el árbol pide la raíz real, y que ninguna carpeta del enlace se usa como raíz.
+- Pruebas del portal: 7 bancos en verde (`enlacesDeArchivos` 17/17, con una prueba nueva). ESLint sin problemas.
+
+**Para producción:** commiteado con tu autorización («VAMOS»). Va en el mismo push que «Editar» suprime y restaura, así que el despliegue es backend primero y portal después.
 
 ## Cierre
 
@@ -161,8 +178,7 @@ CORRECCIONES PREVIAS = de paso, un enlace que no se abre ya no se registra en el
   como error de base de datos.
 FUNCIONES NUEVAS YA UTILIZABLES = ninguna en producción todavía. En local: enlaces por obra,
   carpeta, documento y versión; Atrás, Adelante y F5; «Copiar enlace»; el enlace sobrevive al
-  login; un documento movido se abre donde está. Lo serán tras el push y los dos Manual
-  Deploy.
+  login; un documento movido se abre donde está. Lo serán tras los dos Manual Deploy.
 FUNCIONES DEL OBJETIVO TODAVÍA PENDIENTES = «Copiar enlace a esta versión» (la acción explícita
   que dejaste para después); `documento` en la dirección al abrir desde la búsqueda; la vista
   dentro de un modelo (viewableGuid); enlaces a la papelera.

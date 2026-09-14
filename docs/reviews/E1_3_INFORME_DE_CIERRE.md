@@ -2,7 +2,7 @@
 
 14-sep-2026. Base: `41d7dda`, en producción. Pedido: «Si hago ya el arreglo de flujos creados y empiezo el contrato de volver atrás / devolver al iniciador». Diagnóstico previo: `E1_3_FLUJOS_CREADOS_Y_RECHAZO.md`. El contrato va aparte: `E3_CONTRATO_RONDAS.md`.
 
-**Estado:** probado en local, commiteado (`88b300f`, con tu «HAZLO») y publicado con push (tu «si»). **Falta el despliegue**, cada paso con tu autorización (§7).
+**Estado:** probado en local, commiteado (`88b300f`, con tu «HAZLO»), publicado con push (tu «si») y **desplegado por ti**: verificado el 14-sep por `/api/health` (`88b300fc61d1`) y por el contenido del portal. Falta tu recorrido (bloque H de la guía).
 
 ## En corto
 

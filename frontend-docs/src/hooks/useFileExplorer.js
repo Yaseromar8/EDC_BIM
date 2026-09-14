@@ -286,12 +286,15 @@ export function useFileExplorer(project, user) {
         
         if (!trash) setNivelCarpetaActual(data.current_permission_level || null);
 
-        // Capturar root ID de la primera respuesta
-        if (data.current_node_id && data.current_node_id !== 'null') {
+        // EL ID DE LA RAÍZ SOLO SALE DE UN LISTADO DE LA RAÍZ (14-sep-2026). Decía «de la
+        // primera respuesta», y entrando por un enlace o con F5 dentro de una carpeta la primera
+        // respuesta es ESA carpeta: el árbol y «Desplazar» tomaban su id por el de la raíz. Lo vio
+        // el propietario en producción: tras F5, el árbol se quedaba en «Archivos de proyecto» sin
+        // hijos. Si no se lista la raíz, la pide aparte `pedirLaRaiz`.
+        const listaLaRaiz = path === projectPrefix || path === projectPrefix + '/';
+        if (listaLaRaiz && data.current_node_id && data.current_node_id !== 'null') {
            if (!projectRootIdRef.current) setProjectRootId(data.current_node_id);
-           if (!currentNodeIdRef.current && (path === projectPrefix || path === projectPrefix + '/')) {
-               setCurrentNodeId(data.current_node_id);
-           }
+           if (!currentNodeIdRef.current) setCurrentNodeId(data.current_node_id);
         }
 
         const sortedFolders = (data.folders || []).map(f => ({...f, type: 'folder'})).sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
@@ -496,6 +499,22 @@ export function useFileExplorer(project, user) {
                         version: apertura.version?.id || null }, 'replace', { abiertoAqui });
   };
 
+  // LA RAÍZ, AUNQUE SE ENTRE POR UN ENLACE. El árbol y «Desplazar» necesitan el id de la raíz;
+  // si la primera carpeta listada no es la raíz, se pregunta aparte, una sola vez a la vez.
+  const pidiendoLaRaiz = useRef(false);
+  const pedirLaRaiz = () => {
+    if (pidiendoLaRaiz.current || projectRootIdRef.current) return;
+    pidiendoLaRaiz.current = true;
+    apiFetch(`${API}/api/docs/list?path=${encodeURIComponent(`${projectPrefix}/`)}&model_urn=${encodeURIComponent(projectPrefix)}`)
+      .then(r => (r.ok ? r.json() : null))
+      .then((d) => {
+        const id = d?.data?.current_node_id;
+        if (id && id !== 'null' && !projectRootIdRef.current) setProjectRootId(String(id));
+      })
+      .catch(() => {})
+      .finally(() => { pidiendoLaRaiz.current = false; });
+  };
+
   // Lo que llama `fetchContents`: siempre la versión de este render.
   const alListarCarpeta = useRef(() => {});
   const alFallarListado = useRef(() => {});
@@ -506,6 +525,7 @@ export function useFileExplorer(project, user) {
       const carpeta = enLaRaiz(ruta) ? null : id;
       carpetaListadaRef.current = id;
       filesRef.current = lista;
+      if (!projectRootIdRef.current && !enLaRaiz(ruta)) pedirLaRaiz();
       const apertura = aperturaPendiente.current;
       if (apertura && apertura.ruta === ruta) {
         aperturaPendiente.current = null;

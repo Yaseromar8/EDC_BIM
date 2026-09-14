@@ -158,5 +158,13 @@ await test('el lector y el menu usan el enlace', () => {
   assert.ok(menu.includes('Copiar enlace') && menu.includes('onCopiarEnlace(item)'), 'falta «Copiar enlace»');
 });
 
+await test('la raiz de la obra solo sale de un listado de la raiz, tambien entrando por enlace', () => {
+  const ex = fuente('hooks/useFileExplorer.js');
+  assert.ok(!ex.includes('Capturar root ID de la primera respuesta'), 'la raíz se vuelve a tomar de la primera respuesta');
+  assert.ok(ex.includes("listaLaRaiz && data.current_node_id"), 'la raíz no se limita a un listado de la raíz');
+  assert.ok(ex.includes('if (!projectRootIdRef.current && !enLaRaiz(ruta)) pedirLaRaiz();'),
+            'entrando por un enlace nadie pide la raíz: el árbol y «Desplazar» se quedan sin ella');
+});
+
 console.log(JSON.stringify({ banco: 'enlacesDeArchivos', pass, fail }));
 if (fail) process.exit(1);
