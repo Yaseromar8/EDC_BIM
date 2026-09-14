@@ -1,11 +1,12 @@
-# E1 y E1.1 · Guía de prueba en producción
+# E1, E1.1 y E1.2 · Guía de prueba en producción
 
-13-sep-2026, revisada tras tu prueba de la noche. **Requiere E1.1 desplegado:** backend `8875f9e` en Virginia y el portal con E1.1. Antes de empezar lo compruebo yo.
+13-sep-2026, revisada tras tu prueba de la noche. **Requiere E1.2 desplegado:** backend `27e1a42` en Virginia y el portal con E1.2. Está desplegado y comprobado desde las 21:36.
 
-**Si ya hiciste A–E, no las repitas.**
-- Te falta el bloque **F**, con un flujo creado.
-- Si quieres confirmar en producción la causa del enlace cruzado, haz también **D4**.
-- Lo que salió en tu prueba está en `E1_UAT_HALLAZGOS.md` (H5–H9).
+**Si ya hiciste A–E, no las repitas.** Te faltan:
+- el bloque **F**, con un flujo creado;
+- **D4** y el bloque **G**, que comprueban lo que corrige E1.2.
+
+Lo que salió en tu prueba está en `E1_UAT_HALLAZGOS.md` (H5–H9).
 
 La guía entera lleva entre 40 y 50 minutos; el bloque F, unos 15. Marca cada paso con ✅ o ❌. Si algo falla, anota el número del paso y, si puedes, haz una captura.
 
@@ -26,10 +27,6 @@ La guía entera lleva entre 40 y 50 minutos; el bloque F, unos 15. Marca cada pa
 - **No pulses Dar conformidad, Aprobar, Aprobar y cerrar ni Rechazar en revisiones reales.** Todo queda registrado, y «Aprobar y cerrar» cambia el estado de los documentos.
 - **Las revisiones de prueba se quedarán en la obra**, porque anular y archivar llegan con E2. Pon títulos que empiecen por **«PRUEBA E1 —»**.
 - **Retirar a alguien de la obra bloquea sus revisiones en curso.** No retires a nadie que tenga revisiones reales pendientes.
-- **Mientras no llegue la corrección (E1.2):**
-  - con una confirmación abierta, no uses Atrás ni Adelante del navegador (H6);
-  - copia la dirección solo desde el detalle de una revisión (H5);
-  - ojo con los gestos del touchpad: también van atrás y adelante.
 
 ## A · Solo mirar, sobre revisiones reales
 
@@ -104,7 +101,7 @@ No se pulsa ningún botón de acto: no hay riesgo.
 | D1 | Abre T1, copia la dirección y pégala en otra pestaña | Se abre T1 directamente |
 | D2 | Cierra sesión, pega el enlace e inicia sesión | Tras entrar se abre T1, sin pasar por la lista de obras |
 | D3 (opcional) | Pasa el enlace a alguien que **no** sea de la obra | «No tienes acceso a la obra de esa revisión, o ya no existe.» y no ve nada de la revisión |
-| D4 (opcional, confirma H5) | Abre T2 desde la lista y pulsa **← Revisiones**. Ve a **Archivos** y pulsa **Adelante** del navegador. Mira la dirección y después pulsa **Revisiones** | **Sin E1.2 desplegado, esto es H5:** la dirección vuelve a llevar `revision=` aunque sigues en Archivos, y «Revisiones» abre T2 en vez de la lista. **Con E1.2 desplegado:** Adelante abre T2, y «Revisiones» abre la lista |
+| D4 (comprueba H5) | Abre T2 desde la lista y pulsa **← Revisiones**. Ve a **Archivos** y pulsa **Adelante** del navegador. Después vuelve a **Archivos** y pulsa **Revisiones** en el menú | **Adelante abre T2**, y la dirección y la pantalla coinciden. **«Revisiones» en el menú abre la lista**, no T2 |
 
 ## E · Teclado, pantalla ancha y lector de pantalla
 
@@ -136,17 +133,28 @@ Un flujo es el molde de pasos que se aplica al crear una revisión. La revisión
 - Pulsa **+ Añadir paso**.
 - **Paso 2:** «Aprobación», **Aprueba**, persona tú.
 
+## G · Lo que corrige E1.2
+
+Hazlo con T3 **antes de F8**, mientras sigue en curso.
+
+| # | Quién | Haz esto | Debe pasar |
+|---|---|---|---|
+| G1 | Colega | En T3, pulsa **Dar conformidad** y, con la confirmación abierta, pulsa **Atrás** del navegador | La confirmación **desaparece** y no se registra nada: T3 sigue en su paso 1 |
+| G2 | Tú | Mira la hora de creación de T3, en la lista y en el detalle | Es la hora a la que la creaste, no 5 horas más, y cuadra con la del Historial |
+| G3 | Tú | En Archivos selecciona **PDF-5**, pulsa **Enviar a revisión** y luego **Cancelar**, sin crear nada | Junto a PDF-5 dice «Ya está en RV-…, en curso.», con una línea que explica por qué importa |
+
 ## Qué me devuelves
 
-Una línea por bloque. Si solo haces F y D4, basta con esas dos. Por ejemplo:
+Una línea por bloque. Si solo haces F, D4 y G, basta con esas. Por ejemplo:
 
 ```
 A = OK
 B = OK (B6 no aplica: no hay flujos)
 C = FALLA en C9: salió un error rojo en vez del aviso
-D = OK (D4: sí pasa lo de H5)
+D = OK (D4 bien)
 E = OK (E4 no probado)
 F = OK
+G = OK
 ```
 
 ## Qué no forma parte de esta prueba
@@ -156,5 +164,5 @@ F = OK
 - Exportación y contadores (E5).
 - Correo opcional por acción.
 - Flujos de la entidad, que designan funciones en vez de personas.
-- Las correcciones de H5, H6 y H9 (E1.2) y la decisión sobre H7.
+- La opción B de H7: impedir que un documento esté en dos revisiones en curso.
 - Usuarios: una sola pantalla de cuentas y eliminar definitivamente (U2–U5, pendientes de tu decisión).

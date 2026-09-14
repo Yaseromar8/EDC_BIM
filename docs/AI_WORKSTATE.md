@@ -570,23 +570,23 @@ NEXT EXACT ACTION:    ver «Unidad REVIEWS · E1.2»; E2 sigue sin autorizar.
 DO NOT TOUCH:         el WIP ajeno listado; producción; E2–E5; Usuarios U2–U5; las reglas del alta en el servidor, /act y la sustitución.
 COMMIT/HEAD REF:      8875f9ed142893505e0135956ce893ede4f13e75 (commit de E1.1, igual a origin/main; su padre es 68b14b8)
 
-### Unidad REVIEWS · E1.2 (enlace, confirmación, fechas y documentos compartidos) — COMMIT sobre 8875f9e, sin push, 13-sep
+### Unidad REVIEWS · E1.2 (enlace, confirmación, fechas y documentos compartidos) — DESPLEGADA (27e1a42 en Virginia y portal), 13-sep
 
 Autorizada por el propietario con «SI, HAZLO» sobre la segunda parte de `docs/reviews/E1_UAT_HALLAZGOS.md`. Para H7
 la respuesta no eligió: se aplicó A (avisar), la recomendada, y se dice en el contrato. Contrato:
 `docs/reviews/E1_2_CONTRATO.md`. Informe: `docs/reviews/E1_2_INFORME_DE_CIERRE.md`.
 
 [WIP HANDOFF]
-TAREA:                REVIEWS · E1.2 — H5 dirección y pantalla, H6 confirmación retirable, H9 fechas con zona y H7-A avisos de documentos en otra revisión en curso. Implementado y probado en local; commit único sobre 8875f9e autorizado por el propietario («SI HAZLO»). Sin push, sin despliegue, sin migraciones.
+TAREA:                REVIEWS · E1.2 — H5 dirección y pantalla, H6 confirmación retirable, H9 fechas con zona y H7-A avisos de documentos en otra revisión en curso. Implementado y probado en local; commit único sobre 8875f9e autorizado por el propietario («SI HAZLO») y publicado en origin/main con push normal («VAMOS»), tras releer Auto-Deploy Off en los cuatro servicios de Render. DESPLEGADO por el propietario el 13-sep y verificado: Virginia /api/health → 27e1a428ce3c, también por el /api del portal y de alephia.com.pe; portal index-DgYYQqZD.js con E1.2 en Render y en alephia.com.pe; Oregón cdf783754574 sin cambios. INCIDENTE: el primer arranque tras el Manual Deploy (21:11) se quedó en «Control socket listening» sin «Booting worker»; Render lo marcó Live pero no detectaba puerto, y el backend no respondió de 21:11 a 21:36. Con autorización del propietario («REINICIA») se reinició el servicio y arrancó normal (Booting worker; política aplicada a 393 endpoints). Sin migraciones.
 IMPLEMENTADO:         H5 useFileExplorer escucha popstate y abre Revisiones si la dirección trae una revisión de su obra, y setSidebarView('reviews') desde otra sección quita un enlace viejo; App_Refactor abre como enlace una revisión de otra obra o traída fuera de Documentos (destinoTrasNavegar en utils/revisiones.js). H6 confirmAction acepta `signal`; RevisionDetalle la retira al desmontarse y no actúa sin la revisión en pantalla. H7-A GET /api/reviews/en-curso (solo lectura, solo revisiones visibles), items[].tambien_en (solo revisiones en curso) y estado_documento en el detalle, acciones.aprobar.ya_en_destino/todos_en_destino/retroceden, y los avisos en alta, detalle y consecuencia del cierre. H9 _COLUMNAS_DE_REVISION y la consulta de Mi Trabajo leen created_at, paso_vence_en, vence_en y creado_en con AT TIME ZONE current_setting('TimeZone').
-PENDIENTE:            1) push de E1.2 y después su despliegue, backend antes que portal, cada uno con su autorización; 2) bloque F de la guía por el propietario; 3) B (impedir) sigue fuera.
+PENDIENTE:            1) UAT del propietario: bloques F, D4 y G de docs/reviews/E1_GUIA_DE_PRUEBA.md; 2) commitear en el próximo handoff este fichero y la guía, el informe y los hallazgos actualizados tras el despliegue; 3) B (impedir) sigue fuera; 4) E2 sin autorizar.
 ARCHIVOS MODIFICADOS: backend/routes/reviews.py, backend/encargos.py, backend/tests/test_revision_detalle_y_listado.py, backend/tests/test_encargos.py, frontend-docs/src/utils/revisiones.js, frontend-docs/src/hooks/useFileExplorer.js, frontend-docs/src/App_Refactor.jsx, frontend-docs/src/utils/confirm.jsx, frontend-docs/src/components/RevisionDetalle.jsx, frontend-docs/src/components/ReviewsModule.jsx, frontend-docs/pruebas/revisiones.prueba.mjs, frontend-docs/src/probar-revisiones.jsx, docs/reviews/E1_UAT_HALLAZGOS.md, docs/reviews/E1_GUIA_DE_PRUEBA.md, docs/AI_WORKSTATE.md; nuevos: backend/herramientas/ensayo_de_revisiones_gemelas.py, docs/reviews/E1_2_CONTRATO.md, docs/reviews/E1_2_INFORME_DE_CIERRE.md. Ajenos, no tocados (sha256 iguales): los siete M de siempre y los untracked históricos.
 TESTS EJECUTADOS:     pytest completo → 1827 passed / 1 failed (test_capacidades_con_puerta, preexistente; 15 pruebas nuevas); npm test en frontend-docs → 6 bancos en verde (revisiones 19/19); ESLint en los ficheros tocados → sin problemas nuevos (confirm.jsx y probar-revisiones.jsx traen el mismo error react-refresh que HEAD); construcción del portal con la configuración del banco y sin .env → OK; ensayo_de_revisiones_gemelas 24/24; regresiones ensayo_de_detalle_de_revision 25/25, ensayo_de_version_y_visibilidad 67/67, ensayo_de_admin_participante 16/16, ensayo_de_revisiones 50/50 (sin .env); app real del banco: H5 (Archivos + Adelante abre T2; «Revisiones» con dirección vieja abre la lista), H6 (Atrás cierra la confirmación y no hay acto) y aviso del detalle; banco probar-revisiones: avisos del alta, del detalle y del cierre, y H6.
 TESTS PENDIENTES:     «Enviar a revisión» en la app real (el panel no pinta la tabla); Atrás/Adelante hacia otra obra o desde la portada (App_Refactor) solo con reglas puras y lectura de código; UAT del propietario tras el despliegue.
 FALLO CONOCIDO:       test_capacidades_con_puerta (preexistente). Error de lint react-refresh preexistente en confirm.jsx y probar-revisiones.jsx.
-NEXT EXACT ACTION:    pedir al propietario la autorización del push de E1.2; antes, comprobar origin/main en 8875f9e y Auto-Deploy Off en los servicios de Render.
+NEXT EXACT ACTION:    esperar el resultado de la UAT del propietario (bloques F, D4 y G). Tras cada Manual Deploy del backend: /api/health y «Booting worker» en el log, no basta con «Live».
 DO NOT TOUCH:         el WIP ajeno listado; producción; E2–E5; B de H7; Usuarios U2–U5; las reglas del servidor en /act, el alta, la sustitución y las plantillas.
-COMMIT/HEAD REF:      commit de E1.2 con padre 8875f9ed142893505e0135956ce893ede4f13e75 (E1.1, igual a origin/main); su hash se anota fuera del propio commit.
+COMMIT/HEAD REF:      27e1a428ce3c35a215f0b7319ecf0fe399ee94df (commit de E1.2, igual a origin/main tras el push del 13-sep; su padre es 8875f9e).
 
 ### Análisis de Usuarios · administrador único y eliminar usuarios — VERSIONADO con E1.1, 13-sep
 
@@ -598,6 +598,25 @@ quedar como único Entity Admin y poder eliminar usuarios. Hallazgos:
 - varias FK con RESTRICT impiden purgar a quien tiene huella.
 Nada cambiado en código. En producción, el propietario degradó id 19 al perfil «Editar» (13-sep, desde la
 interfaz): queda un solo admin. Pendiente: sus decisiones U2–U5 (U5 = unificar «Usuarios» y «Usuarios del sistema»).
+
+### Unidad PERMISOS · A (planos CAD para todos) y B («Editar» en la carpeta) — COMMIT LOCAL, SIN PUSH NI DESPLIEGUE, 14-sep
+
+Pedido del propietario el 13/14-sep, con su equipo empezando a trabajar en el ECD el 14-sep. Diagnóstico previo:
+`docs/usuarios/01_PERFIL_Y_PERMISO_DE_CARPETA.md`. Informe: `docs/usuarios/02_PLANOS_CAD_Y_EDITAR_EN_CARPETA.md`.
+En la misma sesión, solo análisis y sin código: `docs/reviews/E1_3_FLUJOS_CREADOS_Y_RECHAZO.md` y
+`docs/compartir/01_COMPARTIR_VARIOS_DOCUMENTOS.md`.
+
+[WIP HANDOFF]
+TAREA:                PERMISOS · A) el visor web de planos CAD daba 403 PROJECT_UNRESOLVED a todo el que no fuera admin de entidad (ENFORCE encendido desde el 22-ago); B) «Cargar archivos», «Nueva carpeta», soltar ficheros, añadir subcarpeta, mover y suprimir se decidían con «administra esta obra» y no con el permiso de carpeta. Implementado y probado en local; commit autorizado por el propietario («SI»), que es el que contiene este fichero; SIN push ni despliegue: cada uno necesita su autorización.
+IMPLEMENTADO:         A) perimetro_de_obra: `cad_status` en RUTAS_POR_QUERY; nuevo RUTAS_POR_CUERPO con `translate_cad` y `obra_por_cuerpo` (solo valores simples de primer nivel); auth_middleware._request_project_id la consulta después de la query; docs_cad `_guardia_del_plano` (guardia_del_documento + permiso_documental.guardia con minimo viewer) en translate y en status; test_cobertura_autorizacion lee también RUTAS_POR_CUERPO. B) /api/docs/list devuelve `current_permission_level` (permiso_efectivo de quien mira sobre la carpeta listada; fail-closed 'none'); move exige 'edit' también en el destino; portal: `puedeEditarEn` y las capacidades `subcarpeta` y `nueva_version` en capacidadesDeSeleccion; useFileExplorer con `nivelCarpetaActual` y `puedeEditarAqui` (cargar, crear, soltar) y `subirNuevaVersion` (sube el fichero elegido con el nombre del documento, del mismo tipo); mover y suprimir sin gate `isAdmin` (deciden capacidades y servidor); ContextMenu con «Añadir subcarpeta» por permiso y «Subir nueva versión»; MatrixTable renombrar y descripción con 'edit'; FilesPage con los botones sobre `fe.puedeEditarAqui` y un selector de fichero oculto para la nueva versión.
+PENDIENTE:            1) autorización del propietario para el push (normal, sin forzar, tras releer Auto-Deploy Off en Render) y para cada Manual Deploy (primero el backend `visor-ecd-backend-va`, con /api/health y «Booting worker»; luego `visor-ecd-portal`, verificado por contenido); 2) sus decisiones sobre E1.3 (flujos creados), el contrato de rondas (D8) y el paquete compartido; 3) C (camino hasta una carpeta anidada) y D (ordenar Rol frente a Configuración de permisos), aplazados por el propietario.
+ARCHIVOS MODIFICADOS: propios: backend/perimetro_de_obra.py, backend/auth_middleware.py, backend/routes/docs_cad.py, backend/routes/documents.py, backend/tests/test_cobertura_autorizacion.py, frontend-docs/src/utils/capacidadesDeSeleccion.js, frontend-docs/pruebas/capacidadesDeSeleccion.prueba.mjs, frontend-docs/src/hooks/useFileExplorer.js, frontend-docs/src/components/ContextMenu.jsx, frontend-docs/src/MatrixTable.jsx y frontend-docs/src/pages/FilesPage.jsx (SOLO los hunks de los dos botones, del selector de «Subir nueva versión» y de la prop del menú: el fichero ya traía WIP ajeno de la barra de iconos, que no se commitea); nuevos: backend/tests/test_planos_para_todos.py, backend/tests/test_editar_en_carpeta.py, docs/usuarios/01_PERFIL_Y_PERMISO_DE_CARPETA.md, docs/usuarios/02_PLANOS_CAD_Y_EDITAR_EN_CARPETA.md, docs/reviews/E1_3_FLUJOS_CREADOS_Y_RECHAZO.md, docs/compartir/01_COMPARTIR_VARIOS_DOCUMENTOS.md; y este fichero. Pendientes del handoff anterior (E1.2): docs/reviews/E1_2_INFORME_DE_CIERRE.md, docs/reviews/E1_GUIA_DE_PRUEBA.md, docs/reviews/E1_UAT_HALLAZGOS.md. Ajenos, no tocados: los siete M de siempre (incluidos los hunks ajenos de FilesPage.jsx) y los untracked históricos.
+TESTS EJECUTADOS:     pytest completo sin .env → 1841 passed / 1 failed (test_capacidades_con_puerta, preexistente; 14 pruebas nuevas); dirigido (planos, editar, cobertura, perímetro, aislamiento, documento, auth, política) → 98 passed; ensayo de banco con rutas reales y ENFORCE (scratchpad/permisos/ensayo_planos_y_editar.py) → 21/21; reproducciones previas: defecto CAD (repro_cad_perimetro.py) 9/9 en sombra y en estricto, y camino de carpetas (ensayo_perfil_vs_carpeta.py) 56/56; npm test en frontend-docs → 6 bancos en verde (capacidadesDeSeleccion 20/20); eslint de los ficheros tocados → los mismos problemas que HEAD, ninguno nuevo; build del portal sin .env → OK; app real del banco con un usuario de rol «Usar» y «Editar» en 03_Documentos → la raíz y 02_SHA_Compartido sin «Cargar archivos»; 03_Documentos con «Cargar archivos» y «Nueva carpeta»; menú de un PDF con «Subir nueva versión», «Cambiar nombre» y «Desplazar», y «Suprimir» apagado («Necesitas permiso de administración en esta carpeta»).
+TESTS PENDIENTES:     subir un fichero real desde la pantalla (el banco no tiene GCS y el navegador de pruebas no elige ficheros); ver un plano CAD traducido (sin credenciales APS: se prueba que la petición pasa todas las puertas); validación en producción tras el despliegue.
+FALLO CONOCIDO:       test_capacidades_con_puerta (preexistente). En el Browser pane (286×307) la tabla de Archivos no pinta filas: se usó resize_window 1280×800 y un dblclick despachado para abrir filas. Mover por ruta (`destPath` sin `destNodeId`) todavía puede crear carpetas antes de comprobar el destino (preexistente; el portal usa ids). En compartir (solo análisis): revocar no comprueba la obra del enlace, el autor sale del cuerpo y el enlace sirve la versión actual.
+NEXT EXACT ACTION:    pedir la autorización del push; con ella, releer Auto-Deploy Off en los cuatro servicios de Render y push normal; después, la autorización de cada Manual Deploy (primero el backend de Virginia).
+DO NOT TOUCH:         el WIP ajeno (incluidos los hunks de la barra de iconos de FilesPage.jsx); producción y Oregón; Revisiones (/act, alta, sustitución, plantillas) hasta que decida sobre E1.3 y las rondas; el significado del Rol (D, aplazado).
+COMMIT/HEAD REF:      el commit que contiene este fichero; su padre es 27e1a428ce3c35a215f0b7319ecf0fe399ee94df (igual a origin/main)
 
 ## FROZEN / DO NOT REOPEN
 
@@ -663,12 +682,17 @@ Observaciones reales, ya conocidas y aceptadas. Ninguna bloquea nada.
    propietario (7-sep-2026). No bloquea B1.
 ## CURRENT TASK
 
+**14-sep-2026 · PERMISOS · A (planos CAD para todos) y B («Editar» en la carpeta) — COMMIT LOCAL, SIN PUSH NI DESPLIEGUE.**
+Probado en local (pytest 1841/1, banco 21/21, npm 6 bancos, pantalla del banco) y commiteado con autorización del
+propietario («SI»). Espera la autorización del push y la del despliegue. Revisiones (flujos creados y rondas) y compartir varios documentos: solo análisis,
+pendientes de sus decisiones. Ver «Unidad PERMISOS · A y B».
+
 **13-sep-2026 · REVIEWS · E1 (detalle, navegación y semántica) — DESPLEGADA (`68b14b8` en Virginia y portal).**
 Dictámenes del propietario: `E1 CODE/TEST GREEN LOCAL = PASS` y `E1 COMMIT = PASS`; despliegue manual
 hecho por él el 13-sep y verificado. Falta su UAT en producción. E2 y cambios en Oregón: NO autorizados.
 E1.1 (corrige H1–H4 de esa UAT) está DESPLEGADA (`8875f9e` en Virginia y portal, verificado): ver «Unidad REVIEWS · E1.1».
 La UAT de la noche del 13-sep (bloques C y D) dio H5–H9 (`docs/reviews/E1_UAT_HALLAZGOS.md`, segunda parte): los datos
-no se cruzan. E1.2 (H5, H6, H9 y el aviso H7-A) tiene COMMIT sobre 8875f9e, sin push ni despliegue: ver «Unidad REVIEWS · E1.2».
+no se cruzan. E1.2 (H5, H6, H9 y el aviso H7-A) está DESPLEGADA (27e1a42 en Virginia y portal, verificado; el primer arranque del backend se colgó y se reinició): ver «Unidad REVIEWS · E1.2».
 Primera entrega del programa funcional de Reviews que aprobó el propietario
 (`docs/reviews/00_PROGRAMA_Y_DECISIONES.md`, decisiones D1–D9). Contrato e informe:
 `docs/reviews/E1_CONTRATO_DE_ACEPTACION.md` y `docs/reviews/E1_INFORME_DE_CIERRE.md`.
@@ -733,19 +757,24 @@ autorreferencial del presente documento. Consultar HEAD real por separado.
 
 ## EXACT NEXT ACTION
 
+**PERMISOS · A y B (14-sep-2026):** commit local hecho. Pedir al propietario la autorización del push (antes, releer
+Auto-Deploy Off en Render) y después la de cada Manual Deploy (primero el backend de Virginia, con /api/health y «Booting
+worker»; luego el portal, por contenido). Decisiones pendientes suyas: E1.3, contrato de rondas (D8) y paquete compartido
+(`docs/reviews/E1_3_FLUJOS_CREADOS_Y_RECHAZO.md`, `docs/compartir/01_COMPARTIR_VARIOS_DOCUMENTOS.md`).
+
 **REVIEWS · E1.1 (13-sep-2026):** `8875f9e` desplegado en el backend de Virginia (`/api/health` →
 `8875f9ed1428`) y en el portal (`index-BU0VvNh3.js`, con E1.1). La UAT de la noche dio H5–H9
-(`docs/reviews/E1_UAT_HALLAZGOS.md`). E1.2 está probada en local y con commit
-(`docs/reviews/E1_2_INFORME_DE_CIERRE.md`). Siguiente: autorización del push de E1.2; después el
-despliegue, con la suya; y el bloque F de `docs/reviews/E1_GUIA_DE_PRUEBA.md`.
+(`docs/reviews/E1_UAT_HALLAZGOS.md`). E1.2 está desplegada y verificada (`27e1a42`;
+`docs/reviews/E1_2_INFORME_DE_CIERRE.md` §6). Siguiente: la UAT del propietario con los bloques F, D4 y G de
+`docs/reviews/E1_GUIA_DE_PRUEBA.md`.
 
 **REVIEWS · E1 (13-sep-2026):** E1 (`68b14b8`) está desplegado en el backend de Virginia y en el
 portal, verificado por `/api/health` y por contenido. Esperar la UAT del propietario en producción y
 su autorización para E2. Sin ella: ni E2, ni cambios en Oregón.
 
-Producción medida el 13-sep-2026, tras E1.1:
-- backend de Virginia (`visor-ecd-backend-va`): `/api/health` → `version 8875f9ed1428`;
-- portal: sirve `index-BU0VvNh3.js`, con E1.1 (verificado por contenido en Render y en `alephia.com.pe`);
+Producción medida el 13-sep-2026, tras E1.2 y el reinicio del backend:
+- backend de Virginia (`visor-ecd-backend-va`): `/api/health` → `version 27e1a428ce3c`, también por el `/api` del portal y de `alephia.com.pe`;
+- portal: sirve `index-DgYYQqZD.js`, con E1.2 (verificado por contenido en Render y en `alephia.com.pe`);
 - Oregón (`visor-ecd-backend`): `version cdf783754574`, sin cambios.
 
 Lo que sigue es el cierre de Filters del 10-sep; sus SHA son de esa fecha.

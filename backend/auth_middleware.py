@@ -524,12 +524,17 @@ def _request_project_id():
         # Ultima via: rutas que reciben el ID DE UN RECURSO y no la obra. La
         # obra esta en la propia fila y solo se sabe consultandola.
         try:
-            from perimetro_de_obra import obra_de_la_peticion, obra_por_query
+            from perimetro_de_obra import obra_de_la_peticion, obra_por_query, obra_por_cuerpo
             obra = obra_de_la_peticion(request.endpoint, request.view_args)
             if obra:
                 return obra
             # ...y rutas cuyo id de recurso viaja en la query (?node_id=...).
             obra = obra_por_query(request.endpoint, request.args)
+            if obra:
+                return obra
+            # ...o en el cuerpo JSON: el visor de planos manda solo `node_id`.
+            obra = obra_por_cuerpo(request.endpoint,
+                                   request.get_json(silent=True) if request.is_json else None)
             if obra:
                 return obra
         except Exception as e:

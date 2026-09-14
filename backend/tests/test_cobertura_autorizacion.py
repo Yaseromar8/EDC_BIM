@@ -162,8 +162,8 @@ def _ficheros():
 def _por_recurso():
     """Endpoints cuya obra resuelve el middleware consultando el propio recurso.
 
-    Son dos diccionarios de `perimetro_de_obra`: RUTAS_POR_RECURSO (el id viaja
-    en la RUTA) y RUTAS_POR_QUERY (viaja en la QUERY). Se leen del modulo, no se
+    Son tres diccionarios de `perimetro_de_obra`: RUTAS_POR_RECURSO (el id viaja
+    en la RUTA), RUTAS_POR_QUERY (en la QUERY) y RUTAS_POR_CUERPO (en el cuerpo). Se leen del modulo, no se
     copian aqui: una copia envejece y el detector volveria a contar como deuda
     rutas que el control ya cubre -- que es exactamente lo que pasaba.
     """
@@ -171,7 +171,8 @@ def _por_recurso():
         import perimetro_de_obra as pm
     except Exception:
         return set()
-    return set(getattr(pm, 'RUTAS_POR_RECURSO', {})) | set(getattr(pm, 'RUTAS_POR_QUERY', {}))
+    return (set(getattr(pm, 'RUTAS_POR_RECURSO', {})) | set(getattr(pm, 'RUTAS_POR_QUERY', {}))
+            | set(getattr(pm, 'RUTAS_POR_CUERPO', {})))
 
 
 def _rutas():
@@ -294,7 +295,8 @@ def test_las_rutas_por_recurso_apuntan_a_vistas_y_tablas_declaradas():
 
     reales = {n.rsplit('.', 1)[-1] for n in server.app.view_functions}
     for nombre, mapa in (('RUTAS_POR_RECURSO', po.RUTAS_POR_RECURSO),
-                         ('RUTAS_POR_QUERY', po.RUTAS_POR_QUERY)):
+                         ('RUTAS_POR_QUERY', po.RUTAS_POR_QUERY),
+                         ('RUTAS_POR_CUERPO', po.RUTAS_POR_CUERPO)):
         fantasmas = sorted(set(mapa) - reales)
         assert not fantasmas, (
             f'{nombre} nombra vistas inexistentes: ' + ', '.join(fantasmas))

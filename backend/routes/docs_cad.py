@@ -612,6 +612,35 @@ def pretraducir_en_fondo(node_id, forzar=False, master=False):
             _PRETRADUCCIONES_EN_CURSO.discard(node_id)
 
 
+def _guardia_del_plano(node):
+    """Traducir un plano, o preguntar por su traduccion, exige poder ABRIRLO.
+
+    Estas dos rutas no comprobaban nada por dentro. No se notaba porque el
+    perimetro central las cortaba a TODOS menos al administrador de la entidad:
+    no sabia de que obra eran (13-sep-2026, reproducido). Al ensenarle a
+    resolverlas, la puerta de la obra deja de bastar: sin esta guardia cualquier
+    miembro veria el plano de una carpeta sin acceso con solo conocer su id.
+
+    Se exige lo mismo que para abrir un PDF: pertenecer a la obra DEL NODO y
+    tener al menos «Ver» en su carpeta. None si se puede seguir.
+    """
+    from perimetro_de_obra import guardia_del_documento
+    negativa = guardia_del_documento(node_id=node['id'], accion='ver este plano')
+    if negativa:
+        return negativa
+    try:
+        import permiso_documental as _pd
+        with get_db_connection() as conn:
+            return _pd.guardia(conn.cursor(), getattr(g, 'current_user', None),
+                               node['model_urn'], 'ver este plano', minimo='viewer',
+                               node_id=node['id'])
+    except Exception as e:
+        # FAIL-CLOSED, como la apertura de documentos: si no se puede decidir,
+        # no se entrega.
+        print('[CAD] permiso del plano sin resolver: %s' % e)
+        return jsonify({'success': False, 'error': 'No se pudo verificar el acceso'}), 503
+
+
 @docs_cad_bp.route('/api/docs/cad/translate', methods=['POST'])
 def translate_cad():
     """Prepara un CAD para verse: lo sube a APS y lanza la traduccion.
@@ -627,6 +656,9 @@ def translate_cad():
     node = _load_node(node_id)
     if not node:
         return jsonify({'success': False, 'error': 'Archivo no encontrado'}), 404
+    negativa = _guardia_del_plano(node)
+    if negativa:
+        return negativa
     if not is_cad_file(node['name']):
         return jsonify({'success': False, 'error': 'Este archivo no es CAD'}), 400
     if not node['gcs_urn']:
@@ -786,6 +818,9 @@ def cad_status():
     node = _load_node(node_id)
     if not node:
         return jsonify({'success': False, 'error': 'Archivo no encontrado'}), 404
+    negativa = _guardia_del_plano(node)
+    if negativa:
+        return negativa
 
     cad = node['meta'].get('cad') or {}
 

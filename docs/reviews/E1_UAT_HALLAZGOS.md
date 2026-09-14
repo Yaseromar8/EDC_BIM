@@ -5,7 +5,7 @@
 **Estado:**
 - **Primera parte (H1–H4):** creación de las revisiones de prueba. Corregida en E1.1 (`8875f9e`) y desplegada el 13-sep.
 - **Segunda parte (H5–H9):** tu prueba de la noche, bloques C y D.
-  - **E1.2 corrige H5, H6 y H9 y aplica H7-A (avisar).** Está probada en local y con commit, sin push ni despliegue: `E1_2_INFORME_DE_CIERRE.md`.
+  - **E1.2 corrige H5, H6 y H9 y aplica H7-A (avisar).** Está en producción desde el 13-sep (`27e1a42`): `E1_2_INFORME_DE_CIERRE.md`.
   - H8 ya quedó corregido en la guía.
   - B (impedir) queda fuera.
 

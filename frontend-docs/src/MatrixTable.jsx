@@ -5,6 +5,7 @@ import AutoSizer from 'react-virtualized-auto-sizer';
 import { ESTADOS } from './utils/estadosECD';
 import { ANCHO_MINIMO, ANCHO_MAXIMO } from './utils/anchosColumnas';
 import { PASO_TECLADO, PASO_TECLADO_GRANDE } from './hooks/useColumnResize';
+import { NIVELES } from './utils/capacidadesDeSeleccion';
 
 // ── ISO 19650 Document Lifecycle ──────────────────────────────────────────
 //
@@ -261,6 +262,8 @@ const TableRow = ({ index, style, data }) => {
   // seleccionado, y «Suprimir» no hacía nada.
   const isSelected = selected.has(item.id);
   const isGrey = item.has_access === false;
+  // Renombrar y describir exigen «Editar» en el servidor, no administrar la obra.
+  const puedeEditarFila = isAdmin || (NIVELES[item.permission_level] ?? NIVELES.none) >= NIVELES.edit;
 
   // Abrir elemento: carpeta navega, archivo abre el visor
   const openItem = () => {
@@ -452,7 +455,7 @@ const TableRow = ({ index, style, data }) => {
                 {String(item.bloqueado_por).split('@')[0]}
               </span>
             )}
-            {isAdmin && !isGrey && (
+            {puedeEditarFila && !isGrey && (
               <svg 
                 className="pencil-icon-acc name-pencil" 
                 onClick={startEditingName}
@@ -472,7 +475,7 @@ const TableRow = ({ index, style, data }) => {
           style={{ width: columnWidths.description, position: 'relative' }}
           onClick={(e) => {
             // Editar descripción: solo admin con acceso; el clic no debe alterar la selección
-            if (!isAdmin || isGrey) return;
+            if (!puedeEditarFila || isGrey) return;
             e.stopPropagation();
             setIsEditing(true);
           }}
@@ -518,7 +521,7 @@ const TableRow = ({ index, style, data }) => {
           ) : (
             <>
               <span className="description-text-value">{item.description || ''}</span>
-              {isAdmin && !isGrey && (
+              {puedeEditarFila && !isGrey && (
                 <svg className="pencil-icon-acc" width="14" height="14" viewBox="0 0 24 24" fill="none" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ stroke: 'var(--accent)' }}>
                   <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path>
                 </svg>

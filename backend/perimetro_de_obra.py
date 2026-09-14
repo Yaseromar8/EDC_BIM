@@ -148,6 +148,20 @@ RUTAS_POR_QUERY = {
     'trazabilidad_de_documento': ('file_nodes', 'id'),        # ?id=
     'get_versions': ('file_nodes', 'id'),                     # ?id=
     'download_folder_urls': ('file_nodes', 'folder_id'),      # ?folder_id=
+    # El sondeo de la traduccion de un plano CAD. Sin esta linea, bajo ENFORCE
+    # el visor web de planos solo abria al administrador de la entidad: a los
+    # demas les salia "No se pudo determinar a que obra pertenece esta
+    # peticion" (13-sep-2026, reproducido). La guardia del documento esta
+    # dentro, en routes/docs_cad.py.
+    'cad_status': ('file_nodes', 'node_id'),                  # ?node_id=
+}
+
+
+# Como RUTAS_POR_QUERY, pero para rutas cuyo id de recurso viaja en el CUERPO
+# JSON, como clave de primer nivel. Mismo mecanismo, tercera fuente.
+RUTAS_POR_CUERPO = {
+    # Traducir un plano CAD para verlo: el visor manda solo `node_id`.
+    'translate_cad': ('file_nodes', 'node_id'),
 }
 
 
@@ -188,6 +202,31 @@ def obra_por_query(nombre_vista, args):
             return obra_del_recurso(conn.cursor(), tabla, valor)
     except Exception as e:
         logger.warning(f'no se pudo resolver la obra de {corto} por query: {e}')
+        return None
+
+
+def obra_por_cuerpo(nombre_vista, cuerpo):
+    """La obra de una peticion cuyo id de recurso viaja en el cuerpo JSON.
+
+    Solo claves de primer nivel y solo valores simples: un id que llega como
+    lista, diccionario o booleano no se interpreta -- y bajo ENFORCE eso es
+    PROJECT_UNRESOLVED, no un pase.
+    """
+    if not nombre_vista or not isinstance(cuerpo, dict):
+        return None
+    corto = nombre_vista.rsplit('.', 1)[-1]
+    if corto not in RUTAS_POR_CUERPO:
+        return None
+    tabla, param = RUTAS_POR_CUERPO[corto]
+    valor = cuerpo.get(param)
+    if not valor or isinstance(valor, bool) or not isinstance(valor, (str, int)):
+        return None
+    from db import get_db_connection
+    try:
+        with get_db_connection() as conn:
+            return obra_del_recurso(conn.cursor(), tabla, valor)
+    except Exception as e:
+        logger.warning(f'no se pudo resolver la obra de {corto} por cuerpo: {e}')
         return None
 
 

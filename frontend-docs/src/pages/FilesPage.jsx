@@ -270,6 +270,15 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
     elementos: objetivoMenu, isAdmin, isTrashMode: fe.isTrashMode,
   }), [objetivoMenu, isAdmin, fe.isTrashMode]);
 
+  // «SUBIR NUEVA VERSIÓN» abre el selector de ficheros del sistema para UN
+  // documento; el fichero elegido se sube con el nombre de ese documento.
+  const selectorDeVersion = React.useRef(null);
+  const versionPara = React.useRef(null);
+  const pedirNuevaVersion = (item) => {
+    versionPara.current = item;
+    if (selectorDeVersion.current) selectorDeVersion.current.click();
+  };
+
   // ABRIR ES IDEMPOTENTE. Un doble clic sobre el nombre dispara `onClick` dos
   // veces y `onDoubleClick` una: TRES invocaciones, medido en banco. Hoy el
   // efecto era uno solo porque poner el mismo objeto en el estado no cambia
@@ -1018,10 +1027,10 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
             {/* DATA PANEL */}
             <section style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
               <div className="acc-toolbar" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', background: '#fff', borderBottom: '1px solid #eee', flexShrink: 0 }}>
-                {isAdmin && !fe.isTrashMode && (
+                {fe.puedeEditarAqui && !fe.isTrashMode && (
                   <button onClick={() => fe.setShowUploadModal(true)} style={{ padding: '6px 16px', background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 4, fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>Cargar archivos</button>
                 )}
-                {isAdmin && !fe.isTrashMode && (
+                {fe.puedeEditarAqui && !fe.isTrashMode && (
                   <button onClick={() => { fe.setNewFolderParentPath(''); fe.setShowNewFolder(true); }} title="Crear carpeta en la ubicación actual"
                     style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', background: '#fff', color: 'var(--accent)', border: '1px solid var(--accent)', borderRadius: 4, fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/><line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/></svg>
@@ -1387,7 +1396,15 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
           else fe.setDeleteTask({ ids: [], count: 1, single: { fullName, id } });
           fe.setShowDeleteModal(true);
         }}
-        onAttributes={(item) => setAttributesItem(item)} />
+        onAttributes={(item) => setAttributesItem(item)}
+        onNuevaVersion={pedirNuevaVersion} />
+      <input ref={selectorDeVersion} type="file" hidden
+        onChange={(e) => {
+          const fichero = e.target.files && e.target.files[0];
+          e.target.value = '';
+          if (fichero && versionPara.current) fe.subirNuevaVersion(versionPara.current, fichero);
+          versionPara.current = null;
+        }} />
 
       {attributesItem && (
         <AttributesPanel item={attributesItem} projectPrefix={projectPrefix} isAdmin={isAdmin}

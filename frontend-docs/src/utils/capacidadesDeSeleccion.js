@@ -17,6 +17,7 @@
  * Trazados endpoint por endpoint sobre `backend/routes/documents.py`:
  *
  *     renombrar · compartir · desplazar · reservar  ->  'edit'
+ *     añadir subcarpeta · subir nueva versión       ->  'edit'
  *     suprimir                                      ->  'admin' de carpeta
  *
  * Antes la interfaz exigía «administrador de obra» para las cuatro primeras, y
@@ -36,13 +37,19 @@ export const EXIGE = {
     compartir: 'edit',
     desplazar: 'edit',
     reservar:  'edit',
+    // Crear una carpeta dentro y subir una versión nueva ESCRIBEN en la carpeta:
+    // `POST /api/docs/folder` y la subida exigen «Editar» (13-sep-2026).
+    subcarpeta:    'edit',
+    nueva_version: 'edit',
     suprimir:  'admin',
 };
 
 /** Capacidades que sólo tienen sentido sobre UN elemento. */
-const SOLO_UNO = new Set(['renombrar', 'compartir', 'reservar', 'atributos']);
+const SOLO_UNO = new Set(['renombrar', 'compartir', 'reservar', 'atributos', 'subcarpeta', 'nueva_version']);
 /** Capacidades que sólo tienen sentido sobre un DOCUMENTO. */
-const SOLO_ARCHIVO = new Set(['reservar', 'atributos']);
+const SOLO_ARCHIVO = new Set(['reservar', 'atributos', 'nueva_version']);
+/** Capacidades que sólo tienen sentido sobre una CARPETA. */
+const SOLO_CARPETA = new Set(['subcarpeta']);
 
 const nivelDe = (item, isAdmin) => {
     const n = NIVELES[item?.permission_level];
@@ -56,13 +63,23 @@ const no = (motivo, mostrar = 'deshabilitada') => ({ disponible: false, motivo, 
 const si = () => ({ disponible: true });
 
 /**
+ * ¿Se puede crear o cargar en ESTA carpeta? Lo que exige el servidor: «Editar».
+ *
+ * @param nivel    `current_permission_level` del listado de la carpeta abierta
+ * @param isAdmin  administrador DE ESTA OBRA
+ */
+export const puedeEditarEn = (nivel, isAdmin = false) =>
+    Boolean(isAdmin) || (NIVELES[nivel] ?? NIVELES.none) >= NIVELES.edit;
+
+/**
  * @param elementos   los elementos seleccionados (o el elemento pulsado)
  * @param isAdmin     administrador DE ESTA OBRA
  * @param isTrashMode papelera: el repertorio documental no aplica
  * @returns {Object<string, {disponible, motivo?, mostrar?}>}
  */
 export function capacidadesDeSeleccion({ elementos = [], isAdmin = false, isTrashMode = false } = {}) {
-    const capacidades = ['renombrar', 'compartir', 'desplazar', 'suprimir', 'reservar', 'atributos', 'descargar'];
+    const capacidades = ['renombrar', 'compartir', 'desplazar', 'suprimir', 'reservar', 'atributos', 'descargar',
+                         'subcarpeta', 'nueva_version'];
     const r = {};
 
     for (const cap of capacidades) {
@@ -86,6 +103,9 @@ export function capacidadesDeSeleccion({ elementos = [], isAdmin = false, isTras
         // o sólo se apaga.
         if (SOLO_ARCHIVO.has(cap) && elementos.some(e => e?.type === 'folder')) {
             r[cap] = no('Sólo para documentos', 'oculta'); continue;
+        }
+        if (SOLO_CARPETA.has(cap) && elementos.some(e => e?.type !== 'folder')) {
+            r[cap] = no('Sólo para carpetas', 'oculta'); continue;
         }
         if (SOLO_UNO.has(cap) && elementos.length > 1) {
             r[cap] = no('Sólo se puede con un elemento a la vez'); continue;

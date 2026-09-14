@@ -10,7 +10,7 @@
 // compartir y desplazar, y escondia esas capacidades a quien el servidor SI se
 // las concede.
 import assert from 'node:assert/strict';
-import { capacidadesDeSeleccion, NIVELES, EXIGE } from '../src/utils/capacidadesDeSeleccion.js';
+import { capacidadesDeSeleccion, NIVELES, EXIGE, puedeEditarEn } from '../src/utils/capacidadesDeSeleccion.js';
 
 let pass = 0, fail = 0;
 async function test(name, fn) {
@@ -108,6 +108,46 @@ await test('reservar y atributos son de documento, no de carpeta', () => {
     assert.equal(c.atributos.mostrar, 'oculta');
 });
 
+// ── CREAR Y SUBIR CON «EDITAR» (13-sep-2026) ─────────────────────────────────
+//
+// El portal decidia «Cargar archivos», «Nueva carpeta» y «Añadir subcarpeta»
+// con «administra esta obra». Quien tenia «Editar» en la carpeta no los veia,
+// aunque el servidor si se lo permite.
+
+await test('con `edit` en la carpeta se puede cargar y crear SIN ser admin de obra', () => {
+    assert.equal(puedeEditarEn('edit', false), true);
+    assert.equal(puedeEditarEn('admin', false), true);
+});
+
+await test('con Ver, Descargar o Comentar NO se ofrece cargar ni crear', () => {
+    for (const nivel of ['viewer', 'view_download', 'view_markup', 'none', undefined, null, 'raro']) {
+        assert.equal(puedeEditarEn(nivel, false), false, String(nivel));
+    }
+});
+
+await test('quien administra la obra puede cargar aunque aun no haya llegado el nivel', () => {
+    assert.equal(puedeEditarEn(null, true), true);
+});
+
+await test('añadir subcarpeta: solo sobre UNA carpeta y con `edit`', () => {
+    assert.equal(capacidadesDeSeleccion({ elementos: [carpeta({ permission_level: 'edit' })] }).subcarpeta.disponible, true);
+    const lector = capacidadesDeSeleccion({ elementos: [carpeta({ permission_level: 'viewer' })] }).subcarpeta;
+    assert.equal(lector.disponible, false);
+    assert.equal(lector.mostrar, 'deshabilitada');
+    const sobreDoc = capacidadesDeSeleccion({ elementos: [doc()] }).subcarpeta;
+    assert.equal(sobreDoc.disponible, false);
+    assert.equal(sobreDoc.mostrar, 'oculta', 'una subcarpeta dentro de un documento no significa nada');
+});
+
+await test('subir nueva version: solo sobre UN documento y con `edit`', () => {
+    assert.equal(capacidadesDeSeleccion({ elementos: [doc({ permission_level: 'edit' })] }).nueva_version.disponible, true);
+    assert.equal(capacidadesDeSeleccion({ elementos: [doc({ permission_level: 'view_markup' })] }).nueva_version.disponible, false);
+    assert.equal(capacidadesDeSeleccion({ elementos: [carpeta()] }).nueva_version.mostrar, 'oculta');
+    const dos = capacidadesDeSeleccion({ elementos: [doc({ id: 'a' }), doc({ id: 'b' })] }).nueva_version;
+    assert.equal(dos.disponible, false);
+    assert.match(dos.motivo, /un elemento/i);
+});
+
 // ── PAPELERA ─────────────────────────────────────────────────────────────────
 
 await test('en la papelera el repertorio documental no aplica', () => {
@@ -118,7 +158,8 @@ await test('en la papelera el repertorio documental no aplica', () => {
 // ── EL CONTRATO ──────────────────────────────────────────────────────────────
 
 await test('los niveles exigidos son los que se trazaron contra el backend', () => {
-    assert.deepEqual(EXIGE, { renombrar: 'edit', compartir: 'edit', desplazar: 'edit', reservar: 'edit', suprimir: 'admin' });
+    assert.deepEqual(EXIGE, { renombrar: 'edit', compartir: 'edit', desplazar: 'edit', reservar: 'edit',
+                              subcarpeta: 'edit', nueva_version: 'edit', suprimir: 'admin' });
     assert.equal(NIVELES.admin > NIVELES.edit, true);
 });
 

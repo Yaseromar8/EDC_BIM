@@ -2,7 +2,7 @@
 
 13-sep-2026. Base: `8875f9e` (E1.1, en producción). Contrato: `E1_2_CONTRATO.md`. Corrige H5, H6 y H9 y aplica H7-A, de la segunda parte de `E1_UAT_HALLAZGOS.md`.
 
-**Estado: implementado y probado en local; commit único sobre `8875f9e`, autorizado por el propietario («SI HAZLO»). Sin push, sin despliegue y sin migraciones.**
+**Estado: en producción desde el 13-sep.** Commit único `27e1a42` sobre `8875f9e` («SI HAZLO»), push normal («VAMOS») y despliegue manual del propietario, verificado (§6). Sin migraciones.
 
 **H7:** tu respuesta no eligió entre A y B, así que se aplicó **A (avisar)**, la recomendada. B (impedir) queda fuera.
 
@@ -116,10 +116,36 @@
   - D4 ya no reproduce H5;
   - sobran las advertencias de «Mientras no llegue la corrección (E1.2)».
 
-## 6 · Cierre
+## 6 · Despliegue en producción
+
+13-sep-2026, por la noche.
+
+**Antes del push:** `origin/main` estaba en `8875f9e`, y Auto-Deploy en Off en los cuatro servicios de Render. Después del push no arrancó ningún despliegue.
+
+**Despliegue manual del propietario:** primero el backend de Virginia y luego el portal.
+
+**Incidente del backend, de 21:11 a 21:36:**
+- El primer arranque de `27e1a42` se quedó en «Control socket listening…» y no llegó a «Booting worker»: la aplicación nunca se cargó.
+- Render lo dio por Live, pero avisó de que no detectaba ningún puerto abierto. No respondían ni `/api/health` ni el `/api` del portal.
+- El arranque de E1.1 en el mismo servicio y con las mismas librerías (gunicorn 25.1.0) sí siguió con «Booting worker». El fallo ocurrió antes de ejecutarse el código de la aplicación.
+- Con tu autorización («REINICIA») se reinició el servicio, y arrancó normal: «Booting worker», y la política de acceso aplicada a 393 endpoints (392 con E1.1; la diferencia es la ruta nueva).
+- No se tocó ningún dato.
+
+**Verificación tras el reinicio:**
+
+| Qué | Resultado |
+|---|---|
+| Backend de Virginia, `/api/health` | `27e1a428ce3c` |
+| El mismo, por el `/api` del portal y de `alephia.com.pe` | `27e1a428ce3c`, HTTP 200 |
+| Portal | `index-DgYYQqZD.js`, idéntico en Render y en `alephia.com.pe`. Trae «Cada documento tiene un solo estado…» y la llamada a `/api/reviews/en-curso`, que no existen en `8875f9e` |
+| Oregón | `cdf783754574`, sin cambios |
+
+**Lección:** tras cada despliegue manual del backend, «Live» no basta. Hay que comprobar `/api/health` y que el log diga «Booting worker».
+
+## 7 · Cierre
 
 ```
-CORRECCIONES PREVIAS = en producción: versión fijada, lista filtrada por acceso, acceso documental para actuar, vista previa y E1.1 (administrador como revisor, alta sin perder revisores, listas solo con participantes) · E1.2 con commit, sin push ni despliegue: dirección y pantalla siempre iguales, confirmación que no sobrevive a su revisión, fechas con zona horaria, avisos de documentos en otra revisión en curso
+CORRECCIONES PREVIAS = en producción: versión fijada, lista filtrada por acceso, acceso documental para actuar, vista previa y E1.1 (administrador como revisor, alta sin perder revisores, listas solo con participantes) · E1.2 en producción desde el 13-sep: dirección y pantalla siempre iguales, confirmación que no sobrevive a su revisión, fechas con zona horaria, avisos de documentos en otra revisión en curso
 FUNCIONES NUEVAS YA UTILIZABLES = en producción desde el 13-sep: detalle con documentos, versiones, pasos, plazo e historial · enlace y apertura desde Mi Trabajo · filtros y paginación · botones según actor y paso (Dar conformidad ≠ Aprobar) · confirmación y mensajes
 FUNCIONES DEL OBJETIVO TODAVÍA PENDIENTES = B: impedir documentos en dos revisiones en curso (decisión) · E2 anular y archivar · contrato nuevo (rondas, devolver al iniciador, volver al paso anterior, decisión por archivo, cierre separado de la emisión) · E5 exportación y contadores · correo opcional por acción
 ```

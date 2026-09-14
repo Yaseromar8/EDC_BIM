@@ -951,7 +951,25 @@ def list_documents():
                 if f.get('gcs_urn'):
                     f['mediaLink'] = generate_signed_url(f['gcs_urn'])
 
-        return jsonify({"success": True, "data": {**contents, "current_node_id": str(parent_id) if parent_id else None}}), 200
+        # QUE PUEDE HACER QUIEN MIRA EN ESTA CARPETA. La interfaz decidia
+        # «Cargar archivos» y «Nueva carpeta» con «administra esta obra», y a
+        # quien tenia «Editar» en la carpeta le escondia lo que el servidor si le
+        # deja (13-sep-2026). Se responde con la misma regla que decide todo lo
+        # demas; la ruta de subida lo vuelve a comprobar igualmente.
+        nivel_actual = 'none'
+        if parent_id and user:
+            try:
+                import permiso_documental as _pd
+                from db import get_db_connection as _gc
+                with _gc() as _c:
+                    nivel_actual = _pd.permiso_efectivo(_c.cursor(), user, model_urn, parent_id)
+            except Exception as _e:
+                print(f"[LIST] permiso de la carpeta sin resolver: {_e}")
+                nivel_actual = 'none'   # FAIL-CLOSED: no se ofrece lo que no se sabe
+
+        return jsonify({"success": True, "data": {**contents,
+                                                  "current_node_id": str(parent_id) if parent_id else None,
+                                                  "current_permission_level": nivel_actual}}), 200
     except Exception as e:
         import traceback
         traceback.print_exc()
@@ -1423,6 +1441,16 @@ def move_document():
                  new_parent_id = None
             else:
                  new_parent_id = resolve_path_to_node_id(dest_path, model_urn, created_by=performed_by)
+
+        # EL DESTINO TAMBIEN MANDA. Solo se miraba el permiso sobre lo que se
+        # mueve: con «Editar» en una carpeta se podia soltar el documento en otra
+        # donde no se tiene permiso. Mover es escribir en el destino, y escribir
+        # exige «Editar» alli (13-sep-2026). Sin destino resuelto solo pasa quien
+        # administra la obra.
+        rbac_destino = check_folder_permission(user, new_parent_id, model_urn, 'edit',
+                                               'mover a esa carpeta')
+        if rbac_destino:
+            return rbac_destino
 
         # Evitar mover dentro de sí mismo
         if target_node_id == new_parent_id:

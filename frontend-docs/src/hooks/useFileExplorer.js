@@ -15,6 +15,7 @@ import { useAdministracion } from './useAdministracion';
 import toast from 'react-hot-toast';
 import { arbolDocumental } from '../utils/arbolDocumental';
 import { leerEnlace, conRevision, destinoTrasNavegar } from '../utils/revisiones';
+import { puedeEditarEn } from '../utils/capacidadesDeSeleccion';
 
 export function useFileExplorer(project, user) {
   // EL ALCANCE QUE MANDA EL SERVIDOR, no una ruta deducida del nombre.
@@ -33,6 +34,16 @@ export function useFileExplorer(project, user) {
   const { esAdminDeObra, esEntityAdmin, cargando: cargandoAdmin } =
     useAdministracion(project);
   const isAdmin = esAdminDeObra;
+
+  // QUÉ PUEDE HACER QUIEN MIRA EN LA CARPETA ABIERTA (13-sep-2026).
+  //
+  // «Cargar archivos», «Nueva carpeta» y soltar ficheros se decidían con
+  // `isAdmin`, y a quien tenía «Editar» en la carpeta se le escondía lo que el
+  // servidor sí le deja. El nivel lo manda el listado
+  // (`current_permission_level`) con la misma regla que todo lo demás; mientras
+  // no llega, no se ofrece.
+  const [nivelCarpetaActual, setNivelCarpetaActual] = useState(null);
+  const puedeEditarAqui = puedeEditarEn(nivelCarpetaActual, isAdmin);
 
   // ── Core Navigation State ──
   const [currentPath, setCurrentPath] = useState(projectPrefix + '/');
@@ -242,6 +253,8 @@ export function useFileExplorer(project, user) {
         if (seq !== fetchSeqRef.current) return;
         const data = response.data || {};
         
+        if (!trash) setNivelCarpetaActual(data.current_permission_level || null);
+
         // Capturar root ID de la primera respuesta
         if (data.current_node_id && data.current_node_id !== 'null') {
            if (!projectRootIdRef.current) setProjectRootId(data.current_node_id);
@@ -323,6 +336,7 @@ export function useFileExplorer(project, user) {
     // No vaciamos los arrays ni ponemos loading bruto, dejamos que fetchContents lo maneje con caché
     setCurrentPath(finalPath);
     setCurrentNodeId(finalId);
+    setNivelCarpetaActual(null);
     setSelected(new Set());
     setIsTrashMode(false);
   }, [currentPath, currentNodeId, projectPrefix]);
@@ -337,6 +351,7 @@ export function useFileExplorer(project, user) {
     switchMode(false);
     setCurrentPath(path);
     if (nodeId) setCurrentNodeId(nodeId);
+    setNivelCarpetaActual(null);
     setSearchQuery('');
     setSelected(new Set());
     triggerRefresh(path, nodeId);
@@ -347,7 +362,13 @@ export function useFileExplorer(project, user) {
   // ═══════════════════════════════════════════════════════════════
 
   const createFolder = async () => {
-    if (!isAdmin || !folderName.trim()) return;
+    if (!folderName.trim()) return;
+    // Crear en la carpeta abierta exige «Editar» en ella; el servidor lo vuelve a
+    // comprobar. Crear en otra carpeta lo decide solo el servidor.
+    if (!newFolderParentPath && !puedeEditarAqui) {
+      toast.error('Necesitas permiso de Editar en esta carpeta para crear carpetas.');
+      return;
+    }
     const targetPath = (newFolderParentPath || currentPath) + ((newFolderParentPath || currentPath).endsWith('/') ? '' : '/') + folderName.trim() + '/';
     const parentId = newFolderParentPath || (currentPath.startsWith(projectPrefix) && (currentPath === projectPrefix || currentPath === projectPrefix + '/') ? null : currentPath);
     if (parentId && parentId.length > 30) setProcessingIds(prev => ({ ...prev, [parentId]: true }));
@@ -422,7 +443,10 @@ export function useFileExplorer(project, user) {
   };
 
   const deleteSpecificItem = async (fullName, id) => {
-    if (!isAdmin) return;
+    // Sin `isAdmin`: quién puede suprimir lo dicen `capacidadesDeSeleccion`
+    // («Administrar» en la carpeta) y el servidor, que lo vuelve a comprobar y
+    // dice el motivo si no. Antes el clic de quien no administraba la obra se
+    // perdía en silencio.
     if (!id || !fullName) return; // Validación básica, asegurar que tenemos data
     if (id) setProcessingIds(prev => ({ ...prev, [id]: true }));
     try {
@@ -466,7 +490,7 @@ export function useFileExplorer(project, user) {
   const DESPLAZAMIENTOS_A_LA_VEZ = 4;
 
   const handleExecuteMove = async () => {
-    if (!isAdmin || !moveState.destPath || !moveState.itemIds?.length) return;
+    if (!moveState.destPath || !moveState.itemIds?.length) return;
     const idsToMove = [...moveState.itemIds];
     if (moveState.destId && idsToMove.some(id => String(id) === String(moveState.destId))) {
       toast.error('No puedes mover un elemento dentro de sí mismo.');
@@ -559,7 +583,7 @@ export function useFileExplorer(project, user) {
   };
 
   const handleExecuteBatchDelete = async () => {
-    if (!isAdmin || selected.size === 0) return;
+    if (selected.size === 0) return;
     // La selección YA son ids: no hay que traducir de ruta a id, que es donde
     // la cuadrícula se caía -- guardaba ids y esta búsqueda los buscaba como
     // rutas, no encontraba ninguno, y «Suprimir» se iba en silencio.
@@ -639,8 +663,8 @@ export function useFileExplorer(project, user) {
 
   // ── Upload Handler ──
   const handleSopUpload = async (fileList) => {
-    if (!isAdmin) {
-      toast.error('Solo un administrador de esta obra puede cargar archivos.');
+    if (!puedeEditarAqui) {
+      toast.error('Necesitas permiso de Editar en esta carpeta para cargar archivos.');
       return;
     }
     if (!fileList?.length) return;
@@ -651,6 +675,24 @@ export function useFileExplorer(project, user) {
   const handleSopListo = () => {
     setShowUploadModal(false);
     chunkedUpload.clearCompleted();
+  };
+
+  // SUBIR UNA VERSIÓN NUEVA DE UN DOCUMENTO. El servidor ya versiona por
+  // nombre: lo que llega a la misma carpeta con el mismo nombre es la versión
+  // siguiente (`create_file_record`). Aquí solo se sube el fichero elegido CON
+  // EL NOMBRE DEL DOCUMENTO, para que nadie tenga que renombrarlo a mano.
+  const subirNuevaVersion = (item, fichero) => {
+    if (!item?.name || !fichero) return;
+    const extension = (n) => (String(n).includes('.') ? String(n).split('.').pop().toLowerCase() : '');
+    if (extension(fichero.name) !== extension(item.name)) {
+      toast.error(`La versión nueva tiene que ser del mismo tipo que «${item.name}».`);
+      return;
+    }
+    const ruta = String(item.fullName || '');
+    const carpeta = ruta.includes('/') ? ruta.slice(0, ruta.lastIndexOf('/') + 1) : currentPath;
+    const conSuNombre = new File([fichero], item.name, { type: fichero.type, lastModified: fichero.lastModified });
+    setShowUploadModal(true);
+    chunkedUpload.addFiles([conSuNombre], carpeta);
   };
 
   const openUploadedFile = (item) => {
@@ -741,6 +783,7 @@ export function useFileExplorer(project, user) {
     showUploadMenu, setShowUploadMenu,
     dragOver, pendingBanner, setPendingBanner,
     chunkedUpload, handleSopUpload, handleSopListo, openUploadedFile,
+    subirNuevaVersion, nivelCarpetaActual, puedeEditarAqui,
     onDragOver, onDragLeave, onDrop,
     
     // Context Menu
