@@ -6,6 +6,8 @@
 
 **Estado:** en producción desde el 14-sep (`41d7dda`). Backend de Virginia y portal desplegados y verificados (§5).
 
+> **Cambio posterior (14-sep-2026):** «Suprimir» y «Restaurar» ya piden «Editar», no «Administrar». Ver `03_EDITAR_SUPRIME_Y_RESTAURA.md`.
+
 ## 1 · Qué cambia para tu equipo
 
 | Antes | Ahora |

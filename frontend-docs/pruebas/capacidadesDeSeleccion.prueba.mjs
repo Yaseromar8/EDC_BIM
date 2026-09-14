@@ -10,7 +10,12 @@
 // compartir y desplazar, y escondia esas capacidades a quien el servidor SI se
 // las concede.
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
 import { capacidadesDeSeleccion, NIVELES, EXIGE, puedeEditarEn } from '../src/utils/capacidadesDeSeleccion.js';
+
+const aqui = dirname(fileURLToPath(import.meta.url));
 
 let pass = 0, fail = 0;
 async function test(name, fn) {
@@ -52,11 +57,21 @@ await test('con `edit` se puede renombrar, compartir y desplazar SIN ser admin d
     assert.equal(c.desplazar.disponible, true);
 });
 
-await test('con `edit` NO se puede suprimir: el servidor pide `admin` de carpeta', () => {
-    const c = capacidadesDeSeleccion({ elementos: [doc({ permission_level: 'edit' })], isAdmin: false });
-    assert.equal(c.suprimir.disponible, false);
-    assert.match(c.suprimir.motivo, /administraci/i);
-    assert.equal(c.suprimir.mostrar, 'deshabilitada', 'se puede pedir ese permiso: no se esconde');
+await test('con `edit` se puede suprimir (14-sep-2026: antes pedia `admin` de carpeta)', () => {
+    const c = capacidadesDeSeleccion({
+        elementos: [doc({ permission_level: 'edit' }), carpeta({ id: 'c2', permission_level: 'edit' })],
+        isAdmin: false,
+    });
+    assert.equal(c.suprimir.disponible, true);
+});
+
+await test('con Ver, Descargar o Comentar NO se puede suprimir, y se dice por que', () => {
+    for (const nivel of ['viewer', 'view_download', 'view_markup']) {
+        const c = capacidadesDeSeleccion({ elementos: [doc({ permission_level: nivel })], isAdmin: false });
+        assert.equal(c.suprimir.disponible, false, nivel);
+        assert.match(c.suprimir.motivo, /edici/i);
+        assert.equal(c.suprimir.mostrar, 'deshabilitada', 'se puede pedir ese permiso: no se esconde');
+    }
 });
 
 await test('con `admin` de carpeta se puede suprimir aunque no seas admin de obra', () => {
@@ -159,8 +174,13 @@ await test('en la papelera el repertorio documental no aplica', () => {
 
 await test('los niveles exigidos son los que se trazaron contra el backend', () => {
     assert.deepEqual(EXIGE, { renombrar: 'edit', compartir: 'edit', desplazar: 'edit', reservar: 'edit',
-                              subcarpeta: 'edit', nueva_version: 'edit', suprimir: 'admin' });
+                              subcarpeta: 'edit', nueva_version: 'edit', suprimir: 'edit' });
     assert.equal(NIVELES.admin > NIVELES.edit, true);
+    // Y el servidor pide lo mismo para suprimir, en lote y restaurar.
+    const servidor = readFileSync(join(aqui, '..', '..', 'backend', 'routes', 'documents.py'), 'utf8');
+    assert.match(servidor, /'edit', 'suprimir archivos'/, 'suprimir de uno en uno');
+    assert.match(servidor, /'edit',\s+'suprimir documentos'/, 'suprimir en lote');
+    assert.match(servidor, /'edit', 'restaurar elementos'/, 'restaurar');
 });
 
 await test('llamarla sin argumentos no revienta', () => {

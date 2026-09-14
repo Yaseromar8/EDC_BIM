@@ -1297,6 +1297,36 @@ def upload_document():
 # Para vaciar una base de desarrollo se usa un guion local con la identidad de
 # migracion, no una ruta del producto.
 
+def _subarbol_protegido(user, node_id, model_urn, accion):
+    """Suprimir o restaurar una CARPETA arrastra su subárbol entero.
+
+    Con «Editar» en la carpeta no basta si dentro hay carpetas donde esta persona no
+    llega a «Editar» (`permiso_documental.subcarpetas_sin_nivel`): se llevaría por
+    delante lo que no puede tocar. Devuelve la respuesta 403 lista, o None si se puede
+    seguir. Un documento no tiene subárbol. Sin poder comprobarlo, no se sigue.
+    """
+    if not node_id:
+        return None
+    import permiso_documental as _pd
+    from db import get_db_connection as _gc
+    try:
+        with _gc() as _c:
+            cur = _c.cursor()
+            cur.execute("SELECT node_type, name FROM file_nodes WHERE id::text = %s AND model_urn = %s",
+                        (str(node_id), model_urn))
+            fila = cur.fetchone()
+            protegido = bool(fila and fila[0] == 'FOLDER'
+                             and _pd.subcarpetas_sin_nivel(cur, user, model_urn, node_id, 'edit'))
+    except Exception as e:
+        logger.error(f"[PAPELERA] no se pudo comprobar el contenido de la carpeta: {e}")
+        return jsonify({"success": False, "code": "SUBARBOL_SIN_COMPROBAR",
+                        "error": "No se pudo comprobar el permiso sobre el contenido de la carpeta. Inténtalo de nuevo."}), 503
+    if not protegido:
+        return None
+    return jsonify({"success": False, "code": "SUBCARPETAS_SIN_PERMISO",
+                    "error": f"No puedes {accion} «{fila[1]}»: dentro hay carpetas en las que no tienes permiso de Editar."}), 403
+
+
 @documents_bp.route('/api/docs/delete', methods=['DELETE'])
 def delete_document():
     """Soft-delete recursivo en BD (carpetas borran todos sus hijos)."""
@@ -1314,8 +1344,14 @@ def delete_document():
     user = getattr(g, 'current_user', None)
     if not verify_project_access(user, model_urn):
         return jsonify({"success": False, "error": "No tienes acceso a este proyecto."}), 403
-    rbac = check_folder_permission(user, node_id, model_urn, 'admin', 'eliminar archivos')
+    # «EDITAR» SUPRIME (14-sep-2026, decisión del propietario): quien puede subir y
+    # reemplazar en una carpeta también puede mandar a la papelera lo que hay en ella.
+    # Antes pedía «Administrar». Una carpeta arrastra su subárbol, y ahí manda también lo
+    # que hay dentro (`_subarbol_protegido`). Eliminar DEFINITIVAMENTE no cambia.
+    rbac = check_folder_permission(user, node_id, model_urn, 'edit', 'suprimir archivos')
     if rbac: return rbac
+    denegado = _subarbol_protegido(user, node_id, model_urn, 'suprimir')
+    if denegado: return denegado
 
     try:
         from file_system_db import soft_delete_node, resolve_path_to_node_id
@@ -2106,9 +2142,8 @@ def batch_update():
                 # POR CADA documento, no solo por el primero de la lista. El
                 # guardia de arriba mira items[0]: bastaba con poner delante uno
                 # de tu carpeta para arrastrar en la misma peticion documentos de
-                # cualquier otra. Y el borrado de uno en uno exige 'admin'
-                # (:1056), asi que la via masiva era ademas la mas laxa de las
-                # dos. Se filtra y se borra solo lo que se puede.
+                # cualquier otra. Se filtra y se borra solo lo que se puede, con la
+                # misma regla que el borrado de uno en uno («Editar», y el subárbol).
                 # El administrador global pasa siempre (folder_permissions.py:99),
                 # asi que se resuelve UNA vez con la conexion que ya tenemos abierta
                 # en vez de preguntarlo por cada documento.
@@ -2126,8 +2161,20 @@ def batch_update():
                     permitidos = list(items)
                 else:
                     permitidos = [nid for nid in items
-                                  if check_folder_permission(user, nid, model_urn, 'admin',
+                                  if check_folder_permission(user, nid, model_urn, 'edit',
                                                              'suprimir documentos') is None]
+                    # Una carpeta arrastra su subárbol: con «Editar» en ella no basta si
+                    # dentro hay carpetas donde no llega (`_subarbol_protegido`). Se mira con
+                    # el cursor ya abierto y solo en las carpetas.
+                    if permitidos:
+                        import permiso_documental as _pd
+                        cursor.execute("SELECT id::text FROM file_nodes WHERE id = ANY(%s::uuid[]) "
+                                       "AND model_urn = %s AND node_type = 'FOLDER'",
+                                       (permitidos, model_urn))
+                        carpetas = {r[0] for r in cursor.fetchall()}
+                        permitidos = [nid for nid in permitidos
+                                      if str(nid) not in carpetas
+                                      or not _pd.subcarpetas_sin_nivel(cursor, user, model_urn, nid, 'edit')]
                 denegados = len(items) - len(permitidos)
                 if not permitidos:
                     conn.rollback()
@@ -2312,13 +2359,15 @@ def restore_doc():
     if not node_id:
         return jsonify({"success": False, "error": "Missing ID"}), 400
 
-    # ── TENANT ISOLATION + RBAC (mismo nivel que eliminar) ──
+    # ── TENANT ISOLATION + RBAC (lo mismo que suprimir: «Editar», y el subárbol) ──
     from flask import g
     user = getattr(g, 'current_user', None)
     if not verify_project_access(user, model_urn):
         return jsonify({"success": False, "error": "No tienes acceso a este proyecto."}), 403
-    rbac = check_folder_permission(user, node_id, model_urn, 'admin', 'restaurar elementos')
+    rbac = check_folder_permission(user, node_id, model_urn, 'edit', 'restaurar elementos')
     if rbac: return rbac
+    denegado = _subarbol_protegido(user, node_id, model_urn, 'restaurar')
+    if denegado: return denegado
 
     try:
         from file_system_db import restore_node

@@ -18,7 +18,7 @@
  *
  *     renombrar · compartir · desplazar · reservar  ->  'edit'
  *     añadir subcarpeta · subir nueva versión       ->  'edit'
- *     suprimir                                      ->  'admin' de carpeta
+ *     suprimir (y restaurar, en la papelera)        ->  'edit' (14-sep-2026; antes 'admin')
  *
  * Antes la interfaz exigía «administrador de obra» para las cuatro primeras, y
  * eso ESCONDÍA capacidades a quien el servidor sí se las concede. La interfaz
@@ -41,7 +41,10 @@ export const EXIGE = {
     // `POST /api/docs/folder` y la subida exigen «Editar» (13-sep-2026).
     subcarpeta:    'edit',
     nueva_version: 'edit',
-    suprimir:  'admin',
+    // «Editar» suprime (14-sep-2026, decisión del propietario); antes pedía
+    // «Administrar». Una carpeta con subcarpetas donde no se llega a «Editar» la niega
+    // el servidor, que es quien conoce el subárbol: aquí no se adivina.
+    suprimir:  'edit',
 };
 
 /** Capacidades que sólo tienen sentido sobre UN elemento. */

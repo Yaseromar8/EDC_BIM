@@ -369,6 +369,58 @@ def permiso_efectivo(cur, usuario, model_urn, node_id, con_motivo=False, context
     return por_defecto
 
 
+# ── SUPRIMIR Y RESTAURAR ARRASTRAN EL SUBÁRBOL ────────────────────────────
+
+_MAX_PROFUNDIDAD_SUBARBOL = 100
+
+
+def subcarpetas_sin_nivel(cur, usuario, model_urn, node_id, minimo='edit'):
+    """¿Hay DEBAJO de `node_id` alguna carpeta donde este principal no llega a `minimo`?
+
+    Suprimir o restaurar una carpeta arrastra todo lo que tiene dentro. Desde el
+    14-sep-2026 basta «Editar» para suprimir y restaurar, y «Editar» en la carpeta no
+    puede bastar si dentro hay una subcarpeta «Restringido» o «Ver» para esa persona:
+    se llevaría por delante lo que no puede tocar.
+
+    Solo se miran las carpetas del subárbol con alguna regla que alcance a este
+    principal: las demás no tienen regla propia y heredan de arriba (closest-wins), así
+    que valen lo mismo que la carpeta, que ya comprueba quien llama. Quien administra
+    la obra atraviesa los permisos de carpeta, como en todo lo demás.
+
+    Devuelve True si hay alguna carpeta por debajo del nivel.
+    """
+    contexto = contexto_de_permisos(cur, usuario, model_urn)
+    if contexto.get('es_admin'):
+        return False
+    sujetos = contexto.get('sujetos') or {}
+    if USER not in sujetos:
+        return True                                    # FAIL-CLOSED: sin identidad
+    cur.execute("""
+        WITH RECURSIVE subarbol AS (
+            SELECT id, 0 AS salto FROM file_nodes WHERE id::text = %s AND model_urn = %s
+            UNION ALL
+            SELECT fn.id, s.salto + 1 FROM file_nodes fn
+              JOIN subarbol s ON fn.parent_id = s.id
+             WHERE fn.model_urn = %s AND s.salto < %s
+        )
+        SELECT DISTINCT fp.folder_node_id::text
+          FROM folder_permissions fp
+          JOIN subarbol s ON s.id = fp.folder_node_id
+         WHERE s.salto > 0
+           AND ( (fp.sujeto_tipo = %s AND fp.sujeto_id = %s)
+              OR (fp.sujeto_tipo = %s AND fp.sujeto_id = %s)
+              OR (fp.sujeto_tipo = %s AND fp.sujeto_id = %s) )""",
+                (str(node_id), str(model_urn), str(model_urn), _MAX_PROFUNDIDAD_SUBARBOL,
+                 USER, sujetos.get(USER) or SIN_SUJETO,
+                 COMPANY, sujetos.get(COMPANY) or SIN_SUJETO,
+                 FUNCTION, sujetos.get(FUNCTION) or SIN_SUJETO))
+    for (carpeta,) in cur.fetchall():
+        nivel = permiso_efectivo(cur, usuario, model_urn, carpeta, contexto=contexto)
+        if _nivel(nivel) < _nivel(minimo):
+            return True
+    return False
+
+
 # ── EL GUARDIA UNICO ──────────────────────────────────────────────────────
 
 def guardia(cur, usuario, model_urn, accion, minimo='viewer',

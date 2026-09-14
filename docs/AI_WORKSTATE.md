@@ -618,7 +618,7 @@ NEXT EXACT ACTION:    esperar la UAT del propietario en producción y su decisi�
 DO NOT TOUCH:         el WIP ajeno (incluidos los hunks de la barra de iconos de FilesPage.jsx); producción y Oregón; Revisiones: lo que diga la unidad REVIEWS · E1.3; el significado del Rol (D, aplazado).
 COMMIT/HEAD REF:      41d7dda3e662f7bc6d218ffac3e4beb0543dbfd5 (igual a origin/main tras el push del 14-sep; su padre es 27e1a42)
 
-### Unidad REVIEWS · E1.3 (flujos creados utilizables) — PUBLICADA (88b300f en origin/main), SIN DESPLIEGUE, 14-sep
+### Unidad REVIEWS · E1.3 (flujos creados utilizables) — DESPLEGADA (88b300f en Virginia y portal), 14-sep
 
 Pedido del propietario el 14-sep: «si hago ya el arreglo de flujos creados y empiezo el contrato de volver atrás / devolver
 al iniciador… como lo investigamos en ACC». Diagnóstico: `docs/reviews/E1_3_FLUJOS_CREADOS_Y_RECHAZO.md`. Informe:
@@ -628,16 +628,16 @@ aprobación: `docs/reviews/E3_CONTRATO_RONDAS.md` (fuente: el contrato de ACC me
 [WIP HANDOFF]
 TAREA:                REVIEWS · E1.3 — que los flujos de revisión creados se puedan usar (las 7 causas del diagnóstico) y escribir el contrato RONDAS (rondas, volver al paso anterior, devolver al iniciador, decisión por archivo, cierre separado de la emisión) para aprobarlo. Implementado y probado en local; commit autorizado por el propietario («HAZLO») y publicado con push normal («si»), tras releer Auto-Deploy Off en los cuatro servicios de Render; el push no arrancó ningún despliegue. SIN desplegar: cada Manual Deploy necesita su autorización.
 IMPLEMENTADO:         plantillas_de_revision: validar_pasos exige plazo entero ≥1 (la regla del alta) y user_id numérico; resolver devuelve `opciones` de todo paso por función con varias personas, elegido o no, da ELECCION_INVALIDA ante elecciones mal formadas o ajenas, REVISOR_INVALIDO ante un id guardado malo y nombra a quien salió de la obra (REVISOR_NO_MIEMBRO); nuevo motivo_no_utilizable (validar_pasos + resolver; ELIGE_REVISOR no inutiliza). routes/plantillas_revision: el listado añade utilizable y motivo_no_utilizable por plantilla, cada una en un SAVEPOINT; modificar exige personas de la obra como crear (_personas_fuera_de_la_obra); solo un 23505 se anuncia como NOMBRE_REPETIDO. routes/reviews: POST /api/reviews/previsualizar = create_review(solo_comprobar=True), mismas comprobaciones en el mismo orden y salida antes de la primera escritura, sin exigir título ni idoneidad; la expansión de la plantilla va en try (PLANTILLA_NO_LEIDA) y un id o unas elecciones mal formados dan 404/400; el 500 del alta ya no devuelve str(e) (ERROR_DEL_SERVIDOR); tildes en el mensaje del plazo. Portal: altaDeRevision.js (opcionDePlantilla, pasosSinElegir, eleccionesParaEnviar, plazoValido, leerRespuesta, textoDeFallo, trasVistaPrevia); ReviewModal con la vista previa completa, contador que descarta respuestas tardías, selector por paso por función, flujos no utilizables deshabilitados con su motivo, aviso si fallan los flujos, claves con posición y envío de elecciones; FlujosDeRevisionModule comprueba el plazo antes de guardar, enseña un 0 guardado y marca «NO SE PUEDE USAR» con el motivo. La vista previa antigua GET /api/review-templates/<id>/resolver no cambia (portal desplegado).
-PENDIENTE:            1) autorización del propietario para cada Manual Deploy (backend `visor-ecd-backend-va` primero, con /api/health y «Booting worker»; luego `visor-ecd-portal`, verificado por contenido); 2) sus respuestas R1–R14 del contrato RONDAS para congelarlo antes de E3; 3) UAT de A, B y E1.3 en producción tras desplegar; 4) E2 sin autorizar.
+PENDIENTE:            1) desplegada por el propietario; verificada el 14-sep por /api/health (88b300fc61d1) y por el contenido del portal (/api/reviews/previsualizar, «Comprobando el flujo»); 2) sus respuestas R1–R14 del contrato RONDAS para congelarlo antes de E3; 3) UAT de A, B y E1.3 en producción tras desplegar; 4) E2 sin autorizar.
 ARCHIVOS MODIFICADOS: backend/plantillas_de_revision.py, backend/routes/plantillas_revision.py, backend/routes/reviews.py, frontend-docs/src/utils/altaDeRevision.js, frontend-docs/src/components/ReviewsModule.jsx, frontend-docs/src/components/FlujosDeRevisionModule.jsx, frontend-docs/pruebas/altaDeRevision.prueba.mjs, frontend-docs/src/probar-revisiones.jsx, docs/reviews/E1_GUIA_DE_PRUEBA.md, docs/reviews/E1_3_FLUJOS_CREADOS_Y_RECHAZO.md, docs/AI_WORKSTATE.md; nuevos: backend/tests/test_e13_flujos_creados.py, backend/herramientas/ensayo_de_flujos_creados.py, docs/reviews/E1_3_INFORME_DE_CIERRE.md, docs/reviews/E3_CONTRATO_RONDAS.md. Pendiente del handoff anterior: docs/usuarios/02_PLANOS_CAD_Y_EDITAR_EN_CARPETA.md. Ajenos, no tocados: los siete M de siempre (incluidos los hunks de la barra de iconos de FilesPage.jsx) y los untracked históricos.
 TESTS EJECUTADOS:     pytest completo sin .env → 1864 passed / 1 failed (test_capacidades_con_puerta, preexistente; 23 pruebas nuevas); ensayo_de_flujos_creados contra PostgreSQL con ENFORCE → 36/36; regresiones sin .env: ensayo_de_revisiones_gemelas 24/24, ensayo_de_version_y_visibilidad 67/67, ensayo_de_detalle_de_revision 25/25, ensayo_de_revisiones 50/50, ensayo_de_admin_participante 16/16; npm test en frontend-docs → 6 bancos en verde (altaDeRevision 15/15); ESLint de los ficheros tocados → los mismos 2 problemas que HEAD; build del portal sin .env → OK; banco probar-revisiones con el alta real: flujo no utilizable deshabilitado con motivo, selector por función, bloqueo por acceso, pasos al elegir, envío con plantilla_id y elecciones, respuesta tardía descartada y recuperación ante un flujo roto.
 TESTS PENDIENTES:     la app real del banco (Archivos → Enviar a revisión con el backend del banco): la pestaña cerró su sesión al cargarla sin backend y no se fabrican sesiones en el navegador; la etiqueta «NO SE PUEDE USAR» del editor en pantalla; UAT del propietario (bloque H de la guía) tras desplegar.
 FALLO CONOCIDO:       test_capacidades_con_puerta (preexistente). tests/test_capa16_tool_activation.py asigna am.ENFORCE_PROJECT_AUTHZ=True y am._user_in_project sin monkeypatch y los deja así para el resto de la sesión de pytest (preexistente, propuesto como tarea aparte): las pruebas de ruta de E1.3 lo declaran con su fixture `ruta`. Errores de lint preexistentes: 'user' sin usar en FlujosDeRevisionModule.jsx y react-refresh en probar-revisiones.jsx.
-NEXT EXACT ACTION:    pedir la autorización del Manual Deploy del backend de Virginia y verificar /api/health (88b300fc61d1) y «Booting worker»; después, la del portal, verificado por contenido. Y las respuestas R1–R14 del contrato RONDAS.
+NEXT EXACT ACTION:    esperar la UAT del propietario (bloque H de la guía) y sus respuestas R1–R14 del contrato RONDAS.
 DO NOT TOUCH:         el WIP ajeno (incluidos los hunks de la barra de iconos de FilesPage.jsx); producción y Oregón; /act y la sustitución; E2–E5 y el contrato RONDAS en código hasta que esté congelado; C y D de permisos (aplazados).
 COMMIT/HEAD REF:      88b300fc61d1dca0b21a9805bb5b0a86eeda7d43 (commit de E1.3, igual a origin/main tras el push del 14-sep; su padre es 41d7dda)
 
-### Unidad ARCHIVOS · ENLACES por obra, carpeta y documento — COMMIT LOCAL, SIN PUSH NI DESPLIEGUE, 14-sep
+### Unidad ARCHIVOS · ENLACES por obra, carpeta y documento — DESPLEGADA (9dd13e8 en Virginia y portal); CORRECCIÓN DE LA RAÍZ COMMITEADA, SIN PUSH, 14-sep
 
 Pedido del propietario el 14-sep: «ARCHIVOS · DEEP LINKS — CONTRATO FINAL BASADO EN ACC» (`/?obra=&carpeta=&documento=&version=`
 con identificadores; la carpeta es contexto y el documento identidad; «Copiar enlace» al documento vigente; respuesta neutra;
@@ -645,16 +645,34 @@ sin tocar Compartir público, papelera, búsqueda, viewableGuid ni frontend-reac
 intacto). Diagnóstico: `docs/archivos/01_ENLACES_POR_CARPETA_Y_DOCUMENTO.md`. Informe: `docs/archivos/02_ENLACES_INFORME_DE_CIERRE.md`.
 
 [WIP HANDOFF]
-TAREA:                ARCHIVOS · enlaces internos por obra, carpeta, documento y versión, como ACC. Implementado y probado en local; revisado por el propietario («DEEP LINKS ARCHIVOS CODE/TEST GREEN LOCAL = PASS»), que autorizó un único commit funcional sobre 88b300f: el que contiene este fichero. La corrección del falso error de base de datos en las negativas queda aceptada como parte de la entrega. SIN push ni despliegue: cada uno necesita su autorización.
+TAREA:                ARCHIVOS · enlaces internos por obra, carpeta, documento y versión, como ACC. Implementado y probado en local; revisado por el propietario («DEEP LINKS ARCHIVOS CODE/TEST GREEN LOCAL = PASS»), que autorizó un único commit funcional sobre 88b300f: el que contiene este fichero. La corrección del falso error de base de datos en las negativas queda aceptada como parte de la entrega. Push normal ejecutado por el propietario desde su terminal (a Claude Code el permiso le bloqueó `git push`), tras comprobar Auto-Deploy Off en los cuatro servicios: origin/main = 9dd13e8; después, producción seguía en 88b300f (/api/health) y el portal sin la ruta nueva. SIN desplegar: cada Manual Deploy necesita su autorización.
 IMPLEMENTADO:         backend/enlaces_de_archivos.py (`ubicar`: usuario → obra → recurso → permiso efectivo, y versión → documento; cadena de carpetas sin la raíz; papelera, otra obra, tipo, ciclo e ISO estricto; NoDisponible con motivo solo para registro y pruebas) y `GET /api/docs/ubicacion` en routes/documents.py (un único 404 ENLACE_NO_DISPONIBLE; la negativa se recoge dentro de la conexión para no registrarse como error de base de datos; la clave de la versión con la regla de /api/docs/versions). Portal: utils/enlacesDeArchivos.js; App_Refactor (obra en la URL con su paso, enlace pendiente en sessionStorage durante el login, Atrás/Adelante entre obras, lista y portada con marcas en history.state); useFileExplorer (push al entrar en una carpeta cuando el listado confirma su id; restauración al montar y con Atrás/Adelante, siempre validada en el servidor; el documento se abre desde el listado de su carpeta; normalización con replaceState; fuera de Carpetas, sin carpeta ni documento en la URL; anotarDocumento, cerrarDocumento, verVersion y copiarEnlace); FilesPage (solo 3 bloques propios: abrir, cerrar y versión, menú); ContextMenu «Copiar enlace».
-PENDIENTE:            1) autorización del push (normal, tras releer Auto-Deploy Off) y de cada Manual Deploy: backend primero (la ruta nueva, junto con E1.3 88b300f, aún sin desplegar), portal después; 2) UAT del propietario: producción aún no validada; 3) limitaciones registradas por el propietario: la búsqueda y la ventana de subida no añaden todavía `documento` a la URL, y Atrás desde la raíz de la obra hasta la lista de obras no se recorrió en pantalla; 4) posterior: «Copiar enlace a esta versión».
+PENDIENTE:            0) desplegada por el propietario y verificada el 14-sep (/api/health 9dd13e886c08 y el portal con el código nuevo); hallazgo del propietario en producción: tras F5 en una carpeta el árbol perdía la raíz, porque `fetchContents` tomaba el id de la raíz de la primera carpeta listada (y «Desplazar» a «Archivos de proyecto» habría ido a la carpeta del enlace); corregido y commiteado con autorización («VAMOS»), antes del commit de PERMISOS; 1) push del propietario y Manual Deploy (backend primero, por PERMISOS; portal después); 2) UAT del propietario: producción aún no validada; 3) limitaciones registradas por el propietario: la búsqueda y la ventana de subida no añaden todavía `documento` a la URL, y Atrás desde la raíz de la obra hasta la lista de obras no se recorrió en pantalla; 4) posterior: «Copiar enlace a esta versión».
 ARCHIVOS MODIFICADOS: backend/routes/documents.py, frontend-docs/src/App_Refactor.jsx, frontend-docs/src/hooks/useFileExplorer.js, frontend-docs/src/components/ContextMenu.jsx, frontend-docs/src/pages/FilesPage.jsx (3 bloques propios), docs/AI_WORKSTATE.md; nuevos: backend/enlaces_de_archivos.py, backend/tests/test_enlaces_de_archivos.py, backend/herramientas/ensayo_de_enlaces_de_archivos.py, frontend-docs/src/utils/enlacesDeArchivos.js, frontend-docs/pruebas/enlacesDeArchivos.prueba.mjs, docs/archivos/01_ENLACES_POR_CARPETA_Y_DOCUMENTO.md, docs/archivos/02_ENLACES_INFORME_DE_CIERRE.md. Pendiente del handoff anterior: docs/reviews/E1_3_INFORME_DE_CIERRE.md. Ajenos, no tocados: los siete M de siempre (incluidos los 3 bloques de la barra de iconos de FilesPage.jsx) y los untracked históricos.
 TESTS EJECUTADOS:     pytest completo sin .env → 1883 passed / 1 failed (test_capacidades_con_puerta, preexistente; 19 nuevas); ensayo_de_enlaces_de_archivos contra PostgreSQL con ENFORCE → 34/34, sin líneas de error en el log; regresiones de Revisiones → gemelas 24/24, versión y visibilidad 67/67, detalle 25/25, revisiones 50/50, admin participante 16/16, flujos creados 36/36; npm test → 7 bancos en verde (enlacesDeArchivos 16/16, revisiones 19/19); ESLint → ningún error nuevo (los 5 de FilesPage y ContextMenu ya están en HEAD); build del banco sin .env → OK; app real del banco: obra → carpeta A → carpeta B → documento → Atrás → Adelante → F5 → URL en otra pestaña, «Copiar enlace», documento movido, sin permiso, documento de otra obra, versión de otro documento y login intermedio.
 TESTS PENDIENTES:     en pantalla, Atrás desde la raíz de la obra hasta la lista y la portada (cubierto por el banco de reglas); UAT del propietario tras desplegar.
 FALLO CONOCIDO:       test_capacidades_con_puerta (preexistente). Un documento abierto desde la búsqueda o desde la ventana de subida se abre sin `documento` en la URL (la búsqueda quedó fuera del contrato).
-NEXT EXACT ACTION:    pedir al propietario la autorización del push de ARCHIVOS · ENLACES (tras releer Auto-Deploy Off); después, la de cada Manual Deploy (backend primero, portal después).
+NEXT EXACT ACTION:    push del propietario y Manual Deploy (backend primero, por PERMISOS; portal después). Hasta desplegar, tras un F5 o un enlace, no usar «Desplazar» hacia «Archivos de proyecto».
 DO NOT TOUCH:         el WIP ajeno (incluidos los 3 bloques de la barra de iconos de FilesPage.jsx); Compartir público, papelera, búsqueda, viewableGuid y frontend-react; producción y Oregón.
-COMMIT/HEAD REF:      el commit que contiene este fichero; su padre es 88b300fc61d1dca0b21a9805bb5b0a86eeda7d43 (igual a origin/main)
+COMMIT/HEAD REF:      9dd13e886c0838690b80b0507e7504ee07bdcf03 (igual a origin/main tras el push del 14-sep; su padre es 88b300f)
+
+### Unidad PERMISOS · «Editar» suprime y restaura — COMMIT LOCAL, SIN PUSH NI DESPLIEGUE, 14-sep
+
+Pedido del propietario el 14-sep: «cuando en Configuración de permisos esté en Editar, ese usuario también pueda eliminar o
+restaurar… después hacemos commit de ambos» (con la corrección de la raíz de ARCHIVOS · ENLACES). Informe:
+`docs/usuarios/03_EDITAR_SUPRIME_Y_RESTAURA.md`.
+
+[WIP HANDOFF]
+TAREA:                PERMISOS · suprimir (a la papelera, de uno en uno y en lote) y restaurar con «Editar» en la carpeta, en vez de «Administrar». Implementado y probado en local; commit autorizado por el propietario («VAMOS») en dos commits: la corrección de la raíz de los enlaces y este cambio, que es el que contiene este fichero. SIN push ni despliegue.
+IMPLEMENTADO:         permiso_documental.subcarpetas_sin_nivel (¿hay debajo alguna carpeta con una regla que deje a la persona por debajo de «Editar»?; quien administra la obra la atraviesa; sin identidad se niega). routes/documents.py: /api/docs/delete, el DELETE de /api/docs/batch y /api/docs/restore piden 'edit' y, para carpetas, `_subarbol_protegido` (403 SUBCARPETAS_SIN_PERMISO nombrando solo la carpeta pedida; 503 SUBARBOL_SIN_COMPROBAR si no se puede mirar); /api/docs/permanent-delete sin cambios (solo administrador de la plataforma). Portal: capacidadesDeSeleccion EXIGE.suprimir = 'edit'; AddPermissionModal describe Editar y Administrar; la prueba del portal fija las reglas nuevas y el nivel del backend.
+PENDIENTE:            1) push del propietario (tras releer Auto-Deploy Off) y Manual Deploy: backend primero (este cambio toca el servidor), portal después; 2) observación sin tocar: la papelera enseña a todo miembro lo suprimido, también de carpetas que no ve (restaurar sí exige permiso).
+ARCHIVOS MODIFICADOS: backend/permiso_documental.py, backend/routes/documents.py, frontend-docs/src/utils/capacidadesDeSeleccion.js, frontend-docs/src/components/AddPermissionModal.jsx, frontend-docs/pruebas/capacidadesDeSeleccion.prueba.mjs, docs/usuarios/02_PLANOS_CAD_Y_EDITAR_EN_CARPETA.md (nota), docs/AI_WORKSTATE.md; nuevos: backend/tests/test_editar_suprime_y_restaura.py, backend/herramientas/ensayo_de_editar_suprime_y_restaura.py, docs/usuarios/03_EDITAR_SUPRIME_Y_RESTAURA.md.
+TESTS EJECUTADOS:     pytest completo sin .env → 1896 passed / 1 failed (test_capacidades_con_puerta, preexistente; 13 nuevas); ensayo_de_editar_suprime_y_restaura contra PostgreSQL con ENFORCE → 19/19, sin errores en el log; npm test → 7 bancos en verde (capacidadesDeSeleccion 21/21); ESLint → sin problemas en lo tocado; app real del banco con perfil Editar: «Suprimir» activo en el menú, suprimir un PDF (en base is_deleted y activity_log «delete» a su nombre) y restaurarlo desde la Papelera (aviso «Restaurado», is_deleted falso y «restore»).
+TESTS PENDIENTES:     UAT del propietario en producción tras desplegar.
+FALLO CONOCIDO:       test_capacidades_con_puerta (preexistente).
+NEXT EXACT ACTION:    push del propietario y Manual Deploy: backend primero (verificar /api/health), portal después (verificar por contenido).
+DO NOT TOUCH:         /api/docs/permanent-delete (sigue solo del administrador de la plataforma); el WIP ajeno (incluidos los 3 bloques de la barra de iconos de FilesPage.jsx); producción y Oregón.
+COMMIT/HEAD REF:      el commit que contiene este fichero; su padre es el de la corrección de la raíz de ENLACES, que va sobre 9dd13e8 (igual a origin/main)
 
 ## FROZEN / DO NOT REOPEN
 
@@ -720,15 +738,19 @@ Observaciones reales, ya conocidas y aceptadas. Ninguna bloquea nada.
    propietario (7-sep-2026). No bloquea B1.
 ## CURRENT TASK
 
-**14-sep-2026 · ARCHIVOS · ENLACES por obra, carpeta y documento — COMMIT LOCAL, SIN PUSH NI DESPLIEGUE.**
+**14-sep-2026 · PERMISOS · «Editar» suprime y restaura — COMMIT LOCAL, SIN PUSH NI DESPLIEGUE.**
+Pedido del propietario antes del commit de la corrección de la raíz de ENLACES: los dos van juntos. Probado en local (pytest
+1896/1, ensayo 19/19, npm 7 bancos, app real del banco). Ver «Unidad PERMISOS · «Editar» suprime y restaura».
+
+**14-sep-2026 · ARCHIVOS · ENLACES por obra, carpeta y documento — DESPLEGADA (9dd13e8); CORRECCIÓN DE LA RAÍZ, COMMITEADA.**
 Contrato final del propietario basado en ACC. Probado en local (pytest 1883/1, ensayo 34/34, regresiones de Revisiones,
 npm 7 bancos, app real del banco con el recorrido pedido y los cinco casos). Revisado por el propietario («GREEN LOCAL = PASS») y
-commiteado con su autorización; espera la del push. Ver «Unidad ARCHIVOS · ENLACES».
+commiteado con su autorización; push y despliegue hechos por él; la corrección de la raíz tras F5 está commiteada y espera push y despliegue. Ver «Unidad ARCHIVOS · ENLACES».
 
 **14-sep-2026 · REVIEWS · E1.3 (flujos creados utilizables) — PUBLICADA (88b300f), SIN DESPLIEGUE.**
 Probado en local (pytest 1864/1, ensayo 36/36, regresiones de Revisiones, npm 6 bancos, banco de pantalla). En la misma
 entrega, el contrato RONDAS para aprobar (`docs/reviews/E3_CONTRATO_RONDAS.md`, sin código). Commit («HAZLO») y push («si»)
-autorizados por el propietario; espera la autorización de cada Manual Deploy. Ver «Unidad REVIEWS · E1.3».
+autorizados por el propietario; desplegada por él y verificada el 14-sep (/api/health y portal por contenido). Ver «Unidad REVIEWS · E1.3».
 
 **14-sep-2026 · PERMISOS · A (planos CAD para todos) y B («Editar» en la carpeta) — DESPLEGADA (41d7dda).**
 Probado en local (pytest 1841/1, banco 21/21, npm 6 bancos, pantalla del banco); commit y push autorizados; desplegada
@@ -805,13 +827,14 @@ autorreferencial del presente documento. Consultar HEAD real por separado.
 
 ## EXACT NEXT ACTION
 
-**ARCHIVOS · ENLACES (14-sep-2026):** commit local hecho con la autorización del propietario; sin push ni despliegue. Pedir la
-autorización del push; después, la de cada Manual Deploy: backend primero (la ruta `/api/docs/ubicacion`, junto con E1.3 aún
-sin desplegar) y portal después.
+**PERMISOS · «Editar» suprime y restaura (14-sep-2026):** commiteado («VAMOS»), sin push ni despliegue. Push del propietario
+y Manual Deploy: backend primero (verificar /api/health), portal después (verificar por contenido).
 
-**REVIEWS · E1.3 (14-sep-2026):** commit y push hechos (`88b300f` en origin/main; Auto-Deploy Off releído y ningún
-despliegue arrancado). Pedir la autorización de cada Manual Deploy: backend primero, portal después. Y sus respuestas
-R1–R14 del contrato RONDAS antes de E3.
+**ARCHIVOS · ENLACES (14-sep-2026):** `9dd13e8` desplegada y verificada. La corrección de la raíz tras F5 está commiteada;
+va en el mismo push y despliegue que PERMISOS.
+
+**REVIEWS · E1.3 (14-sep-2026):** desplegada y verificada (`88b300f`: /api/health y portal por contenido). Esperar la UAT
+del propietario (bloque H) y sus respuestas R1–R14 del contrato RONDAS antes de E3.
 
 **PERMISOS · A y B (14-sep-2026):** desplegada y verificada (`41d7dda`). Esperar la UAT del propietario en producción. Decisión pendiente suya: paquete compartido
 (`docs/compartir/01_COMPARTIR_VARIOS_DOCUMENTOS.md`). Revisiones: ver REVIEWS · E1.3.

@@ -98,8 +98,8 @@ export default function AddPermissionModal({ folder, modelUrn, apiBaseUrl, onClo
     { value: 'viewer', label: 'Ver', desc: 'Solo ver archivos' },
     { value: 'view_download', label: 'Ver y descargar', desc: 'Ver y descargar archivos' },
     { value: 'view_markup', label: 'Comentar', desc: 'Ver, descargar y publicar marcas de revisión' },
-    { value: 'edit', label: 'Editar', desc: 'Ver, descargar, marcar y subir/editar archivos' },
-    { value: 'admin', label: 'Administrar', desc: 'Control total, incluida eliminación y permisos' }
+    { value: 'edit', label: 'Editar', desc: 'Ver, descargar, marcar, subir/editar, suprimir y restaurar archivos' },
+    { value: 'admin', label: 'Administrar', desc: 'Todo lo de Editar, más publicar o archivar documentos y configurar permisos' }
   ];
 
   const selectedOption = PERMISSION_LEVELS.find(l => l.value === level);
