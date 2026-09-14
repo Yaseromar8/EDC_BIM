@@ -15,7 +15,10 @@ cada sentencia (el mismo metodo que `test_r01_motor_por_contrato`):
     revision BLOQUEADA y rol global de administrador; aprobar apagado por
     asociacion invalida o por version nueva en el cierre;
   · el listado aplica el permiso y el filtro ANTES de cortar la pagina, pagina
-    por cursor y respeta el tope de filas examinadas.
+    por cursor y respeta el tope de filas examinadas;
+  · E1.2: el detalle y el alta nombran las OTRAS revisiones en curso con el mismo
+    documento, solo si se pueden ver; el cierre dice si los documentos ya estaban en
+    su destino o si alguno volveria atras; las fechas sin zona salen con la suya.
 
 El comportamiento contra PostgreSQL, con `/act` de verdad, se mide en
 `herramientas/ensayo_de_detalle_de_revision.py`.
@@ -84,7 +87,14 @@ class Cursor:
             self.e['lecturas'] += 1
             self._todos = sorted(filas, key=lambda f: -f[0])[:lote]
         elif s.startswith('SELECT ID::TEXT, CURRENT_VERSION_ID::TEXT, VERSION_NUMBER'):
-            self._todos = [(DOC, self.e['vigente'], self.e['numero_vigente'])]
+            self._todos = [(DOC, self.e['vigente'], self.e['numero_vigente'],
+                            self.e['estado_doc'])]
+        elif s.startswith('SELECT ID, TITLE, ITEMS FROM DOC_REVIEWS'):
+            urn, excluir, nodos, tope = params
+            filas = [f for f in self.e['filas']
+                     if f[1] == urn and (f[6] or 'pending') == 'pending' and f[0] != excluir
+                     and any(isinstance(i, dict) and i.get('node_id') in nodos for i in f[3])]
+            self._todos = [(f[0], f[2], f[3]) for f in sorted(filas, key=lambda f: -f[0])[:tope]]
         elif s.startswith('SELECT ID FROM USERS'):
             self._uno = (params[0],)
         elif s.startswith('SELECT 1 FROM PROJECT_USERS'):
@@ -131,7 +141,8 @@ def ruta(monkeypatch):
     import auth_middleware as am
 
     e = {'filas': [], 'sql': [], 'commits': 0, 'lecturas': 0, 'vigente': VERSION,
-         'numero_vigente': 1, 'fuera_de_la_obra': set(), 'con_acceso': set(),
+         'numero_vigente': 1, 'estado_doc': 'WIP', 'fuera_de_la_obra': set(),
+         'con_acceso': set(),
          'acceso_obra': True,
          'usuario': {'id': 1, 'name': 'Usuario 1', 'email': 'u1@obra.pe', 'role': 'editor'}}
 
@@ -459,3 +470,125 @@ def test_las_acciones_preguntan_lo_mismo_que_act():
     # Antes de la sustitucion: lo que va detras de ella no puede leer el contrato.
     assert fuente.index('def _acciones_para') < fuente.index('def reasignar_revisor')
     assert fuente.index('def get_review') < fuente.index('def reasignar_revisor')
+
+
+# ══ E1.2 · DOCUMENTOS EN OTRA REVISION EN CURSO (H7-A) ═══════════════════════
+
+def en_curso(r, *nodos, **query):
+    query.setdefault('model_urn', OBRA)
+    partes = ['%s=%s' % kv for kv in query.items()] + ['node_id=%s' % n for n in nodos]
+    resp = r['cli'].get('/api/reviews/en-curso?' + '&'.join(partes))
+    return resp.status_code, resp.get_json()
+
+
+def test_el_detalle_nombra_las_otras_revisiones_en_curso_con_el_mismo_documento(ruta):
+    ruta['e']['filas'] = [
+        fila(5), fila(6),                                    # en curso, mismo documento
+        fila(7, status='approved', current_step=1),          # terminada: no se nombra
+        fila(8, items=[item(), item('RESERVADO-8.pdf')]),    # no la puede ver: no se nombra
+    ]
+    s, b = detalle(ruta, 5)
+    assert s == 200
+    assert b['revision']['items'][0]['tambien_en'] == [
+        {'id': 6, 'codigo': 'RV-006', 'title': 'Revisión 6'}]
+    # Quien puede ver la reservada la ve nombrada, de la mas reciente a la mas antigua.
+    ruta['e']['con_acceso'] = {1}
+    _s, b = detalle(ruta, 5)
+    assert [x['id'] for x in b['revision']['items'][0]['tambien_en']] == [8, 6]
+    assert escrituras(ruta['e']) == [] and ruta['e']['commits'] == 0
+
+
+def test_una_revision_terminada_no_busca_otras(ruta):
+    ruta['e']['filas'] = [fila(5, status='approved', current_step=1), fila(6)]
+    como(ruta, 2)
+    _s, b = detalle(ruta, 5)
+    assert 'tambien_en' not in b['revision']['items'][0]
+    assert not any(s.startswith('SELECT ID, TITLE, ITEMS') for s, _ in ruta['e']['sql'])
+
+
+@pytest.mark.parametrize('estado,ya,todos,retroceden', [
+    ('WIP', [], False, []),
+    ('SHARED', ['P-01.pdf'], True, []),
+    ('PUBLISHED', [], False, [{'name': 'P-01.pdf', 'estado': 'PUBLISHED'}]),
+])
+def test_el_cierre_dice_que_pasa_con_los_documentos(ruta, estado, ya, todos, retroceden):
+    ruta['e']['estado_doc'] = estado
+    ruta['e']['filas'] = [fila(5, current_step=1)]
+    como(ruta, 2)
+    _s, b = detalle(ruta)
+    aprobar = b['revision']['acciones']['aprobar']
+    # Avisa, no decide: aprobar sigue disponible (impedirlo seria la opcion B).
+    assert aprobar['tipo'] == 'aprobar_y_cerrar' and aprobar['disponible'] is True
+    assert (aprobar['ya_en_destino'], aprobar['todos_en_destino'],
+            aprobar['retroceden']) == (ya, todos, retroceden)
+    assert b['revision']['items'][0]['estado_documento'] == estado
+
+
+def test_un_paso_que_no_cierra_no_habla_del_estado_de_los_documentos(ruta):
+    ruta['e']['estado_doc'] = 'SHARED'
+    ruta['e']['filas'] = [fila(5)]
+    _s, b = detalle(ruta)
+    aprobar = b['revision']['acciones']['aprobar']
+    assert aprobar['tipo'] == 'conformidad'
+    assert (aprobar['ya_en_destino'], aprobar['todos_en_destino'], aprobar['retroceden']) == \
+        ([], False, [])
+
+
+def test_el_alta_pregunta_en_que_revisiones_en_curso_estan_sus_documentos(ruta):
+    ruta['e']['filas'] = [fila(5), fila(6, status='rejected'),
+                          fila(7, items=[item('RESERVADO.pdf')])]
+    s, b = en_curso(ruta, DOC)
+    assert s == 200
+    assert b['documentos'] == {DOC: [{'id': 5, 'codigo': 'RV-005', 'title': 'Revisión 5'}]}
+    assert escrituras(ruta['e']) == [] and ruta['e']['commits'] == 0
+
+
+@pytest.mark.parametrize('nodos,query', [
+    ((DOC,), {'model_urn': ''}),
+    ((), {}),
+    (('no-es-un-uuid',), {}),
+])
+def test_el_alta_con_una_pregunta_mal_formada_da_400(ruta, nodos, query):
+    s, b = en_curso(ruta, *nodos, **query)
+    assert s == 400 and b['success'] is False
+
+
+def test_sin_acceso_a_la_obra_el_alta_no_sabe_nada(ruta):
+    ruta['e']['filas'] = [fila(5)]
+    ruta['e']['acceso_obra'] = False
+    s, b = en_curso(ruta, DOC)
+    assert s == 403 and 'documentos' not in b
+
+
+def test_la_pregunta_del_alta_tiene_su_puerta_y_no_escribe():
+    fuente = _fuente('routes/reviews.py')
+    cuerpo = fuente[fuente.index('def revisiones_en_curso_con'):
+                    fuente.index('def _revision_independiente')]
+    assert 'verify_project_access(' in cuerpo and '_otras_en_curso(' in cuerpo
+    ayuda = fuente[fuente.index('def _otras_en_curso'):fuente.index('def _pasos_para_mostrar')]
+    assert '_puede_ver_la_revision(' in ayuda
+    for efecto in ('UPDATE ', 'INSERT ', 'DELETE ', '.commit(', 'log_activity('):
+        assert efecto not in cuerpo and efecto not in ayuda, efecto
+
+
+# ══ E1.2 · FECHAS CON SU ZONA (H9) ════════════════════════════════════════════
+
+def test_las_fechas_sin_zona_se_leen_con_la_zona_de_la_base():
+    fuente = _fuente('routes/reviews.py')
+    inicio = fuente.index('_COLUMNAS_DE_REVISION = """')
+    bloque = fuente[inicio:fuente.index('"""', inicio + 30)]
+    assert "created_at AT TIME ZONE current_setting('TimeZone')" in bloque
+    assert "paso_vence_en AT TIME ZONE current_setting('TimeZone')" in bloque
+    # `cerrada_en` ya es TIMESTAMP WITH TIME ZONE: convertirla la estropearia.
+    assert 'cerrada_en AT TIME ZONE' not in bloque
+
+
+def test_una_fecha_con_zona_sale_como_instante(ruta):
+    import datetime as dt
+    creada = dt.datetime(2026, 9, 14, 0, 15, 8, tzinfo=dt.timezone.utc)
+    f = list(fila(5))
+    f[10], f[13] = creada, creada + dt.timedelta(days=1)
+    ruta['e']['filas'] = [tuple(f)]
+    _s, b = detalle(ruta)
+    assert b['revision']['created_at'] == '2026-09-14T00:15:08+00:00'
+    assert b['revision']['paso_vence_en'] == '2026-09-15T00:15:08+00:00'

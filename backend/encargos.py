@@ -380,7 +380,11 @@ def usuario_por_email(cur, email):
 # alcanzaria a cualquiera de esa empresa, perteneciera o no a la obra.
 _MI_TRABAJO = """
 SELECT e.id, e.project_id, p.name, e.objeto_tipo, e.objeto_id, e.asunto,
-       e.vence_en, e.creado_en, e.creado_por, e.destino_funcion
+       -- Con su zona (E1.2 · H9): son TIMESTAMP sin zona, en la zona de la base, y
+       -- sin esto la pantalla contaba los dias de plazo con cinco horas de mas.
+       e.vence_en AT TIME ZONE current_setting('TimeZone'),
+       e.creado_en AT TIME ZONE current_setting('TimeZone'),
+       e.creado_por, e.destino_funcion
   FROM encargos e
   JOIN project_users pu ON pu.project_id = e.project_id AND pu.user_id = %(uid)s
   LEFT JOIN projects p ON p.id = e.project_id

@@ -14,6 +14,7 @@ import { useFolderCache } from './useFolderCache';
 import { useAdministracion } from './useAdministracion';
 import toast from 'react-hot-toast';
 import { arbolDocumental } from '../utils/arbolDocumental';
+import { leerEnlace, conRevision, destinoTrasNavegar } from '../utils/revisiones';
 
 export function useFileExplorer(project, user) {
   // EL ALCANCE QUE MANDA EL SERVIDOR, no una ruta deducida del nombre.
@@ -98,8 +99,39 @@ export function useFileExplorer(project, user) {
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   // Un enlace a una revisión (`?revision=<id>`) abre directamente Revisiones;
   // `ReviewsView` lee el mismo parámetro para mostrar su detalle.
-  const [sidebarView, setSidebarView] = useState(() => (
+  const [sidebarView, fijarVista] = useState(() => (
     /[?&]revision=\d+(&|$)/.test(window.location.search) ? 'reviews' : 'files'));
+  const vistaActual = useRef(sidebarView);
+  useEffect(() => { vistaActual.current = sidebarView; }, [sidebarView]);
+
+  // LA DIRECCIÓN Y LA PANTALLA DICEN LO MISMO (E1.2 · H5).
+  //
+  // Antes, en Archivos, Adelante devolvía `?revision=` a la dirección sin que nada
+  // cambiara en pantalla: copiarla daba el enlace de una revisión que no se veía, y
+  // «Revisiones» abría esa revisión en vez de la lista. Ahora:
+  //   · «Revisiones» desde el menú, o tras «Enviar a revisión», abre la LISTA: si la
+  //     dirección guardaba el enlace de una revisión que no se ve, se quita antes;
+  //   · si Atrás o Adelante traen una revisión de esta obra estando en otra sección, se
+  //     enseña esa revisión. Dentro de Revisiones manda `ReviewsView`, y una revisión
+  //     de otra obra la abre `App_Refactor` como un enlace.
+  const setSidebarView = useCallback((vista) => {
+    if (vista === 'reviews' && vistaActual.current !== 'reviews'
+        && leerEnlace(window.location.search)) {
+      window.history.replaceState(null, '', window.location.pathname
+        + conRevision(window.location.search, null, null));
+    }
+    fijarVista(vista);
+  }, []);
+  const obraDelExplorador = project?.id;
+  useEffect(() => {
+    const alNavegar = () => {
+      const destino = destinoTrasNavegar(window.location.search,
+                                         { enDocumentos: true, obraActual: obraDelExplorador });
+      if (destino.tipo === 'revisiones' && vistaActual.current !== 'reviews') fijarVista('reviews');
+    };
+    window.addEventListener('popstate', alNavegar);
+    return () => window.removeEventListener('popstate', alNavegar);
+  }, [obraDelExplorador]);
 
   // CAPA 16 · TOOL ACTIVATION: que herramientas EXISTEN en esta obra. Lo lee
   // el menu para no ofrecer lo que el servidor va a negar. No autoriza nada:

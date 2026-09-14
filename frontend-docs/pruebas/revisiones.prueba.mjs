@@ -17,7 +17,7 @@ import { dirname, join } from 'node:path';
 import {
   FILTROS, leerEnlace, enlaceDeRevision, conRevision, codigoDe, chipDeEstado,
   papelDelPaso, botonAprobar, consecuenciaDeAprobar, exitoDe, describirEvento,
-  mensajeDeError, CONSECUENCIA_DE_RECHAZAR,
+  mensajeDeError, CONSECUENCIA_DE_RECHAZAR, destinoTrasNavegar, avisoDeOtrasRevisiones,
 } from '../src/utils/revisiones.js';
 
 let pass = 0, fail = 0;
@@ -27,6 +27,7 @@ async function test(name, fn) {
 }
 
 const aqui = dirname(fileURLToPath(import.meta.url));
+const fuente = (ruta) => readFileSync(join(aqui, '..', 'src', ruta), 'utf8');
 
 await test('el enlace se lee con obra y revision', () => {
   assert.deepEqual(leerEnlace('?obra=p-12&revision=7'), { obra: 'p-12', revision: 7 });
@@ -136,6 +137,79 @@ await test('los filtros de la pantalla son exactamente los del servidor', () => 
   assert.ok(bloque, 'no se encuentra FILTROS_DEL_LISTADO en el backend');
   const servidor = [...bloque[1].matchAll(/'([a-z_]+)'/g)].map(m => m[1]);
   assert.deepEqual(FILTROS.map(f => f.id), servidor);
+});
+
+// ── E1.2 ─────────────────────────────────────────────────────────────────────────
+
+await test('Atras y Adelante: la direccion decide lo que se ve (H5)', () => {
+  const aqui1 = { enDocumentos: true, obraActual: 'p-1' };
+  assert.deepEqual(destinoTrasNavegar('', aqui1), { tipo: 'nada' });
+  assert.deepEqual(destinoTrasNavegar('?hub=1', aqui1), { tipo: 'nada' });
+  assert.deepEqual(destinoTrasNavegar('?obra=p-1&revision=5', aqui1), { tipo: 'revisiones', revision: 5 });
+  assert.deepEqual(destinoTrasNavegar('?revision=5', aqui1), { tipo: 'revisiones', revision: 5 });
+  assert.deepEqual(destinoTrasNavegar('?obra=p-2&revision=5', aqui1),
+                   { tipo: 'enlace', enlace: { obra: 'p-2', revision: 5 } });
+  assert.deepEqual(destinoTrasNavegar('?obra=p-1&revision=5', { enDocumentos: false }),
+                   { tipo: 'enlace', enlace: { obra: 'p-1', revision: 5 } });
+  assert.deepEqual(destinoTrasNavegar('?revision=5', { enDocumentos: false }), { tipo: 'nada' });
+});
+
+await test('el explorador y la app siguen a Atras y Adelante; el menu abre la lista (H5)', () => {
+  const explorador = fuente('hooks/useFileExplorer.js');
+  assert.ok(explorador.includes("window.addEventListener('popstate', alNavegar)"), 'el explorador no escucha Atrás y Adelante');
+  assert.ok(explorador.includes('destinoTrasNavegar(window.location.search'), 'el explorador no decide con destinoTrasNavegar');
+  const cambiar = explorador.slice(explorador.indexOf('const setSidebarView = useCallback'),
+                                   explorador.indexOf('const obraDelExplorador'));
+  assert.ok(cambiar.length > 0, 'no se encuentra setSidebarView');
+  assert.ok(cambiar.includes('conRevision(window.location.search, null, null)'),
+            '«Revisiones» desde el menú no quita el enlace de una revisión que no se ve');
+  const app = fuente('App_Refactor.jsx');
+  assert.ok(app.includes("window.addEventListener('popstate', alNavegar)") && app.includes('destinoTrasNavegar('),
+            'la app no abre como enlace una revisión de otra obra traída por Atrás o Adelante');
+});
+
+await test('una confirmacion se retira si su revision deja de verse (H6)', () => {
+  const dialogo = fuente('utils/confirm.jsx');
+  assert.ok(dialogo.includes("senal.addEventListener('abort', retirar)"), 'el diálogo no se cierra al retirarlo');
+  assert.ok(dialogo.includes('options.signal?.aborted'), 'una pregunta ya retirada se sigue haciendo');
+  const detalle = fuente('components/RevisionDetalle.jsx');
+  assert.ok(detalle.includes('signal: pregunta.signal'), 'el detalle no permite retirar su confirmación');
+  assert.ok(detalle.includes('confirmacion.current?.abort()'), 'el detalle no retira la confirmación al dejar de verse');
+  assert.ok(detalle.includes('if (!ok || !vivo.current) return;'), 'sin la revisión en pantalla se seguiría actuando');
+});
+
+await test('el aviso de documentos en otra revision en curso (H7-A)', () => {
+  assert.equal(avisoDeOtrasRevisiones(undefined), '');
+  assert.equal(avisoDeOtrasRevisiones([]), '');
+  assert.equal(avisoDeOtrasRevisiones([{ id: 12, codigo: 'RV-012' }]), 'También está en RV-012, en curso.');
+  assert.equal(avisoDeOtrasRevisiones([{ id: 12 }, { id: 11 }], { enElAlta: true }),
+               'Ya está en RV-012 y RV-011, en curso.');
+  assert.equal(avisoDeOtrasRevisiones([{ id: 3 }, { id: 2 }, { id: 1 }]),
+               'También está en RV-003, RV-002 y RV-001, en curso.');
+});
+
+await test('al cerrar, la consecuencia dice que pasa con los documentos (H7-A)', () => {
+  const todos = consecuenciaDeAprobar({ tipo: 'aprobar_y_cerrar', destino: 'SHARED',
+                                        ya_en_destino: ['A.pdf', 'B.pdf'], todos_en_destino: true });
+  assert.match(todos, /se cierra como aprobada\. Los documentos ya están en Compartido, así que su estado no cambia/);
+  const uno = consecuenciaDeAprobar({ tipo: 'aprobar_y_cerrar', destino: 'SHARED',
+                                      ya_en_destino: ['A.pdf'], todos_en_destino: false });
+  assert.match(uno, /pasan a Compartido\. A\.pdf ya lo está\./);
+  const atras = consecuenciaDeAprobar({ tipo: 'aprobar_y_cerrar', destino: 'SHARED', ya_en_destino: [],
+                                        retroceden: [{ name: 'C.pdf', estado: 'PUBLISHED' }] });
+  assert.match(atras, /Atención: C\.pdf está en Publicado y volverá a Compartido\./);
+  // Sin datos del servidor, dice lo de siempre.
+  assert.match(consecuenciaDeAprobar({ tipo: 'aprobar_y_cerrar', destino: 'PUBLISHED' }),
+               /pasan a Publicado\. Antes se comprueban/);
+});
+
+await test('el alta y el detalle ensenan el aviso (H7-A)', () => {
+  const modulo = fuente('components/ReviewsModule.jsx');
+  const alta = modulo.slice(modulo.indexOf('export function ReviewModal'), modulo.indexOf('// ── Vista: listado'));
+  assert.ok(alta.includes('apiFetch(`${API}/api/reviews/en-curso?${q.toString()}`)'), 'el alta no pregunta por sus documentos');
+  assert.ok(alta.includes('avisoDeOtrasRevisiones(otras, { enElAlta: true })'), 'el alta no enseña el aviso');
+  const detalle = fuente('components/RevisionDetalle.jsx');
+  assert.ok(detalle.includes('avisoDeOtrasRevisiones(it.tambien_en)'), 'el detalle no enseña el aviso');
 });
 
 console.log(JSON.stringify({ banco: 'revisiones', pass, fail }));

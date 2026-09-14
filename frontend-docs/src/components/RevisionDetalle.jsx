@@ -15,7 +15,7 @@ import DocQuickView from './DocQuickView';
 import useDocPreview from '../hooks/useDocPreview';
 import {
   chipDeEstado, papelDelPaso, ESTADO_DEL_PASO, botonAprobar, consecuenciaDeAprobar,
-  CONSECUENCIA_DE_RECHAZAR, exitoDe, describirEvento, mensajeDeError,
+  CONSECUENCIA_DE_RECHAZAR, exitoDe, describirEvento, mensajeDeError, avisoDeOtrasRevisiones,
 } from '../utils/revisiones';
 
 const TONO = {
@@ -159,10 +159,16 @@ export default function RevisionDetalle({ rid, projectPrefix, onVolver, onCambio
   const [preview, openDoc, closePreview] = useDocPreview(projectPrefix);
   const vivo = useRef(true);
   const peticion = useRef(0);
+  const confirmacion = useRef(null);
 
   useEffect(() => {
     vivo.current = true;
-    return () => { vivo.current = false; };
+    // Si esta revisión deja de verse con una confirmación abierta --Atrás, otra
+    // sección--, la confirmación se retira (E1.2 · H6).
+    return () => {
+      vivo.current = false;
+      confirmacion.current?.abort();
+    };
   }, []);
 
   const cargar = useCallback(async () => {
@@ -192,14 +198,20 @@ export default function RevisionDetalle({ rid, projectPrefix, onVolver, onCambio
     const aprobar = rev.acciones?.aprobar || {};
     const nombre = accion === 'reject' ? 'Rechazar' : botonAprobar(aprobar.tipo);
     const nota = comentario.trim();
+    // La confirmación se puede retirar: si la revisión deja de verse, se cancela
+    // (E1.2 · H6). Y si aun así llegara un «sí» sin la revisión en pantalla, no se actúa.
+    const pregunta = new AbortController();
+    confirmacion.current = pregunta;
     const ok = await confirmAction({
       title: `${nombre} · ${rev.codigo}`,
       message: (accion === 'reject' ? CONSECUENCIA_DE_RECHAZAR : consecuenciaDeAprobar(aprobar))
         + (nota ? ` Comentario: «${nota}».` : ''),
       confirmText: nombre,
       danger: accion === 'reject',
+      signal: pregunta.signal,
     });
-    if (!ok) return;
+    if (confirmacion.current === pregunta) confirmacion.current = null;
+    if (!ok || !vivo.current) return;
     setEnviando(true);
     try {
       const r = await apiFetch(`${API}/api/reviews/${rev.id}/act`, {
@@ -338,6 +350,13 @@ export default function RevisionDetalle({ rid, projectPrefix, onVolver, onCambio
                   hay v{it.version_vigente_numero}
                 </Chip>
               )}
+              {/* E1.2 · H7-A: el mismo documento en otra revisión en curso. */}
+              {avisoDeOtrasRevisiones(it.tambien_en) && (
+                <span style={S.otraRevision}
+                      title={(it.tambien_en || []).map(o => `${o.codigo} · ${o.title}`).join('\n')}>
+                  {avisoDeOtrasRevisiones(it.tambien_en)}
+                </span>
+              )}
             </li>
           ))}
         </ul>
@@ -440,6 +459,8 @@ const S = {
               padding: '3px 10px', borderRadius: 12, fontSize: 12, fontWeight: 600, cursor: 'pointer' },
   docInvalido: { background: '#fff1f2', border: '1px solid #fecdd3', color: '#9f1239',
                  padding: '3px 10px', borderRadius: 12, fontSize: 12, fontWeight: 600 },
+  otraRevision: { background: '#fffaf0', border: '1px solid #f0d9a0', color: '#8a5a12',
+                  padding: '1px 8px', borderRadius: 10, fontSize: 11 },
   paso: { padding: '6px 0', borderBottom: '1px solid #f5f5f5' },
   numero: { width: 22, height: 22, borderRadius: '50%', background: '#eef2f7', color: '#1a56a8',
             display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 11,

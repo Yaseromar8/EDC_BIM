@@ -19,14 +19,16 @@
  *   │   └── MatrixTable, DocumentViewer (existentes)
  *   └── SharedViewer (existente)
  */
-import React, { useState, useEffect, lazy, Suspense } from 'react';
+import React, { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import { Toaster } from 'react-hot-toast';
 
 // ── Auth Hook ──
 import { useUser } from './hooks/useUser';
 import { API } from './utils/helpers';
 import { apiFetch } from './utils/apiFetch';
-import { leerEnlace, conRevision, CLAVE_DEL_ENLACE_PENDIENTE } from './utils/revisiones';
+import {
+  leerEnlace, conRevision, destinoTrasNavegar, CLAVE_DEL_ENLACE_PENDIENTE,
+} from './utils/revisiones';
 
 // ── Pages ──
 import HubPage from './pages/HubPage';
@@ -161,6 +163,30 @@ export default function App() {
     })();
     return () => { cancelado = true; };
   }, [user, enlace]);
+
+  // ATRÁS Y ADELANTE HACIA UNA REVISIÓN DE OTRA OBRA, O FUERA DE DOCUMENTOS (E1.2 · H5).
+  //
+  // Si el navegador devuelve a la dirección el enlace de una revisión estando en la
+  // portada, en la lista de obras o dentro de OTRA obra, se abre como un enlace: la
+  // dirección y la pantalla tienen que decir lo mismo. Dentro de la misma obra lo
+  // resuelve el explorador (`useFileExplorer`), y dentro de Revisiones, `ReviewsView`.
+  const pantalla = useRef({ user, enteredDocs, selectedProject });
+  useEffect(() => {
+    pantalla.current = { user, enteredDocs, selectedProject };
+  }, [user, enteredDocs, selectedProject]);
+  useEffect(() => {
+    const alNavegar = () => {
+      const { user: quien, enteredDocs: dentro, selectedProject: obra } = pantalla.current;
+      if (!quien) return;
+      const destino = destinoTrasNavegar(window.location.search,
+                                         { enDocumentos: Boolean(dentro && obra), obraActual: obra?.id });
+      if (destino.tipo === 'enlace') {
+        setEnlace({ obra: String(destino.enlace.obra), revision: destino.enlace.revision });
+      }
+    };
+    window.addEventListener('popstate', alNavegar);
+    return () => window.removeEventListener('popstate', alNavegar);
+  }, []);
 
   // SSO de vuelta (Visor -> Hub): el visor manda un ticket efímero de un solo
   // uso en el URL; aquí se canjea por la sesión y se aterriza en el Hub sin

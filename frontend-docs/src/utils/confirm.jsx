@@ -9,6 +9,10 @@
  *   if (!await confirmAction('¿Borrar?')) return;
  *   if (!await confirmAction({ title: 'Eliminar', message: '...', danger: true })) return;
  *
+ * RETIRAR LA PREGUNTA: con `signal` (de un AbortController), quien pregunta puede
+ * cerrarla como si se hubiera pulsado Cancelar; por ejemplo, si su pantalla deja de
+ * verse. Quien no pasa `signal` no nota nada.
+ *
  * Requiere <ConfirmHost /> montado una vez en la raíz de la app.
  */
 import React, { useState, useEffect, useRef } from 'react';
@@ -19,6 +23,8 @@ let _openDialog = null;
 
 export function confirmAction(opts = {}) {
   const options = typeof opts === 'string' ? { message: opts } : opts;
+  // Quien pregunta ya no está (E1.2 · H6): no se pregunta.
+  if (options.signal?.aborted) return Promise.resolve(false);
   // Degradación segura: si el host no está montado, no rompemos el flujo.
   if (!_openDialog) {
     return Promise.resolve(window.confirm(options.message || '¿Confirmar?'));
@@ -48,6 +54,18 @@ export function ConfirmHost() {
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state]);
+
+  // SE RETIRA SI QUIEN PREGUNTÓ YA NO ESTÁ (E1.2 · H6). Sin esto, tras Atrás la
+  // confirmación seguía encima de otra pantalla, y aceptarla actuaba sobre algo que
+  // ya no se veía.
+  useEffect(() => {
+    const senal = state?.signal;
+    if (!senal) return undefined;
+    const retirar = () => close(false);
+    senal.addEventListener('abort', retirar);
+    return () => senal.removeEventListener('abort', retirar);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state]);
 

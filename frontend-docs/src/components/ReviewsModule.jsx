@@ -8,6 +8,7 @@ import { cambioDeFlujo, confirmacionDePlantilla, AYUDA_PARTICIPANTES } from '../
 import RevisionDetalle from './RevisionDetalle';
 import {
   FILTROS, leerEnlace, conRevision, chipDeEstado, codigoDe, mensajeDeError,
+  avisoDeOtrasRevisiones, AVISO_DOCUMENTOS_EN_CURSO,
 } from '../utils/revisiones';
 
 // ── Modal: enviar documentos a revisión ──
@@ -25,6 +26,8 @@ export function ReviewModal({ isOpen, onClose, items, projectPrefix, onCreated }
   const [plantillas, setPlantillas] = useState([]);
   const [plantillaId, setPlantillaId] = useState('');
   const [avisoPlantilla, setAvisoPlantilla] = useState('');
+  // En qué OTRAS revisiones en curso están ya estos documentos (E1.2 · H7-A).
+  const [enCurso, setEnCurso] = useState({});
 
   useEffect(() => {
     if (!isOpen) return;
@@ -47,6 +50,22 @@ export function ReviewModal({ isOpen, onClose, items, projectPrefix, onCreated }
     apiFetch(`${API}/api/docs/idoneidad?model_urn=${encodeURIComponent(projectPrefix)}`)
       .then(r => r.json()).then(d => setCodigos(d.codigos || [])).catch(() => setCodigos([]));
   }, [isOpen, projectPrefix]);
+
+  // ¿ESTOS DOCUMENTOS YA ESTÁN EN OTRA REVISIÓN EN CURSO? (E1.2 · H7-A). Se avisa antes
+  // de crear otra: un documento tiene un solo estado, y lo que emita una revisión cambia
+  // lo que la otra sigue revisando. Solo avisa: el servidor no lo impide.
+  const nodosDelAlta = (items || []).map(it => it.node_id).filter(Boolean).join(',');
+  useEffect(() => {
+    if (!isOpen || !nodosDelAlta) return undefined;
+    let vigente = true;
+    const q = new URLSearchParams({ model_urn: projectPrefix });
+    nodosDelAlta.split(',').forEach(n => q.append('node_id', n));
+    apiFetch(`${API}/api/reviews/en-curso?${q.toString()}`)
+      .then(r => (r.ok ? r.json() : null))
+      .then(d => { if (vigente) setEnCurso(d?.documentos || {}); })
+      .catch(() => { if (vigente) setEnCurso({}); });
+    return () => { vigente = false; };
+  }, [isOpen, projectPrefix, nodosDelAlta]);
 
   if (!isOpen) return null;
 
@@ -183,14 +202,31 @@ export function ReviewModal({ isOpen, onClose, items, projectPrefix, onCreated }
 
           <div>
             <label style={{ display: 'block', color: '#666', marginBottom: 6, fontWeight: 600 }}>Documentos ({items.length})</label>
-            <div style={{ maxHeight: 110, overflowY: 'auto', border: '1px solid #eee', borderRadius: 4 }}>
-              {items.map(it => (
-                <div key={it.node_id} style={{ padding: '6px 10px', borderBottom: '1px solid #f5f5f5', display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.name}</span>
-                  <span style={{ color: 'var(--accent)', fontWeight: 600 }}>V{it.version || 1}</span>
-                </div>
-              ))}
+            <div style={{ maxHeight: 140, overflowY: 'auto', border: '1px solid #eee', borderRadius: 4 }}>
+              {items.map(it => {
+                const otras = enCurso[it.node_id] || [];
+                const aviso = avisoDeOtrasRevisiones(otras, { enElAlta: true });
+                return (
+                  <div key={it.node_id} style={{ padding: '6px 10px', borderBottom: '1px solid #f5f5f5' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.name}</span>
+                      <span style={{ color: 'var(--accent)', fontWeight: 600 }}>V{it.version || 1}</span>
+                    </div>
+                    {aviso && (
+                      <div style={{ marginTop: 2, fontSize: 11, color: '#8a5a12' }}
+                           title={otras.map(o => `${o.codigo} · ${o.title}`).join('\n')}>
+                        {aviso}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
+            {Object.keys(enCurso).length > 0 && (
+              <div style={{ marginTop: 6, fontSize: 11, color: '#8a5a12', lineHeight: 1.5 }}>
+                {AVISO_DOCUMENTOS_EN_CURSO}
+              </div>
+            )}
           </div>
 
           {plantillas.length > 0 && (

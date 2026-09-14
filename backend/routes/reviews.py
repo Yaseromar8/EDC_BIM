@@ -432,9 +432,18 @@ def _con_asociacion_documental(cur, rev):
 # `_row_to_dict`. Una sola definicion para las dos lecturas: si manana se anade
 # una columna, no puede quedar una de las dos pantallas leyendo otra forma.
 # `/act` y la sustitucion conservan la suya, con FOR UPDATE.
+#
+# LAS FECHAS SALEN CON SU ZONA (E1.2 · H9). `created_at` y `paso_vence_en` son
+# TIMESTAMP sin zona: guardan la hora en la zona de la base (UTC en produccion), y
+# la pantalla leia '2026-09-14T00:15:08' como hora de Lima -- cinco horas de mas,
+# mientras `cerrada_en` y el historial, que si llevan zona, se veian bien. Se leen
+# con la zona de la sesion, que es la misma con la que se escribieron, y salen como
+# un instante. No se migra ningun dato.
 _COLUMNAS_DE_REVISION = """id, model_urn, title, items, steps, current_step, status,
-                                  final_status, history, created_by, created_at,
-                                  codigo_idoneidad, cerrada_en, paso_vence_en,
+                                  final_status, history, created_by,
+                                  created_at AT TIME ZONE current_setting('TimeZone'),
+                                  codigo_idoneidad, cerrada_en,
+                                  paso_vence_en AT TIME ZONE current_setting('TimeZone'),
                                   plantilla_id, plantilla_nombre, plantilla_version,
                                   contrato"""
 
@@ -527,9 +536,12 @@ def _con_versiones_vigentes(cur, rev):
                     and _uuid(it.get('node_id'))})
     if not nodos:
         return rev
-    cur.execute("SELECT id::text, current_version_id::text, version_number FROM file_nodes "
-                " WHERE id = ANY(%s::uuid[]) AND model_urn = %s", (nodos, rev['model_urn']))
-    vigentes = {f[0]: (f[1], f[2]) for f in cur.fetchall()}
+    # `status` es el estado de HOY de cada documento: con el, el cierre avisa si ya
+    # esta en su destino o si volveria atras (E1.2 · H7-A).
+    cur.execute("SELECT id::text, current_version_id::text, version_number, status "
+                "  FROM file_nodes WHERE id = ANY(%s::uuid[]) AND model_urn = %s",
+                (nodos, rev['model_urn']))
+    vigentes = {f[0]: (f[1], f[2], f[3]) for f in cur.fetchall()}
     items = []
     for it in rev.get('items') or []:
         if isinstance(it, dict) and it.get('asociacion_valida') is not False:
@@ -538,10 +550,63 @@ def _con_versiones_vigentes(cur, rev):
                 fijada = _uuid(it.get('version_id'))
                 it = dict(it, version_vigente_numero=vigente[1],
                           es_version_vigente=(None if not fijada else
-                                              not (vigente[0] and vigente[0] != fijada)))
+                                              not (vigente[0] and vigente[0] != fijada)),
+                          estado_documento=ecd.normalizar(vigente[2]))
         items.append(it)
     rev['items'] = items
     return rev
+
+
+# Cuantas otras revisiones se nombran como mucho en un aviso. Es un aviso, no una
+# regla: si hubiera mas en curso sobre el mismo documento, nombra las mas recientes.
+_TOPE_DE_OTRAS_EN_CURSO = 50
+# Cuantos documentos puede preguntar el alta de una vez.
+_TOPE_DE_DOCUMENTOS_DEL_ALTA = 500
+
+
+def _otras_en_curso(cur, usuario, model_urn, nodos, excluir=None, contexto=None, vistos=None):
+    """Las OTRAS revisiones en curso de esta obra que llevan alguno de estos
+    documentos y que esta persona puede ver: `{node_id: [{id, codigo, title}]}`.
+
+    DOS REVISIONES SOBRE EL MISMO DOCUMENTO (E1.2 · H7-A)
+    -----------------------------------------------------
+    El servidor lo permite, y un documento tiene un solo estado: lo que emite una
+    revision cambia lo que la otra sigue revisando, y parecen cruzadas. No se
+    prohibe -- eso seria una regla nueva, y la decide el propietario --: se AVISA,
+    en el alta y en el detalle.
+
+    Solo se nombran revisiones que esta persona ya puede abrir, con la misma regla
+    documental que el listado. Una que no puede ver no se menciona, ni siquiera con
+    un aviso neutro. Solo lee.
+    """
+    nodos = sorted({n for n in (_uuid(x) for x in (nodos or [])) if n})
+    if not nodos:
+        return {}
+    cur.execute("SELECT id, title, items FROM doc_reviews "
+                " WHERE model_urn = %s AND COALESCE(status, 'pending') = 'pending' "
+                "   AND id <> %s AND jsonb_typeof(items) = 'array' "
+                "   AND EXISTS (SELECT 1 FROM jsonb_array_elements(items) AS it "
+                "                WHERE it->>'node_id' = ANY(%s)) "
+                " ORDER BY id DESC LIMIT %s",
+                (model_urn, int(excluir or 0), nodos, _TOPE_DE_OTRAS_EN_CURSO))
+    filas = cur.fetchall()
+    if not filas:
+        return {}
+    if contexto is None:
+        import permiso_documental as pd
+        contexto = pd.contexto_de_permisos(cur, usuario, model_urn)
+    vistos = {} if vistos is None else vistos
+    salida = {}
+    for rid, titulo, items in filas:
+        propios = {_uuid(it.get('node_id')) for it in (items or []) if isinstance(it, dict)}
+        comunes = sorted(propios.intersection(nodos))
+        if not comunes or not _puede_ver_la_revision(cur, usuario, model_urn, items or [],
+                                                     contexto, vistos):
+            continue
+        for n in comunes:
+            salida.setdefault(n, []).append({'id': rid, 'codigo': _codigo_de_revision(rid),
+                                             'title': titulo})
+    return salida
 
 
 def _pasos_para_mostrar(rev):
@@ -666,10 +731,28 @@ def _acciones_para(cur, usuario, rev):
     if not cierra and indice + 1 < len(pasos):
         siguiente = {'numero': indice + 2,
                      'persona': flujo.etiqueta_del_paso(flujo.paso_en(pasos, indice + 1))}
+    # AL CERRAR, QUE PASA CON LOS DOCUMENTOS (E1.2 · H7-A). No cambia ninguna regla:
+    # dice ANTES de confirmar si ya estaban en su destino -- porque otra revision los
+    # emitio -- o si alguno volveria atras, por ejemplo de Publicado a Compartido.
+    # `estado_documento` lo pone `_con_versiones_vigentes`.
+    ya_en_destino, retroceden = [], []
+    if cierra:
+        destino = ecd.normalizar(rev.get('final_status'))
+        for it in items:
+            estado = it.get('estado_documento')
+            if estado not in ecd.ESTADOS:
+                continue
+            if estado == destino:
+                ya_en_destino.append(it.get('name') or 'un documento')
+            elif ecd.ESTADOS.index(estado) > ecd.ESTADOS.index(destino):
+                retroceden.append({'name': it.get('name') or 'un documento', 'estado': estado})
     acciones['aprobar'] = {'disponible': puede_aprobar, 'tipo': tipo,
                            'motivo_no': '' if puede_aprobar else motivo_no,
                            'siguiente_paso': siguiente,
-                           'destino': rev.get('final_status') if cierra else None}
+                           'destino': rev.get('final_status') if cierra else None,
+                           'ya_en_destino': ya_en_destino,
+                           'todos_en_destino': bool(items) and len(ya_en_destino) == len(items),
+                           'retroceden': retroceden}
     return acciones
 
 
@@ -816,12 +899,52 @@ def get_review(rid):
                     "code": "SIN_PERMISO_DOCUMENTAL"}), 403
             rev = _con_versiones_vigentes(cur, _con_asociacion_documental(cur, rev))
             rev = _con_estado_del_flujo(cur, rev)
+            # En que OTRA revision en curso, que esta persona pueda ver, esta cada
+            # documento (E1.2 · H7-A). Una revision terminada ya no lo necesita.
+            if (rev.get('status') or 'pending') == 'pending':
+                otras = _otras_en_curso(cur, usuario, rev['model_urn'],
+                                        [it.get('node_id') for it in rev['items'] or []
+                                         if isinstance(it, dict)],
+                                        excluir=rev['id'], contexto=contexto)
+                rev['items'] = [dict(it, tambien_en=otras.get(_uuid(it.get('node_id')), []))
+                                if isinstance(it, dict) else it for it in rev['items'] or []]
             rev['codigo'] = _codigo_de_revision(rev['id'])
             rev['obra_id'] = obra
             rev['me_toca'] = _me_toca(usuario, rev)
             rev['pasos'] = _pasos_para_mostrar(rev)
             rev['acciones'] = _acciones_para(cur, usuario, rev)
         return jsonify({"success": True, "revision": rev})
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@reviews_bp.route('/api/reviews/en-curso', methods=['GET'])
+def revisiones_en_curso_con():
+    """En que OTRAS revisiones en curso estan ya estos documentos. Para el alta.
+
+    `?model_urn=<obra>&node_id=<id>&node_id=<id>...` devuelve
+    `{documentos: {node_id: [{id, codigo, title}]}}`, solo con revisiones que esta
+    persona puede ver (E1.2 · H7-A). Es un AVISO antes de crear otra, no una
+    prohibicion. Solo lee.
+    """
+    model_urn = request.args.get('model_urn')
+    if not model_urn:
+        return jsonify({"success": False, "error": "Falta model_urn"}), 400
+    usuario = _user()
+    from routes.documents import verify_project_access
+    if not verify_project_access(usuario, model_urn):
+        return jsonify({"success": False, "error": "No tienes acceso a esta obra."}), 403
+    pedidos = request.args.getlist('node_id')
+    nodos = [_uuid(n) for n in pedidos]
+    if not pedidos or len(pedidos) > _TOPE_DE_DOCUMENTOS_DEL_ALTA or not all(nodos):
+        return jsonify({"success": False, "error": "Los documentos pedidos no son válidos.",
+                        "code": "DOCUMENTOS_NO_VALIDOS"}), 400
+    try:
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            documentos = _otras_en_curso(cur, usuario, model_urn, nodos)
+        return jsonify({"success": True, "documentos": documentos})
     except Exception as e:
         traceback.print_exc()
         return jsonify({"success": False, "error": str(e)}), 500

@@ -56,6 +56,28 @@ export function conRevision(search, obra, revision) {
   return s ? `?${s}` : '';
 }
 
+// ATRÁS Y ADELANTE (E1.2 · H5). El navegador puede devolver a la dirección el enlace de
+// una revisión estando en otra pantalla. Esto dice qué tiene que verse entonces, para
+// que la dirección y la pantalla digan lo mismo:
+//   · 'revisiones': la revisión es de la obra que se está viendo → su sección;
+//   · 'enlace': es de otra obra, o no se está dentro de Documentos → se abre como un enlace;
+//   · 'nada': la dirección no trae ninguna revisión.
+export function destinoTrasNavegar(search, { enDocumentos = false, obraActual = null } = {}) {
+  const enlace = leerEnlace(search);
+  if (!enlace) return { tipo: 'nada' };
+  const mismaObra = !enlace.obra
+    || (obraActual != null && String(enlace.obra) === String(obraActual));
+  if (enDocumentos && mismaObra) return { tipo: 'revisiones', revision: enlace.revision };
+  if (enlace.obra) return { tipo: 'enlace', enlace };
+  return { tipo: 'nada' };
+}
+
+// «A», «A y B», «A, B y C».
+function enumerar(lista) {
+  if (lista.length < 2) return lista.join('');
+  return `${lista.slice(0, -1).join(', ')} y ${lista[lista.length - 1]}`;
+}
+
 export function codigoDe(id) {
   return `RV-${String(id).padStart(3, '0')}`;
 }
@@ -89,6 +111,10 @@ export const ESTADO_DEL_PASO = {
 
 export const DESTINO = { SHARED: 'Compartido', PUBLISHED: 'Publicado' };
 
+const ESTADO_DEL_DOCUMENTO = {
+  WIP: 'Trabajo en curso', SHARED: 'Compartido', PUBLISHED: 'Publicado', ARCHIVED: 'Archivado',
+};
+
 const BOTON_APROBAR = {
   conformidad: 'Dar conformidad',
   aprobar: 'Aprobar',
@@ -100,16 +126,40 @@ export function botonAprobar(tipo) {
 }
 
 export function consecuenciaDeAprobar(aprobar) {
-  const { tipo, siguiente_paso: siguiente, destino } = aprobar || {};
+  const datos = aprobar || {};
+  const { tipo, siguiente_paso: siguiente, destino } = datos;
   if (tipo === 'aprobar_y_cerrar') {
     const a = DESTINO[destino] || destino || 'su estado final';
-    return `La revisión se cierra como aprobada y los documentos pasan a ${a}. `
-      + 'Antes se comprueban la versión, la autoridad sobre la carpeta y las reglas de emisión.';
+    // Lo que YA pasó con los documentos, dicho antes de confirmar (E1.2 · H7-A): otra
+    // revisión pudo emitirlos, o cerrar esta puede devolver alguno atrás.
+    const ya = datos.ya_en_destino || [];
+    const atras = (datos.retroceden || []).map(r => (
+      `${r.name} está en ${ESTADO_DEL_DOCUMENTO[r.estado] || r.estado} y volverá a ${a}`));
+    let texto = datos.todos_en_destino
+      ? `La revisión se cierra como aprobada. Los documentos ya están en ${a}, así que su estado no cambia.`
+      : `La revisión se cierra como aprobada y los documentos pasan a ${a}.`;
+    if (!datos.todos_en_destino && ya.length) {
+      texto += ` ${enumerar(ya)} ya ${ya.length === 1 ? 'lo está' : 'lo están'}.`;
+    }
+    if (atras.length) texto += ` Atención: ${enumerar(atras)}.`;
+    return `${texto} Antes se comprueban la versión, la autoridad sobre la carpeta y las reglas de emisión.`;
   }
   const hacia = siguiente ? ` al paso ${siguiente.numero} (${siguiente.persona})` : ' al paso siguiente';
   const que = tipo === 'conformidad' ? 'tu conformidad' : 'tu aprobación';
   return `Queda registrada ${que} y la revisión pasa${hacia}. Los documentos no cambian de estado.`;
 }
+
+// DOCUMENTOS QUE ESTÁN EN OTRA REVISIÓN EN CURSO (E1.2 · H7-A). El servidor solo manda
+// las que esta persona puede abrir: las demás no se nombran.
+export function avisoDeOtrasRevisiones(otras, { enElAlta = false } = {}) {
+  const lista = (otras || []).filter(o => o && o.id);
+  if (!lista.length) return '';
+  const codigos = lista.map(o => o.codigo || codigoDe(o.id));
+  return `${enElAlta ? 'Ya está' : 'También está'} en ${enumerar(codigos)}, en curso.`;
+}
+
+export const AVISO_DOCUMENTOS_EN_CURSO =
+  'Cada documento tiene un solo estado: si esa otra revisión se cierra antes, cambiará el estado de lo que esta revisa.';
 
 export const CONSECUENCIA_DE_RECHAZAR =
   'La revisión termina como rechazada. Los documentos no cambian de estado y la revisión no se puede reabrir.';

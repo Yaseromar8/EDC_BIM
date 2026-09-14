@@ -21,6 +21,10 @@
  * aplica y otra que falla (para ver que vuelven los pasos de antes), y una lista de
  * participantes distinta del padrón (`/api/users` trae a alguien de otra obra).
  *
+ * E1.2: RV-042 y RV-043 llevan los MISMOS documentos que RV-041, y las dos esperan el
+ * cierre de Luis. El detalle dice «También está en…», el alta «Ya está en…», y cerrada
+ * una, la consecuencia de cerrar la otra dice que los documentos ya están en su destino.
+ *
  * No entra en producción: `vite.config.js` no lo conoce.
  */
 import React from 'react';
@@ -52,8 +56,21 @@ window.__como = (id) => {
   window.location.reload();
 };
 
+const copiaDeDrenaje = (id, para, dias) => ({
+  id, title: `Planos de drenaje · copia para ${para}`, contrato: 'AUTORIDAD_TERMINAL', status: 'pending',
+  current_step: 1, steps: [paso(1, 'REVISA'), paso(2, 'APRUEBA')], items: [doc(1, 2), doc(2, 1)],
+  created_by: GENTE[3].email, created_at: dia(-dias), final_status: 'SHARED',
+  history: [{ event: 'created', by: GENTE[3].email, at: dia(-dias) },
+            { event: 'approve', step: 0, by: GENTE[1].email, emitido: 'CONFORME', comment: 'Conforme', at: dia(-1) },
+            { event: 'step_started', step: 1, to: GENTE[2].name, at: dia(-1) }],
+});
+
 const estado = {
+  // El estado de HOY de cada documento (E1.2): lo cambia el cierre de una revisión.
+  documentos: { 'nodo-1': 'WIP', 'nodo-2': 'WIP', 'nodo-3': 'SHARED', 'nodo-4': 'SHARED' },
   revisiones: [
+    copiaDeDrenaje(43, 'Arquitectura', 2),
+    copiaDeDrenaje(42, 'Estructuras', 2),
     { id: 41, title: 'Planos de drenaje · Rev B', contrato: 'AUTORIDAD_TERMINAL', status: 'pending',
       current_step: 0, steps: [paso(1, 'REVISA', 3), paso(2, 'APRUEBA', 2)],
       items: [doc(1, 2), doc(2, 1)], created_by: GENTE[3].email, created_at: dia(-3),
@@ -96,13 +113,27 @@ function acciones(rev) {
   const tipo = cierra ? 'aprobar_y_cerrar' : p.decision === 'REVISA' ? 'conformidad' : 'aprobar';
   const nuevas = cierra ? rev.items.filter(it => it.__nueva) : [];
   const siguiente = cierra ? null : { numero: rev.current_step + 2, persona: rev.steps[rev.current_step + 1].name };
+  const orden = ['WIP', 'SHARED', 'PUBLISHED', 'ARCHIVED'];
+  const ya = cierra ? rev.items.filter(it => estado.documentos[it.node_id] === rev.final_status).map(it => it.name) : [];
+  const atras = cierra ? rev.items
+    .filter(it => orden.indexOf(estado.documentos[it.node_id]) > orden.indexOf(rev.final_status))
+    .map(it => ({ name: it.name, estado: estado.documentos[it.node_id] })) : [];
   return {
     ...vacio,
     aprobar: { disponible: !nuevas.length, tipo, siguiente_paso: siguiente,
                destino: cierra ? rev.final_status : null,
+               ya_en_destino: ya, todos_en_destino: cierra && ya.length === rev.items.length, retroceden: atras,
                motivo_no: nuevas.length ? `Hay una versión nueva de ${nuevas.map(n => n.name).join(', ')}: aprobar cerraría la revisión sobre algo que nadie revisó. Hay que volver a mandarlo a revisión.` : '' },
     rechazar: { disponible: true, motivo_no: '' },
   };
+}
+
+// Espejo de `_otras_en_curso`: en el banco todas se pueden ver.
+function otrasEnCurso(nodo, excluir = 0) {
+  return estado.revisiones
+    .filter(o => o.id !== excluir && o.status === 'pending' && o.items.some(x => x.node_id === nodo))
+    .sort((a, b) => b.id - a.id)
+    .map(o => ({ id: o.id, codigo: `RV-${String(o.id).padStart(3, '0')}`, title: o.title }));
 }
 
 function detalle(rev) {
@@ -116,7 +147,9 @@ function detalle(rev) {
     inicio: null, vence: i === rev.current_step ? rev.paso_vence_en || null : null, sustituciones: [],
   }));
   const items = rev.items.map(({ __nueva, ...it }) => ({
-    ...it, version_vigente_numero: __nueva ? it.version + 1 : it.version, es_version_vigente: !__nueva }));
+    ...it, version_vigente_numero: __nueva ? it.version + 1 : it.version, es_version_vigente: !__nueva,
+    estado_documento: estado.documentos[it.node_id] || 'WIP',
+    ...(rev.status === 'pending' ? { tambien_en: otrasEnCurso(it.node_id, rev.id) } : {}) }));
   return { ...rev, items, codigo: `RV-${String(rev.id).padStart(3, '0')}`, obra_id: OBRA, flujo: 'ACTIVA',
            flujo_motivo: '', me_toca: rev.status === 'pending' && rev.steps[rev.current_step].user_id === window.__usuario,
            pasos, acciones: acciones(rev) };
@@ -145,6 +178,15 @@ window.fetch = async (url, opciones = {}) => {
                        siguiente: lista.length > limite ? pagina[pagina.length - 1].id : null });
   }
 
+  if (u.pathname === '/api/reviews/en-curso' && metodo === 'GET') {
+    const documentos = {};
+    for (const nodo of u.searchParams.getAll('node_id')) {
+      const otras = otrasEnCurso(nodo);
+      if (otras.length) documentos[nodo] = otras;
+    }
+    return responder({ success: true, documentos });
+  }
+
   const enDetalle = u.pathname.match(/^\/api\/reviews\/(\d+)$/);
   if (enDetalle) {
     const rev = estado.revisiones.find(r => r.id === Number(enDetalle[1]));
@@ -167,7 +209,10 @@ window.fetch = async (url, opciones = {}) => {
     const emitido = action === 'reject' ? 'RECHAZA' : p.decision === 'APRUEBA' ? 'APRUEBA' : 'CONFORME';
     rev.history.push({ event: action, step: rev.current_step, by: quien().email, comment, emitido, at: ahora });
     if (action === 'reject') rev.status = 'rejected';
-    else if (terminal) rev.status = 'approved';
+    else if (terminal) {
+      rev.status = 'approved';
+      rev.items.forEach(it => { estado.documentos[it.node_id] = rev.final_status; });
+    }
     else {
       rev.current_step += 1;
       rev.history.push({ event: 'step_started', step: rev.current_step, to: rev.steps[rev.current_step].name, at: ahora });

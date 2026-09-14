@@ -98,6 +98,14 @@ def test_la_consulta_de_la_bandeja_parte_de_la_membresia():
     assert "e.estado = 'abierto'" in sql, 'la bandeja devolveria encargos cerrados'
 
 
+def test_mi_trabajo_devuelve_los_plazos_con_su_zona():
+    """E1.2 · H9. `vence_en` y `creado_en` son TIMESTAMP sin zona: sin leerlos con la
+    zona de la base, Mi trabajo contaba los dias de plazo con cinco horas de mas."""
+    import encargos as enc
+    for columna in ('e.vence_en', 'e.creado_en'):
+        assert columna + " AT TIME ZONE current_setting('TimeZone')" in enc._MI_TRABAJO
+
+
 # ── Invariante 1 (bis): no se abre sobre lo que no existe ──────────────────
 
 def test_no_se_abre_un_encargo_sobre_un_objeto_inexistente():
