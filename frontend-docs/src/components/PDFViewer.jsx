@@ -12,6 +12,12 @@ import { API } from '../utils/helpers';
 import { apiFetch } from '../utils/apiFetch';
 import { tiraEstaAbierta, recordarTira } from '../utils/tiraDocumentos';
 import { urlsDeMiniaturas } from '../utils/colaMiniaturas';
+import {
+  PASO_DE_TECLADO, pasoDeRueda, suavizar, limitesDeZoom, objetivoDelZoom,
+  puntoParaElZoom, desfaseDelPunto,
+  DURACION_DE_HOJA_ENTERA_MS, vistaDeHojaEntera, vistaIntermedia,
+  areaDelDetalle, detalleSigueValiendo,
+} from '../utils/navegacionLector';
 import './PDFViewer.css';
 
 // El worker y los recursos de pdf.js se configuran en un solo sitio.
@@ -22,6 +28,11 @@ import './PDFViewer.css';
 // Techo de resolución del canvas (~16 MP). Sin esto, un plano A0 a 8× con
 // devicePixelRatio 2 pedía cientos de megapíxeles: el navegador se arrodilla.
 const MAX_CANVAS_PIXELS = 16_000_000;
+// El detalle nitido de lo visible (ver dibujarDetalle) tiene su propio
+// presupuesto. Lo visible de una pantalla normal cabe con margen (1920 × 1080
+// al 125 % son 3,2 MP), y con la hoja entera al tope (16) y el bufer del
+// detalle (8) el pico se queda en 32 MP, el mismo que ya tenia el doble bufer.
+const PIXELES_DEL_DETALLE = 8_000_000;
 
 // Buscar sin tildes ni mayúsculas: "excavacion" encuentra "EXCAVACIÓN".
 const normalizeText = (s) => (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
@@ -411,7 +422,28 @@ export default function PDFViewer({ url, preparando = false,
   const textCacheRef = useRef(new Map());
   const busquedaVivaRef = useRef(null);   // debounce de la busqueda en vivo
   const bufferCanvasRef = useRef(null);   // doble bufer del render (uno, reutilizado)
-  const anclaRef = useRef(null);          // punto que el zoom debe conservar bajo el cursor
+  // EL ZOOM EN MARCHA: a donde va, por donde va y el punto que no puede
+  // escaparse del cursor. En una referencia y no en el estado: cambia en cada
+  // fotograma, y React solo se entera cuando el paso termina.
+  const zoomVivoRef = useRef({ raf: 0 });
+  // ¿El dibujado en marcha es solo el de un zoom? Ese se puede abandonar si
+  // vuelve la rueda; el de una pagina o un documento nuevo, no.
+  const dibujoDeZoomRef = useRef(false);
+  // CADA ESCALA FIJADA PIDE SU DIBUJADO NITIDO, aunque coincida con la de
+  // antes. El zoom abandona el dibujado pendiente al empezar (ver zoomHacia);
+  // si termina en la misma escala --en el tope, o al volver al encuadre--
+  // React no ve cambio en `scale` y, sin este contador, el plano se quedaria
+  // sin afinar.
+  const [escalaFijada, setEscalaFijada] = useState(0);
+  // EL DETALLE NITIDO (ver dibujarDetalle): su lienzo, su dibujado en marcha y
+  // lo que tiene dibujado. Y la ultima hoja entera dibujada, para no repetirla
+  // cuando, al tope de pixeles, saldria igual.
+  const detalleRef = useRef(null);
+  const detalleTareaRef = useRef(null);
+  const detalleSecuenciaRef = useRef(0);
+  const detalleBufferRef = useRef(null);
+  const detalleDibujadoRef = useRef(null);
+  const baseDibujadaRef = useRef(null);
   const [avisoDeRender, setAvisoDeRender] = useState(true);
   const [saltandoA, setSaltandoA] = useState(null);
 
@@ -837,6 +869,7 @@ export default function PDFViewer({ url, preparando = false,
       clearTimeout(renderDebounceRef.current);
       renderSequenceRef.current += 1;
       try { renderTaskRef.current?.cancel(); } catch { /* render ya finalizado */ }
+      try { detalleTareaRef.current?.cancel(); } catch { /* detalle ya finalizado */ }
       // OJO: destruir la tarea de carga destruye TAMBIEN su documento. Si
       // este esta en el almacen, liberarlo aqui haria que la proxima apertura
       // recibiera un documento muerto -- el fallo clasico de esta clase de
@@ -871,51 +904,7 @@ export default function PDFViewer({ url, preparando = false,
     if (!canvasRef.current) return;
     canvasRef.current.style.width = `${base.width * escalaVisualRef.current}px`;
     canvasRef.current.style.height = `${base.height * escalaVisualRef.current}px`;
-
-    // ── EL PUNTO BAJO EL CURSOR SE QUEDA BAJO EL CURSOR ──────────────────
-    //
-    // EL DEFECTO QUE ESTO CORRIGE (reportado mirando un plano de verdad): al
-    // acercarse a un detalle, el detalle se escapaba. La versión anterior
-    // calculaba el scroll dentro de un `requestAnimationFrame` disparado
-    // JUNTO al cambio de escala — es decir, ANTES de que la hoja creciera. El
-    // navegador recortaba ese scroll al máximo del tamaño VIEJO y el ancla se
-    // perdía; cuanto más se acercaba, más se iba.
-    //
-    // Ahora la corrección se aplica AQUÍ, en el instante exacto en que la
-    // hoja ya tiene su tamaño nuevo, y se mide contra el rectángulo REAL de
-    // la página: así funciona igual esté centrada, con relleno o desbordando
-    // — que era el otro motivo por el que fallaba.
-    const ancla = anclaRef.current;
-    if (ancla && wrapRef.current && containerRef.current) {
-      const cont = containerRef.current;
-
-      // LA CORRECCION SE VERIFICA A SI MISMA.
-      //
-      // Antes se calculaba UNA vez con la escala del ESTADO (`scale`) y se
-      // aplicaba a ciegas. Dos problemas: la escala del estado y la geometria
-      // real pueden ir desfasadas --el mismo error que habia al anotar el
-      // ancla-- y ademas el navegador puede recortar el scroll y dejar la
-      // correccion a medias. El resto sobraba en cada giro y se acumulaba:
-      // medido, 7,4 % de deriva en seis giros lentos, y eso NO lo arreglaba
-      // corregir solo el anotado.
-      //
-      // Ahora se mide, se corrige, y SE VUELVE A MEDIR. La escala sale del
-      // propio rectangulo, asi que geometria y escala vienen siempre del mismo
-      // instante. Se repite hasta que el punto esta a menos de medio pixel del
-      // cursor, con tope de tres vueltas para no poder colgarse.
-      const base = baseVpRef.current[`${currentPage}:${rotation}`];
-      for (let intento = 0; intento < 3; intento++) {
-        const rr = wrapRef.current.getBoundingClientRect();
-        const sr = base && base.width ? rr.width / base.width : (scale || 1);
-        const dx = (rr.left + ancla.ux * sr) - ancla.clientX;
-        const dy = (rr.top + ancla.uy * sr) - ancla.clientY;
-        if (Math.abs(dx) < 0.5 && Math.abs(dy) < 0.5) break;
-        cont.scrollLeft += dx;
-        cont.scrollTop += dy;
-      }
-      anclaRef.current = null;
-    }
-  }, [currentPage, rotation, scale]);
+  }, [currentPage, rotation]);
 
   // Mira el lienzo hasta encontrar el primer trazo. Muestrea un cuadrito
   // pequeño --no la hoja entera-- porque esto corre mientras pdf.js rasteriza
@@ -956,6 +945,103 @@ export default function PDFViewer({ url, preparando = false,
 
   useEffect(() => () => cancelAnimationFrame(vigilaTintaRef.current), []);
 
+  // ── EL DETALLE: LO QUE SE VE, A LA RESOLUCION DE LA PANTALLA ────────────
+  //
+  // La imagen de la hoja entera tiene un tope de 16 MP (MAX_CANVAS_PIXELS).
+  // Pasado cierto zoom cada pixel de esa imagen se estira sobre varios de la
+  // pantalla, y el plano se ve borroso: con un A1 a 8× y la pantalla al 100 %,
+  // un pixel de imagen por cada cuatro de pantalla.
+  //
+  // Encima se pone un segundo lienzo con SOLO lo visible, y un margen, dibujado
+  // a la resolucion de la pantalla. Lo visible cabe siempre en su presupuesto,
+  // sea cual sea el zoom. Es la idea del visor de pdf.js («detail view»); las
+  // cuentas estan en utils/navegacionLector.js. Va en porcentajes de la hoja:
+  // durante el zoom la acompaña como la capa de marcas, y al parar se rehace.
+  const ocultarDetalle = useCallback(() => {
+    detalleSecuenciaRef.current += 1;
+    try { detalleTareaRef.current?.cancel(); } catch { /* ya termino */ }
+    detalleDibujadoRef.current = null;
+    const lienzo = detalleRef.current;
+    if (lienzo) {
+      lienzo.style.display = 'none';
+      lienzo.removeAttribute('data-clave');
+      lienzo.width = 0;
+      lienzo.height = 0;
+    }
+  }, []);
+
+  const dibujarDetalle = useCallback(async (paginaDada = null, viewportDado = null) => {
+    const pdf = pdfDocRef.current, cont = containerRef.current, hoja = wrapRef.current, lienzo = detalleRef.current;
+    if (!pdf || !cont || !hoja || !lienzo) return;
+    // A medio gesto no: al terminar, el gesto pide el suyo.
+    const quieto = () => !zoomVivoRef.current.raf && Math.abs(escalaVisualRef.current - scale) < 1e-9;
+    if (!quieto()) return;
+    // Si mientras se pide la pagina se retira el detalle (otra pagina, otro
+    // documento), esta peticion ya no vale: pintaria la hoja anterior.
+    const alPedir = detalleSecuenciaRef.current;
+    try {
+      const page = paginaDada || await pdf.getPage(currentPage);
+      const viewport = viewportDado || page.getViewport({ scale, rotation: giroDeLaHoja(page, rotation) });
+      if (!quieto() || pdfDocRef.current !== pdf || detalleSecuenciaRef.current !== alPedir) return;
+      const dpr = window.devicePixelRatio || 1;
+      // Si la hoja entera cabe en su tope, ya se ve nitida: sobra el detalle.
+      if (viewport.width * viewport.height * dpr * dpr <= MAX_CANVAS_PIXELS) {
+        ocultarDetalle();
+        return;
+      }
+      const zona = cont.getBoundingClientRect();
+      const izquierda = zona.left + cont.clientLeft, arriba = zona.top + cont.clientTop;
+      const area = areaDelDetalle({
+        vista: { left: izquierda, top: arriba, right: izquierda + cont.clientWidth, bottom: arriba + cont.clientHeight },
+        hoja: hoja.getBoundingClientRect(),
+        anchoVp: viewport.width, altoVp: viewport.height, dpr, presupuesto: PIXELES_DEL_DETALLE,
+      });
+      if (!area) return;   // la hoja no se ve: lo dibujado sigue valiendo para cuando vuelva
+      const clave = `${currentPage}:${rotation}:${scale}`;
+      const dibujado = detalleDibujadoRef.current;
+      if (dibujado && dibujado.pdf === pdf && dibujado.clave === clave
+        && detalleSigueValiendo(dibujado, area.visible, { anchoVp: viewport.width, altoVp: viewport.height })) return;
+
+      const secuencia = ++detalleSecuenciaRef.current;
+      try { detalleTareaRef.current?.cancel(); } catch { /* ya termino */ }
+      const ancho = Math.max(1, Math.round((area.maxX - area.minX) * area.resolucion));
+      const alto = Math.max(1, Math.round((area.maxY - area.minY) * area.resolucion));
+      const bufer = detalleBufferRef.current || (detalleBufferRef.current = document.createElement('canvas'));
+      bufer.width = ancho;
+      bufer.height = alto;
+      const ctx = bufer.getContext('2d');
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(0, 0, ancho, alto);
+      const sx = ancho / (area.maxX - area.minX), sy = alto / (area.maxY - area.minY);
+      detalleTareaRef.current = page.render({
+        canvasContext: ctx, viewport, transform: [sx, 0, 0, sy, -area.minX * sx, -area.minY * sy],
+      });
+      await detalleTareaRef.current.promise;
+      if (secuencia !== detalleSecuenciaRef.current) return;
+
+      // Se vuelca de golpe: hasta aqui seguia a la vista el detalle anterior.
+      lienzo.width = ancho;
+      lienzo.height = alto;
+      lienzo.getContext('2d').drawImage(bufer, 0, 0);
+      bufer.width = 0;    // la memoria del bufer se suelta en cuanto se ha usado
+      bufer.height = 0;
+      Object.assign(lienzo.style, {
+        left: `${(area.minX / viewport.width) * 100}%`,
+        top: `${(area.minY / viewport.height) * 100}%`,
+        width: `${((area.maxX - area.minX) / viewport.width) * 100}%`,
+        height: `${((area.maxY - area.minY) / viewport.height) * 100}%`,
+        display: 'block',
+      });
+      lienzo.dataset.clave = clave;   // de que hoja y a que escala es (lo mira el banco)
+      detalleDibujadoRef.current = { pdf, clave, minX: area.minX, maxX: area.maxX, minY: area.minY, maxY: area.maxY };
+    } catch (err) {
+      if (err?.name !== 'RenderingCancelledException' && err?.name !== 'RenderingCancelled') {
+        // Sin detalle, la hoja entera sigue ahi: se ve como antes, no se rompe nada.
+        console.warn('[PDFViewer] detalle sin dibujar:', err);
+      }
+    }
+  }, [currentPage, rotation, scale, ocultarDetalle]);
+
   // Render nítido de la página actual
   const renderPage = useCallback(async () => {
     const pdf = pdfDocRef.current;
@@ -967,7 +1053,12 @@ export default function PDFViewer({ url, preparando = false,
     }
 
     const renderSequence = ++renderSequenceRef.current;
-    setVpInfo(null);
+    // LAS MARCAS NO SE APAGAN EN CADA ZOOM. Se retiraban al empezar CUALQUIER
+    // dibujado (medido en el banco: de 9 a 40 fotogramas sin marcas en cada
+    // acercamiento). Ahora siguen a la hoja a cualquier tamaño --ver el
+    // `viewBox` de PdfToolsOverlay-- y solo se retiran cuando cambia la pagina,
+    // el giro o el documento: lo hace el efecto que llama a este dibujado.
+    dibujoDeZoomRef.current = !avisoDeRender;   // el de zoom se puede abandonar
     setPageRendering(true);
     if (avisoDeRender) { setHayTinta(false); vigilarLaTinta(); }
     setRenderError('');
@@ -989,6 +1080,24 @@ export default function PDFViewer({ url, preparando = false,
       if (wanted > MAX_CANVAS_PIXELS) {
         dpr = Math.max(0.1, dpr * Math.sqrt(MAX_CANVAS_PIXELS / wanted));
       }
+      const alTope = wanted > MAX_CANVAS_PIXELS;
+      const claveDeLaHoja = `${currentPage}:${rotation}`;
+
+      // AL TOPE, LA HOJA ENTERA SALDRIA IGUAL. Si solo cambio el zoom y la hoja
+      // ya estaba al tope de pixeles, su imagen tendria el mismo tamaño y el
+      // mismo contenido: dibujarla otra vez era trabajo tirado, justo en los
+      // zooms donde mas pesa. Lo que gana nitidez es el detalle.
+      const previa = baseDibujadaRef.current;
+      if (!avisoDeRender && alTope && previa && previa.pdf === pdf
+        && previa.clave === claveDeLaHoja && previa.alTope) {
+        setVpInfo({ vp: viewport, w: viewport.width, h: viewport.height });
+        dibujarDetalle(page, viewport);
+        return;
+      }
+      // Por debajo del tope la hoja entera vuelve a ser nitida por si sola: el
+      // detalle sobra, y soltarlo ANTES de dibujar deja el pico de memoria donde
+      // estaba. No se nota: la imagen al tope ya tiene pixeles de sobra a esta escala.
+      if (!alTope) ocultarDetalle();
 
       // DOBLE BÚFER: se dibuja en un canvas FUERA de pantalla y se vuelca de un
       // golpe al visible cuando está terminado. Antes se redimensionaba el
@@ -1058,7 +1167,12 @@ export default function PDFViewer({ url, preparando = false,
         const ctx = canvas.getContext('2d');
         ctx.setTransform(1, 0, 0, 1, 0, 0);
         ctx.drawImage(buffer, 0, 0);
+        // Volcado, el bufer ya no sirve: se suelta su memoria (16 MP en un A1
+        // grande) en vez de tenerla ocupada hasta el siguiente zoom.
+        buffer.width = 0;
+        buffer.height = 0;
       }
+      baseDibujadaRef.current = { pdf, clave: claveDeLaHoja, alTope };
 
       // Calentar las páginas vecinas: getPage dispara el parseo del contenido,
       // que es la parte lenta al avanzar hoja a hoja por un expediente.
@@ -1074,6 +1188,7 @@ export default function PDFViewer({ url, preparando = false,
       }
       // El overlay necesita el viewport vigente para transformar coordenadas PDF<->pantalla
       setVpInfo({ vp: viewport, w: viewport.width, h: viewport.height });
+      dibujarDetalle(page, viewport);
       // RED DE SEGURIDAD: si el vigilante de tinta no llegara a dispararse
       // --una lamina practicamente vacia, o un fallo al leer el lienzo-- la
       // hoja se quedaria oculta para siempre. Al terminar el dibujado se
@@ -1087,9 +1202,12 @@ export default function PDFViewer({ url, preparando = false,
         setRenderError('No se pudo representar esta página.');
       }
     } finally {
-      if (renderSequence === renderSequenceRef.current) setPageRendering(false);
+      if (renderSequence === renderSequenceRef.current) {
+        setPageRendering(false);
+        dibujoDeZoomRef.current = false;
+      }
     }
-  }, [currentPage, scale, rotation, avisoDeRender, vigilarLaTinta]);
+  }, [currentPage, scale, rotation, avisoDeRender, vigilarLaTinta, dibujarDetalle, ocultarDetalle]);
 
   // Render principal. El debounce se aplica SOLO al zoom (para no rasterizar 15
   // veces en un gesto de rueda). Abrir el documento o cambiar de página rinde
@@ -1113,6 +1231,16 @@ export default function PDFViewer({ url, preparando = false,
     // avisa, porque ahi el usuario espera de verdad.
     setAvisoDeRender(!soloCambioElZoom);
 
+    // PAGINA, GIRO O DOCUMENTO NUEVOS: fuera lo que era de la hoja anterior --las
+    // marcas, cuyo viewport ya no vale, y el detalle nitido, que es de otra hoja.
+    // Aqui y no dentro del dibujado: el primero tras el cambio corre con el
+    // `avisoDeRender` de antes, y en el banco, justo despues de cambiar de
+    // pagina o de girar, seguia a la vista el detalle de la hoja anterior.
+    if (!soloCambioElZoom) {
+      setVpInfo(null);
+      ocultarDetalle();
+    }
+
     applyPreviewSize();
     clearTimeout(renderDebounceRef.current);
     if (soloCambioElZoom) {
@@ -1121,7 +1249,7 @@ export default function PDFViewer({ url, preparando = false,
       renderPage(); // primera carga / cambio de página → sin esperar
     }
     return () => clearTimeout(renderDebounceRef.current);
-  }, [loading, docNonce, encuadrado, currentPage, rotation, applyPreviewSize, renderPage]);
+  }, [loading, docNonce, encuadrado, currentPage, rotation, applyPreviewSize, renderPage, escalaFijada, ocultarDetalle]);
 
   // Auto-scroll sidebar thumbnail into view when page changes
   useEffect(() => {
@@ -1193,77 +1321,206 @@ export default function PDFViewer({ url, preparando = false,
         if (!it) return null;
         const tx = pdfjsLib.Util.transform(vpInfo.vp.transform, it.transform);
         const h = Math.hypot(tx[2], tx[3]) || 10;
+        // EN PORCENTAJE DE LA HOJA, no en pixeles: asi siguen a la hoja mientras
+        // el zoom la agranda, sin esperar al dibujado nitido.
+        const enX = (v) => `${(v / vpInfo.w) * 100}%`;
+        const enY = (v) => `${(v / vpInfo.h) * 100}%`;
         return {
           key: m.globalIdx,
           active: m.globalIdx === matchIdx,
-          left: tx[4],
-          top: tx[5] - h,
-          width: Math.max(4, (it.width || 0) * (vpInfo.vp.scale || 1)),
-          height: h,
+          left: enX(tx[4]),
+          top: enY(tx[5] - h),
+          width: enX(Math.max(4, (it.width || 0) * (vpInfo.vp.scale || 1))),
+          height: enY(h),
         };
       })
       .filter(Boolean);
   }, [matches, matchIdx, currentPage, vpInfo]);
 
-  const zoomIn = useCallback(() => { setFitMode('custom'); setScale(prev => Math.min((prev || 1.0) * 1.2, 8.0)); }, []);
-  const zoomOut = useCallback(() => { setFitMode('custom'); setScale(prev => Math.max((prev || 1.0) / 1.2, 0.2)); }, []);
-
-  // Zoom anclado al cursor. Aquí solo se ANOTA el punto en unidades de la
-  // hoja (sin escala); la corrección del scroll la aplica `applyPreviewSize`
-  // cuando la hoja ya creció — ver el comentario largo de allí.
-  const zoomAt = useCallback((dir, clientX, clientY) => {
-    // EL ZOOM SE APLICA Y SE CORRIGE EN EL MISMO INSTANTE DEL GIRO.
-    //
-    // Antes esto solo ANOTABA el punto y dejaba la correccion para un efecto
-    // posterior. Eso ata la exactitud al ciclo de React: segun cuando llegue
-    // el giro respecto al redibujado, la escala del estado y la geometria de
-    // la hoja pueden ir desfasadas, y el error se acumula. Medido en el banco:
-    // 58 % de deriva con giros cada 30 ms, y un 7,4 % tozudo con giros lentos
-    // que NO se arreglaba corrigiendo el anotado.
-    //
-    // Aqui no hay ciclo que esperar. Se lee la escala REAL de la hoja (su
-    // ancho entre el ancho a escala 1), se calcula la nueva, se aplica el
-    // tamaño AL INSTANTE y se corrige el scroll midiendo el resultado. Todo
-    // dentro del mismo evento, con la misma geometria. El estado se actualiza
-    // despues, solo para que el redibujado nitido sepa a que escala ir.
-    const cont = containerRef.current, hoja = wrapRef.current;
-    const lienzo = canvasRef.current;
-    const base = baseVpRef.current[`${currentPage}:${rotation}`];
-    if (!cont || !hoja || !lienzo || !base || !base.width) {
-      dir > 0 ? zoomIn() : zoomOut();
-      return;
-    }
-
-    const r = hoja.getBoundingClientRect();
-    const sAhora = r.width / base.width;
-    const siguiente = dir > 0 ? Math.min(sAhora * 1.2, 8.0) : Math.max(sAhora / 1.2, 0.2);
-    if (Math.abs(siguiente - sAhora) < 0.0005) return;
-
-    // El punto del plano que hay bajo el cursor, en unidades de la hoja.
-    const ux = (clientX - r.left) / sAhora;
-    const uy = (clientY - r.top) / sAhora;
-
-    fitModeRef.current = 'custom';
-    escalaVisualRef.current = siguiente;
-    setFitMode('custom');
-    lienzo.style.width = `${base.width * siguiente}px`;
-    lienzo.style.height = `${base.height * siguiente}px`;
-
-    // Y se coloca, verificando: leer el rectangulo fuerza el recalculo, asi
-    // que la medida ya refleja el tamaño nuevo. Dos vueltas bastan; la tercera
-    // es un seguro.
+  // ── EL ZOOM, COMO EN ACC ─────────────────────────────────────────────────
+  //
+  // Una muesca de rueda acerca ×1,10 y el paso llega SUAVE, en unos 60 ms, con
+  // el punto bajo el cursor quieto. Las cifras de ACC y su prueba estan en
+  // utils/navegacionLector.js.
+  //
+  // CADA FOTOGRAMA HACE LO QUE ANTES HACIA CADA GIRO: fija el tamaño de la hoja
+  // y corrige el scroll MIDIENDO el resultado, hasta dejar el punto a menos de
+  // medio pixel del cursor. Ese metodo acabo con la deriva del zoom (58 % con
+  // giros rapidos y 7,4 % con giros lentos, medido en el banco) y se conserva:
+  // lo nuevo es que se aplica en cada fotograma del suavizado, siempre contra el
+  // MISMO punto anotado, asi que el error no se acumula.
+  //
+  // React no se entera hasta que el paso termina: entonces se fija `scale` y el
+  // dibujado nitido llega como siempre, 110 ms despues. Tocar el estado en cada
+  // fotograma redibujaria el lector entero en cada uno.
+  const aplicarEscala = useCallback((escala, punto, base) => {
+    const cont = containerRef.current, hoja = wrapRef.current, lienzo = canvasRef.current;
+    if (!cont || !hoja || !lienzo || !base) return;
+    lienzo.style.width = `${base.width * escala}px`;
+    lienzo.style.height = `${base.height * escala}px`;
+    escalaVisualRef.current = escala;
+    // Leer el rectangulo fuerza el recalculo, asi que la medida ya refleja el
+    // tamaño nuevo. Dos vueltas bastan; la tercera es un seguro.
     for (let i = 0; i < 3; i++) {
-      const rr = hoja.getBoundingClientRect();
-      const dx = (rr.left + ux * siguiente) - clientX;
-      const dy = (rr.top + uy * siguiente) - clientY;
+      const { dx, dy } = desfaseDelPunto(hoja.getBoundingClientRect(), punto, escala);
       if (Math.abs(dx) < 0.5 && Math.abs(dy) < 0.5) break;
       cont.scrollLeft += dx;
       cont.scrollTop += dy;
     }
+  }, []);
 
-    anclaRef.current = null;   // ya esta colocado: el efecto no debe tocarlo
-    setScale(siguiente);
-  }, [zoomIn, zoomOut, currentPage, rotation]);
+  // Detiene el zoom en marcha donde este. Con `confirmar`, esa escala pasa al
+  // estado --y con ella el dibujado nitido--; sin el, quien llama pone la suya.
+  const pararZoom = useCallback((confirmar) => {
+    const motor = zoomVivoRef.current;
+    if (!motor.raf) return;
+    cancelAnimationFrame(motor.raf);
+    motor.raf = 0;
+    if (confirmar) {
+      setScale(escalaVisualRef.current);
+      setEscalaFijada(n => n + 1);
+    }
+  }, []);
+
+  // Abandona el dibujado nitido pendiente, o el de zoom que vaya a medias (ver
+  // «NADA DE DIBUJADO NITIDO A MEDIO GESTO» en zoomHacia).
+  const soltarDibujadoDeZoom = useCallback(() => {
+    clearTimeout(renderDebounceRef.current);
+    if (dibujoDeZoomRef.current) {
+      try { renderTaskRef.current?.cancel(); } catch { /* ya termino */ }
+    }
+    // Tambien el detalle a medias; el que ya se ve se queda, acompañando a la hoja.
+    detalleSecuenciaRef.current += 1;
+    try { detalleTareaRef.current?.cancel(); } catch { /* ya termino */ }
+  }, []);
+
+  // Cambiar de pagina, de giro o de documento con un zoom a medio camino: su
+  // siguiente fotograma le pondria a la hoja nueva el tamaño de la anterior.
+  useEffect(() => () => pararZoom(true), [currentPage, rotation, docNonce, pararZoom]);
+
+  // Lleva el zoom un paso mas alla de a donde iba (`lnPaso`, el logaritmo del
+  // factor) o a una escala concreta (`lnDestino`), con el punto (clientX,
+  // clientY) quieto. Las muescas seguidas se suman AL OBJETIVO y no a la escala
+  // del momento: dos muescas rapidas dan ×1,21, igual que dos lentas.
+  const zoomHacia = useCallback(({ lnPaso = 0, lnDestino = null }, clientX, clientY) => {
+    const cont = containerRef.current, hoja = wrapRef.current;
+    const base = baseVpRef.current[`${currentPage}:${rotation}`];
+    if (!cont || !hoja || !canvasRef.current || !base || !base.width) return;
+    if (lnDestino === null && !lnPaso) return;
+    const motor = zoomVivoRef.current;
+    // Un viaje a la hoja entera en marcha se detiene donde va: manda la rueda.
+    if (motor.raf && motor.tipo !== 'rueda') {
+      cancelAnimationFrame(motor.raf);
+      motor.raf = 0;
+    }
+
+    // Sin zoom en marcha, la escala sale del propio rectangulo de la hoja y no
+    // del estado: geometria y escala del mismo instante (su desfase era otra
+    // forma de perder el punto). En marcha, es la del ultimo fotograma.
+    const rect = hoja.getBoundingClientRect();
+    const lnAhora = motor.raf ? motor.lnActual : Math.log(rect.width / base.width);
+    if (!Number.isFinite(lnAhora)) return;
+    const limites = limitesDeZoom({
+      anchoHoja: base.width, altoHoja: base.height,
+      anchoVista: cont.clientWidth, altoVista: cont.clientHeight,
+    });
+    const lnPedido = lnDestino !== null ? lnDestino : (motor.raf ? motor.lnObjetivo : lnAhora) + lnPaso;
+    motor.lnObjetivo = objetivoDelZoom(lnPedido, lnAhora, limites);
+    motor.lnActual = lnAhora;
+    motor.punto = puntoParaElZoom(motor.punto, rect, clientX, clientY, Math.exp(lnAhora));
+    motor.base = base;
+    if (motor.raf || motor.lnObjetivo === lnAhora) return;   // ya en marcha, o en el tope
+
+    motor.tipo = 'rueda';
+    fitModeRef.current = 'custom';
+    setFitMode('custom');
+    // NADA DE DIBUJADO NITIDO A MEDIO GESTO. El pendiente, o el que estuviera
+    // a medias, era para una escala que ya no va a quedar, y le robaba los
+    // fotogramas al suavizado: medido en el banco, alejando con muescas
+    // seguidas, uno de cada veinte fotogramas pasaba de 50 ms. Solo se
+    // abandona el de zoom; el de una pagina o un documento nuevo sigue. Al
+    // terminar el gesto se pide otro (`escalaFijada`).
+    soltarDibujadoDeZoom();
+    const fotograma = () => {
+      const ahora = performance.now();
+      const { ln, llegado } = suavizar(motor.lnActual, motor.lnObjetivo, ahora - motor.ultimo);
+      motor.ultimo = ahora;
+      motor.lnActual = ln;
+      aplicarEscala(Math.exp(ln), motor.punto, motor.base);
+      if (llegado) {
+        motor.raf = 0;
+        setScale(Math.exp(ln));
+        setEscalaFijada(n => n + 1);
+      } else {
+        motor.raf = requestAnimationFrame(fotograma);
+      }
+    };
+    motor.ultimo = performance.now();
+    motor.raf = requestAnimationFrame(fotograma);
+  }, [currentPage, rotation, aplicarEscala, soltarDibujadoDeZoom]);
+
+  // + y - del teclado y Ctrl+1, por el mismo camino y anclados al centro de la
+  // vista. Antes cambiaban la escala del ESTADO sin tocar la de la pantalla:
+  // medido en el banco, con «+» el plano no crecia y la capa de marcas si, y
+  // quedaban desplazadas 1.626 px.
+  const zoomDesdeElCentro = useCallback((pedido) => {
+    const cont = containerRef.current;
+    if (!cont) return;
+    const r = cont.getBoundingClientRect();
+    zoomHacia(pedido, r.left + cont.clientWidth / 2, r.top + cont.clientHeight / 2);
+  }, [zoomHacia]);
+  const zoomIn = useCallback(() => zoomDesdeElCentro({ lnPaso: Math.log(PASO_DE_TECLADO) }), [zoomDesdeElCentro]);
+  const zoomOut = useCallback(() => zoomDesdeElCentro({ lnPaso: -Math.log(PASO_DE_TECLADO) }), [zoomDesdeElCentro]);
+
+  // DOBLE CLIC = LA HOJA ENTERA, con un viaje de medio segundo, como en ACC.
+  //
+  // Termina en la MISMA vista que el boton «Ajustar pagina»: misma escala y
+  // mismo centro (ver vistaDeHojaEntera). El viaje se ve como un zoom alrededor
+  // del punto del plano que no se mueve (ver vistaIntermedia), y cada fotograma
+  // coloca la hoja con la misma correccion medida que usa la rueda. La rueda o
+  // un arrastre a medio viaje lo detienen donde va.
+  const verHojaEntera = useCallback(() => {
+    const cont = containerRef.current, hoja = wrapRef.current;
+    const pad = hoja && hoja.parentElement;
+    const base = baseVpRef.current[`${currentPage}:${rotation}`];
+    if (!cont || !hoja || !pad || !base || !base.width) return;
+    pararZoom(false);
+    const rect = hoja.getBoundingClientRect();
+    const desde = { escala: rect.width / base.width, left: rect.left, top: rect.top };
+    if (!(desde.escala > 0)) return;
+    const zona = cont.getBoundingClientRect();
+    const relleno = getComputedStyle(pad);
+    const hasta = vistaDeHojaEntera({
+      anchoHoja: base.width, altoHoja: base.height,
+      vista: { left: zona.left + cont.clientLeft, top: zona.top + cont.clientTop, ancho: cont.clientWidth, alto: cont.clientHeight },
+      relleno: {
+        izquierda: parseFloat(relleno.paddingLeft) || 0, derecha: parseFloat(relleno.paddingRight) || 0,
+        arriba: parseFloat(relleno.paddingTop) || 0, abajo: parseFloat(relleno.paddingBottom) || 0,
+      },
+    });
+
+    // Mientras viaja, el observador de tamaño no puede reencuadrar por su cuenta.
+    fitModeRef.current = 'custom';
+    soltarDibujadoDeZoom();
+    const motor = zoomVivoRef.current;
+    motor.tipo = 'hoja-entera';
+    const t0 = performance.now();
+    const fotograma = () => {
+      const fraccion = Math.min(1, (performance.now() - t0) / DURACION_DE_HOJA_ENTERA_MS);
+      const v = vistaIntermedia(desde, hasta, fraccion);
+      aplicarEscala(v.escala, { ux: 0, uy: 0, clientX: v.left, clientY: v.top }, base);
+      if (fraccion < 1) {
+        motor.raf = requestAnimationFrame(fotograma);
+        return;
+      }
+      motor.raf = 0;
+      fitModeRef.current = 'page';
+      setFitMode('page');
+      setScale(hasta.escala);
+      setEscalaFijada(n => n + 1);
+    };
+    motor.raf = requestAnimationFrame(fotograma);
+  }, [currentPage, rotation, aplicarEscala, pararZoom, soltarDibujadoDeZoom]);
 
   // Ajustar a página / ancho según el tamaño real del contenedor
   const fitTo = useCallback(async (mode) => {
@@ -1274,6 +1531,8 @@ export default function PDFViewer({ url, preparando = false,
       const vp1 = page.getViewport({ scale: 1, rotation: giroDeLaHoja(page, rotation) });
       const sW = (cont.clientWidth - 64) / vp1.width;
       const sH = (cont.clientHeight - 64) / vp1.height;
+      // Un zoom a medio camino pisaria este encuadre en su siguiente fotograma.
+      pararZoom(false);
       fitModeRef.current = mode;
       escalaVisualRef.current = Math.max(0.2, mode === 'width' ? sW : Math.min(sW, sH));
       setFitMode(mode);
@@ -1287,8 +1546,9 @@ export default function PDFViewer({ url, preparando = false,
         c.scrollTop = (c.scrollHeight - c.clientHeight) / 2;
       });
       setScale(Math.max(0.2, mode === 'width' ? sW : Math.min(sW, sH)));
+      setEscalaFijada(n => n + 1);
     } catch { /* el documento puede estar cerrándose */ }
-  }, [currentPage, rotation]);
+  }, [currentPage, rotation, pararZoom]);
 
   // Al abrir un documento, ajustarlo a la vista (no 100% arbitrario).
   //
@@ -1451,53 +1711,62 @@ export default function PDFViewer({ url, preparando = false,
       } else if ((e.ctrlKey || e.metaKey) && e.key === '0') {
         e.preventDefault(); fitTo('page');
       } else if ((e.ctrlKey || e.metaKey) && e.key === '1') {
-        e.preventDefault(); setFitMode('custom'); setScale(1);
+        e.preventDefault(); zoomDesdeElCentro({ lnDestino: 0 });
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [currentPage, numPages, searchOpen, fitTo, goToPage, zoomIn, zoomOut]);
+  }, [currentPage, numPages, searchOpen, fitTo, goToPage, zoomIn, zoomOut, zoomDesdeElCentro]);
 
-  // Scroll handling: Zoom en Canvas / Cambiar Página en Fondo Gris
+  // LA RUEDA ES ZOOM EN CUALQUIER PUNTO DEL ESCENARIO, como en ACC: sobre la
+  // hoja y sobre el margen gris.
+  //
+  // Medido en el banco antes de este cambio: sobre la hoja acercaba ×1,2 de
+  // golpe; sobre el margen gris DESPLAZABA la vista (el scroll nativo del
+  // contenedor, 100 px por muesca), y solo sobre las barras de desplazamiento
+  // cambiaba de pagina. El mismo gesto hacia tres cosas segun donde cayera el
+  // cursor, y al alejar un plano --justo cuando mas margen hay a la vista-- la
+  // rueda dejaba de alejar y empezaba a mover la hoja: de 20 muescas, 16
+  // desplazaron en vez de alejar.
+  //
+  // La pagina se cambia con las flechas, RePag/AvPag y la barra de arriba.
+  // `preventDefault` siempre, tambien si el evento no trae zoom: el scroll
+  // nativo pelearia con la correccion del punto en cada fotograma.
   useEffect(() => {
-    if (loading || error) return;
-    const canvas = canvasRef.current;
+    if (loading || error) return undefined;
     const container = containerRef.current;
-    if (!canvas || !container) return;
-
-    let lastPageChange = 0;
-
-    const handleWheel = (e) => {
-      // ZOOM CON LA RUEDA A SECAS, COMO EL VISOR DE AUTODESK.
-      //
-      // Antes la rueda sobre la hoja exigia Ctrl para hacer zoom, y sin Ctrl no
-      // hacia nada (la condicion de arriba cortaba). Quien viene de ACC o de
-      // cualquier visor CAD espera rueda = zoom, sin teclas: es el gesto que
-      // mas veces se hace al leer un plano. El cambio de pagina con la rueda
-      // sobre el fondo gris se conserva tal cual.
-      if (wrapRef.current && wrapRef.current.contains(e.target)) {
-        // Sobre la hoja: zoom anclado al cursor. Con o sin Ctrl -- Ctrl sigue
-        // funcionando para no romper el habito de quien ya lo aprendio.
-        e.preventDefault();
-        zoomAt(e.deltaY < 0 ? 1 : -1, e.clientX, e.clientY);
-      } else if (e.target === container) {
-        // Sobre el fondo gris: cambiar de pagina, como siempre.
-        e.preventDefault();
-        const now = Date.now();
-        if (now - lastPageChange < 300) return; // Cooldown de 300ms
-        lastPageChange = now;
-
-        if (e.deltaY < 0) {
-          setCurrentPage(prev => Math.max(1, prev - 1));
-        } else if (e.deltaY > 0) {
-          setCurrentPage(prev => Math.min(numPages, prev + 1));
-        }
-      }
+    if (!container) return undefined;
+    const alGirarLaRueda = (e) => {
+      e.preventDefault();
+      zoomHacia({ lnPaso: pasoDeRueda(e) }, e.clientX, e.clientY);
     };
+    container.addEventListener('wheel', alGirarLaRueda, { passive: false });
+    return () => container.removeEventListener('wheel', alGirarLaRueda);
+  }, [loading, error, zoomHacia]);
 
-    container.addEventListener('wheel', handleWheel, { passive: false });
-    return () => container.removeEventListener('wheel', handleWheel);
-  }, [loading, error, numPages, zoomAt]);
+  // AL DESPLAZAR LA VISTA (arrastre, barras), el detalle se rehace para la zona
+  // nueva en cuanto la vista se queda quieta. Mientras tanto, lo que asome
+  // fuera del detalle se ve con la imagen de la hoja entera.
+  useEffect(() => {
+    if (loading || error) return undefined;
+    const container = containerRef.current;
+    if (!container) return undefined;
+    let espera = 0;
+    const alDesplazar = () => {
+      clearTimeout(espera);
+      espera = setTimeout(() => dibujarDetalle(), 150);
+    };
+    container.addEventListener('scroll', alDesplazar, { passive: true });
+    // Y si cambia el tamaño de la vista (miniaturas, cinta, pantalla completa):
+    // asoma plano que el detalle no tenia.
+    const vigia = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(alDesplazar);
+    if (vigia) vigia.observe(container);
+    return () => {
+      clearTimeout(espera);
+      container.removeEventListener('scroll', alDesplazar);
+      if (vigia) vigia.disconnect();
+    };
+  }, [loading, error, dibujarDetalle]);
 
   // El menu de zoom se cierra como se espera de un menu: Escape o clic fuera.
   useEffect(() => {
@@ -1526,6 +1795,7 @@ export default function PDFViewer({ url, preparando = false,
     if (!conLaRueda && tool !== 'pan' && wrapRef.current && wrapRef.current.contains(e.target)) return;
     if (e.button !== 0 && e.button !== 1) return;
     e.preventDefault(); // Evitar scroll automático al usar click central
+    pararZoom(true);    // arrastrar manda: un zoom a medio camino se detiene donde esta
     setIsDragging(true);
     dragStart.current = {
       x: e.clientX,
@@ -1544,6 +1814,15 @@ export default function PDFViewer({ url, preparando = false,
   };
 
   const handleMouseUp = () => setIsDragging(false);
+
+  // Doble clic con la herramienta Mover: la hoja entera. Con una herramienta de
+  // medir o marcar activa, el doble clic es suyo (cierra la medida o el area).
+  const alHacerDobleClic = (e) => {
+    if (tool !== 'pan' || e.button !== 0) return;
+    if (e.target.closest && e.target.closest('button, a, input, select, textarea')) return;
+    e.preventDefault();
+    verHojaEntera();
+  };
 
   // --- Render ---
   // SOLO LA PRIMERA VEZ SE VACIA LA PANTALLA.
@@ -1716,7 +1995,8 @@ export default function PDFViewer({ url, preparando = false,
           <div ref={containerRef} className="pdf-canvas-container"
             style={{ cursor: tool === 'pan' ? (isDragging ? 'grabbing' : 'grab') : 'crosshair' }}
             onMouseDown={handleMouseDown} onMouseMove={handleMouseMove}
-            onMouseUp={handleMouseUp} onMouseLeave={handleMouseUp}>
+            onMouseUp={handleMouseUp} onMouseLeave={handleMouseUp}
+            onDoubleClick={alHacerDobleClic}>
 
 
             {renderError && (
@@ -1747,6 +2027,8 @@ export default function PDFViewer({ url, preparando = false,
                 className="pdf-page"
                 style={{ transform: `translate(${desplazamiento.x}px, ${desplazamiento.y}px)` }}>
                 <canvas ref={canvasRef} />
+                {/* El detalle nitido de lo visible (ver dibujarDetalle). */}
+                <canvas ref={detalleRef} className="pdf-detalle" aria-hidden="true" />
                 {highlights.map(h => (
                   <div key={h.key} style={{
                     position: 'absolute', pointerEvents: 'none',

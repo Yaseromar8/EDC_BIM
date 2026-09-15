@@ -30,6 +30,8 @@ const PLANOS = [
   { id: 'f', name: 'plano-F.pdf', gcs_urn: 'urn-f', url: '/_probar/plano-F.pdf' },
   { id: 'g', name: 'plano-G.pdf', gcs_urn: 'urn-g', url: '/_probar/plano-G.pdf' },
   { id: 'h', name: 'plano-H.pdf', gcs_urn: 'urn-h', url: '/_probar/plano-H.pdf' },
+  // DOS PAGINAS (A y G juntos): para comprobar que la rueda no cambia de pagina.
+  { id: 'i', name: 'plano-I.pdf', gcs_urn: 'urn-i', url: '/_probar/plano-I.pdf' },
 ];
 
 // Lo que tarda el backend en devolver la URL firmada. Medido en produccion
@@ -66,6 +68,10 @@ function Banco() {
       hermanos={PLANOS}
       onAbrirHermano={(d) => saltar(PLANOS.findIndex(p => p.name === d.name))}
       obraDelDocumento="banco"
+      // Con nodo, el lector monta su capa de marcas: asi se ve si siguen a la
+      // hoja durante el zoom. Las marcas las sirve el fetch simulado de abajo.
+      nodeId="banco-nodo"
+      projectPrefix="banco"
       onClose={() => {}}
       versionLabel="V1"
     />
@@ -91,9 +97,26 @@ setInterval(() => {
 // devuelve /api/docs/miniaturas/urls. Aqui se responde con imagenes locales
 // generadas EXACTAMENTE como las genera el servidor (primera pagina a 420 px),
 // asi que lo que se prueba es el camino REAL del componente y no un atajo.
+// MARCAS DE MENTIRA, en coordenadas PDF de la hoja A1 (2384 x 1684 pt): un
+// marco, un conteo en el centro, una medida y una nube.
+const MARCAS_DEL_BANCO = [
+  { id: 'm1', page: 1, kind: 'rect', geometry: { x: 1000, y: 700, w: 300, h: 200 }, style: { color: '#e53935' } },
+  { id: 'm2', page: 1, kind: 'count', geometry: { p: [1192, 842] }, style: { color: '#1e88e5' } },
+  { id: 'm3', page: 1, kind: 'measure', geometry: { points: [[200, 200], [800, 200], [800, 500]] }, style: { color: '#43a047' } },
+  { id: 'm4', page: 1, kind: 'cloud', geometry: { x: 1600, y: 1100, w: 400, h: 250 }, style: { color: '#fb8c00' } },
+];
+
 const fetchReal = window.fetch.bind(window);
 window.fetch = (entrada, opciones) => {
   const dir = typeof entrada === 'string' ? entrada : (entrada && entrada.url) || '';
+  if (dir.includes('/api/pdf/markups')) {
+    return Promise.resolve(new Response(JSON.stringify({ success: true, markups: MARCAS_DEL_BANCO }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } }));
+  }
+  if (dir.includes('/api/pdf/calibration')) {
+    return Promise.resolve(new Response(JSON.stringify({ success: true, calibrations: {} }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } }));
+  }
   if (dir.includes('/api/docs/miniaturas/urls')) {
     return Promise.resolve(new Response(JSON.stringify({
       success: true,

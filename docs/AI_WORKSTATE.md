@@ -637,7 +637,7 @@ NEXT EXACT ACTION:    esperar la UAT del propietario (bloque H de la guía) y su
 DO NOT TOUCH:         el WIP ajeno (incluidos los hunks de la barra de iconos de FilesPage.jsx); producción y Oregón; /act y la sustitución; E2–E5 y el contrato RONDAS en código hasta que esté congelado; C y D de permisos (aplazados).
 COMMIT/HEAD REF:      88b300fc61d1dca0b21a9805bb5b0a86eeda7d43 (commit de E1.3, igual a origin/main tras el push del 14-sep; su padre es 41d7dda)
 
-### Unidad ARCHIVOS · ENLACES por obra, carpeta y documento — DESPLEGADA (9dd13e8 en Virginia y portal); CORRECCIÓN DE LA RAÍZ COMMITEADA, SIN PUSH, 14-sep
+### Unidad ARCHIVOS · ENLACES por obra, carpeta y documento — DESPLEGADA (9dd13e8 y la corrección de la raíz d30762d, en Virginia y portal), 14-sep
 
 Pedido del propietario el 14-sep: «ARCHIVOS · DEEP LINKS — CONTRATO FINAL BASADO EN ACC» (`/?obra=&carpeta=&documento=&version=`
 con identificadores; la carpeta es contexto y el documento identidad; «Copiar enlace» al documento vigente; respuesta neutra;
@@ -647,32 +647,50 @@ intacto). Diagnóstico: `docs/archivos/01_ENLACES_POR_CARPETA_Y_DOCUMENTO.md`. I
 [WIP HANDOFF]
 TAREA:                ARCHIVOS · enlaces internos por obra, carpeta, documento y versión, como ACC. Implementado y probado en local; revisado por el propietario («DEEP LINKS ARCHIVOS CODE/TEST GREEN LOCAL = PASS»), que autorizó un único commit funcional sobre 88b300f: el que contiene este fichero. La corrección del falso error de base de datos en las negativas queda aceptada como parte de la entrega. Push normal ejecutado por el propietario desde su terminal (a Claude Code el permiso le bloqueó `git push`), tras comprobar Auto-Deploy Off en los cuatro servicios: origin/main = 9dd13e8; después, producción seguía en 88b300f (/api/health) y el portal sin la ruta nueva. SIN desplegar: cada Manual Deploy necesita su autorización.
 IMPLEMENTADO:         backend/enlaces_de_archivos.py (`ubicar`: usuario → obra → recurso → permiso efectivo, y versión → documento; cadena de carpetas sin la raíz; papelera, otra obra, tipo, ciclo e ISO estricto; NoDisponible con motivo solo para registro y pruebas) y `GET /api/docs/ubicacion` en routes/documents.py (un único 404 ENLACE_NO_DISPONIBLE; la negativa se recoge dentro de la conexión para no registrarse como error de base de datos; la clave de la versión con la regla de /api/docs/versions). Portal: utils/enlacesDeArchivos.js; App_Refactor (obra en la URL con su paso, enlace pendiente en sessionStorage durante el login, Atrás/Adelante entre obras, lista y portada con marcas en history.state); useFileExplorer (push al entrar en una carpeta cuando el listado confirma su id; restauración al montar y con Atrás/Adelante, siempre validada en el servidor; el documento se abre desde el listado de su carpeta; normalización con replaceState; fuera de Carpetas, sin carpeta ni documento en la URL; anotarDocumento, cerrarDocumento, verVersion y copiarEnlace); FilesPage (solo 3 bloques propios: abrir, cerrar y versión, menú); ContextMenu «Copiar enlace».
-PENDIENTE:            0) desplegada por el propietario y verificada el 14-sep (/api/health 9dd13e886c08 y el portal con el código nuevo); hallazgo del propietario en producción: tras F5 en una carpeta el árbol perdía la raíz, porque `fetchContents` tomaba el id de la raíz de la primera carpeta listada (y «Desplazar» a «Archivos de proyecto» habría ido a la carpeta del enlace); corregido y commiteado con autorización («VAMOS»), antes del commit de PERMISOS; 1) push del propietario y Manual Deploy (backend primero, por PERMISOS; portal después); 2) UAT del propietario: producción aún no validada; 3) limitaciones registradas por el propietario: la búsqueda y la ventana de subida no añaden todavía `documento` a la URL, y Atrás desde la raíz de la obra hasta la lista de obras no se recorrió en pantalla; 4) posterior: «Copiar enlace a esta versión».
+PENDIENTE:            0) desplegada por el propietario y verificada el 14-sep (/api/health 9dd13e886c08 y el portal con el código nuevo); hallazgo del propietario en producción: tras F5 en una carpeta el árbol perdía la raíz, porque `fetchContents` tomaba el id de la raíz de la primera carpeta listada (y «Desplazar» a «Archivos de proyecto» habría ido a la carpeta del enlace); corregido y commiteado con autorización («VAMOS»), antes del commit de PERMISOS; 1) push y Manual Deploy de la corrección hechos por el propietario, verificado el 15-sep (/api/health 6e51793937a7, que la contiene, y portal `index-Cr11Kw1A.js` con «Abriendo el enlace»); 2) UAT del propietario: producción aún no validada; 3) limitaciones registradas por el propietario: la búsqueda y la ventana de subida no añaden todavía `documento` a la URL, y Atrás desde la raíz de la obra hasta la lista de obras no se recorrió en pantalla; 4) posterior: «Copiar enlace a esta versión».
 ARCHIVOS MODIFICADOS: backend/routes/documents.py, frontend-docs/src/App_Refactor.jsx, frontend-docs/src/hooks/useFileExplorer.js, frontend-docs/src/components/ContextMenu.jsx, frontend-docs/src/pages/FilesPage.jsx (3 bloques propios), docs/AI_WORKSTATE.md; nuevos: backend/enlaces_de_archivos.py, backend/tests/test_enlaces_de_archivos.py, backend/herramientas/ensayo_de_enlaces_de_archivos.py, frontend-docs/src/utils/enlacesDeArchivos.js, frontend-docs/pruebas/enlacesDeArchivos.prueba.mjs, docs/archivos/01_ENLACES_POR_CARPETA_Y_DOCUMENTO.md, docs/archivos/02_ENLACES_INFORME_DE_CIERRE.md. Pendiente del handoff anterior: docs/reviews/E1_3_INFORME_DE_CIERRE.md. Ajenos, no tocados: los siete M de siempre (incluidos los 3 bloques de la barra de iconos de FilesPage.jsx) y los untracked históricos.
 TESTS EJECUTADOS:     pytest completo sin .env → 1883 passed / 1 failed (test_capacidades_con_puerta, preexistente; 19 nuevas); ensayo_de_enlaces_de_archivos contra PostgreSQL con ENFORCE → 34/34, sin líneas de error en el log; regresiones de Revisiones → gemelas 24/24, versión y visibilidad 67/67, detalle 25/25, revisiones 50/50, admin participante 16/16, flujos creados 36/36; npm test → 7 bancos en verde (enlacesDeArchivos 16/16, revisiones 19/19); ESLint → ningún error nuevo (los 5 de FilesPage y ContextMenu ya están en HEAD); build del banco sin .env → OK; app real del banco: obra → carpeta A → carpeta B → documento → Atrás → Adelante → F5 → URL en otra pestaña, «Copiar enlace», documento movido, sin permiso, documento de otra obra, versión de otro documento y login intermedio.
 TESTS PENDIENTES:     en pantalla, Atrás desde la raíz de la obra hasta la lista y la portada (cubierto por el banco de reglas); UAT del propietario tras desplegar.
 FALLO CONOCIDO:       test_capacidades_con_puerta (preexistente). Un documento abierto desde la búsqueda o desde la ventana de subida se abre sin `documento` en la URL (la búsqueda quedó fuera del contrato).
-NEXT EXACT ACTION:    push del propietario y Manual Deploy (backend primero, por PERMISOS; portal después). Hasta desplegar, tras un F5 o un enlace, no usar «Desplazar» hacia «Archivos de proyecto».
+NEXT EXACT ACTION:    UAT del propietario en producción: enlaces, F5 dentro de una carpeta y «Desplazar» a «Archivos de proyecto».
 DO NOT TOUCH:         el WIP ajeno (incluidos los 3 bloques de la barra de iconos de FilesPage.jsx); Compartir público, papelera, búsqueda, viewableGuid y frontend-react; producción y Oregón.
 COMMIT/HEAD REF:      9dd13e886c0838690b80b0507e7504ee07bdcf03 (igual a origin/main tras el push del 14-sep; su padre es 88b300f)
 
-### Unidad PERMISOS · «Editar» suprime y restaura — COMMIT LOCAL, SIN PUSH NI DESPLIEGUE, 14-sep
+### Unidad PERMISOS · «Editar» suprime y restaura — DESPLEGADA (6e51793 en Virginia y portal, verificada el 15-sep), 14-sep
 
 Pedido del propietario el 14-sep: «cuando en Configuración de permisos esté en Editar, ese usuario también pueda eliminar o
 restaurar… después hacemos commit de ambos» (con la corrección de la raíz de ARCHIVOS · ENLACES). Informe:
 `docs/usuarios/03_EDITAR_SUPRIME_Y_RESTAURA.md`.
 
 [WIP HANDOFF]
-TAREA:                PERMISOS · suprimir (a la papelera, de uno en uno y en lote) y restaurar con «Editar» en la carpeta, en vez de «Administrar». Implementado y probado en local; commit autorizado por el propietario («VAMOS») en dos commits: la corrección de la raíz de los enlaces y este cambio, que es el que contiene este fichero. SIN push ni despliegue.
+TAREA:                PERMISOS · suprimir (a la papelera, de uno en uno y en lote) y restaurar con «Editar» en la carpeta, en vez de «Administrar». Implementado y probado en local; commit autorizado por el propietario («VAMOS») en dos commits: la corrección de la raíz de los enlaces y este cambio (`6e51793`). Push y Manual Deploy hechos por el propietario; verificado el 15-sep.
 IMPLEMENTADO:         permiso_documental.subcarpetas_sin_nivel (¿hay debajo alguna carpeta con una regla que deje a la persona por debajo de «Editar»?; quien administra la obra la atraviesa; sin identidad se niega). routes/documents.py: /api/docs/delete, el DELETE de /api/docs/batch y /api/docs/restore piden 'edit' y, para carpetas, `_subarbol_protegido` (403 SUBCARPETAS_SIN_PERMISO nombrando solo la carpeta pedida; 503 SUBARBOL_SIN_COMPROBAR si no se puede mirar); /api/docs/permanent-delete sin cambios (solo administrador de la plataforma). Portal: capacidadesDeSeleccion EXIGE.suprimir = 'edit'; AddPermissionModal describe Editar y Administrar; la prueba del portal fija las reglas nuevas y el nivel del backend.
-PENDIENTE:            1) push del propietario (tras releer Auto-Deploy Off) y Manual Deploy: backend primero (este cambio toca el servidor), portal después; 2) observación sin tocar: la papelera enseña a todo miembro lo suprimido, también de carpetas que no ve (restaurar sí exige permiso).
+PENDIENTE:            1) UAT del propietario (desplegado y verificado el 15-sep: /api/health 6e51793937a7 y portal `index-Cr11Kw1A.js` con «suprimir y restaurar archivos»); 2) observación sin tocar: la papelera enseña a todo miembro lo suprimido, también de carpetas que no ve (restaurar sí exige permiso).
 ARCHIVOS MODIFICADOS: backend/permiso_documental.py, backend/routes/documents.py, frontend-docs/src/utils/capacidadesDeSeleccion.js, frontend-docs/src/components/AddPermissionModal.jsx, frontend-docs/pruebas/capacidadesDeSeleccion.prueba.mjs, docs/usuarios/02_PLANOS_CAD_Y_EDITAR_EN_CARPETA.md (nota), docs/AI_WORKSTATE.md; nuevos: backend/tests/test_editar_suprime_y_restaura.py, backend/herramientas/ensayo_de_editar_suprime_y_restaura.py, docs/usuarios/03_EDITAR_SUPRIME_Y_RESTAURA.md.
 TESTS EJECUTADOS:     pytest completo sin .env → 1896 passed / 1 failed (test_capacidades_con_puerta, preexistente; 13 nuevas); ensayo_de_editar_suprime_y_restaura contra PostgreSQL con ENFORCE → 19/19, sin errores en el log; npm test → 7 bancos en verde (capacidadesDeSeleccion 21/21); ESLint → sin problemas en lo tocado; app real del banco con perfil Editar: «Suprimir» activo en el menú, suprimir un PDF (en base is_deleted y activity_log «delete» a su nombre) y restaurarlo desde la Papelera (aviso «Restaurado», is_deleted falso y «restore»).
 TESTS PENDIENTES:     UAT del propietario en producción tras desplegar.
 FALLO CONOCIDO:       test_capacidades_con_puerta (preexistente).
-NEXT EXACT ACTION:    push del propietario y Manual Deploy: backend primero (verificar /api/health), portal después (verificar por contenido).
+NEXT EXACT ACTION:    UAT del propietario con una persona con «Editar»: suprimir, restaurar y una carpeta con una subcarpeta sin «Editar».
 DO NOT TOUCH:         /api/docs/permanent-delete (sigue solo del administrador de la plataforma); el WIP ajeno (incluidos los 3 bloques de la barra de iconos de FilesPage.jsx); producción y Oregón.
-COMMIT/HEAD REF:      el commit que contiene este fichero; su padre es el de la corrección de la raíz de ENLACES, que va sobre 9dd13e8 (igual a origin/main)
+COMMIT/HEAD REF:      6e51793 (igual a origin/main tras el push del propietario; su padre es d30762d, la corrección de la raíz de ENLACES, sobre 9dd13e8)
+
+### Unidad ARCHIVOS · LECTOR DE PLANOS COMO ACC (rueda, doble clic y nitidez) — COMMIT LOCAL, SIN PUSH NI DESPLIEGUE, 15-sep
+
+Pedido del propietario el 15-sep: la opción A de `docs/archivos/03_LECTOR_PDF_MANIPULACION_COMO_ACC.md` («vamos, con cuidado
+y profesionalismo»): que manejar un plano en el lector de pdf.js se sienta como el lector de planos de ACC; solo la
+manipulación, no los botones. Informe: `docs/archivos/04_LECTOR_PDF_COMO_ACC_INFORME.md`.
+
+[WIP HANDOFF]
+TAREA:                ARCHIVOS · lector de planos (PDFViewer): rueda, doble clic y nitidez como el lector de planos de ACC, medidos contra sus cifras del 13-sep. Implementado y probado en local. Commit autorizado por el propietario («HAGAMOS LOS DOS COMIT»): este, y después el del lote P1 de velocidad de apertura. SIN push ni despliegue.
+IMPLEMENTADO:         utils/navegacionLector.js (paso de rueda ×1,10 con los eventos finos en proporción; suavizado exponencial τ 18 ms en logaritmos; límites de hoja encuadrada/3,5 a 64; el punto bajo el cursor no acumula redondeo; viaje a la hoja entera de 500 ms con punto fijo, que termina igual que fitTo; área y validez del detalle nítido con las reglas del detail view de pdf.js). PDFViewer.jsx: motor de zoom por fotogramas con la corrección medida del scroll y sin tocar el estado hasta terminar; rueda en todo el escenario, sin cambio de página ni scroll nativo; +, − y Ctrl+1 por el mismo motor; doble clic con la herramienta Mover; sin dibujado nítido a medio gesto (`escalaFijada`); marcas y resaltados que siguen a la hoja (viewBox y porcentajes), retirados solo al cambiar de página, giro o documento, en el efecto; lienzo de detalle de lo visible con presupuesto de 8 MP, sin redibujar la hoja entera cuando al tope saldría igual; el búfer de la hoja entera se suelta tras volcarlo. PDFViewer.css: holgura 100vh/100vw y el lienzo `.pdf-detalle`. PdfToolsOverlay.jsx: viewBox, clic en proporción y texto en porcentaje. Banco: probar-lector.jsx con un plano de dos páginas y marcas simuladas.
+PENDIENTE:            1) push del propietario y Manual Deploy del portal (va en el mismo push que el lote P1, que toca el servidor: portal primero, backend después); 2) su prueba con ratón real (banco en http://localhost:5180/probar-lector.html, o tras desplegar); 3) opcional: «Ajustar página/ancho» siguen sin viaje; panel táctil y pellizco sin medir con un panel real; 4) velocidad de apertura: la investigación de `docs/archivos/05_VELOCIDAD_DE_APERTURA_ACC_VS_ALEPHIA.md` llevó al lote P1, autorizado y commiteado en el commit siguiente.
+ARCHIVOS MODIFICADOS: frontend-docs/src/components/PDFViewer.jsx, frontend-docs/src/components/PDFViewer.css, frontend-docs/src/components/PdfToolsOverlay.jsx, frontend-docs/src/probar-lector.jsx, docs/AI_WORKSTATE.md; nuevos: frontend-docs/src/utils/navegacionLector.js, frontend-docs/pruebas/navegacionLector.prueba.mjs, docs/archivos/03_LECTOR_PDF_MANIPULACION_COMO_ACC.md, docs/archivos/04_LECTOR_PDF_COMO_ACC_INFORME.md, docs/archivos/05_VELOCIDAD_DE_APERTURA_ACC_VS_ALEPHIA.md. Los planos del banco (public/_probar, incluido el nuevo plano-I de dos páginas) están en .gitignore. Ajenos, no tocados: los M de siempre (incluidos los 3 bloques de la barra de iconos de FilesPage.jsx) y los untracked históricos (probar-primitivas.*).
+TESTS EJECUTADOS:     npm test → 8 bancos en verde (navegacionLector 35/35); ESLint de lo tocado → los mismos 6 errores que ya están en HEAD, ninguno nuevo; build del banco sin .env → OK; medición con Chrome sin ventana y entrada CDP (el panel de navegador del escritorio estaba oculto y ahí no corren los fotogramas), a 100 % y 125 %, del lector de 6e51793 y del nuevo: paso, curva, punto bajo el cursor, marcas, fotogramas, dibujados a medio gesto, doble clic frente a «Ajustar página», nitidez a 8/20/40/64×, memoria, cambio de página, giro y documento fotograma a fotograma.
+TESTS PENDIENTES:     prueba del propietario con su ratón y su PC; producción.
+FALLO CONOCIDO:       ninguno nuevo. Observado sin tocar: tras un zoom, un cambio de página dibuja la página dos veces (el primer dibujado corre con el `avisoDeRender` anterior); ya pasaba antes.
+NEXT EXACT ACTION:    push del propietario y Manual Deploy del portal, junto con el lote P1 (portal primero, backend después); después, verificar el portal por contenido.
+DO NOT TOUCH:         el WIP ajeno (incluidos los 3 bloques de la barra de iconos de FilesPage.jsx); el backend; producción y Oregón.
+COMMIT/HEAD REF:      el commit que contiene este fichero; su padre es 6e51793 (igual a origin/main)
 
 ## FROZEN / DO NOT REOPEN
 
@@ -738,14 +756,18 @@ Observaciones reales, ya conocidas y aceptadas. Ninguna bloquea nada.
    propietario (7-sep-2026). No bloquea B1.
 ## CURRENT TASK
 
-**14-sep-2026 · PERMISOS · «Editar» suprime y restaura — COMMIT LOCAL, SIN PUSH NI DESPLIEGUE.**
+**15-sep-2026 · ARCHIVOS · LECTOR DE PLANOS COMO ACC — COMMIT LOCAL, SIN PUSH NI DESPLIEGUE.**
+Opción A de `docs/archivos/03_LECTOR_PDF_MANIPULACION_COMO_ACC.md`: rueda, doble clic y nitidez como el lector de planos de
+ACC, medidos contra sus cifras. Probado en local (npm 8 bancos, medición CDP a 100 % y 125 %). Ver «Unidad ARCHIVOS · LECTOR DE PLANOS».
+
+**14-sep-2026 · PERMISOS · «Editar» suprime y restaura — DESPLEGADA (6e51793, verificada el 15-sep).**
 Pedido del propietario antes del commit de la corrección de la raíz de ENLACES: los dos van juntos. Probado en local (pytest
 1896/1, ensayo 19/19, npm 7 bancos, app real del banco). Ver «Unidad PERMISOS · «Editar» suprime y restaura».
 
-**14-sep-2026 · ARCHIVOS · ENLACES por obra, carpeta y documento — DESPLEGADA (9dd13e8); CORRECCIÓN DE LA RAÍZ, COMMITEADA.**
+**14-sep-2026 · ARCHIVOS · ENLACES por obra, carpeta y documento — DESPLEGADA (9dd13e8 y la corrección de la raíz d30762d).**
 Contrato final del propietario basado en ACC. Probado en local (pytest 1883/1, ensayo 34/34, regresiones de Revisiones,
 npm 7 bancos, app real del banco con el recorrido pedido y los cinco casos). Revisado por el propietario («GREEN LOCAL = PASS») y
-commiteado con su autorización; push y despliegue hechos por él; la corrección de la raíz tras F5 está commiteada y espera push y despliegue. Ver «Unidad ARCHIVOS · ENLACES».
+commiteado con su autorización; push y despliegue hechos por él; la corrección de la raíz tras F5 está desplegada y verificada (15-sep). Ver «Unidad ARCHIVOS · ENLACES».
 
 **14-sep-2026 · REVIEWS · E1.3 (flujos creados utilizables) — PUBLICADA (88b300f), SIN DESPLIEGUE.**
 Probado en local (pytest 1864/1, ensayo 36/36, regresiones de Revisiones, npm 6 bancos, banco de pantalla). En la misma
@@ -827,11 +849,14 @@ autorreferencial del presente documento. Consultar HEAD real por separado.
 
 ## EXACT NEXT ACTION
 
-**PERMISOS · «Editar» suprime y restaura (14-sep-2026):** commiteado («VAMOS»), sin push ni despliegue. Push del propietario
-y Manual Deploy: backend primero (verificar /api/health), portal después (verificar por contenido).
+**ARCHIVOS · LECTOR DE PLANOS COMO ACC (15-sep-2026):** commiteado («HAGAMOS LOS DOS COMIT»), sin push ni despliegue. Va en el mismo
+push y despliegue que el lote P1.
 
-**ARCHIVOS · ENLACES (14-sep-2026):** `9dd13e8` desplegada y verificada. La corrección de la raíz tras F5 está commiteada;
-va en el mismo push y despliegue que PERMISOS.
+**PERMISOS · «Editar» suprime y restaura (14-sep-2026):** desplegada y verificada el 15-sep (`6e51793`: /api/health
+6e51793937a7 y portal `index-Cr11Kw1A.js`). Esperar la UAT del propietario.
+
+**ARCHIVOS · ENLACES (14-sep-2026):** `9dd13e8` y la corrección de la raíz (`d30762d`) desplegadas y verificadas. Esperar la
+UAT del propietario.
 
 **REVIEWS · E1.3 (14-sep-2026):** desplegada y verificada (`88b300f`: /api/health y portal por contenido). Esperar la UAT
 del propietario (bloque H) y sus respuestas R1–R14 del contrato RONDAS antes de E3.
@@ -848,6 +873,10 @@ del propietario (bloque H) y sus respuestas R1–R14 del contrato RONDAS antes d
 **REVIEWS · E1 (13-sep-2026):** E1 (`68b14b8`) está desplegado en el backend de Virginia y en el
 portal, verificado por `/api/health` y por contenido. Esperar la UAT del propietario en producción y
 su autorización para E2. Sin ella: ni E2, ni cambios en Oregón.
+
+Producción medida el 15-sep-2026, tras la corrección de la raíz de ENLACES y «Editar» suprime y restaura:
+- backend de Virginia (`visor-ecd-backend-va`): `/api/health` → `version 6e51793937a7`;
+- portal: sirve `index-Cr11Kw1A.js`, con «Abriendo el enlace» y «suprimir y restaurar archivos».
 
 Producción medida el 14-sep-2026, tras A y B:
 - backend de Virginia (`visor-ecd-backend-va`): `/api/health` → `version 41d7dda3e662`, también por `alephia.com.pe`; arranque con «Booting worker» (sin reinicio);

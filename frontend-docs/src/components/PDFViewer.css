@@ -218,8 +218,14 @@
    consultas de medios mas abajo que ajustan ese relleno para pantallas
    estrechas y lo pisaban (computado: 14 px en vez de 45vh). Aqui nadie la
    toca, y el efecto es el mismo: margen a los cuatro lados para que SIEMPRE
-   haya sitio adonde arrastrar y adonde corregir el zoom. */
-.pdf-page { margin: 45vh 45vw; }
+   haya sitio adonde arrastrar y adonde corregir el zoom.
+
+   UNA VISTA ENTERA, NO MEDIA (15-sep-2026). Con 45vh/45vw, al alejar con el
+   cursor cerca de un borde la hoja topaba con el final del scroll y el
+   punto se escapaba 279 px (medido en el banco). La rueda aleja ahora en
+   cualquier punto, como en ACC, y para eso la hoja tiene que poder llegar a
+   cualquier sitio de la vista. */
+.pdf-page { margin: 100vh 100vw; }
 
 .pdf-page { position: relative; }
 
@@ -227,6 +233,16 @@
   display: block;
   background: #fff;
   box-shadow: 0 0 0 1px rgba(20, 30, 42, 0.10), 0 6px 20px rgba(20, 30, 42, 0.12);
+}
+
+/* EL DETALLE NITIDO de lo que se ve, encima de la hoja entera (ver
+   dibujarDetalle en PDFViewer.jsx). El lector lo coloca en porcentajes de la
+   hoja y lo enseña cuando esta dibujado. */
+.pdf-page canvas.pdf-detalle {
+  position: absolute;
+  display: none;
+  box-shadow: none;
+  pointer-events: none;
 }
 
 /* ── CARRIL DE HERRAMIENTAS · fino, de iconos, a la derecha ───────────── */

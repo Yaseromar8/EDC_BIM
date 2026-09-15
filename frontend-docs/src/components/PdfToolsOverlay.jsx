@@ -68,8 +68,14 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
   // ── Transformaciones ──
   const toPdf = useCallback((e) => {
     const rect = svgRef.current.getBoundingClientRect();
-    return vp.convertToPdfPoint(e.clientX - rect.left, e.clientY - rect.top);
-  }, [vp]);
+    // La capa se ve al tamaño de la hoja, que durante el zoom va por delante del
+    // ultimo dibujado nitido (ver el `viewBox` de abajo): el clic se lleva en
+    // proporcion a las coordenadas de ese dibujado. Con la hoja quieta la
+    // proporcion es 1, y esto da lo mismo que antes.
+    const kx = rect.width ? vpInfo.w / rect.width : 1;
+    const ky = rect.height ? vpInfo.h / rect.height : 1;
+    return vp.convertToPdfPoint((e.clientX - rect.left) * kx, (e.clientY - rect.top) * ky);
+  }, [vp, vpInfo]);
   const toScr = useCallback((p) => vp.convertToViewportPoint(p[0], p[1]), [vp]);
 
   // ── Persistencia ──
@@ -304,7 +310,13 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
       <svg
         ref={svgRef}
         width={vpInfo.w} height={vpInfo.h}
-        style={{ display: 'block', cursor: interactive ? (tool === 'erase' ? 'pointer' : 'crosshair') : 'default' }}
+        // LA CAPA SIGUE A LA HOJA. Sus coordenadas son las del ultimo dibujado
+        // nitido (`viewBox`), pero su tamaño es el de la hoja en pantalla. Con el
+        // tamaño fijo de ese dibujado, durante el zoom la hoja y las marcas iban
+        // cada una a su tamaño.
+        viewBox={`0 0 ${vpInfo.w} ${vpInfo.h}`}
+        preserveAspectRatio="none"
+        style={{ display: 'block', width: '100%', height: '100%', cursor: interactive ? (tool === 'erase' ? 'pointer' : 'crosshair') : 'default' }}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
@@ -321,7 +333,7 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
           <input
             autoFocus
             placeholder="Texto…"
-            style={{ position: 'absolute', left: s[0], top: s[1] - 14, width: 180, padding: '4px 8px', fontSize: 13, border: `2px solid ${color}`, borderRadius: 4, outline: 'none', background: '#fff' }}
+            style={{ position: 'absolute', left: `${(s[0] / vpInfo.w) * 100}%`, top: `calc(${(s[1] / vpInfo.h) * 100}% - 14px)`, width: 180, padding: '4px 8px', fontSize: 13, border: `2px solid ${color}`, borderRadius: 4, outline: 'none', background: '#fff' }}
             onKeyDown={(e) => {
               if (e.key === 'Enter') { const v = e.target.value.trim(); if (v) saveMarkup('text', { p: textDraft.p }, v); setTextDraft(null); }
               if (e.key === 'Escape') setTextDraft(null);
