@@ -1392,15 +1392,17 @@ export default function PDFViewer({ url, preparando = false,
 
   // Detiene el zoom en marcha donde este. Con `confirmar`, esa escala pasa al
   // estado --y con ella el dibujado nitido--; sin el, quien llama pone la suya.
+  // Devuelve si habia un zoom en marcha.
   const pararZoom = useCallback((confirmar) => {
     const motor = zoomVivoRef.current;
-    if (!motor.raf) return;
+    if (!motor.raf) return false;
     cancelAnimationFrame(motor.raf);
     motor.raf = 0;
     if (confirmar) {
       setScale(escalaVisualRef.current);
       setEscalaFijada(n => n + 1);
     }
+    return true;
   }, []);
 
   // Abandona el dibujado nitido pendiente, o el de zoom que vaya a medias (ver
@@ -1505,7 +1507,7 @@ export default function PDFViewer({ url, preparando = false,
     const pad = hoja && hoja.parentElement;
     const base = baseVpRef.current[`${currentPage}:${rotation}`];
     if (!cont || !hoja || !pad || !base || !base.width) return;
-    pararZoom(false);
+    const habiaZoom = pararZoom(false);
     const rect = hoja.getBoundingClientRect();
     const desde = { escala: rect.width / base.width, left: rect.left, top: rect.top };
     if (!(desde.escala > 0)) return;
@@ -1519,6 +1521,16 @@ export default function PDFViewer({ url, preparando = false,
         arriba: parseFloat(relleno.paddingTop) || 0, abajo: parseFloat(relleno.paddingBottom) || 0,
       },
     });
+
+    // YA SE VE LA HOJA ENTERA (a menos de medio pixel) y no habia zoom que cortar:
+    // no hay viaje ni dibujado nitido que pedir. Pedirlo redibujaba la hoja entera,
+    // en el bufer, con la misma imagen (ver `fitTo`).
+    if (!habiaZoom && Math.abs(desde.escala - hasta.escala) * base.width < 0.5
+      && Math.abs(desde.left - hasta.left) < 0.5 && Math.abs(desde.top - hasta.top) < 0.5) {
+      fitModeRef.current = 'page';
+      setFitMode('page');
+      return;
+    }
 
     // Mientras viaja, el observador de tamaño no puede reencuadrar por su cuenta.
     fitModeRef.current = 'custom';
@@ -1553,7 +1565,7 @@ export default function PDFViewer({ url, preparando = false,
       const sW = (cont.clientWidth - 64) / vp1.width;
       const sH = (cont.clientHeight - 64) / vp1.height;
       // Un zoom a medio camino pisaria este encuadre en su siguiente fotograma.
-      pararZoom(false);
+      const habiaZoom = pararZoom(false);
       fitModeRef.current = mode;
       escalaVisualRef.current = Math.max(0.2, mode === 'width' ? sW : Math.min(sW, sH));
       setFitMode(mode);
@@ -1567,7 +1579,13 @@ export default function PDFViewer({ url, preparando = false,
         c.scrollTop = (c.scrollHeight - c.clientHeight) / 2;
       });
       setScale(Math.max(0.2, mode === 'width' ? sW : Math.min(sW, sH)));
-      setEscalaFijada(n => n + 1);
+      // EL DIBUJADO NITIDO SE FUERZA SOLO SI SE CORTO UN ZOOM: ese zoom abandono
+      // el suyo al empezar (ver `escalaFijada`). Sin zoom en marcha basta con
+      // `setScale`: si la escala no cambia, la hoja dibujada ya es la buena.
+      // Forzarlo siempre la redibujaba entera, en el bufer, al REABRIR un plano:
+      // el primer aviso del ResizeObserver reencuadra sin cambiar nada. Medido en
+      // produccion con 004122: 12,6 s de hilo ocupado despues de verse la hoja.
+      if (habiaZoom) setEscalaFijada(n => n + 1);
     } catch { /* el documento puede estar cerrándose */ }
   }, [currentPage, rotation, pararZoom]);
 

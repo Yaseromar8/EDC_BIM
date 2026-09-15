@@ -674,25 +674,25 @@ NEXT EXACT ACTION:    UAT del propietario con una persona con «Editar»: suprim
 DO NOT TOUCH:         /api/docs/permanent-delete (sigue solo del administrador de la plataforma); el WIP ajeno (incluidos los 3 bloques de la barra de iconos de FilesPage.jsx); producción y Oregón.
 COMMIT/HEAD REF:      6e51793 (igual a origin/main tras el push del propietario; su padre es d30762d, la corrección de la raíz de ENLACES, sobre 9dd13e8)
 
-### Unidad ARCHIVOS · LECTOR DE PLANOS COMO ACC (rueda, doble clic y nitidez) — COMMIT LOCAL, SIN PUSH NI DESPLIEGUE, 15-sep
+### Unidad ARCHIVOS · LECTOR DE PLANOS COMO ACC (rueda, doble clic y nitidez) — DESPLEGADA con el lote P1 (1810d11 bajo 27ea400, Virginia y portal), 15-sep
 
 Pedido del propietario el 15-sep: la opción A de `docs/archivos/03_LECTOR_PDF_MANIPULACION_COMO_ACC.md` («vamos, con cuidado
 y profesionalismo»): que manejar un plano en el lector de pdf.js se sienta como el lector de planos de ACC; solo la
 manipulación, no los botones. Informe: `docs/archivos/04_LECTOR_PDF_COMO_ACC_INFORME.md`.
 
 [WIP HANDOFF]
-TAREA:                ARCHIVOS · lector de planos (PDFViewer): rueda, doble clic y nitidez como el lector de planos de ACC, medidos contra sus cifras del 13-sep. Implementado y probado en local. Commit autorizado por el propietario («HAGAMOS LOS DOS COMIT»): este, y después el del lote P1 de velocidad de apertura. SIN push ni despliegue.
+TAREA:                ARCHIVOS · lector de planos (PDFViewer): rueda, doble clic y nitidez como el lector de planos de ACC, medidos contra sus cifras del 13-sep. Implementado y probado en local. Commit autorizado por el propietario («HAGAMOS LOS DOS COMIT»): este, y después el del lote P1 de velocidad de apertura. Push y Manual Deploy del propietario el 15-sep, junto con P1.
 IMPLEMENTADO:         utils/navegacionLector.js (paso de rueda ×1,10 con los eventos finos en proporción; suavizado exponencial τ 18 ms en logaritmos; límites de hoja encuadrada/3,5 a 64; el punto bajo el cursor no acumula redondeo; viaje a la hoja entera de 500 ms con punto fijo, que termina igual que fitTo; área y validez del detalle nítido con las reglas del detail view de pdf.js). PDFViewer.jsx: motor de zoom por fotogramas con la corrección medida del scroll y sin tocar el estado hasta terminar; rueda en todo el escenario, sin cambio de página ni scroll nativo; +, − y Ctrl+1 por el mismo motor; doble clic con la herramienta Mover; sin dibujado nítido a medio gesto (`escalaFijada`); marcas y resaltados que siguen a la hoja (viewBox y porcentajes), retirados solo al cambiar de página, giro o documento, en el efecto; lienzo de detalle de lo visible con presupuesto de 8 MP, sin redibujar la hoja entera cuando al tope saldría igual; el búfer de la hoja entera se suelta tras volcarlo. PDFViewer.css: holgura 100vh/100vw y el lienzo `.pdf-detalle`. PdfToolsOverlay.jsx: viewBox, clic en proporción y texto en porcentaje. Banco: probar-lector.jsx con un plano de dos páginas y marcas simuladas.
-PENDIENTE:            1) push del propietario y Manual Deploy del portal (va en el mismo push que el lote P1, que toca el servidor: portal primero, backend después); 2) su prueba con ratón real (banco en http://localhost:5180/probar-lector.html, o tras desplegar); 3) opcional: «Ajustar página/ancho» siguen sin viaje; panel táctil y pellizco sin medir con un panel real; 4) velocidad de apertura: la investigación de `docs/archivos/05_VELOCIDAD_DE_APERTURA_ACC_VS_ALEPHIA.md` llevó al lote P1, autorizado y commiteado en el commit siguiente.
+PENDIENTE:            1) DEFECTO DE ESTE COMMIT, destapado por la medición «después» de P1 en producción: al REABRIR un plano la hoja se dibuja dos veces. `fitTo` hace siempre `setEscalaFijada(n => n + 1)`; el primer aviso del ResizeObserver reencuadra sin cambiar la escala y sale un segundo dibujado «de zoom» en el búfer, sin aceleración: con 004122, 12,6 s de hilo ocupado después de verse la hoja. Lo mismo con «Ajustar página» o el doble clic con la hoja ya encuadrada. Reproducido en el banco (6e51793 dibuja 1 vez, HEAD 2). Arreglado en la unidad «LECTOR · DIBUJADO REPETIDO Y CENTRADO AL ABRIR» (commit A, sin push ni despliegue; `docs/archivos/07_P1_MEDICION_EN_PRODUCCION.md` §4). 1b) DEFECTO ANTERIOR AL LECTOR, visto en el banco al probar ese arreglo: a veces la hoja sale descentrada al abrir y se queda así. `fitTo` centra el scroll en el siguiente fotograma y, si React aún no ha dado al lienzo su tamaño, centra un lienzo de 300×150. Arreglado en la misma unidad (commit B; informe §5). 2) su prueba con ratón real; 3) opcional: «Ajustar página/ancho» siguen sin viaje; panel táctil y pellizco sin medir con un panel real.
 ARCHIVOS MODIFICADOS: frontend-docs/src/components/PDFViewer.jsx, frontend-docs/src/components/PDFViewer.css, frontend-docs/src/components/PdfToolsOverlay.jsx, frontend-docs/src/probar-lector.jsx, docs/AI_WORKSTATE.md; nuevos: frontend-docs/src/utils/navegacionLector.js, frontend-docs/pruebas/navegacionLector.prueba.mjs, docs/archivos/03_LECTOR_PDF_MANIPULACION_COMO_ACC.md, docs/archivos/04_LECTOR_PDF_COMO_ACC_INFORME.md, docs/archivos/05_VELOCIDAD_DE_APERTURA_ACC_VS_ALEPHIA.md. Los planos del banco (public/_probar, incluido el nuevo plano-I de dos páginas) están en .gitignore. Ajenos, no tocados: los M de siempre (incluidos los 3 bloques de la barra de iconos de FilesPage.jsx) y los untracked históricos (probar-primitivas.*).
 TESTS EJECUTADOS:     npm test → 8 bancos en verde (navegacionLector 35/35); ESLint de lo tocado → los mismos 6 errores que ya están en HEAD, ninguno nuevo; build del banco sin .env → OK; medición con Chrome sin ventana y entrada CDP (el panel de navegador del escritorio estaba oculto y ahí no corren los fotogramas), a 100 % y 125 %, del lector de 6e51793 y del nuevo: paso, curva, punto bajo el cursor, marcas, fotogramas, dibujados a medio gesto, doble clic frente a «Ajustar página», nitidez a 8/20/40/64×, memoria, cambio de página, giro y documento fotograma a fotograma.
-TESTS PENDIENTES:     prueba del propietario con su ratón y su PC; producción.
-FALLO CONOCIDO:       ninguno nuevo. Observado sin tocar: tras un zoom, un cambio de página dibuja la página dos veces (el primer dibujado corre con el `avisoDeRender` anterior); ya pasaba antes.
-NEXT EXACT ACTION:    push del propietario y Manual Deploy del portal, junto con el lote P1 (portal primero, backend después); después, verificar el portal por contenido.
+TESTS PENDIENTES:     prueba del propietario con su ratón y su PC. En producción, la medición «después» de P1 (15-sep) destapó el defecto de PENDIENTE 1.
+FALLO CONOCIDO:       el dibujado repetido al reabrir (PENDIENTE 1), que entró con este commit, y el descentrado al abrir (PENDIENTE 1b), que ya estaba en 6e51793. Observado sin tocar: tras un zoom, un cambio de página dibuja la página una o dos veces según el instante (el primer dibujado corre con el `avisoDeRender` anterior y va por el búfer); ya pasaba antes.
+NEXT EXACT ACTION:    ver la unidad «LECTOR · DIBUJADO REPETIDO Y CENTRADO AL ABRIR»: push y Manual Deploy del portal, y reabrir 004122 en producción.
 DO NOT TOUCH:         el WIP ajeno (incluidos los 3 bloques de la barra de iconos de FilesPage.jsx); el backend; producción y Oregón.
-COMMIT/HEAD REF:      el commit que contiene este fichero; su padre es 6e51793 (igual a origin/main)
+COMMIT/HEAD REF:      1810d11 (padre 6e51793); encima va 27ea400 (lote P1); origin/main = 27ea400, desplegado el 15-sep
 
-### Unidad ARCHIVOS · VELOCIDAD DE APERTURA · LOTE P1 (trabajo repetido) — COMMIT LOCAL, SIN PUSH NI DESPLIEGUE, 15-sep
+### Unidad ARCHIVOS · VELOCIDAD DE APERTURA · LOTE P1 (trabajo repetido) — DESPLEGADA (27ea400 en Virginia y portal) Y MEDIDA en producción, 15-sep
 
 Pedido del propietario el 15-sep («ALEPHIA · VELOCIDAD DE APERTURA — AUTORIZACIÓN LOTE P1»): solo trabajo redundante o
 evitable, en cinco puntos, con puerta de medición antes/después y puertas de calidad. NO autorizados: motor PDF, visor CAD
@@ -700,16 +700,33 @@ precargado o reutilizado, infraestructura/workers, mosaicos de ACC, almacenamien
 lector. Informe: `docs/archivos/06_P1_APERTURA_SIN_TRABAJO_REPETIDO.md`.
 
 [WIP HANDOFF]
-TAREA:                ARCHIVOS · lote P1 de velocidad de apertura: quitar el trabajo repetido al abrir PDF y CAD. Medido «antes» en producción (sin carga masiva), implementado y probado en local. Commit autorizado por el propietario («HAGAMOS LOS DOS COMIT»), en un commit propio después del del lector. SIN push ni despliegue.
+TAREA:                ARCHIVOS · lote P1 de velocidad de apertura: quitar el trabajo repetido al abrir PDF y CAD. Medido «antes» en producción (sin carga masiva), implementado y probado en local. Commit autorizado por el propietario («HAGAMOS LOS DOS COMIT»), en un commit propio después del del lector. Push y Manual Deploy del propietario el 15-sep (el backend dejó de responder tras arrancar y volvió con Restart); «después» medido en producción.
 IMPLEMENTADO:         DocumentViewer.jsx: un CAD no pide ni espera la URL firmada de la vista (nadie la leía) y no enseña «Preparando vista segura…»; la pre-firma y el clic de «Abrir en escritorio» pasan por el almacén compartido utils/urlFirmada.js. docs_cad.py translate_cad: contesta con lo guardado solo si status es success y el URN guardado == _urn_for de esta versión y empaquetado; si no, el camino de siempre; `verificar` fuerza la comprobación. CadViewer.jsx: si el URN guardado no abre, retira el visor y pide una vez con `verificar`. documents.py urls_de_miniaturas: un listado por documento pedido (tope 20, hasta 8 a la vez); lo que no está bajo el prefijo de la obra queda pendiente; sello de caché solo de lo mirado. utils/vecinasDelLector.js + PDFViewer.jsx: se firma la ventana de siempre, solo se descargan las pegadas de tamaño conocido ≤ 5 MB y al cerrar el visor se cancela la descarga en curso. probar-cad.jsx: palancas __traduccionGuardada y __fallarDocumento.
-PENDIENTE:            1) push y Manual Deploy del propietario, portal primero y backend después; 2) medición «después» en producción con el mismo registrador y las puertas del §4 del informe; 3) P2 (visor CAD precargado y reutilizable) solo si esa medición lo pide, e incluiría los ~300 ms de Suspense del primer CAD de la página.
+PENDIENTE:            1) hecho: medición «después» en producción, `docs/archivos/07_P1_MEDICION_EN_PRODUCCION.md`. Pasan las seis puertas: DWG 3,52→2,39 s en frío y 2,05→1,76 s en caliente; primer trazo del PDF de 400 KB 3,36→2,82 s; el plano de 23 MB ya no baja vecinas (2 bajadas de ~23 MB → 0); URL firmada y traducción sin repetir; nada después de cerrar. 2) P2 no hace falta según la regla del propietario (primer CAD 2,39 s frente a 2,7 s de ACC); queda como opción, con los ~300 ms de Suspense. 3) Causa del cuelgue del backend tras el despliegue (18:53–19:57 UTC): faltan los registros de Render. 4) Opcional: repetir en producción versión fija, enlace directo y Reviews.
 ARCHIVOS MODIFICADOS: backend/routes/docs_cad.py, backend/routes/documents.py, frontend-docs/src/components/DocumentViewer.jsx, frontend-docs/src/components/CadViewer.jsx, frontend-docs/src/components/PDFViewer.jsx (bloques de vecinas), frontend-docs/src/probar-cad.jsx, docs/AI_WORKSTATE.md; nuevos: frontend-docs/src/utils/vecinasDelLector.js, frontend-docs/pruebas/vecinasDelLector.prueba.mjs, frontend-docs/pruebas/aperturaSinRepetir.prueba.mjs, backend/tests/test_apertura_sin_trabajo_repetido.py, docs/archivos/06_P1_APERTURA_SIN_TRABAJO_REPETIDO.md. Ajenos, no tocados: los M de siempre (incluidos los 3 bloques de la barra de iconos de FilesPage.jsx) y los untracked históricos.
 TESTS EJECUTADOS:     pytest completo 1919/1 (el fallo es test_capacidades_con_puerta, preexistente), con 23 nuevas; npm test 10 bancos; ESLint de lo tocado = los 6 errores de HEAD; probar-cad 7/7; banco de componentes reales construido contra HEAD y contra HEAD + P1 (P1 16/16; HEAD falla justo donde P1 cambia la conducta); app real del banco con backend y base locales 12/12 (enlace a carpeta y a documento, Atrás/Adelante, versión fija, CAD guardado y sin guardar); Revisiones reales 4/4; memoria con recolección forzada igual que HEAD; árbol HEAD + P1 sin el lector: 9 bancos, 45 pytest, lint = HEAD y banco 16/16.
-TESTS PENDIENTES:     medición «después» en producción; UAT del propietario; miniaturas de una carpeta grande contra el almacén real.
-FALLO CONOCIDO:       ninguno nuevo. Observado: ~300 ms de React 19 (Suspense, FALLBACK_THROTTLE_MS) en el primer CAD de cada página; ya pasaba, tapado por la espera de la URL.
-NEXT EXACT ACTION:    push del propietario y Manual Deploy: portal primero, backend después (verificar /api/health y el portal por contenido); después, la medición «después» en producción.
+TESTS PENDIENTES:     UAT del propietario; miniaturas de una carpeta grande contra el almacén real; versión fija, enlace directo y Reviews en producción (probados en el banco).
+FALLO CONOCIDO:       ninguno de P1. Observado: ~300 ms de React 19 (Suspense, FALLBACK_THROTTLE_MS) en el primer CAD de cada página; ya pasaba, tapado por la espera de la URL. La medición «después» destapó un defecto del LECTOR, no de P1: ver su unidad, PENDIENTE 1.
+NEXT EXACT ACTION:    nada de P1. Queda abierto pedir los registros de Render del cuelgue; los arreglos del lector están en su propia unidad.
 DO NOT TOUCH:         lo no autorizado (motor PDF, visor CAD precargado o reutilizado, infraestructura/workers, mosaicos, almacenamiento, migraciones); el lector (unidad aparte); el WIP ajeno (FilesPage.jsx, .claude/launch.json, probar-primitivas.*); producción y Oregón.
-COMMIT/HEAD REF:      el commit que contiene este fichero; su padre es el commit del lector de planos, que va sobre 6e51793 (igual a origin/main)
+COMMIT/HEAD REF:      27ea400 (padre 1810d11, el lector, sobre 6e51793); origin/main = 27ea400, desplegado el 15-sep
+
+### Unidad ARCHIVOS · LECTOR · DIBUJADO REPETIDO Y CENTRADO AL ABRIR — DOS COMMITS LOCALES, SIN PUSH NI DESPLIEGUE, 15-sep
+
+Autorizado por el propietario el 15-sep («APLICA») tras `docs/archivos/07_P1_MEDICION_EN_PRODUCCION.md` §4 y §5: dos defectos
+de PDFViewer.jsx vistos al medir P1, cada uno en su commit.
+
+[WIP HANDOFF]
+TAREA:                ARCHIVOS · lector: (A) la hoja se dibujaba dos veces al reabrir un plano (defecto de 1810d11; 12,6 s de hilo ocupado con 004122 en producción) y lo mismo con «Ajustar página» o el doble clic con la hoja ya encuadrada; (B) a veces salía descentrada al abrir (anterior al lector). Aplicados y probados en local; commit A y commit B autorizados («APLICA»). SIN push ni despliegue.
+IMPLEMENTADO:         A: `pararZoom` devuelve si había un zoom en marcha; `fitTo` solo hace `setEscalaFijada(n => n + 1)` si cortó un zoom; `verHojaEntera` (doble clic) no viaja ni pide dibujado si la hoja entera ya se ve (a menos de 0,5 px) y no había zoom que cortar. B: `fitTo` da al lienzo su tamaño (y guarda el viewport base) antes de programar el centrado del scroll.
+PENDIENTE:            push del propietario y Manual Deploy del portal (el backend no cambia); verificar el portal por contenido; en producción, reabrir 004122 (un solo dibujado, sin los 12,6 s) y abrir planos varias veces mirando que salen centrados.
+ARCHIVOS MODIFICADOS: commit A: frontend-docs/src/components/PDFViewer.jsx, docs/AI_WORKSTATE.md y docs/archivos/07_P1_MEDICION_EN_PRODUCCION.md (nuevo). Commit B: frontend-docs/src/components/PDFViewer.jsx. Ajenos, no tocados: FilesPage.jsx, .claude/launch.json, probar-primitivas.* y los untracked históricos.
+TESTS EJECUTADOS:     banco con los árboles 6e51793 / HEAD / v1 / v2 (= A) / v3 (= A+B): reabrir (banco_redibujo), gestos con la hoja encuadrada (banco_gestos), centrado al abrir (banco_centrado: sin B 10 de 108 aperturas descentradas, con B 0 de 56) y las 24 escenas del lector (medir.mjs, tres pasadas por versión, 0 errores de página). El PDFViewer.jsx del repositorio es byte a byte el de v2 tras A y el de v3 tras A+B. Con A+B, el banco construido desde el repositorio: centrado al abrir 0 de 40 aperturas descentradas, frente a 7 de 40 con HEAD en la misma corrida; al reabrir, 1 dibujado en los dos casos (HEAD, 2); «Ajustar página» y doble clic con la hoja ya encuadrada, 0 dibujados (HEAD, 1); una muesca, «Ajustar página» tras el zoom o a medio zoom y zoom + doble clic + «Ajustar página», 1 dibujado y la hoja nítida; las 24 escenas del lector, tres pasadas sin errores de página e iguales a HEAD salvo lo que depende del instante (y, en una pasada, posiciones a 1–4 píxeles del dispositivo). npm test: 10 bancos en verde. ESLint de PDFViewer.jsx: los mismos 4 errores que HEAD (no-unused-vars, ya estaban), ninguno nuevo, tanto con A como con A+B.
+TESTS PENDIENTES:     producción (reabrir 004122; centrado al abrir); prueba del propietario con su ratón.
+FALLO CONOCIDO:       sin arreglar, anteriores: tras un zoom, el primer dibujado de la página o documento siguiente va por el búfer (lento en planos pesados) y a veces se dibuja dos veces; el doble clic con la hoja a escala de hoja entera pero desplazada sigue pidiendo un dibujado.
+NEXT EXACT ACTION:    push del propietario y Manual Deploy del portal; después, verificar el portal por contenido y reabrir 004122 en producción.
+DO NOT TOUCH:         el backend; P1; el WIP ajeno (FilesPage.jsx, .claude/launch.json, probar-primitivas.*); producción y Oregón.
+COMMIT/HEAD REF:      commit A = el commit que contiene este fichero (padre 27ea400); commit B = el siguiente, solo PDFViewer.jsx
 
 ## FROZEN / DO NOT REOPEN
 
@@ -775,12 +792,19 @@ Observaciones reales, ya conocidas y aceptadas. Ninguna bloquea nada.
    propietario (7-sep-2026). No bloquea B1.
 ## CURRENT TASK
 
-**15-sep-2026 · ARCHIVOS · VELOCIDAD DE APERTURA · LOTE P1 — COMMIT LOCAL, SIN PUSH NI DESPLIEGUE.**
-Autorizado por el propietario: solo trabajo repetido (cinco puntos). Medido «antes» en producción, probado en local con los
-mismos bancos contra HEAD y contra P1, en la app real del banco y en Revisiones; unidad separable del lector. Ver «Unidad
-ARCHIVOS · VELOCIDAD DE APERTURA · LOTE P1» y `docs/archivos/06_P1_APERTURA_SIN_TRABAJO_REPETIDO.md`.
+**15-sep-2026 · ARCHIVOS · LECTOR · DIBUJADO REPETIDO Y CENTRADO AL ABRIR — DOS COMMITS LOCALES, SIN PUSH NI DESPLIEGUE.**
+Autorizado por el propietario («APLICA»). Commit A: la hoja ya no se dibuja dos veces al reabrir, ni con «Ajustar página» o el
+doble clic con la hoja ya encuadrada. Commit B: la hoja sale centrada al abrir. Probado en el banco contra HEAD y desde el
+repositorio. Ver «Unidad ARCHIVOS · LECTOR · DIBUJADO REPETIDO Y CENTRADO AL ABRIR» y `docs/archivos/07_P1_MEDICION_EN_PRODUCCION.md` §4 y §5.
 
-**15-sep-2026 · ARCHIVOS · LECTOR DE PLANOS COMO ACC — COMMIT LOCAL, SIN PUSH NI DESPLIEGUE.**
+**15-sep-2026 · ARCHIVOS · VELOCIDAD DE APERTURA · LOTE P1 — DESPLEGADA (27ea400) Y MEDIDA EN PRODUCCIÓN.**
+Pasan las seis puertas (`docs/archivos/07_P1_MEDICION_EN_PRODUCCION.md`). La medición destapó un defecto del lector: al
+reabrir un plano la hoja se dibuja dos veces (12,6 s de hilo ocupado con 004122). Al probar el arreglo salió otro defecto,
+anterior al lector: a veces la hoja sale descentrada al abrir. Los dos arreglos van en dos commits locales («APLICA»),
+sin push ni despliegue (§4 y §5 del informe). Ver «Unidad ARCHIVOS · VELOCIDAD DE APERTURA · LOTE P1» y
+«Unidad ARCHIVOS · LECTOR DE PLANOS».
+
+**15-sep-2026 · ARCHIVOS · LECTOR DE PLANOS COMO ACC — DESPLEGADA con P1 (1810d11); defecto al reabrir pendiente de arreglo.**
 Opción A de `docs/archivos/03_LECTOR_PDF_MANIPULACION_COMO_ACC.md`: rueda, doble clic y nitidez como el lector de planos de
 ACC, medidos contra sus cifras. Probado en local (npm 8 bancos, medición CDP a 100 % y 125 %). Ver «Unidad ARCHIVOS · LECTOR DE PLANOS».
 
@@ -873,12 +897,12 @@ autorreferencial del presente documento. Consultar HEAD real por separado.
 
 ## EXACT NEXT ACTION
 
-**ARCHIVOS · VELOCIDAD DE APERTURA · LOTE P1 (15-sep-2026):** commiteado («HAGAMOS LOS DOS COMIT»), sin push ni despliegue. Push del
-propietario y Manual Deploy: portal primero, backend después (verificar /api/health y el portal por contenido); después, la
-medición «después» en producción (`docs/archivos/06_P1_APERTURA_SIN_TRABAJO_REPETIDO.md`, §9).
+**ARCHIVOS · LECTOR · DIBUJADO REPETIDO Y CENTRADO AL ABRIR (15-sep-2026):** dos commits locales («APLICA»), sin push ni
+despliegue. Push del propietario y Manual Deploy del portal (el backend no cambia); después, verificar el portal por contenido y
+reabrir 004122 en producción: un solo dibujado y la hoja centrada.
 
-**ARCHIVOS · LECTOR DE PLANOS COMO ACC (15-sep-2026):** commiteado («HAGAMOS LOS DOS COMIT»), sin push ni despliegue. Va en el mismo
-push y despliegue que el lote P1.
+**ARCHIVOS · VELOCIDAD DE APERTURA · LOTE P1 (15-sep-2026):** desplegado y medido; las puertas pasan. Solo queda pedir al propietario
+los registros de Render del cuelgue del backend (18:53–19:57 UTC).
 
 **PERMISOS · «Editar» suprime y restaura (14-sep-2026):** desplegada y verificada el 15-sep (`6e51793`: /api/health
 6e51793937a7 y portal `index-Cr11Kw1A.js`). Esperar la UAT del propietario.
@@ -901,6 +925,10 @@ del propietario (bloque H) y sus respuestas R1–R14 del contrato RONDAS antes d
 **REVIEWS · E1 (13-sep-2026):** E1 (`68b14b8`) está desplegado en el backend de Virginia y en el
 portal, verificado por `/api/health` y por contenido. Esperar la UAT del propietario en producción y
 su autorización para E2. Sin ella: ni E2, ni cambios en Oregón.
+
+Producción medida el 15-sep-2026, tras el lector y P1:
+- backend de Virginia (`visor-ecd-backend-va`): `/api/health` → `version 27ea400f7a0a`. Arrancó a las 18:53Z («Booting worker», «Live») y dejó de responder; Restart del propietario a las 19:57:39Z y estable durante los 30 min vigilados;
+- portal: sirve `index-ebE4CIvV.js`, con el lector (`pdf-detalle`) y P1 (`verificar`, `guardado`, tope de 5 MB de las vecinas).
 
 Producción medida el 15-sep-2026, tras la corrección de la raíz de ENLACES y «Editar» suprime y restaura:
 - backend de Virginia (`visor-ecd-backend-va`): `/api/health` → `version 6e51793937a7`;
