@@ -317,7 +317,9 @@ export default function CadViewer({ file, projectPrefix = '', urnDirecto = null 
     };
 
     // Monta el visor con el URN ya traducido.
-    const mount = async (urn) => {
+    // `siNoAbre`: que hacer si el URN no abre, en vez de dar el error (ver
+    // `arrancar`).
+    const mount = async (urn, siNoAbre = null) => {
       try {
         await loadViewerScript();
       } catch (e) {
@@ -393,7 +395,19 @@ export default function CadViewer({ file, projectPrefix = '', urnDirecto = null 
               setPhase('listo');
             });
           },
-          (code, msg) => fail(`No se pudo abrir el modelo (${code}): ${msg || ''}`)
+          (code, msg) => {
+            if (cancelled) return;
+            // EL URN GUARDADO NO ABRE. Llego del estado guardado en la version,
+            // sin preguntar a Autodesk: si Autodesk ya no lo tiene, en vez de
+            // dar el error se pregunta UNA vez como antes. Este visor se retira
+            // primero, para que no queden dos montados en el mismo hueco.
+            if (siNoAbre) {
+              try { viewer.finish(); } catch { /* ya destruido */ }
+              if (viewerRef.current === viewer) viewerRef.current = null;
+              return siNoAbre();
+            }
+            fail(`No se pudo abrir el modelo (${code}): ${msg || ''}`);
+          }
         );
       });
     };
@@ -454,18 +468,24 @@ export default function CadViewer({ file, projectPrefix = '', urnDirecto = null 
       }
     };
 
-    const arrancar = async () => {
+    const arrancar = async ({ verificar = false } = {}) => {
       try {
         const d = await pedirTraduccion(file.id + ':' + Date.now(), async () => {
           const r = await apiFetch(`${API}/api/docs/cad/translate`, {
             method: 'POST',
-            body: JSON.stringify({ node_id: file.id }),
+            body: JSON.stringify(verificar ? { node_id: file.id, verificar: true } : { node_id: file.id }),
           });
           return r.json();
         });
         if (cancelled) return;
         if (!d.success) return fail(d.error || 'No se pudo preparar el archivo.');
-        if (d.status === 'success') return mount(d.urn);
+        // `origen: 'guardado'`: el servidor contesto con lo guardado en la
+        // version, sin ir a Autodesk. Si ese URN no abre, se pide otra vez
+        // verificando contra Autodesk, y esa ya no tiene segunda vuelta.
+        if (d.status === 'success') {
+          return mount(d.urn, d.origen === 'guardado' && !verificar
+            ? () => arrancar({ verificar: true }) : null);
+        }
         setPhase('traduciendo');
         poll();
       } catch {

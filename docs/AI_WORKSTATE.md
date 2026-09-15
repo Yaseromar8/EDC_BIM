@@ -692,6 +692,25 @@ NEXT EXACT ACTION:    push del propietario y Manual Deploy del portal, junto con
 DO NOT TOUCH:         el WIP ajeno (incluidos los 3 bloques de la barra de iconos de FilesPage.jsx); el backend; producción y Oregón.
 COMMIT/HEAD REF:      el commit que contiene este fichero; su padre es 6e51793 (igual a origin/main)
 
+### Unidad ARCHIVOS · VELOCIDAD DE APERTURA · LOTE P1 (trabajo repetido) — COMMIT LOCAL, SIN PUSH NI DESPLIEGUE, 15-sep
+
+Pedido del propietario el 15-sep («ALEPHIA · VELOCIDAD DE APERTURA — AUTORIZACIÓN LOTE P1»): solo trabajo redundante o
+evitable, en cinco puntos, con puerta de medición antes/después y puertas de calidad. NO autorizados: motor PDF, visor CAD
+precargado o reutilizado, infraestructura/workers, mosaicos de ACC, almacenamiento y migraciones. No se commitea junto con el
+lector. Informe: `docs/archivos/06_P1_APERTURA_SIN_TRABAJO_REPETIDO.md`.
+
+[WIP HANDOFF]
+TAREA:                ARCHIVOS · lote P1 de velocidad de apertura: quitar el trabajo repetido al abrir PDF y CAD. Medido «antes» en producción (sin carga masiva), implementado y probado en local. Commit autorizado por el propietario («HAGAMOS LOS DOS COMIT»), en un commit propio después del del lector. SIN push ni despliegue.
+IMPLEMENTADO:         DocumentViewer.jsx: un CAD no pide ni espera la URL firmada de la vista (nadie la leía) y no enseña «Preparando vista segura…»; la pre-firma y el clic de «Abrir en escritorio» pasan por el almacén compartido utils/urlFirmada.js. docs_cad.py translate_cad: contesta con lo guardado solo si status es success y el URN guardado == _urn_for de esta versión y empaquetado; si no, el camino de siempre; `verificar` fuerza la comprobación. CadViewer.jsx: si el URN guardado no abre, retira el visor y pide una vez con `verificar`. documents.py urls_de_miniaturas: un listado por documento pedido (tope 20, hasta 8 a la vez); lo que no está bajo el prefijo de la obra queda pendiente; sello de caché solo de lo mirado. utils/vecinasDelLector.js + PDFViewer.jsx: se firma la ventana de siempre, solo se descargan las pegadas de tamaño conocido ≤ 5 MB y al cerrar el visor se cancela la descarga en curso. probar-cad.jsx: palancas __traduccionGuardada y __fallarDocumento.
+PENDIENTE:            1) push y Manual Deploy del propietario, portal primero y backend después; 2) medición «después» en producción con el mismo registrador y las puertas del §4 del informe; 3) P2 (visor CAD precargado y reutilizable) solo si esa medición lo pide, e incluiría los ~300 ms de Suspense del primer CAD de la página.
+ARCHIVOS MODIFICADOS: backend/routes/docs_cad.py, backend/routes/documents.py, frontend-docs/src/components/DocumentViewer.jsx, frontend-docs/src/components/CadViewer.jsx, frontend-docs/src/components/PDFViewer.jsx (bloques de vecinas), frontend-docs/src/probar-cad.jsx, docs/AI_WORKSTATE.md; nuevos: frontend-docs/src/utils/vecinasDelLector.js, frontend-docs/pruebas/vecinasDelLector.prueba.mjs, frontend-docs/pruebas/aperturaSinRepetir.prueba.mjs, backend/tests/test_apertura_sin_trabajo_repetido.py, docs/archivos/06_P1_APERTURA_SIN_TRABAJO_REPETIDO.md. Ajenos, no tocados: los M de siempre (incluidos los 3 bloques de la barra de iconos de FilesPage.jsx) y los untracked históricos.
+TESTS EJECUTADOS:     pytest completo 1919/1 (el fallo es test_capacidades_con_puerta, preexistente), con 23 nuevas; npm test 10 bancos; ESLint de lo tocado = los 6 errores de HEAD; probar-cad 7/7; banco de componentes reales construido contra HEAD y contra HEAD + P1 (P1 16/16; HEAD falla justo donde P1 cambia la conducta); app real del banco con backend y base locales 12/12 (enlace a carpeta y a documento, Atrás/Adelante, versión fija, CAD guardado y sin guardar); Revisiones reales 4/4; memoria con recolección forzada igual que HEAD; árbol HEAD + P1 sin el lector: 9 bancos, 45 pytest, lint = HEAD y banco 16/16.
+TESTS PENDIENTES:     medición «después» en producción; UAT del propietario; miniaturas de una carpeta grande contra el almacén real.
+FALLO CONOCIDO:       ninguno nuevo. Observado: ~300 ms de React 19 (Suspense, FALLBACK_THROTTLE_MS) en el primer CAD de cada página; ya pasaba, tapado por la espera de la URL.
+NEXT EXACT ACTION:    push del propietario y Manual Deploy: portal primero, backend después (verificar /api/health y el portal por contenido); después, la medición «después» en producción.
+DO NOT TOUCH:         lo no autorizado (motor PDF, visor CAD precargado o reutilizado, infraestructura/workers, mosaicos, almacenamiento, migraciones); el lector (unidad aparte); el WIP ajeno (FilesPage.jsx, .claude/launch.json, probar-primitivas.*); producción y Oregón.
+COMMIT/HEAD REF:      el commit que contiene este fichero; su padre es el commit del lector de planos, que va sobre 6e51793 (igual a origin/main)
+
 ## FROZEN / DO NOT REOPEN
 
 - **Saved Views 2.0 está cerrado.** No se reabre la arquitectura salvo
@@ -755,6 +774,11 @@ Observaciones reales, ya conocidas y aceptadas. Ninguna bloquea nada.
    **decisión de producto pendiente y queda FUERA de B1** por decisión del
    propietario (7-sep-2026). No bloquea B1.
 ## CURRENT TASK
+
+**15-sep-2026 · ARCHIVOS · VELOCIDAD DE APERTURA · LOTE P1 — COMMIT LOCAL, SIN PUSH NI DESPLIEGUE.**
+Autorizado por el propietario: solo trabajo repetido (cinco puntos). Medido «antes» en producción, probado en local con los
+mismos bancos contra HEAD y contra P1, en la app real del banco y en Revisiones; unidad separable del lector. Ver «Unidad
+ARCHIVOS · VELOCIDAD DE APERTURA · LOTE P1» y `docs/archivos/06_P1_APERTURA_SIN_TRABAJO_REPETIDO.md`.
 
 **15-sep-2026 · ARCHIVOS · LECTOR DE PLANOS COMO ACC — COMMIT LOCAL, SIN PUSH NI DESPLIEGUE.**
 Opción A de `docs/archivos/03_LECTOR_PDF_MANIPULACION_COMO_ACC.md`: rueda, doble clic y nitidez como el lector de planos de
@@ -848,6 +872,10 @@ Este hash es una referencia al checkpoint anterior, no un requisito
 autorreferencial del presente documento. Consultar HEAD real por separado.
 
 ## EXACT NEXT ACTION
+
+**ARCHIVOS · VELOCIDAD DE APERTURA · LOTE P1 (15-sep-2026):** commiteado («HAGAMOS LOS DOS COMIT»), sin push ni despliegue. Push del
+propietario y Manual Deploy: portal primero, backend después (verificar /api/health y el portal por contenido); después, la
+medición «después» en producción (`docs/archivos/06_P1_APERTURA_SIN_TRABAJO_REPETIDO.md`, §9).
 
 **ARCHIVOS · LECTOR DE PLANOS COMO ACC (15-sep-2026):** commiteado («HAGAMOS LOS DOS COMIT»), sin push ni despliegue. Va en el mismo
 push y despliegue que el lote P1.

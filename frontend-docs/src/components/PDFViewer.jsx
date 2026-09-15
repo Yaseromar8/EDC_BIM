@@ -12,6 +12,7 @@ import { API } from '../utils/helpers';
 import { apiFetch } from '../utils/apiFetch';
 import { tiraEstaAbierta, recordarTira } from '../utils/tiraDocumentos';
 import { urlsDeMiniaturas } from '../utils/colaMiniaturas';
+import { planDeVecinas } from '../utils/vecinasDelLector';
 import {
   PASO_DE_TECLADO, pasoDeRueda, suavizar, limitesDeZoom, objetivoDelZoom,
   puntoParaElZoom, desfaseDelPunto,
@@ -323,7 +324,7 @@ function MarcaEsperando({ porcentaje = null }) {
 // produccion reventaba con «prepararSiguiente is not defined» EN CADA CAMBIO
 // DE LAMINA, y un error sin capturar ahi rompe el ciclo de actualizacion. Lo
 // vio el dueño en la consola, no una prueba.
-async function prepararUna(hermano, obra, yaPedidos, interpretar) {
+async function prepararUna(hermano, obra, yaPedidos, interpretar, sigueValiendo, enCurso) {
   if (!hermano || !hermano.gcs_urn || yaPedidos.has(hermano.gcs_urn)) return;
   yaPedidos.add(hermano.gcs_urn);
   try {
@@ -332,15 +333,23 @@ async function prepararUna(hermano, obra, yaPedidos, interpretar) {
     // compartido: cuando el usuario pulse, esa fase ya no existe.
     const url = await pedirUrlFirmada(hermano.gcs_urn, obra);
     if (!interpretar || documentoEnCache(url)) return;
+    // Si mientras se autorizaba el usuario cerro el visor o cambio de lamina,
+    // no se EMPIEZA una descarga que ya nadie va a mirar. Se olvida el pedido
+    // para que la proxima vuelta pueda prepararla.
+    if (!sigueValiendo()) { yaPedidos.delete(hermano.gcs_urn); return; }
     // Interpretar el vector es lo caro EN MEMORIA (~13 MB por plano), asi que
-    // solo se hace con las inmediatas. La autorizacion, en cambio, no pesa
-    // nada y se adelanta para muchas mas.
-    const pdf = await abrirPdf({ url, withCredentials: false }).promise;
+    // solo se hace con las inmediatas, y solo si pesan poco (ver
+    // `utils/vecinasDelLector.js`). La autorizacion, en cambio, no pesa nada y
+    // se adelanta para muchas mas.
+    const tarea = abrirPdf({ url, withCredentials: false });
+    enCurso.add(tarea);
+    let pdf;
+    try { pdf = await tarea.promise; } finally { enCurso.delete(tarea); }
     try { await pdf.getPage(1); } catch { /* con tenerlo abierto ya se gana */ }
     guardarDocumento(url, pdf);
   } catch {
-    // Adelantar trabajo es un lujo: si falla, no se dice nada y el plano se
-    // abrira como siempre cuando el usuario lo pida.
+    // Adelantar trabajo es un lujo: si falla --o se corto al cerrar el visor--
+    // no se dice nada y el plano se abrira como siempre cuando el usuario lo pida.
     yaPedidos.delete(hermano.gcs_urn);
   }
 }
@@ -356,17 +365,13 @@ async function prepararUna(hermano, obra, yaPedidos, interpretar) {
 // es probable que pulse: primero las pegadas, luego hacia fuera. De una en
 // una y con un respiro entre ellas, porque disparar cuarenta peticiones a la
 // vez es exactamente lo que dejo el backend de rodillas esta misma sesion.
-const VENTANA = 4;
-
-async function prepararVecinas(hermanos, indice, obra, yaPedidos, sigueValiendo) {
-  const orden = [];
-  for (let d = 1; d <= VENTANA; d++) {
-    if (hermanos[indice + d]) orden.push([hermanos[indice + d], d === 1]);
-    if (hermanos[indice - d]) orden.push([hermanos[indice - d], d === 1]);
-  }
-  for (const [hermano, interpretar] of orden) {
+//
+// CUALES Y CUANTO lo decide `planDeVecinas` (utils/vecinasDelLector.js): se
+// autorizan las de la ventana y solo se descargan las pegadas que pesan poco.
+async function prepararVecinas(hermanos, indice, obra, yaPedidos, sigueValiendo, enCurso) {
+  for (const { hermano, interpretar } of planDeVecinas(hermanos, indice)) {
     if (!sigueValiendo()) return;   // el usuario ya salto a otra cosa
-    await prepararUna(hermano, obra, yaPedidos, interpretar);
+    await prepararUna(hermano, obra, yaPedidos, interpretar, sigueValiendo, enCurso);
     await new Promise(r => setTimeout(r, 250));
   }
 }
@@ -726,6 +731,21 @@ export default function PDFViewer({ url, preparando = false,
   // esta misma sesion. Segunda vez en el dia; por eso queda escrito aqui.
   // Se prepara la siguiente lamina en cuanto la actual esta quieta.
   const yaPedidosRef = useRef(new Set());
+  // Las descargas de vecinas EN CURSO, para cortarlas al CERRAR el visor. El
+  // bucle ya paraba entre una vecina y otra, pero la que estaba bajando seguia
+  // hasta el final: medido en produccion el 15-sep-2026, 23 MB que terminaron
+  // de llegar 2,5 s despues de cerrar. Al cambiar de lamina NO se cortan: la
+  // que baja suele ser justo la que el usuario acaba de pulsar.
+  const vecinasEnCursoRef = useRef(new Set());
+  useEffect(() => {
+    const enCurso = vecinasEnCursoRef.current;
+    return () => {
+      for (const tarea of enCurso) {
+        try { tarea.destroy(); } catch { /* ya terminada */ }
+      }
+      enCurso.clear();
+    };
+  }, []);
   useEffect(() => {
     if (ocupado || !hermanos.length || !onAbrirHermano) return undefined;
     const i = hermanos.findIndex(h => h.name === fileName);
@@ -734,7 +754,8 @@ export default function PDFViewer({ url, preparando = false,
     // lamina, no tiene sentido preparar las que ya va a dejar atras.
     let vigente = true;
     const t = setTimeout(() => {
-      prepararVecinas(hermanos, i, obraDelDocumento, yaPedidosRef.current, () => vigente);
+      prepararVecinas(hermanos, i, obraDelDocumento, yaPedidosRef.current, () => vigente,
+        vecinasEnCursoRef.current);
     }, 900);
     return () => { vigente = false; clearTimeout(t); };
   }, [ocupado, hermanos, fileName, obraDelDocumento, onAbrirHermano]);

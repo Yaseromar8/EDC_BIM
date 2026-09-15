@@ -2555,6 +2555,15 @@ def _encolar_miniaturas(urns):
     return nuevas
 
 
+# Objetos que se aceptan por documento al mirar su prefijo: el propio documento
+# y sus miniaturas, con margen. Es solo un tope para que un nombre raro no
+# convierta la consulta en un listado grande.
+_OBJETOS_POR_DOCUMENTO = 20
+# Consultas al almacen a la vez cuando la pantalla pide muchas miniaturas (la
+# cuadricula de una carpeta, la cinta del lector).
+_MIRADAS_A_LA_VEZ = 8
+
+
 @documents_bp.route('/api/docs/miniaturas/urls', methods=['POST'])
 def urls_de_miniaturas():
     """Las URLs FIRMADAS de las miniaturas de una carpeta, de una vez.
@@ -2567,9 +2576,9 @@ def urls_de_miniaturas():
     competir.
 
     Aqui se firma sin tocar la red (la firma es local) y se comprueba
-    cuales EXISTEN con UNA sola llamada de listado sobre el prefijo de la
-    obra. Las que falten se encolan para generarse; la pantalla las pedira
-    otra vez mas tarde.
+    cuales EXISTEN mirando SOLO los documentos pedidos (ver abajo). Las que
+    falten se encolan para generarse; la pantalla las pedira otra vez mas
+    tarde.
     """
     data = request.get_json(silent=True) or {}
     model_urn = data.get('model_urn') or 'global'
@@ -2580,35 +2589,69 @@ def urls_de_miniaturas():
     if not urns:
         return jsonify({'success': True, 'urls': {}, 'pendientes': []})
 
-    from gcs_manager import generate_signed_url, get_storage_client
+    from concurrent.futures import ThreadPoolExecutor
+    from gcs_manager import generate_signed_url, get_storage_client, nombre_inmutable
     import os as _os
 
-    # QUE HAY HECHO, en UNA llamada. Preguntar objeto por objeto seria una
-    # peticion de red por plano: justo lo que hace lenta la pantalla.
+    # SOLO LO QUE SE PIDE, NO LA OBRA ENTERA.
+    #
+    # Antes se listaba la obra completa en CADA llamada: miles de objetos para
+    # resolver, al abrir un plano, la silueta de ESE plano. Medido en
+    # produccion el 15-sep-2026: de 0,7 a 1,3 s por apertura, en el mismo
+    # proceso que atiende todo lo demas, y creciendo con la obra, no con lo que
+    # hay en pantalla.
+    #
+    # Ahora se mira cada documento pedido con su propio nombre como prefijo:
+    # esa lista trae el documento y lo que cuelga de el (`<urn>__thumb420.jpg`),
+    # dos o tres objetos. Una peticion pequena por documento; varias a la vez
+    # cuando la pantalla pide muchas.
+    #
+    # Lo que no esta bajo el prefijo de la obra no se mira, igual que antes (el
+    # listado de la obra tampoco lo encontraba): queda pendiente. Y nunca se
+    # lista con un prefijo que no sea el de un documento.
+    prefijo = 'multi-tenant/%s/' % model_urn
+    propios = [u for u in urns
+               if isinstance(u, str) and u.startswith(prefijo)
+               and len(u) > len(prefijo) and not u.endswith('/')]
     hechas = set()
     sin_cache = []
+    bucket = None
     try:
         bucket = get_storage_client().bucket(_os.environ.get('GCS_BUCKET_NAME'))
-        prefijo = 'multi-tenant/%s/' % model_urn
-        from gcs_manager import nombre_inmutable
-        for blob in bucket.list_blobs(prefix=prefijo):
-            if blob.name.endswith('__thumb420.jpg'):
-                hechas.add(blob.name)
-            # Lo subido ANTES de que existiera el sello no lleva instruccion
-            # de conservacion, y sin ella el navegador no guarda nada: la
-            # miniatura -- y el PDF entero -- viajarian otra vez en cada
-            # visita, para siempre. El listado ya nos dice cuales faltan, asi
-            # que se corrigen solas, una vez, sin migracion ni script aparte.
-            #
-            # Alcanza TAMBIEN al documento completo, no solo a la miniatura:
-            # es lo que hace que abrir el mismo plano por segunda vez no lo
-            # vuelva a descargar. `nombre_inmutable` decide -- los adjuntos de
-            # pin y las fotos de avance viven bajo este mismo prefijo pero se
-            # sobrescriben, y sellarlos mostraria algo viejo.
-            if not blob.cache_control and nombre_inmutable(blob.name):
-                sin_cache.append(blob)
     except Exception as e:
-        print('[miniaturas] no se pudo listar el almacen: %s' % str(e)[:120])
+        print('[miniaturas] no se pudo abrir el almacen: %s' % str(e)[:120])
+
+    def _lo_del_documento(urn):
+        try:
+            return list(bucket.list_blobs(prefix=urn, max_results=_OBJETOS_POR_DOCUMENTO))
+        except Exception as e:
+            print('[miniaturas] no se pudo mirar el almacen: %s' % str(e)[:120])
+            return []
+
+    if bucket is not None and propios:
+        if len(propios) == 1:
+            listados = [_lo_del_documento(propios[0])]
+        else:
+            with ThreadPoolExecutor(max_workers=min(_MIRADAS_A_LA_VEZ, len(propios))) as grupo:
+                listados = list(grupo.map(_lo_del_documento, propios))
+        for blobs in listados:
+            for blob in blobs:
+                if blob.name.endswith('__thumb420.jpg'):
+                    hechas.add(blob.name)
+                # Lo subido ANTES de que existiera el sello no lleva instruccion
+                # de conservacion, y sin ella el navegador no guarda nada: la
+                # miniatura -- y el PDF entero -- viajarian otra vez en cada
+                # visita, para siempre. Lo que se acaba de mirar ya dice cuales
+                # faltan, asi que se corrigen solas, una vez, sin migracion ni
+                # script aparte. Ahora, solo las de los documentos pedidos.
+                #
+                # Alcanza TAMBIEN al documento completo, no solo a la miniatura:
+                # es lo que hace que abrir el mismo plano por segunda vez no lo
+                # vuelva a descargar. `nombre_inmutable` decide -- los adjuntos de
+                # pin y las fotos de avance viven bajo este mismo prefijo pero se
+                # sobrescriben, y sellarlos mostraria algo viejo.
+                if not blob.cache_control and nombre_inmutable(blob.name):
+                    sin_cache.append(blob)
 
     # Con TOPE: es una escritura por objeto y no vale la pena arriesgar el
     # tiempo de respuesta de la pantalla por ponerse al dia de golpe. Lo que

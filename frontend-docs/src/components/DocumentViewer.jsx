@@ -1,5 +1,5 @@
 // frontend-docs/src/components/DocumentViewer.jsx
-import React, { useState, useEffect, useRef, lazy, Suspense } from 'react';
+import React, { useState, useEffect, lazy, Suspense } from 'react';
 import PDFViewer from './PDFViewer';
 import SelloEscritorio from './SelloEscritorio';
 import { apiFetch } from '../utils/apiFetch';
@@ -77,21 +77,22 @@ export default function DocumentViewer({
   // minuto MUDO (lo reporto el dueno: «¿estara cargando o que?»). Pedida
   // aqui, el clic la tiene lista; si caduca de vieja, el clic la renueva
   // avisando en pantalla.
-  const firmadaRef = useRef({ urn: null, url: '', ts: 0 });
+  //
+  // POR EL ALMACEN COMPARTIDO (`utils/urlFirmada.js`), no por libre. Esta
+  // peticion salia a la vez que la de la vista del PDF, que pide la MISMA URL:
+  // cada apertura autorizaba dos veces el mismo fichero (medido en produccion
+  // el 15-sep-2026). Por el almacen, si la vista ya la pidio o la esta
+  // pidiendo, no sale otra; y al reabrir, ninguna.
   useEffect(() => {
     if (!file || isShared) return;
     const abrible = CAD_EXTENSIONS.some(e => (file.name || '').toLowerCase().endsWith(e))
       || /\.pdfx?$/i.test(file.name || '');
     if (!abrible) return;
     const urn = viewedVersionInfo?.gcs_urn || file.gcs_urn;
-    if (!urn || firmadaRef.current.urn === urn) return;
-    apiFetch(`${API}/api/docs/signed-url?urn=${encodeURIComponent(urn)}&model_urn=${encodeURIComponent(projectPrefix)}`)
-      .then(r => r.json())
-      .then(d => {
-        if (d?.success && d.url) firmadaRef.current = { urn, url: d.url, ts: Date.now() };
-      })
+    if (!urn) return;
+    pedirUrlFirmada(urn, projectPrefix)
       .catch(() => { /* el clic tiene su propio camino con aviso */ });
-  }, [file, viewedVersionInfo, projectPrefix, isShared, API]);
+  }, [file, viewedVersionInfo, projectPrefix, isShared]);
 
   useEffect(() => {
     if (!file) return undefined;
@@ -141,7 +142,14 @@ export default function DocumentViewer({
     const lowerName = file.name.toLowerCase();
     const isOffice = ['.docx', '.doc', '.xlsx', '.xls', '.pptx', '.ppt'].some(ext => lowerName.endsWith(ext));
     const isPdf = lowerName.endsWith('.pdf') || lowerName.endsWith('.pdfx');
-    if (isShared || isOffice) {
+    // UN CAD NO LEE ESTA URL. El visor de Autodesk abre el modelo TRADUCIDO por
+    // su URN (`CadViewer`), nunca el fichero original: la URL firmada de aqui
+    // no la usaba nadie en la rama del CAD, y aun asi el visor esperaba a que
+    // llegase detras de «Preparando vista segura…» -- 0,9 s medidos en
+    // produccion el 15-sep-2026. «Abrir en escritorio», que SI necesita el
+    // original, la tiene por el efecto de arriba.
+    const isCad = CAD_EXTENSIONS.some(ext => lowerName.endsWith(ext));
+    if (isShared || isOffice || isCad) {
       queueMicrotask(() => {
         setSecurePreviewUrl(isShared ? (file.url || '') : '');
         setLoadingPreview(false);
@@ -283,21 +291,15 @@ export default function DocumentViewer({
   const abrirEnEscritorio = async () => {
     const urn = viewedVersionInfo?.gcs_urn || file.gcs_urn;
     if (!urn) { toast.error('Este documento no tiene fichero asociado.'); return; }
-    let firmada = '';
-    const enCache = firmadaRef.current;
-    if (enCache.urn === urn && enCache.url && (Date.now() - enCache.ts) < 10 * 60 * 1000) {
-      // Pre-firmada al abrir el documento: el clic es INSTANTANEO.
-      firmada = enCache.url;
-    } else {
+    // Pre-firmada al abrir el documento, en el almacen compartido: el clic es
+    // INSTANTANEO.
+    let firmada = urlFirmadaEnMano(urn) || '';
+    if (!firmada) {
       // Toca pedirla ahora — puede tardar ~30 s si el backend estaba dormido
       // (plan gratuito de Render): que la espera se VEA, no un boton mudo.
       const espera = toast.loading(`Preparando ${file.name}… (si el servidor estaba dormido, tarda ~30 s)`);
       try {
-        const r = await apiFetch(`${API}/api/docs/signed-url?urn=${encodeURIComponent(urn)}&model_urn=${encodeURIComponent(projectPrefix)}`);
-        const d = await r.json().catch(() => ({}));
-        if (!r.ok || !d.success || !d.url) throw new Error(d.error || 'No se pudo preparar el archivo.');
-        firmada = d.url;
-        firmadaRef.current = { urn, url: firmada, ts: Date.now() };
+        firmada = await pedirUrlFirmada(urn, projectPrefix);
         toast.dismiss(espera);
       } catch (e) {
         toast.dismiss(espera);
@@ -516,7 +518,9 @@ export default function DocumentViewer({
           // el primer instante -- sabe que esta preparando porque se le dice
           // con `preparando`.
           const esPdfAqui = /\.pdfx?$/i.test(lowerName);
-          if (!isShared && !esPdfAqui && !['.docx', '.doc', '.xlsx', '.xls', '.pptx', '.ppt'].some(ext => lowerName.endsWith(ext)) && loadingPreview && !fileUrl) {
+          // NI LOS CAD: no esperan ninguna URL (ver el efecto de la vista).
+          const esCadAqui = CAD_EXTENSIONS.some(ext => lowerName.endsWith(ext));
+          if (!isShared && !esPdfAqui && !esCadAqui && !['.docx', '.doc', '.xlsx', '.xls', '.pptx', '.ppt'].some(ext => lowerName.endsWith(ext)) && loadingPreview && !fileUrl) {
             return (
               <div role="status" aria-live="polite" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 16 }}>
                 <div className="spinner-acc" style={{ width: 40, height: 40, border: '3px solid #e5e7eb', borderTop: '3px solid var(--accent)', borderRadius: '50%', animation: 'spin-acc 1s linear infinite' }} />
@@ -525,7 +529,7 @@ export default function DocumentViewer({
             );
           }
 
-          if (!isShared && previewError) {
+          if (!isShared && !esCadAqui && previewError) {
             return (
               <div role="alert" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 12, color: '#5f6368' }}>
                 <div>No se pudo abrir la vista previa.</div>

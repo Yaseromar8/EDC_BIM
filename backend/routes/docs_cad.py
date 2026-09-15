@@ -676,6 +676,26 @@ def translate_cad():
     # Peticion explicita de vista 3D completa (ver _start_translation).
     master = bool(data.get('vista_3d_completa')) and es_admin
 
+    # YA TRADUCIDO: SE CONTESTA CON LO GUARDADO, SIN IR A AUTODESK.
+    #
+    # Abrir un plano ya traducido pagaba en CADA apertura crear el bucket (POST
+    # a APS), leer el manifiesto (GET a APS) y volver a escribir en la base el
+    # mismo estado que ya estaba guardado: de 0,9 a 1,2 s medidos en produccion
+    # el 15-sep-2026, antes de que el visor empezara siquiera a cargar.
+    #
+    # Solo vale si el URN guardado es el de ESTA version con ESTE empaquetado.
+    # `_urn_for` es determinista (bucket + version + si lleva referencias): una
+    # version nueva, o una ortofoto nueva en la carpeta, dan otro URN y siguen
+    # el camino de siempre. Y si el visor no consigue abrir el URN guardado
+    # --Autodesk ya no lo tiene, por ejemplo--, vuelve a pedir con `verificar`
+    # y se comprueba contra Autodesk como antes.
+    guardado = (node.get('meta') or {}).get('cad') or {}
+    if (not forzar and not master and not data.get('verificar')
+            and guardado.get('status') == 'success' and guardado.get('urn')
+            and guardado['urn'] == _urn_for(node, _bucket_key())):
+        return jsonify({'success': True, 'status': 'success', 'urn': guardado['urn'],
+                        'cached': True, 'origen': 'guardado'})
+
     token, error = get_internal_token()
     if error or not token:
         return jsonify({'success': False, 'error': 'Sin credenciales APS'}), 502

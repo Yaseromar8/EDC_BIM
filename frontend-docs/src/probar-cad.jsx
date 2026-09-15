@@ -17,10 +17,18 @@
  * deducida leyendo código.
  *
  * PALANCAS
- *   window.__guionEstado   la secuencia que devolverá /api/docs/cad/status
- *   window.__msPorSondeo   cuánto tarda cada respuesta del backend
- *   window.__vistas        las vistas que traerá el «documento»
- *   window.__fallarStatus  cuántas consultas de estado mueren (prueba el aguante)
+ *   window.__guionEstado         la secuencia que devolverá /api/docs/cad/status
+ *   window.__msPorSondeo         cuánto tarda cada respuesta del backend
+ *   window.__vistas              las vistas que traerá el «documento»
+ *   window.__fallarStatus        cuántas consultas de estado mueren (prueba el aguante)
+ *   window.__traduccionGuardada  translate contesta con lo guardado en la versión
+ *                                (`origen: 'guardado'`), como un plano ya traducido
+ *   window.__fallarDocumento     cuántas cargas del documento fallan (el URN guardado
+ *                                ya no existe en Autodesk)
+ *
+ * LECTURAS
+ *   window.__peticionesTraduccion  el cuerpo de cada POST a translate
+ *   window.__visoresVivos          visores creados y no terminados (debe ser 0 o 1)
  *
  * No entra en producción: `vite.config.js` no lo conoce.
  */
@@ -37,6 +45,10 @@ const anotar = (l) => window.__registro.push({ ms: Date.now() - t0, l });
 
 window.__msPorSondeo = 300;
 window.__fallarStatus = 0;
+window.__traduccionGuardada = false;
+window.__fallarDocumento = 0;
+window.__peticionesTraduccion = [];
+window.__visoresVivos = 0;
 window.__guionEstado = [
   { status: 'pending', progress: '5% complete' },
   { status: 'pending', progress: '25% complete' },
@@ -76,7 +88,19 @@ const responder = (cuerpo, ms = 0, estado = 200) => new Promise(res => {
 const original = window.fetch.bind(window);
 window.fetch = (url, opciones = {}) => {
   const u = String(typeof url === 'string' ? url : url.url);
-  if (u.includes('/api/docs/cad/translate')) { paso = 0; anotar('POST translate'); return responder({ success: true, status: 'pending' }, 200); }
+  if (u.includes('/api/docs/cad/translate')) {
+    paso = 0;
+    let cuerpo = {};
+    try { cuerpo = JSON.parse(opciones.body || '{}'); } catch { /* sin cuerpo */ }
+    window.__peticionesTraduccion.push(cuerpo);
+    anotar(`POST translate${cuerpo.verificar ? ' (verificar)' : ''}`);
+    // Lo que contesta el servidor a un plano ya traducido: lo guardado, sin ir
+    // a Autodesk. Con `verificar` pregunta a Autodesk, que aqui es el guion.
+    if (window.__traduccionGuardada && !cuerpo.verificar) {
+      return responder({ success: true, status: 'success', urn: 'dXJuOmd1YXJkYWRv', cached: true, origen: 'guardado' }, 60);
+    }
+    return responder({ success: true, status: 'pending' }, 200);
+  }
   if (u.includes('/api/docs/cad/status')) {
     if (window.__fallarStatus > 0) { window.__fallarStatus -= 1; anotar('status -> CAÍDO'); return Promise.reject(new Error('red')); }
     const d = window.__guionEstado[Math.min(paso, window.__guionEstado.length - 1)];
@@ -104,16 +128,23 @@ window.Autodesk = {
     Initializer: (cfg, cb) => { anotar('Initializer'); cfg.getAccessToken?.(() => {}); setTimeout(cb, 30); },
     GuiViewer3D: function (contenedor) {
       anotar('GuiViewer3D creado');
+      window.__visoresVivos += 1;
       // La única parte del motor que este banco necesita imitar de verdad: la
       // bandera que decide el sentido de la rueda.
       this.navigation = { getReverseZoomDirection: () => window.__reverseZoom };
-      this.start = () => { anotar('viewer.start()'); const c = document.createElement('div'); c.className = 'sustituto-lmv'; c.textContent = 'MOTOR SUSTITUIDO (el banco no mide navegación)'; c.style.cssText = 'position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#6b7480;font-size:12px;'; contenedor.appendChild(c); };
+      let marca = null;
+      this.start = () => { anotar('viewer.start()'); marca = document.createElement('div'); marca.className = 'sustituto-lmv'; marca.textContent = 'MOTOR SUSTITUIDO (el banco no mide navegación)'; marca.style.cssText = 'position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#6b7480;font-size:12px;'; contenedor.appendChild(marca); };
       this.loadDocumentNode = (doc, node) => { anotar(`loadDocumentNode ${node.data.name}`); window.__vistaMontada = node.data.name; window.__cargas = (window.__cargas || 0) + 1; return Promise.resolve(); };
-      this.finish = () => anotar('viewer.finish()');
+      this.finish = () => { anotar('viewer.finish()'); window.__visoresVivos -= 1; if (marca) marca.remove(); };
     },
     Document: {
-      load: (urn, ok) => {
+      load: (urn, ok, ko) => {
         anotar(`Document.load ${urn}`);
+        if (window.__fallarDocumento > 0) {
+          window.__fallarDocumento -= 1;
+          setTimeout(() => ko(404, 'Not Found'), 30);
+          return;
+        }
         const todas = nodos();
         setTimeout(() => ok({
           getRoot: () => ({ search: () => todas, getDefaultGeometry: () => todas[todas.length - 1] }),
