@@ -1570,6 +1570,16 @@ export default function PDFViewer({ url, preparando = false,
       escalaVisualRef.current = Math.max(0.2, mode === 'width' ? sW : Math.min(sW, sH));
       setFitMode(mode);
       setDesplazamiento({ x: 0, y: 0 });
+      // EL LIENZO, A SU TAMAÑO EN EL ACTO. El centrado de abajo mide el scroll en
+      // el siguiente fotograma; si para entonces la escala nueva no ha llegado al
+      // lienzo --React aun no lo ha pintado, y uno recien montado mide 300×150--
+      // centra ese tamaño y la hoja se queda desplazada hasta que la toquen.
+      // Medido en el banco: 1 de cada 12 aperturas con HEAD, a (+397, +312) px.
+      baseVpRef.current[`${currentPage}:${rotation}`] = { width: vp1.width, height: vp1.height };
+      if (canvasRef.current) {
+        canvasRef.current.style.width = `${vp1.width * escalaVisualRef.current}px`;
+        canvasRef.current.style.height = `${vp1.height * escalaVisualRef.current}px`;
+      }
       // Con holgura alrededor, encuadrar tiene que dejar la hoja EN EL CENTRO
       // de esa holgura; si no, apareceria pegada a una esquina.
       requestAnimationFrame(() => {
