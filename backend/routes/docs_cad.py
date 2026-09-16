@@ -638,7 +638,16 @@ def pretraducir_en_fondo(node_id, forzar=False, master=False):
         _save_cad_meta(node, {'urn': urn, 'status': 'inprogress',
                               'started_at': time.time(), 'object_key': object_key,
                               'refs': [r['name'] for r in node.get('refs') or []], 'error': None})
-        _job, error = _start_translation(token, urn, force=forzar, root_filename=raiz,
+        # SE FUERZA SIEMPRE, porque acabamos de cambiar los bytes. La clave del
+        # objeto es estable, asi que el URN de despues es el MISMO de antes: si
+        # Autodesk ya tenia un resultado para ese URN --por ejemplo el `failed`
+        # de la copia rota que acabamos de reemplazar-- una peticion sin
+        # `x-ads-force` responde 200 y se limita a informar del trabajo viejo.
+        # Sin esto, volver a subir no servia de nada: el dibujo seguia dando
+        # «the drawing file is invalid» con los bytes buenos ya en Autodesk.
+        # No hay riesgo del 409 que evita el `force` por defecto: aqui dentro
+        # solo se entra tras subir, y con el candado de `_PRETRADUCCIONES_EN_CURSO`.
+        _job, error = _start_translation(token, urn, force=True, root_filename=raiz,
                                          master_views=master)
         if error:
             _save_cad_meta(node, {'status': 'failed', 'error': error})

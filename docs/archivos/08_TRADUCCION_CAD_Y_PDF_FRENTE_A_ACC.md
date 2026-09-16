@@ -147,7 +147,16 @@ y se compara con el del documento:
 - si no coincide, se anota en el log cuántos bytes hay de cuántos y **se vuelve a subir**;
 - si Autodesk no contesta o el documento es un enlace a otra versión, se sube igual (no se bloquea nada por una consulta caída).
 
-Prueba: `backend/tests/test_copia_incompleta_en_autodesk.py`, 10 casos sin base
+**Defecto encontrado en producción con esto ya desplegado (16-sep, 00:30).** Rehacer
+la copia no bastaba: la clave del objeto es estable, así que el URN de después es el
+MISMO de antes, y Autodesk guarda el resultado por URN. Una petición de traducción
+sin `x-ads-force` responde 200 y se limita a informar del trabajo anterior —el
+`failed` de la copia mala—, de modo que los bytes buenos recién depositados no se
+miraban nunca y el dibujo seguía dando «the drawing file is invalid». Ahora, cuando
+se vuelve a subir, **se fuerza la traducción**. No hay riesgo del 409 que evita el
+`force` por defecto: solo se llega ahí tras subir, y dentro del candado de la cola.
+
+Prueba: `backend/tests/test_copia_incompleta_en_autodesk.py`, 12 casos sin base
 de datos (copia completa, copia a medias, objeto ausente, detalles que fallan,
 tamaño desconocido, los dos sitios donde se decidía «ya estaba subido»).
 

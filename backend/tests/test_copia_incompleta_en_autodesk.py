@@ -185,3 +185,79 @@ def test_translate_no_resubre_cuando_la_copia_esta_entera(monkeypatch, almacen):
     assert cuerpo['status'] == 'inprogress'
     assert hecho['traducciones'] == 1, 'con el fichero entero se traduce sin volver a subir'
     assert hecho['encolado'] == 0
+
+
+# ── Y DESPUES DE VOLVER A SUBIR, HAY QUE FORZAR LA TRADUCCION ──────────────
+#
+# Defecto encontrado en produccion el 16-sep, con el arreglo de arriba ya
+# desplegado: la copia se rehacia, pero el dibujo seguia dando «the drawing
+# file is invalid». La clave del objeto es estable, asi que el URN de despues
+# es el MISMO de antes, y Autodesk conserva por URN el resultado anterior --el
+# `failed` de la copia mala--. Una peticion de traduccion sin `x-ads-force`
+# responde 200 y se limita a informar de ese trabajo viejo, de modo que los
+# bytes buenos que acabamos de depositar no se miraban nunca.
+
+class _FicheroDeMentira:
+    def __init__(self):
+        self.name = 'temporal'
+
+    def seek(self, *a):
+        pass
+
+    def close(self):
+        pass
+
+
+@pytest.fixture
+def subida(monkeypatch):
+    """Todo el viaje a Autodesk, de mentira, anotando como se lanza la traduccion."""
+    import sys
+    import types
+
+    visto = {'traducciones': [], 'subidas': 0}
+    nodo = {'id': 'n-1', 'v_id': 'v-1', 'name': 'PLANO_DRENAJE.dwg',
+            'size': TAMANO, 'refs': [], 'gcs_urn': 'gs://obra/plano.dwg', 'meta': {}}
+
+    falso_gcs = types.ModuleType('gcs_manager')
+    falso_gcs.descargar_a_fichero = lambda urn, fichero: TAMANO
+    monkeypatch.setitem(sys.modules, 'gcs_manager', falso_gcs)
+
+    monkeypatch.setattr(cad, '_load_node', lambda node_id: nodo)
+    monkeypatch.setattr(cad, '_save_cad_meta', lambda node, patch: None)
+    monkeypatch.setattr(cad, 'get_internal_token', lambda: ('tok', None))
+    monkeypatch.setattr(cad, '_ensure_bucket', lambda token: ('bucket-de-prueba', None))
+    # Autodesk guarda el resultado de la copia mala.
+    monkeypatch.setattr(cad, '_manifest', lambda token, urn: ({'status': 'failed'}, None))
+    monkeypatch.setattr(cad, '_esta_entero', lambda *a, **kw: False)
+    monkeypatch.setattr(cad, 'tempfile', types.SimpleNamespace(
+        NamedTemporaryFile=lambda **kw: _FicheroDeMentira()))
+    monkeypatch.setattr(cad.os, 'unlink', lambda ruta: None)
+
+    def _subir(token, bucket, clave, fichero, size=None):
+        visto['subidas'] += 1
+        return 'urn:adsk.objects:os.object:%s/%s' % (bucket, clave), None
+    monkeypatch.setattr(cad, '_upload_to_oss', _subir)
+
+    def _traducir(token, urn, force=False, root_filename=None, master_views=False):
+        visto['traducciones'].append({'force': force, 'urn': urn})
+        return {'result': 'ok'}, None
+    monkeypatch.setattr(cad, '_start_translation', _traducir)
+
+    return visto, nodo
+
+
+def test_tras_rehacer_la_copia_se_fuerza_la_traduccion(subida):
+    """Sin esto, volver a subir no arregla nada: gana el resultado viejo."""
+    visto, _nodo_ = subida
+    cad.pretraducir_en_fondo('n-1')
+    assert visto['subidas'] == 1
+    assert len(visto['traducciones']) == 1
+    assert visto['traducciones'][0]['force'] is True
+
+
+def test_el_urn_de_despues_es_el_mismo_de_antes(subida):
+    """La razon por la que hay que forzar: el trabajo viejo vive en ese URN."""
+    visto, nodo = subida
+    antes = cad._urn_for(nodo, 'bucket-de-prueba')
+    cad.pretraducir_en_fondo('n-1')
+    assert visto['traducciones'][0]['urn'] == antes
