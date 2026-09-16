@@ -763,7 +763,7 @@ NEXT EXACT ACTION:    push y Manual Deploy (backend y portal) del porcentaje.
 DO NOT TOUCH:         el lector PDF; P1; el WIP ajeno; producción y Oregón.
 COMMIT/HEAD REF:      B = `feat(cad): count the upload …` sobre 0ffc962; A sin commitear
 
-### Unidad VISOR 3D · SOMBRA AMBIENTAL EN METROS REALES — COMMITEADA EN LOCAL, SIN PUSH NI DESPLIEGUE, 16-sep
+### Unidad VISOR 3D · SOMBRA AMBIENTAL EN METROS REALES — 28fa7a3 DESPLEGADO (PC bien, tableta con manchones) + ARREGLO DE TABLETA, 16-sep
 
 El dueño comparó la topografía `PASTEADO_GENERAL.shared.dwg` en ACC y en `visor.alephia.com.pe`: en ACC el relieve tiene
 volumen y en el nuestro sale plano. Autorizado: «VAMOS, CON CUIDADO Y SIN ROMPER NADA». Informe: `docs/archivos/08…` §11.
@@ -771,7 +771,7 @@ volumen y en el nuestro sale plano. Autorizado: «VAMOS, CON CUIDADO Y SIN ROMPE
 [WIP HANDOFF]
 TAREA:                VISOR 3D: la topografía salía plana frente a ACC.
 IMPLEMENTADO:         `frontend-react/src/components/Viewer.jsx`, SOLO el bloque de la sombra ambiental dentro de `applyViewerVisualQuality`: se llama a `viewer.impl.renderer().setAOOptions` (con `viewer.impl.setAOOptions` de respaldo) y el radio va en metros reales, `(__vqAoMetros ?? 2.5) / viewer.model.getUnitScale()`; `__vqAoRadius` sigue siendo el ajuste a mano en unidades de escena. El fichero tiene WIP AJENO (7 bloques, ~48 líneas): se commitea SIN él, poniendo en el índice HEAD + este bloque con `git hash-object -w` + `git update-index --cacheinfo`; el WIP sigue en el árbol de trabajo, intacto.
-PENDIENTE:            push y Manual Deploy de `visor-ecd-frontend`; después, que el dueño mire una topografía y una estructura.
+PENDIENTE:            `28fa7a3` desplegado y verificado en producción (radio 2500 aplicado solo). En la TABLETA Android del dueño salió en manchones negros: segundo commit con `isMobileDevice()` → radio de fábrica en tabletas y móviles (como antes de hoy), 2,5 m en PC (también táctil). Falta: Manual Deploy de `visor-ecd-frontend` y que el dueño recargue la tableta. Informe §11, último apartado.
 ARCHIVOS MODIFICADOS: frontend-react/src/components/Viewer.jsx (solo el bloque), docs/archivos/08…md, docs/AI_WORKSTATE.md.
 TESTS EJECUTADOS:     medido en producción con el visor real y ACC al lado: los AJUSTES eran iguales (Boardwalk, exposición −7, SAO, suavizado, aristas, sombra en el suelo, DPR); la diferencia era la unidad de escena (ACC metros, nosotros milímetros por `applyScaling:'mm'`) y que el radio nunca se aplicaba (`viewer.impl.setAOOptions` no existe en 7.126.0: radio de fábrica 10 mm con la topografía, 0,25 m con Revit). Calibrado con cámara idéntica y métricas de píxeles de `getScreenShot`: topografía de cerca, ACC 2,9 % oscuros, 10 mm 0,9 %, 2,5 m 2,7 %, 8 m 13,9 %; de lejos, 2,5 m no cambia nada; estructuras (3 `.rvt`) sin cambios con 2,5 m. La cuenta del código nuevo, comprobada contra el visor real (→ 2500 en milímetros). El radio sobrevive a `setLightPreset`, `setQualityLevel` y `prefs.set`. ESLint de Viewer.jsx 62 → 62, ninguno nuevo; `vite build` a carpeta temporal, OK.
 TESTS PENDIENTES:     la mirada del dueño tras el despliegue.

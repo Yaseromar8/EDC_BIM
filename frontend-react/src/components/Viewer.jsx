@@ -752,6 +752,15 @@ const Viewer = ({
                         // escena (el de `__vq.ao`); `__vqAoMetros` lo da en metros. Sin
                         // modelo cargado no se sabe la unidad: se espera al siguiente
                         // GEOMETRY_LOADED, que vuelve a pasar por aquí.
+                        //
+                        // EN TABLETAS Y MÓVILES, NO. Desplegado esto, en la tableta del
+                        // dueño la sombra salió en manchones negros borrosos (en su PC,
+                        // bien). Simular en el PC la densidad de píxeles de una tableta
+                        // no los provoca --la aclara--, así que es el camino móvil del
+                        // visor. Allí se deja el radio de fábrica, que es exactamente
+                        // como estaba antes. Se pregunta a LMV, que decide al cargar:
+                        // tableta Android, móvil e iPad dan móvil; un PC táctil, no.
+                        const esMovil = window.Autodesk?.Viewing?.isMobileDevice?.() === true;
                         const renderLMV = viewer.impl?.renderer?.();
                         const ponerAO = (renderLMV && typeof renderLMV.setAOOptions === 'function')
                             ? (radio, intensidad) => renderLMV.setAOOptions(radio, intensidad)
@@ -760,7 +769,7 @@ const Viewer = ({
                                 : null;
                         const metrosPorUnidad = viewer.model?.getUnitScale?.();
                         const radioAO = window.__vqAoRadius
-                            ?? (metrosPorUnidad > 0 ? (window.__vqAoMetros ?? 2.5) / metrosPorUnidad : null);
+                            ?? (!esMovil && metrosPorUnidad > 0 ? (window.__vqAoMetros ?? 2.5) / metrosPorUnidad : null);
                         if (ponerAO && radioAO) {
                             ponerAO(radioAO, window.__vqAoIntensity ?? 1.0);
                         }

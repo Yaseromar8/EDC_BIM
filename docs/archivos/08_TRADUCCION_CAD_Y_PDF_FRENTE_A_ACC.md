@@ -367,3 +367,23 @@ mediana · % de píxeles oscuros (< 90).
 Seguridad del cambio: solo ese bloque de `Viewer.jsx`, que tiene WIP ajeno y se commitea
 **sin** él; ESLint del fichero, 62 mensajes antes y 62 después, ninguno nuevo; el visor
 compila. Se despliega con **Manual Deploy de `visor-ecd-frontend`**.
+
+**Regresión en tableta y arreglo (16-sep, tarde).** Desplegado `28fa7a3`, el dueño lo
+abrió en su PC (bien: volumen, sin manchas) y en su tableta Android: **manchones negros
+borrosos**, con una banda oscura cruzando la vista. Comprobado antes de tocar nada:
+
+- **No es la densidad de píxeles.** Simulada en el PC la de una tableta (×2,5), la
+  sombra se **aclara**; no aparece ninguna mancha. Es el camino móvil del visor.
+- **Quién cuenta como móvil**, con el SDK real cargando como cada equipo (LMV lo
+  decide una sola vez, al cargar): tableta Android, móvil Android e iPad moderno
+  → móvil; PC Windows y **PC táctil** → no.
+
+Arreglo: con `Autodesk.Viewing.isMobileDevice()` no se toca el radio y queda el de
+fábrica, **exactamente como antes de hoy**; en cualquier PC siguen los 2,5 m. Probadas
+las líneas nuevas contra el SDK: tableta → no se llama a `setAOOptions`; PC táctil
+→ 2500. ESLint 62 → 62 y el visor compila. Se commitea otra vez **sin** el WIP ajeno.
+
+Incidente propio durante la prueba: al deshacer la simulación (`delete
+window.devicePixelRatio`) se borró también la propiedad nativa y la pestaña del dueño
+dibujó un momento a 6400×2630. Se restauró el accesor nativo tomándolo de un iframe;
+se le pidió F5. Para simular DPR, no volver a usar `defineProperty` + `delete`.
