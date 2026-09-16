@@ -112,7 +112,7 @@ def _ensure_bucket(token):
     return None, 'No se pudo preparar el bucket APS: %s' % r.text[:200]
 
 
-def _upload_to_oss(token, bucket, object_key, source, size=None):
+def _upload_to_oss(token, bucket, object_key, source, size=None, avisar=None):
     """Sube por S3 firmado (la subida directa a OSS esta descontinuada).
 
     `source` puede ser bytes o un fichero abierto en binario — un paquete con
@@ -121,12 +121,24 @@ def _upload_to_oss(token, bucket, object_key, source, size=None):
     Tres pasos: pedir URL(es) firmada(s), PUT a S3, y confirmar a APS. Si el
     tamaño supera PART_SIZE se pide una URL por trozo, porque S3 no admite un
     PUT unico ilimitado.
+
+    `avisar(hechas, total)` se llama al empezar y tras cada bloque. Es lo unico
+    que sabe de verdad como va este tramo: hasta que Autodesk no acepta el
+    fichero no hay manifiesto, y la pantalla se quedaba en 0% durante minutos
+    —tres minutos y medio con el DWG de 260 MB— para saltar despues a 99%.
     """
     if size is None:
         size = len(source) if isinstance(source, (bytes, bytearray)) else None
     partes = 1
     if size:
         partes = max(1, (size + PART_SIZE - 1) // PART_SIZE)
+    def _contar(hechas):
+        if avisar:
+            try:
+                avisar(hechas, partes)
+            except Exception:
+                pass          # contar el avance jamas puede tumbar una subida
+    _contar(0)
 
     # minutesExpiration=60, el maximo. Autodesk firma para DOS MINUTOS por
     # defecto (se veia en la URL: X-Amz-Expires=119) y un modelo de obra no cabe
@@ -195,6 +207,7 @@ def _upload_to_oss(token, bucket, object_key, source, size=None):
             fallo = _subir_trozo(url, trozo, i)
             if fallo:
                 return None, fallo
+            _contar(i)
     else:
         source.seek(0, os.SEEK_END)
         total = source.tell()
@@ -206,6 +219,7 @@ def _upload_to_oss(token, bucket, object_key, source, size=None):
             fallo = _subir_trozo(url, _Ventana(source, ini, tam), i)
             if fallo:
                 return None, fallo
+            _contar(i)
 
     done = requests.post(
         '%s/oss/v2/buckets/%s/objects/%s/signeds3upload' % (APS_BASE, bucket, object_key),
@@ -334,6 +348,19 @@ def _tam_en_autodesk(token, bucket, object_key):
         return int(det.json().get('size') or 0) or None
     except Exception:
         return None
+
+
+def _progreso_de_subida(cad):
+    """Cuanto lleva enviado a Autodesk, en porcentaje, a partir de los bloques.
+
+    Con un solo bloque no hay nada que repartir y se devuelve cadena vacia: el
+    visor vuelve al circulo, que es mas honesto que una barra inventada.
+    """
+    hechas = cad.get('bloques')
+    total = cad.get('bloques_total')
+    if not total or total < 2 or hechas is None:
+        return ''
+    return '%d%%' % min(99, int(round(100.0 * hechas / total)))
 
 
 def _esta_entero(token, bucket, object_key, node):
@@ -597,13 +624,20 @@ def pretraducir_en_fondo(node_id, forzar=False, master=False):
             print('[CAD pre] %s: ya estaba en Autodesk, traduccion lanzada' % node['name'])
             return
 
+        # Lo que se cuenta aqui es el UNICO avance real de este tramo: no hay
+        # manifiesto hasta que Autodesk acepta el fichero.
+        def _avance(hechas, total):
+            _save_cad_meta(node, {'status': 'subiendo', 'bloques': hechas,
+                                  'bloques_total': total})
+
         raiz = None
         if node.get('refs'):
             paquete, tam, raiz, error = _build_package(node)
             if error:
                 print('[CAD pre] paquete: %s' % error)
                 return
-            object_id, error = _upload_to_oss(token, bucket, object_key, paquete, size=tam)
+            object_id, error = _upload_to_oss(token, bucket, object_key, paquete, size=tam,
+                                                 avisar=_avance)
             try:
                 paquete.close()
             except Exception:
@@ -620,7 +654,8 @@ def pretraducir_en_fondo(node_id, forzar=False, master=False):
                     print('[CAD pre] %s vacio en GCS' % node['name'])
                     return
                 tmp.seek(0)
-                object_id, error = _upload_to_oss(token, bucket, object_key, tmp, size=tam)
+                object_id, error = _upload_to_oss(token, bucket, object_key, tmp, size=tam,
+                                                 avisar=_avance)
             except Exception as e:
                 print('[CAD pre] GCS: %s' % e)
                 return
@@ -635,7 +670,8 @@ def pretraducir_en_fondo(node_id, forzar=False, master=False):
                 return
 
         urn = _urn_of(object_id)
-        _save_cad_meta(node, {'urn': urn, 'status': 'inprogress',
+        _save_cad_meta(node, {'urn': urn, 'status': 'inprogress', 'bloques': None,
+                              'bloques_total': None,
                               'started_at': time.time(), 'object_key': object_key,
                               'refs': [r['name'] for r in node.get('refs') or []], 'error': None})
         # SE FUERZA SIEMPRE, porque acabamos de cambiar los bytes. La clave del
@@ -901,7 +937,13 @@ def cad_status():
     if error:
         return jsonify({'success': False, 'error': error}), 502
     if manifest is None:
-        return jsonify({'success': True, 'status': 'inprogress', 'progress': '0%', 'urn': urn})
+        # SIN MANIFIESTO NO HAY TRADUCCION TODAVIA: el fichero sigue viajando.
+        # Antes se contestaba '0%' durante todo ese rato --tres minutos y medio
+        # con el DWG de 260 MB-- y despues se saltaba al 99% de Autodesk. El
+        # dueno lo dijo tal cual: «el porcentaje no es coherente». Ahora se
+        # cuenta lo que de verdad esta pasando, y se dice que fase es.
+        return jsonify({'success': True, 'status': 'inprogress', 'fase': 'subiendo',
+                        'progress': _progreso_de_subida(cad), 'urn': urn})
 
     status = manifest.get('status', 'inprogress')
     progress = manifest.get('progress', '')

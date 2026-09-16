@@ -461,6 +461,11 @@ export default function CadViewer({ file, projectPrefix = '', urnDirecto = null 
           // Se pide una vez más en lugar de sondear un trabajo inexistente.
           return fail('La preparación no llegó a iniciarse. Cierra y vuelve a abrir el archivo.');
         }
+        // QUE FASE ES, segun el backend. Mientras el fichero viaja a Autodesk
+        // no hay traduccion que medir, y llamarlo «Traduciendo…» con un 0%
+        // clavado durante minutos es justo lo que el dueno llamo «incoherente».
+        if (d.fase === 'subiendo') setPhase('preparando');
+        else if (d.fase) setPhase('traduciendo');
         setProgress(d.progress || '');
         timer = setTimeout(poll, 4000);
       } catch {
@@ -486,7 +491,9 @@ export default function CadViewer({ file, projectPrefix = '', urnDirecto = null 
           return mount(d.urn, d.origen === 'guardado' && !verificar
             ? () => arrancar({ verificar: true }) : null);
         }
-        setPhase('traduciendo');
+        // Sin preguntar todavia por el estado no se sabe si esto se esta
+        // traduciendo o aun viajando: se deja en «preparando» y lo decide la
+        // primera respuesta de /status, que es quien lo sabe.
         poll();
       } catch {
         fail('No se pudo contactar con el servidor.');

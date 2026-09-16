@@ -233,8 +233,10 @@ def subida(monkeypatch):
         NamedTemporaryFile=lambda **kw: _FicheroDeMentira()))
     monkeypatch.setattr(cad.os, 'unlink', lambda ruta: None)
 
-    def _subir(token, bucket, clave, fichero, size=None):
+    def _subir(token, bucket, clave, fichero, size=None, avisar=None):
         visto['subidas'] += 1
+        if avisar:
+            avisar(1, 1)          # la subida real cuenta sus bloques
         return 'urn:adsk.objects:os.object:%s/%s' % (bucket, clave), None
     monkeypatch.setattr(cad, '_upload_to_oss', _subir)
 
