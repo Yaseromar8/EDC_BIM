@@ -387,3 +387,26 @@ Incidente propio durante la prueba: al deshacer la simulación (`delete
 window.devicePixelRatio`) se borró también la propiedad nativa y la pestaña del dueño
 dibujó un momento a 6400×2630. Se restauró el accesor nativo tomándolo de un iframe;
 se le pidió F5. Para simular DPR, no volver a usar `defineProperty` + `delete`.
+
+**La franja siguió en la tableta con `6edb7f6` desplegado.** El dueño probó a apagar
+efectos en el panel de Configuración (sombra de suelo, sombras ambientales, fantasma,
+aristas) y nada cambiaba: con razón, porque `Viewer.jsx` **vuelve a imponerlos** en cada
+`GEOMETRY_LOADED`, cada vez que se aplican o quitan filtros (`__applyViewerVisualQuality`)
+y, el fantasma, con un interceptor de `setGhosting`. Esas pruebas no valen, y tampoco la
+conclusión de que la franja no venía del cambio de hoy.
+
+Pista de su captura: la franja oscura **tapa también plantas y troncos**, así que es algo
+dibujado por delante o un efecto de pantalla, no una sombra sobre el terreno.
+
+**Interruptor de prueba, temporal (autorizado «VAMOS»).** Solo actúa si se escribe en la
+dirección: `?sin=todo`, o `?sin=sombra|aristas|suelo|fantasma` (varios con comas). Apaga
+esos efectos **después** de imponerlos, el fantasma también en el interceptor y en el
+refuerzo de cada carga, y pinta un aviso rojo «PRUEBA · sin …» para saber en la tableta
+que se está probando lo que toca. Sin el parámetro no cambia nada. Probado en local con
+los trozos sacados tal cual de `Viewer.jsx` y un visor de mentira que anota llamadas: 9
+direcciones, todas como se esperaba (vacía, `?obra=1` y `?sin=basura` → conducta de
+siempre y sin aviso). ESLint 62 → 62; compila; commit sin el WIP ajeno.
+
+**PENDIENTE: retirar el interruptor** en cuanto se sepa qué efecto pinta la franja, y
+aplicar entonces el arreglo solo en tabletas.
+

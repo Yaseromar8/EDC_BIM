@@ -722,6 +722,35 @@ const Viewer = ({
                 window.viewer = viewer;
                 window.NOP_VIEWER = viewer;
 
+                // INTERRUPTOR DE PRUEBA POR LA DIRECCIÓN (16-sep-2026). NO ES UNA
+                // FUNCIÓN DEL PRODUCTO: sirve para encontrar la franja oscura que
+                // sale en la tableta del dueño y no en su PC. Desde el panel de
+                // Configuración no se puede probar, porque este código vuelve a
+                // imponer los efectos en cada carga de modelo y en cada filtro.
+                //
+                //   ?sin=todo                                  apaga los cuatro
+                //   ?sin=sombra | aristas | suelo | fantasma   (o varios, con comas)
+                //
+                // Sin el parámetro no cambia nada. Con él, un aviso rojo arriba lo
+                // dice, para saber en la tableta que se está probando lo que toca.
+                // Se retira en cuanto se sepa cuál es.
+                const efectosApagados = () => {
+                    if (!(window.__vqSin instanceof Set)) {
+                        const todos = ['sombra', 'aristas', 'suelo', 'fantasma'];
+                        let pedido = '';
+                        try { pedido = (new URLSearchParams(window.location.search).get('sin') || '').toLowerCase(); } catch { /* sin dirección */ }
+                        window.__vqSin = new Set(pedido === 'todo' ? todos : pedido.split(',').map(v => v.trim()).filter(v => todos.includes(v)));
+                        if (window.__vqSin.size && document.body && !document.getElementById('vq-prueba')) {
+                            const aviso = document.createElement('div');
+                            aviso.id = 'vq-prueba';
+                            aviso.textContent = 'PRUEBA · sin ' + [...window.__vqSin].join(', ');
+                            aviso.style.cssText = 'position:fixed;left:50%;top:6px;transform:translateX(-50%);z-index:2147483647;background:#b00020;color:#fff;font:600 13px system-ui,sans-serif;padding:4px 12px;border-radius:4px;pointer-events:none';
+                            document.body.appendChild(aviso);
+                        }
+                    }
+                    return window.__vqSin;
+                };
+
                 const applyViewerVisualQuality = () => {
                     try {
                         if (typeof viewer.setQualityLevel === 'function') {
@@ -807,6 +836,16 @@ const Viewer = ({
                         if (typeof viewer.setOptimizeNavigation === 'function') {
                             viewer.setOptimizeNavigation(false);
                         }
+                        // Interruptor de prueba (ver `efectosApagados`): va lo último, para
+                        // que nada de lo de arriba lo vuelva a encender.
+                        const sin = efectosApagados();
+                        if (sin.has('sombra')) {
+                            viewer.setQualityLevel?.(false, true);
+                            viewer.prefs?.set?.('ambientShadows', false);
+                        }
+                        if (sin.has('aristas')) viewer.setDisplayEdges?.(false);
+                        if (sin.has('suelo')) viewer.setGroundShadow?.(false);
+                        if (sin.has('fantasma')) viewer.setGhosting?.(false);
                         viewer.impl?.invalidate?.(true, true, true);
                     } catch (e) {
                         console.warn('[Viewer] No se pudo reforzar calidad visual:', e);
@@ -898,6 +937,8 @@ const Viewer = ({
                 // Monkey-patch: interceptar setGhosting para auto-reforzar ACC mode
                 const _originalSetGhosting = viewer.setGhosting.bind(viewer);
                 viewer.setGhosting = (val) => {
+                    // Interruptor de prueba `?sin=fantasma`: nadie lo vuelve a encender.
+                    if (val && efectosApagados().has('fantasma')) val = false;
                     _originalSetGhosting(val);
                     if (val) enforceACCGhosting();
                 };
@@ -906,7 +947,7 @@ const Viewer = ({
                 viewer.addEventListener(Autodesk.Viewing.GEOMETRY_LOADED_EVENT, () => {
                      console.log(`[APS LMV] ⏱️ ${performance.now().toFixed(2)}ms - Evento: GEOMETRY_LOADED_EVENT`);
                      window.dispatchEvent(new CustomEvent('viewer-geometry-loaded'));
-                     enforceACCGhosting();
+                     if (!efectosApagados().has('fantasma')) enforceACCGhosting();
                      applyViewerVisualQuality();
                      console.log('[GHOST ACC] ✅ Modo ACC reforzado en GEOMETRY_LOADED');
                      
