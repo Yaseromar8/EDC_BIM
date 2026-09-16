@@ -711,22 +711,40 @@ NEXT EXACT ACTION:    nada de P1. Queda abierto pedir los registros de Render de
 DO NOT TOUCH:         lo no autorizado (motor PDF, visor CAD precargado o reutilizado, infraestructura/workers, mosaicos, almacenamiento, migraciones); el lector (unidad aparte); el WIP ajeno (FilesPage.jsx, .claude/launch.json, probar-primitivas.*); producción y Oregón.
 COMMIT/HEAD REF:      27ea400 (padre 1810d11, el lector, sobre 6e51793); origin/main = 27ea400, desplegado el 15-sep
 
-### Unidad ARCHIVOS · LECTOR · DIBUJADO REPETIDO Y CENTRADO AL ABRIR — DOS COMMITS LOCALES, SIN PUSH NI DESPLIEGUE, 15-sep
+### Unidad ARCHIVOS · LECTOR · DIBUJADO REPETIDO Y CENTRADO AL ABRIR — DESPLEGADA (0092689 y 1324862 en el portal) Y VERIFICADA, 15-sep
 
 Autorizado por el propietario el 15-sep («APLICA») tras `docs/archivos/07_P1_MEDICION_EN_PRODUCCION.md` §4 y §5: dos defectos
 de PDFViewer.jsx vistos al medir P1, cada uno en su commit.
 
 [WIP HANDOFF]
-TAREA:                ARCHIVOS · lector: (A) la hoja se dibujaba dos veces al reabrir un plano (defecto de 1810d11; 12,6 s de hilo ocupado con 004122 en producción) y lo mismo con «Ajustar página» o el doble clic con la hoja ya encuadrada; (B) a veces salía descentrada al abrir (anterior al lector). Aplicados y probados en local; commit A y commit B autorizados («APLICA»). SIN push ni despliegue.
+TAREA:                ARCHIVOS · lector: (A) la hoja se dibujaba dos veces al reabrir un plano (defecto de 1810d11; 12,6 s de hilo ocupado con 004122 en producción) y lo mismo con «Ajustar página» o el doble clic con la hoja ya encuadrada; (B) a veces salía descentrada al abrir (anterior al lector). Aplicados y probados en local; commit A y commit B autorizados («APLICA»), empujados («HAZ EL PUSH») y desplegados en el portal el 15-sep.
 IMPLEMENTADO:         A: `pararZoom` devuelve si había un zoom en marcha; `fitTo` solo hace `setEscalaFijada(n => n + 1)` si cortó un zoom; `verHojaEntera` (doble clic) no viaja ni pide dibujado si la hoja entera ya se ve (a menos de 0,5 px) y no había zoom que cortar. B: `fitTo` da al lienzo su tamaño (y guarda el viewport base) antes de programar el centrado del scroll.
-PENDIENTE:            push del propietario y Manual Deploy del portal (el backend no cambia); verificar el portal por contenido; en producción, reabrir 004122 (un solo dibujado, sin los 12,6 s) y abrir planos varias veces mirando que salen centrados.
+PENDIENTE:            hecho el push, el Manual Deploy del portal y la verificación: el portal sirve `index-7-tRY03g.js` (con los dos arreglos, comprobado por marcadores contra el paquete anterior) y en producción, al reabrir el 004122, la hoja se dibuja UNA vez (24 ms; total 1,33 s; 6 tareas largas, 0,72 s, frente a 75 y 7,4 s) y sale centrada, con desvío (0,2; 0,3) px en las cuatro aperturas medidas. Queda: más muestras de centrado en otros planos (la extensión de Chrome se desconectó a media prueba) y la UAT del propietario.
 ARCHIVOS MODIFICADOS: commit A: frontend-docs/src/components/PDFViewer.jsx, docs/AI_WORKSTATE.md y docs/archivos/07_P1_MEDICION_EN_PRODUCCION.md (nuevo). Commit B: frontend-docs/src/components/PDFViewer.jsx. Ajenos, no tocados: FilesPage.jsx, .claude/launch.json, probar-primitivas.* y los untracked históricos.
 TESTS EJECUTADOS:     banco con los árboles 6e51793 / HEAD / v1 / v2 (= A) / v3 (= A+B): reabrir (banco_redibujo), gestos con la hoja encuadrada (banco_gestos), centrado al abrir (banco_centrado: sin B 10 de 108 aperturas descentradas, con B 0 de 56) y las 24 escenas del lector (medir.mjs, tres pasadas por versión, 0 errores de página). El PDFViewer.jsx del repositorio es byte a byte el de v2 tras A y el de v3 tras A+B. Con A+B, el banco construido desde el repositorio: centrado al abrir 0 de 40 aperturas descentradas, frente a 7 de 40 con HEAD en la misma corrida; al reabrir, 1 dibujado en los dos casos (HEAD, 2); «Ajustar página» y doble clic con la hoja ya encuadrada, 0 dibujados (HEAD, 1); una muesca, «Ajustar página» tras el zoom o a medio zoom y zoom + doble clic + «Ajustar página», 1 dibujado y la hoja nítida; las 24 escenas del lector, tres pasadas sin errores de página e iguales a HEAD salvo lo que depende del instante (y, en una pasada, posiciones a 1–4 píxeles del dispositivo). npm test: 10 bancos en verde. ESLint de PDFViewer.jsx: los mismos 4 errores que HEAD (no-unused-vars, ya estaban), ninguno nuevo, tanto con A como con A+B.
-TESTS PENDIENTES:     producción (reabrir 004122; centrado al abrir); prueba del propietario con su ratón.
+TESTS PENDIENTES:     más muestras de centrado en producción; prueba del propietario con su ratón.
 FALLO CONOCIDO:       sin arreglar, anteriores: tras un zoom, el primer dibujado de la página o documento siguiente va por el búfer (lento en planos pesados) y a veces se dibuja dos veces; el doble clic con la hoja a escala de hoja entera pero desplazada sigue pidiendo un dibujado.
-NEXT EXACT ACTION:    push del propietario y Manual Deploy del portal; después, verificar el portal por contenido y reabrir 004122 en producción.
+NEXT EXACT ACTION:    nada bloqueante: repetir las muestras de centrado cuando vuelva la extensión de Chrome, y esperar la UAT del propietario.
 DO NOT TOUCH:         el backend; P1; el WIP ajeno (FilesPage.jsx, .claude/launch.json, probar-primitivas.*); producción y Oregón.
 COMMIT/HEAD REF:      commit A = el commit que contiene este fichero (padre 27ea400); commit B = el siguiente, solo PDFViewer.jsx
+
+### Unidad ARCHIVOS · CAD · COPIA ROTA EN AUTODESK Y ESTADO DE LA PREPARACIÓN — DOS COMMITS LOCALES, SIN PUSH NI DESPLIEGUE, 16-sep
+
+Autorizado por el propietario el 16-sep («hazlo») tras `docs/archivos/08_TRADUCCION_CAD_Y_PDF_FRENTE_A_ACC.md` §7: los puntos
+1 y 2 de la lista (rehacer una copia rota y enseñar el estado en la lista) más una pasada de comparación del dibujado contra
+ACC. NO autorizado ni tocado: subir a Autodesk desde el navegador, sacar la traducción del proceso web, las marcas de PDF.
+
+[WIP HANDOFF]
+TAREA:                ARCHIVOS · CAD: (A) una copia truncada en Autodesk se daba por buena para siempre, así que los cinco reintentos del propietario con el DWG de 260,3 MB no podían arreglarla; (B) durante la preparación no se veía nada en la lista —de ahí su conclusión «al subir no se traduce, solo al abrir»— y la pantalla de espera del visor CAD era gris oscura en vez de clara como la de ACC.
+IMPLEMENTADO:         A: `docs_cad.py` — `_tam_en_autodesk` pregunta el tamaño real del objeto en OSS y `_esta_entero` lo compara con el del documento; los dos sitios donde se decidía «ya estaba subido» ahora lo usan, y si no coincide se anota en el log cuántos bytes hay de cuántos y se vuelve a subir. Si Autodesk no contesta o el documento es un enlace a otra versión, se sube igual. B: `POST /api/docs/cad/estados` devuelve subiendo/inprogress/success/failed/atascado/sin_preparar solo para CAD, solo de obras con acceso, tope 300, leyendo lo guardado en la versión (no pregunta a Autodesk) y devolviendo vacío si la consulta falla; `pretraducir_en_fondo` marca «subiendo» al empezar (el tramo largo que no se veía: 3 min 32 s en el de 260 MB); `MatrixTable.jsx` pinta el chip junto al nombre y pregunta cada 15 s solo mientras quede algo preparándose; `CadViewer.jsx` pasa la pantalla de espera y de error de `#2b2f36` a `#f6f7f9` con texto `#1f2733`.
+PENDIENTE:            1) push del propietario y **Manual Deploy del backend** (el portal se despliega solo). Si el portal entra antes que el backend no se rompe nada: la lista pide los estados, no los recibe y se pinta como siempre. 2) Punto 3 del encargo (comparar el dibujado con ACC) a medias: medido el nuestro —fondo ya blanco `#ffffff`, pero el lienzo dibuja 1045×428 para un hueco de 1115×457, o sea ×1,067 de estiramiento, porque sigue al `devicePixelRatio` 0,9375 del navegador del dueño—; falta la pestaña de ACC en el grupo del navegador para tomar los mismos números y decidir si forzar un mínimo de 1. Informe §9. 3) De la lista del §7 siguen sin hacer: marcas de PDF (columna INTEGER vs UUID, necesita dueño de tabla), conservar la `@` en los nombres, sacar la pre-traducción del proceso web que gunicorn reinicia solo, y la causa de que la subida por bloques corrompa de vez en cuando.
+ARCHIVOS MODIFICADOS: backend/routes/docs_cad.py, frontend-docs/src/MatrixTable.jsx, frontend-docs/src/components/CadViewer.jsx, docs/AI_WORKSTATE.md; nuevos: backend/tests/test_copia_incompleta_en_autodesk.py, backend/tests/test_estado_de_traduccion_en_la_lista.py, docs/archivos/08_TRADUCCION_CAD_Y_PDF_FRENTE_A_ACC.md. Ajenos, no tocados: FilesPage.jsx, .claude/launch.json y los untracked históricos.
+TESTS EJECUTADOS:     pytest de las dos pruebas nuevas más la de la cola → 25 passed; pytest completo → 1 failed, 1929 passed (el fallo es test_capacidades_con_puerta, preexistente); npm test → 10 bancos en verde; banco de navegador con la tabla real y un backend de mentira → 13/13 (pregunta una sola vez al pintar, no pregunta por los PDF, cada estado pinta lo suyo, insiste mientras haya algo en marcha, deja de insistir al acabar, sin errores de página); pantalla de espera comprobada en el navegador: fondo medido `rgb(246,247,249)`, texto `rgb(31,39,51)`; ESLint de MatrixTable.jsx y CadViewer.jsx = los mismos 2 errores que HEAD, ninguno nuevo.
+TESTS PENDIENTES:     la prueba que de verdad cierra A solo se puede hacer en producción: volver a subir un DWG grande y comprobar que, si la copia llega corta, se rehace sola. UAT del propietario sobre el chip de la lista y la pantalla clara.
+FALLO CONOCIDO:       la subida por bloques sigue corrompiendo de vez en cuando (probado el 15-sep: la misma copia falló y la segunda traduce); esto NO lo arregla, solo hace que se pueda rehacer. El porcentaje sigue en 0 % mientras Autodesk no informa y luego salta a 99 %: mide solo el último tramo.
+NEXT EXACT ACTION:    push y Manual Deploy del backend del propietario; y su pestaña de ACC para cerrar el punto 3.
+DO NOT TOUCH:         el lector PDF; P1; el WIP ajeno (FilesPage.jsx, .claude/launch.json); producción y Oregón.
+COMMIT/HEAD REF:      commit A = el commit que contiene este fichero (padre 1324862 = origin/main); commit B = el siguiente, solo MatrixTable.jsx y CadViewer.jsx
 
 ## FROZEN / DO NOT REOPEN
 
@@ -792,10 +810,11 @@ Observaciones reales, ya conocidas y aceptadas. Ninguna bloquea nada.
    propietario (7-sep-2026). No bloquea B1.
 ## CURRENT TASK
 
-**15-sep-2026 · ARCHIVOS · LECTOR · DIBUJADO REPETIDO Y CENTRADO AL ABRIR — DOS COMMITS LOCALES, SIN PUSH NI DESPLIEGUE.**
-Autorizado por el propietario («APLICA»). Commit A: la hoja ya no se dibuja dos veces al reabrir, ni con «Ajustar página» o el
-doble clic con la hoja ya encuadrada. Commit B: la hoja sale centrada al abrir. Probado en el banco contra HEAD y desde el
-repositorio. Ver «Unidad ARCHIVOS · LECTOR · DIBUJADO REPETIDO Y CENTRADO AL ABRIR» y `docs/archivos/07_P1_MEDICION_EN_PRODUCCION.md` §4 y §5.
+**15-sep-2026 · ARCHIVOS · LECTOR · DIBUJADO REPETIDO Y CENTRADO AL ABRIR — DESPLEGADA Y VERIFICADA EN PRODUCCIÓN.**
+Autorizado por el propietario («APLICA»), empujado («HAZ EL PUSH») y desplegado en el portal. Commit A `0092689`: la hoja ya no
+se dibuja dos veces al reabrir, ni con «Ajustar página» o el doble clic con la hoja ya encuadrada. Commit B `1324862`: la hoja
+sale centrada al abrir. Probado en el banco y verificado en producción: al reabrir el 004122, un solo dibujado, 1,33 s y 0,72 s
+de tareas largas frente a 7,4 s, y desvío de (0,2; 0,3) px. Ver «Unidad ARCHIVOS · LECTOR · DIBUJADO REPETIDO Y CENTRADO AL ABRIR» y `docs/archivos/07_P1_MEDICION_EN_PRODUCCION.md` §4 y §5.
 
 **15-sep-2026 · ARCHIVOS · VELOCIDAD DE APERTURA · LOTE P1 — DESPLEGADA (27ea400) Y MEDIDA EN PRODUCCIÓN.**
 Pasan las seis puertas (`docs/archivos/07_P1_MEDICION_EN_PRODUCCION.md`). La medición destapó un defecto del lector: al
@@ -897,9 +916,9 @@ autorreferencial del presente documento. Consultar HEAD real por separado.
 
 ## EXACT NEXT ACTION
 
-**ARCHIVOS · LECTOR · DIBUJADO REPETIDO Y CENTRADO AL ABRIR (15-sep-2026):** dos commits locales («APLICA»), sin push ni
-despliegue. Push del propietario y Manual Deploy del portal (el backend no cambia); después, verificar el portal por contenido y
-reabrir 004122 en producción: un solo dibujado y la hoja centrada.
+**ARCHIVOS · LECTOR · DIBUJADO REPETIDO Y CENTRADO AL ABRIR (15-sep-2026):** `0092689` y `1324862` empujados y desplegados en
+el portal (`index-7-tRY03g.js`), verificados en producción: al reabrir el 004122, un solo dibujado (1,33 s, 0,72 s de tareas
+largas) y la hoja centrada. Queda la UAT del propietario y más muestras de centrado.
 
 **ARCHIVOS · VELOCIDAD DE APERTURA · LOTE P1 (15-sep-2026):** desplegado y medido; las puertas pasan. Solo queda pedir al propietario
 los registros de Render del cuelgue del backend (18:53–19:57 UTC).
@@ -925,6 +944,10 @@ del propietario (bloque H) y sus respuestas R1–R14 del contrato RONDAS antes d
 **REVIEWS · E1 (13-sep-2026):** E1 (`68b14b8`) está desplegado en el backend de Virginia y en el
 portal, verificado por `/api/health` y por contenido. Esperar la UAT del propietario en producción y
 su autorización para E2. Sin ella: ni E2, ni cambios en Oregón.
+
+Producción medida el 15-sep-2026, tras los dos arreglos del lector:
+- portal: sirve `assets/index-7-tRY03g.js`. El paquete anterior no tiene el marcador del arreglo del dibujado repetido y este sí, y el del centrado se ve como un `.style.width=` más;
+- backend: sin tocar, `/api/health` → `version 27ea400f7a0a`.
 
 Producción medida el 15-sep-2026, tras el lector y P1:
 - backend de Virginia (`visor-ecd-backend-va`): `/api/health` → `version 27ea400f7a0a`. Arrancó a las 18:53Z («Booting worker», «Live») y dejó de responder; Restart del propietario a las 19:57:39Z y estable durante los 30 min vigilados;

@@ -2,7 +2,7 @@
 
 15-sep-2026. Sigue a `06_P1_APERTURA_SIN_TRABAJO_REPETIDO.md`. P1 (`27ea400`, que va sobre el lector `1810d11`) ya está desplegado. Aquí se compara con la medición de antes, contra las puertas que pusiste.
 
-**Estado:** P1 está desplegado y medido. La medición destapó un defecto que no viene de P1, sino del lector (`1810d11`): al reabrir un plano, la hoja se dibuja dos veces. Al probar el arreglo salió otro defecto, anterior al lector: a veces la hoja se queda descentrada al abrir. Los dos arreglos son pequeños, solo tocan `PDFViewer.jsx` y están probados en el banco. Con tu autorización («APLICA») van en **dos commits aparte, sin push ni despliegue**: primero el del dibujado repetido (§4) y después el del centrado (§5).
+**Estado:** P1 está desplegado y medido. La medición destapó un defecto que no viene de P1, sino del lector (`1810d11`): al reabrir un plano, la hoja se dibuja dos veces. Al probar el arreglo salió otro defecto, anterior al lector: a veces la hoja se queda descentrada al abrir. Los dos arreglos son pequeños, solo tocan `PDFViewer.jsx` y están probados en el banco. Con tu autorización («APLICA») fueron a dos commits aparte, `0092689` (§4) y `1324862` (§5), empujados y **desplegados en el portal** el 15-sep. Comprobados en producción: §6.
 
 ## En corto
 
@@ -49,7 +49,7 @@
 - **Frío:** página recién cargada. **Caliente:** reabrir en la misma página.
 - **Carga masiva:** no hubo durante ninguna de las dos mediciones. La última entrada de la Sala de Cuarentena es de las 10:17:26. Se midió antes de 11:11 a 11:38 y después, de 15:05 a 15:35.
 - **Diferencias entre las dos:**
-  - el backend se había reiniciado una hora antes, porque se colgó tras el despliegue (§6);
+  - el backend se había reiniciado una hora antes, porque se colgó tras el despliegue (§7);
   - con el plano pesado en frío, la bajada desde Google Cloud tardó 14,8 s, frente a 6,2 s antes. P1 no toca esa bajada, así que esos tiempos de dibujo no se comparan. Las peticiones sí.
 - **Versiones medidas:** backend `27ea400f7a0a` y portal `index-ebE4CIvV.js`.
 
@@ -220,7 +220,7 @@ Tiempos en segundos desde el clic. En las cronologías, «inicio→fin» en mili
   - lo único que puede quedarse sin pedir es un zoom que `fitTo` o el doble clic cortan a medias, y ese caso se conserva.
 - **Lo que no toca:**
   - si la hoja está a la escala de hoja entera pero desplazada, el doble clic sigue viajando y pide un dibujado de más. Es raro: con la hoja entera a la vista casi nunca hay nada que desplazar;
-  - lo que ya pasaba antes del lector (§6).
+  - lo que ya pasaba antes del lector (§7).
 
 ### En el banco con el arreglo
 
@@ -312,7 +312,23 @@ Se construyó el mismo banco con estos árboles:
   - `npm test`: 10 bancos en verde;
   - ESLint de `PDFViewer.jsx`: los mismos 4 errores que HEAD (no-unused-vars, ya estaban), ninguno nuevo, tanto con A como con A+B.
 
-## 6 · Otros
+## 6 · Comprobado en producción
+
+- **Desplegado:** el portal sirve `index-7-tRY03g.js`. El paquete anterior, `index-ebE4CIvV.js`, no trae el arreglo del §4 y el nuevo sí; el del §5 se ve como un `style.width` más. El backend sigue en `27ea400f7a0a`, porque estos commits no lo tocan.
+- **Medido en tu Chrome, con la pestaña a la vista, sobre el mismo plano 004122:**
+
+| | Antes, con el defecto | Ahora |
+|---|---|---|
+| Dibujados de la hoja al reabrir | 2, el segundo termina a los 13,3 s | **1**, a los 24 ms |
+| Procesador después de verse la hoja | 75 tareas largas, 7,4 s | 6 tareas largas, 0,72 s, la mayor de 0,2 s |
+| Dibujo completo al reabrir | 0,57 s y después 12,6 s ocupado | 1,33 s y nada después |
+| Desvío de la hoja respecto al centro | — | (0,2; 0,3) px en las cuatro aperturas medidas |
+
+- **En frío:** la primera apertura del día bajó los 23,4 MB en 16 s, otra vez con la red lenta. Un solo dibujado, primer trazo a los 20,3 s y completo a los 21,6 s: manda la descarga, y el dibujado ya no se repite.
+- **Al cerrar:** no queda ningún lienzo vivo.
+- **Lo que quedó sin terminar:** más muestras de centrado en otros planos. La extensión de Chrome se desconectó a media prueba. Dos lecturas de esa tanda no valen: el lienzo medía todavía 300 px porque el plano seguía cargando, así que no son descentrados.
+
+## 7 · Otros
 
 - **Cuelgue del backend tras el despliegue:**
   - arrancó bien (18:52:57Z «Booting worker», 18:53:05Z «Live») y dejó de responder;
@@ -325,8 +341,8 @@ Se construyó el mismo banco con estos árboles:
   - En planos pesados es el camino lento.
   - Queda anotado para otro lote.
 
-## 7 · Qué falta
+## 8 · Qué falta
 
-1. **Push y Manual Deploy del portal** con los dos commits del lector; el backend no cambia. Después, en producción: reabrir el 004122 (tiene que dibujarse una sola vez) y abrir planos varias veces para ver que salen centrados.
+1. **Tu prueba en producción**, con tu ratón: reabrir planos pesados y ver que ya no se atascan, y que salen centrados. Yo dejé cuatro aperturas medidas (§6) y me faltan más muestras de centrado en otros planos: la extensión de Chrome se desconectó.
 2. **Los registros de Render del cuelgue** (18:53–19:57 UTC), para saber la causa.
 3. **Opcional:** repetir en producción la versión fija, el enlace directo y la apertura desde Reviews. Solo son lecturas.

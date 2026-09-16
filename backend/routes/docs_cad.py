@@ -319,6 +319,48 @@ def _first_error(manifest):
     return None
 
 
+def _tam_en_autodesk(token, bucket, object_key):
+    """Cuanto pesa el objeto en el almacen de Autodesk, o None si no esta.
+
+    Sirve para saber si lo que hay alli es el fichero ENTERO. Ver
+    `_esta_entero`, que es quien decide.
+    """
+    try:
+        det = requests.get(
+            '%s/oss/v2/buckets/%s/objects/%s/details' % (APS_BASE, bucket, object_key),
+            headers=_headers(token), timeout=30)
+        if not det.ok:
+            return None
+        return int(det.json().get('size') or 0) or None
+    except Exception:
+        return None
+
+
+def _esta_entero(token, bucket, object_key, node):
+    """¿Esta en Autodesk el fichero de esta version, y COMPLETO?
+
+    EL DEFECTO QUE ESTO CORRIGE. Antes bastaba con que el objeto pesara mas de
+    cero. Una subida que llegaba cortada quedaba asi para siempre: Autodesk
+    respondia «the drawing file is invalid», el usuario pulsaba «Volver a
+    intentarlo», el backend veia «ya esta subido» y relanzaba la traduccion
+    SOBRE LA MISMA COPIA MALA. Medido en produccion el 15-sep-2026 con un DWG
+    de 260,3 MB: fallaba siempre aqui, ACC lo traducia sin problema, y subido
+    de nuevo como archivo nuevo tradujo tambien aqui.
+
+    Solo se compara cuando el fichero viaja SUELTO. Si lleva referencias, lo
+    que sube es un paquete comprimido y su tamaño no es el del documento.
+    """
+    tam_alla = _tam_en_autodesk(token, bucket, object_key)
+    if not tam_alla:
+        return False
+    esperado = 0 if node.get('refs') else (node.get('size') or 0)
+    if esperado and tam_alla != esperado:
+        print('[CAD] la copia en Autodesk de %s no coincide (%d de %d bytes): se vuelve a subir'
+              % (node.get('name'), tam_alla, esperado))
+        return False
+    return True
+
+
 def _manifest(token, urn):
     r = requests.get(
         '%s/modelderivative/v2/designdata/%s/manifest' % (APS_BASE, urn),
@@ -521,6 +563,11 @@ def pretraducir_en_fondo(node_id, forzar=False, master=False):
         node = _load_node(node_id)
         if not node or not is_cad_file(node['name']) or not node['gcs_urn']:
             return
+        # SE ANOTA QUE EMPIEZA, para que la lista pueda decirlo. Hasta hoy el
+        # primer rastro llegaba al TERMINAR de mover el fichero a Autodesk
+        # (minutos con un plano grande), asi que durante ese rato la pantalla no
+        # tenia nada que contar y parecia que la traduccion no habia arrancado.
+        _save_cad_meta(node, {'status': 'subiendo', 'started_at': time.time()})
         token, error = get_internal_token()
         if error or not token:
             print('[CAD pre] sin credenciales APS: %s' % error)
@@ -537,14 +584,7 @@ def pretraducir_en_fondo(node_id, forzar=False, master=False):
             return
 
         object_key = _object_key_for(node)
-        ya_subido = False
-        try:
-            det = requests.get(
-                '%s/oss/v2/buckets/%s/objects/%s/details' % (APS_BASE, bucket, object_key),
-                headers=_headers(token), timeout=30)
-            ya_subido = det.ok and (det.json().get('size') or 0) > 0
-        except Exception:
-            ya_subido = False
+        ya_subido = _esta_entero(token, bucket, object_key, node)
 
         if ya_subido and not node.get('refs'):
             ok, error = _start_translation(token, urn, force=forzar or master,
@@ -731,14 +771,10 @@ def translate_cad():
     #
     # El manifiesto y el objeto son dos cosas distintas: el fichero puede estar
     # subido y la traduccion sin lanzar. Es exactamente el caso que se atascaba.
-    ya_subido = False
-    try:
-        det = requests.get(
-            '%s/oss/v2/buckets/%s/objects/%s/details' % (APS_BASE, bucket, object_key),
-            headers=_headers(token), timeout=30)
-        ya_subido = det.ok and (det.json().get('size') or 0) > 0
-    except Exception:
-        ya_subido = False
+    # Y ENTERO: una copia cortada dejaba el archivo muerto para siempre (ver
+    # `_esta_entero`). Si no coincide con el tamaño de esta version, se vuelve
+    # a subir por el camino de abajo.
+    ya_subido = _esta_entero(token, bucket, object_key, node)
 
     if ya_subido and not node.get('refs'):
         print('[CAD] el fichero ya estaba en Autodesk: se lanza la traduccion sin volver a subir')
@@ -889,3 +925,67 @@ def cad_status():
                             'Autodesk no pudo procesar. Si la necesitas, subela en '
                             'formato GeoTIFF (.tif + .tfw).')
     return jsonify(payload)
+
+
+@docs_cad_bp.route('/api/docs/cad/estados', methods=['POST'])
+def cad_estados():
+    """Como va la preparacion de varios planos, para pintarlo en la LISTA.
+
+    ACC pone «Procesando» y un circulo en la fila mientras prepara el modelo, y
+    la fecha que enseña es la del fin de ese proceso. Aqui no se veia NADA -- ni
+    preparando, ni listo, ni fallido -- y por eso parecia que la traduccion no
+    arrancaba hasta que alguien abria el archivo. Medido el 15/16-sep-2026: si
+    arranca al subir; lo que faltaba era CONTARLO.
+
+    Se contesta con lo YA GUARDADO en la version. No se pregunta a Autodesk:
+    esto lo pide una carpeta entera de una vez, y una llamada por archivo a APS
+    seria justo el trabajo que el lote P1 quito de las aperturas.
+
+    Estados: 'subiendo' (viajando a Autodesk), 'inprogress' (traduciendo),
+    'success', 'failed', 'atascado' (empezo y no termino en una hora) y
+    'sin_preparar' (nadie lo ha preparado todavia).
+    """
+    data = request.get_json(silent=True) or {}
+    ids = [str(x) for x in (data.get('node_ids') or []) if x][:300]
+    if not ids:
+        return jsonify({'success': True, 'estados': {}})
+
+    from routes.documents import verify_project_access
+    usuario = getattr(g, 'current_user', None)
+
+    try:
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            cur.execute("""
+                SELECT n.id::text, n.name, n.model_urn, v.metadata
+                  FROM file_nodes n
+                  LEFT JOIN file_versions v ON v.id = n.current_version_id
+                 WHERE n.id = ANY(%s::uuid[]) AND n.is_deleted = FALSE
+            """, (ids,))
+            filas = cur.fetchall()
+    except Exception as e:
+        # Un listado sin estados se pinta igual que antes: sin adornos.
+        print('[CAD estados] %s' % str(e)[:120])
+        return jsonify({'success': True, 'estados': {}})
+
+    ahora = time.time()
+    permitido = {}
+    estados = {}
+    for node_id, nombre, model_urn, meta in filas:
+        if not is_cad_file(nombre or ''):
+            continue
+        if model_urn not in permitido:
+            permitido[model_urn] = bool(verify_project_access(usuario, model_urn))
+        if not permitido[model_urn]:
+            continue
+        cad = ((meta or {}).get('cad') or {})
+        estado = cad.get('status') or 'sin_preparar'
+        if estado in ('subiendo', 'inprogress'):
+            empezo = cad.get('started_at')
+            try:
+                if empezo and (ahora - float(empezo)) > STALE_SECONDS:
+                    estado = 'atascado'
+            except (TypeError, ValueError):
+                pass
+        estados[node_id] = estado
+    return jsonify({'success': True, 'estados': estados})
