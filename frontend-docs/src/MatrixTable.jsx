@@ -6,6 +6,8 @@ import { ESTADOS } from './utils/estadosECD';
 import { ANCHO_MINIMO, ANCHO_MAXIMO } from './utils/anchosColumnas';
 import { PASO_TECLADO, PASO_TECLADO_GRANDE } from './hooks/useColumnResize';
 import { NIVELES } from './utils/capacidadesDeSeleccion';
+import { API } from './utils/helpers';
+import { apiFetch } from './utils/apiFetch';
 
 // ── ISO 19650 Document Lifecycle ──────────────────────────────────────────
 //
@@ -22,6 +24,27 @@ const STATUS_CONFIG = Object.fromEntries(
     codigo, { label: e.etiqueta, color: e.texto, bg: e.fondo, borde: e.borde },
   ]),
 );
+
+// ── COMO VA LA PREPARACION DE UN PLANO ─────────────────────────────────────
+//
+// ACC enseña «Procesando» con un circulo en la fila mientras prepara el modelo,
+// y asi el usuario sabe que su archivo esta en camino. Aqui no se veia NADA --
+// ni preparando, ni listo, ni fallido-- y el dueno concluyo que «no se traduce
+// al subir, solo al abrir». El log del 15/16-sep-2026 demostro que SI se
+// traducia al subir: lo que faltaba era contarlo. Y cuando la traduccion
+// fallaba, el fallo solo aparecia al abrir el documento, dias despues.
+const ES_CAD = /\.(dwg|dxf|dwf|dwfx|rvt|rfa|ifc|nwd|nwc|dgn|3dm|sat|ste?p|ig[es]s?|obj|fbx|stl)$/i;
+const PREPARANDO = new Set(['subiendo', 'inprogress']);
+const AVISO_CAD = {
+  subiendo:   { texto: 'Preparando…', color: '#6b7480',
+                titulo: 'Se está enviando a Autodesk para poder verlo en el navegador.' },
+  inprogress: { texto: 'Preparando…', color: '#6b7480',
+                titulo: 'Autodesk lo está traduciendo. Cuando termine, se abrirá al instante.' },
+  failed:     { texto: 'No se pudo preparar', color: '#c0392b',
+                titulo: 'Autodesk no pudo traducirlo. Ábrelo para volver a intentarlo.' },
+  atascado:   { texto: 'Se quedó a medias', color: '#b26a00',
+                titulo: 'Empezó a prepararse y lleva más de una hora sin terminar. Ábrelo para volver a intentarlo.' },
+};
 
 const VALID_TRANSITIONS = {
   WIP:       ['SHARED'],
@@ -221,7 +244,7 @@ const TiradorColumna = ({ columna, etiqueta, ancho, iniciar, ajustar }) => (
  * TableRow Component - Renders an individual row in the virtualized list.
  */
 const TableRow = ({ index, style, data }) => {
-  const { items, selected, toggle, navigate, setActiveFile, onUpdateDescription, onRename, formatSize, formatDate, getInitials, user, isAdmin, onRowMenu, isTrashMode, onShowVersions, columnWidths, renderFileIconSop, editingNodeId, setEditingNodeId, rightClickedId, processingIds, onStatusChange } = data;
+  const { items, selected, toggle, navigate, setActiveFile, onUpdateDescription, onRename, formatSize, formatDate, getInitials, user, isAdmin, onRowMenu, isTrashMode, onShowVersions, columnWidths, renderFileIconSop, editingNodeId, setEditingNodeId, rightClickedId, processingIds, onStatusChange, estadosCad = {} } = data;
   
   const item = items && items[index] ? items[index] : {};
 
@@ -367,7 +390,7 @@ const TableRow = ({ index, style, data }) => {
           openItem();
         }}
       >
-        {processingIds[item.id] ? (
+        {(processingIds[item.id] || PREPARANDO.has(estadosCad[item.id])) ? (
           <div className="adsk-spinner" style={{ width: 14, height: 14, borderWidth: 2, marginRight: 8 }} />
         ) : (
           isFolder ? (
@@ -441,6 +464,17 @@ const TableRow = ({ index, style, data }) => {
             >
               {item.name || 'Sin nombre'}
             </span>
+            {/* Como va la preparacion del plano (ver ES_CAD arriba). Lo listo y
+                lo que nadie ha preparado no dicen nada: solo se habla cuando hay
+                algo que esperar o algo que arreglar. */}
+            {AVISO_CAD[estadosCad[item.id]] && (
+              <span
+                title={AVISO_CAD[estadosCad[item.id]].titulo}
+                style={{ flexShrink: 0, fontSize: 11, color: AVISO_CAD[estadosCad[item.id]].color }}
+              >
+                {AVISO_CAD[estadosCad[item.id]].texto}
+              </span>
+            )}
             {/* Reservado para editar. Se ve en la fila, sin abrir nada: quien va a
                 trabajar en un documento tiene que enterarse ANTES de empezar, no
                 cuando ya ha invertido dos horas y le rechazan la subida. */}
@@ -631,6 +665,36 @@ const MatrixTable = ({
   onStatusChange
 }) => {
   const allItems = [...folders, ...files];
+
+  // Una pregunta por carpeta, y solo se insiste mientras haya algo preparandose
+  // (ver AVISO_CAD arriba). Se contesta con lo guardado en la version: la lista
+  // no hace que el servidor pregunte a Autodesk fila por fila.
+  const [estadosCad, setEstadosCad] = useState({});
+  const claveCad = files.filter(f => ES_CAD.test(f?.name || '')).map(f => f.id).join(',');
+  useEffect(() => {
+    const ids = claveCad ? claveCad.split(',') : [];
+    if (!ids.length) return undefined;
+    let vivo = true;
+    let reloj = null;
+    const preguntar = async () => {
+      try {
+        const r = await apiFetch(`${API}/api/docs/cad/estados`, {
+          method: 'POST', body: JSON.stringify({ node_ids: ids }),
+        });
+        const d = await r.json();
+        if (!vivo) return;
+        const estados = (d && d.estados) || {};
+        setEstadosCad(estados);
+        if (Object.values(estados).some(e => PREPARANDO.has(e))) reloj = setTimeout(preguntar, 15000);
+      } catch { /* sin estados, la lista se pinta como siempre */ }
+    };
+    preguntar();
+    return () => { vivo = false; if (reloj) clearTimeout(reloj); };
+  }, [claveCad]);
+  // Sin planos en la carpeta no hay nada que contar, y asi el efecto no toca
+  // el estado por su cuenta (regla `set-state-in-effect`).
+  const avisosDeCad = claveCad ? estadosCad : {};
+
   return (
     <div className="table-wrap" style={{ display: 'flex', flexDirection: 'column', overflowX: 'auto', overflowY: 'hidden', height: '100%', background: '#fff' }}>
       <div style={{ width: totalTableWidth, flex: 1, display: 'flex', flexDirection: 'column' }}>
@@ -740,7 +804,8 @@ const MatrixTable = ({
                   setEditingNodeId,
                   rightClickedId,
                   processingIds,
-                  onStatusChange
+                  onStatusChange,
+                  estadosCad: avisosDeCad
                 }}
               >
                 {TableRow}

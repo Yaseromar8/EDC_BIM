@@ -509,7 +509,7 @@ export default function CadViewer({ file, projectPrefix = '', urnDirecto = null 
   }, [file.id, intento, urnDirecto]);
 
   return (
-    <div style={{ position: 'relative', width: '100%', height: '100%', background: '#2b2f36' }}>
+    <div style={{ position: 'relative', width: '100%', height: '100%', background: '#f6f7f9' }}>
       <div ref={containerRef} style={{ position: 'absolute', inset: 0 }} />
 
       {/* Aviso discreto: el plano se ve, solo faltó algo accesorio. No es un
@@ -559,16 +559,16 @@ export default function CadViewer({ file, projectPrefix = '', urnDirecto = null 
         <div style={{
           position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
           alignItems: 'center', justifyContent: 'center', gap: 12,
-          background: '#2b2f36', color: '#dfe3e9', textAlign: 'center', padding: 24,
+          background: '#f6f7f9', color: '#1f2733', textAlign: 'center', padding: 24,
         }}>
           {phase === 'error' ? (
             <>
-              <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#e57373" strokeWidth="1.5" strokeLinecap="round">
+              <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#c0392b" strokeWidth="1.5" strokeLinecap="round">
                 <circle cx="12" cy="12" r="9" /><line x1="12" y1="8" x2="12" y2="13" /><line x1="12" y1="16" x2="12" y2="16" />
               </svg>
               <div style={{ fontSize: 14, maxWidth: 460, lineHeight: 1.5 }}>{error}</div>
               {detalle && (
-                <div style={{ fontSize: 12, color: '#8b939e', maxWidth: 460, fontFamily: 'monospace' }}>
+                <div style={{ fontSize: 12, color: '#6b7480', maxWidth: 460, fontFamily: 'monospace' }}>
                   {detalle}
                 </div>
               )}
@@ -600,7 +600,7 @@ export default function CadViewer({ file, projectPrefix = '', urnDirecto = null 
                     toast.error(e.message || 'No se pudo descargar el archivo original.');
                   }
                 }}
-                style={{ fontSize: 13, color: '#7fb3d5', marginTop: 4, background: 'none',
+                style={{ fontSize: 13, color: 'var(--accent)', marginTop: 4, background: 'none',
                          border: 'none', textDecoration: 'underline', cursor: 'pointer' }}>
                 Descargar el archivo original
               </button>
@@ -612,19 +612,19 @@ export default function CadViewer({ file, projectPrefix = '', urnDirecto = null 
                   durante el envio, el reloj y el tamano; durante la traduccion,
                   el porcentaje real que da Autodesk. */}
               {pct === null ? <div className="adsk-spinner" /> : (
-                <div style={{ width: 260, height: 6, background: '#3a3f47', borderRadius: 3, overflow: 'hidden' }}>
-                  <div style={{ width: `${pct}%`, height: '100%', background: '#7fb3d5', transition: 'width .4s' }} />
+                <div style={{ width: 260, height: 6, background: '#dfe4ea', borderRadius: 3, overflow: 'hidden' }}>
+                  <div style={{ width: `${pct}%`, height: '100%', background: 'var(--accent)', transition: 'width .4s' }} />
                 </div>
               )}
               <div style={{ fontSize: 14 }}>
                 {phase === 'preparando' ? 'Enviando el archivo a Autodesk…' : 'Traduciendo el modelo…'}
                 {pct !== null ? ` ${pct}%` : (progress ? ` ${progress}` : '')}
               </div>
-              <div style={{ fontSize: 12, color: '#98a1ad', display: 'flex', gap: 14 }}>
+              <div style={{ fontSize: 12, color: '#6b7480', display: 'flex', gap: 14 }}>
                 <span>{formatoReloj(transcurrido)}</span>
                 {file?.size ? <span>{(file.size / 1048576).toFixed(0)} MB</span> : null}
               </div>
-              <div style={{ fontSize: 12, color: '#98a1ad', maxWidth: 430, lineHeight: 1.5 }}>
+              <div style={{ fontSize: 12, color: '#6b7480', maxWidth: 430, lineHeight: 1.5 }}>
                 {phase === 'preparando'
                   ? 'Todavía no hay porcentaje: Autodesk no conoce el archivo hasta que termina el envío. Va por tamaño.'
                   : 'La primera vez tarda unos minutos según el tamaño. Las siguientes aperturas son inmediatas.'}
