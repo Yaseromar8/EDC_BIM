@@ -746,6 +746,40 @@ NEXT EXACT ACTION:    Manual Deploy del propietario de LOS DOS servicios (el por
 DO NOT TOUCH:         el lector PDF; P1; el WIP ajeno (FilesPage.jsx, .claude/launch.json); producción y Oregón.
 COMMIT/HEAD REF:      `0aa2cb2` (backend y pruebas), `65d5184` (frontend) y un tercero con el forzado de la traducción; origin/main tras el push
 
+### Unidad ARCHIVOS · MARCAS DE PDF Y PORCENTAJE DE PREPARACIÓN — PORCENTAJE COMMITEADO; MIGRACIÓN 32 APARCADA POR EL DUEÑO, 16-sep
+
+Las otras dos cosas que dijo el dueño en la auditoría de esta noche: «los pdf están medio raros» y «al abrir el
+porcentaje tampoco es coherente». Informe: `docs/archivos/08_TRADUCCION_CAD_Y_PDF_FRENTE_A_ACC.md` §10.
+
+[WIP HANDOFF]
+TAREA:                ARCHIVOS: (A) las marcas y calibraciones de PDF no se leen ni se guardan nunca porque `file_node_id` es INTEGER y `file_nodes.id` es UUID —cada apertura deja un 500 en el log—; (B) el porcentaje al abrir un CAD no medía nada: `0%` fijo durante toda la subida (3 min 32 s con el DWG de 260 MB) y salto al 99%, con el visor diciendo «Traduciendo» antes de que hubiera traducción.
+IMPLEMENTADO:         A: migración a mano `backend/sql/32_marcas_de_pdf_por_uuid.sql` + rollback; convierte el tipo y nada más, con guardia de `ecd_migrator` y abortando si alguna fila no convierte. NO se toca `_migrar_a_uuid`: sigue ahí y es inofensiva, pero con el esquema congelado no se ejecuta nunca —ese era el motivo real, no la propiedad de `doc_redlines`, que es otra tabla—. B: `_upload_to_oss` acepta `avisar(hechas, total)` y lo llama al empezar y tras cada bloque; `pretraducir_en_fondo` lo guarda en la versión; `_progreso_de_subida` lo convierte en porcentaje (vacío si hay un solo bloque, tope 99%); `/status` sin manifiesto devuelve `fase='subiendo'` con ese número; `CadViewer.jsx` deja que la fase la decida `/status` en vez de declararse «traduciendo» de entrada.
+PENDIENTE:            1) B va commiteado («SOLO 1 Y 2»); falta push y Manual Deploy del backend y del portal. 2) A (la 32) NO se commitea por decisión del dueño: «NO MIGRAREMOS NADA», y tras explicársela, «SOLO 1 Y 2». Sus tres ficheros quedan SIN SEGUIMIENTO (`backend/sql/32_*.sql` y `backend/tests/test_migracion_marcas_de_pdf.py`); las marcas de PDF siguen rotas. No volver a proponerla sin que él la saque. 3) Sigue abierto el punto 3 del encargo (dibujado contra ACC: falta su pestaña) y, de la lista del §7, la «@» en los nombres, sacar la pre-traducción del proceso que gunicorn recicla, y la causa de que la subida por bloques corrompa.
+ARCHIVOS MODIFICADOS: backend/routes/docs_cad.py, frontend-docs/src/components/CadViewer.jsx, backend/tests/test_copia_incompleta_en_autodesk.py (el falso `_upload_to_oss` acepta `avisar`), docs/archivos/08…md, docs/AI_WORKSTATE.md; nuevos: backend/sql/32_marcas_de_pdf_por_uuid.sql, backend/sql/32_marcas_de_pdf_por_uuid_rollback.sql, backend/tests/test_migracion_marcas_de_pdf.py, backend/tests/test_porcentaje_de_preparacion.py. Ajenos, no tocados: FilesPage.jsx, .claude/launch.json y los untracked históricos.
+TESTS EJECUTADOS:     pytest completo → 1 failed, 1958 passed (el fallo es test_capacidades_con_puerta, preexistente); npm test → 10 bancos en verde; la 32 EJECUTADA de verdad contra un PostgreSQL 18 de usar y tirar (initdb en el temporal) con el esquema de hoy y sus cuatro índices: 9 comprobaciones en verde, incluidas las dos guardias, la consulta real de `list_markups` y las dos direcciones del rollback; banco `banco_fases` con el `CadViewer` REAL y un backend de mentira → 10/10; ESLint de CadViewer.jsx = el mismo error que HEAD, ninguno nuevo.
+TESTS PENDIENTES:     en producción: abrir un plano y comprobar que ya no sale el 500 de las marcas (después de la 32), y subir un CAD grande para ver la cuenta de bloques de verdad.
+FALLO CONOCIDO:       el porcentaje de la fase de traducción sigue siendo el que informa Autodesk, que da saltos suyos; esto arregla el tramo de subida y la etiqueta, no el informe de Model Derivative.
+NEXT EXACT ACTION:    push y Manual Deploy (backend y portal) del porcentaje.
+DO NOT TOUCH:         el lector PDF; P1; el WIP ajeno; producción y Oregón.
+COMMIT/HEAD REF:      B = `feat(cad): count the upload …` sobre 0ffc962; A sin commitear
+
+### Unidad VISOR 3D · SOMBRA AMBIENTAL EN METROS REALES — COMMITEADA EN LOCAL, SIN PUSH NI DESPLIEGUE, 16-sep
+
+El dueño comparó la topografía `PASTEADO_GENERAL.shared.dwg` en ACC y en `visor.alephia.com.pe`: en ACC el relieve tiene
+volumen y en el nuestro sale plano. Autorizado: «VAMOS, CON CUIDADO Y SIN ROMPER NADA». Informe: `docs/archivos/08…` §11.
+
+[WIP HANDOFF]
+TAREA:                VISOR 3D: la topografía salía plana frente a ACC.
+IMPLEMENTADO:         `frontend-react/src/components/Viewer.jsx`, SOLO el bloque de la sombra ambiental dentro de `applyViewerVisualQuality`: se llama a `viewer.impl.renderer().setAOOptions` (con `viewer.impl.setAOOptions` de respaldo) y el radio va en metros reales, `(__vqAoMetros ?? 2.5) / viewer.model.getUnitScale()`; `__vqAoRadius` sigue siendo el ajuste a mano en unidades de escena. El fichero tiene WIP AJENO (7 bloques, ~48 líneas): se commitea SIN él, poniendo en el índice HEAD + este bloque con `git hash-object -w` + `git update-index --cacheinfo`; el WIP sigue en el árbol de trabajo, intacto.
+PENDIENTE:            push y Manual Deploy de `visor-ecd-frontend`; después, que el dueño mire una topografía y una estructura.
+ARCHIVOS MODIFICADOS: frontend-react/src/components/Viewer.jsx (solo el bloque), docs/archivos/08…md, docs/AI_WORKSTATE.md.
+TESTS EJECUTADOS:     medido en producción con el visor real y ACC al lado: los AJUSTES eran iguales (Boardwalk, exposición −7, SAO, suavizado, aristas, sombra en el suelo, DPR); la diferencia era la unidad de escena (ACC metros, nosotros milímetros por `applyScaling:'mm'`) y que el radio nunca se aplicaba (`viewer.impl.setAOOptions` no existe en 7.126.0: radio de fábrica 10 mm con la topografía, 0,25 m con Revit). Calibrado con cámara idéntica y métricas de píxeles de `getScreenShot`: topografía de cerca, ACC 2,9 % oscuros, 10 mm 0,9 %, 2,5 m 2,7 %, 8 m 13,9 %; de lejos, 2,5 m no cambia nada; estructuras (3 `.rvt`) sin cambios con 2,5 m. La cuenta del código nuevo, comprobada contra el visor real (→ 2500 en milímetros). El radio sobrevive a `setLightPreset`, `setQualityLevel` y `prefs.set`. ESLint de Viewer.jsx 62 → 62, ninguno nuevo; `vite build` a carpeta temporal, OK.
+TESTS PENDIENTES:     la mirada del dueño tras el despliegue.
+FALLO CONOCIDO:       sin el ajuste de sesgo de ACC (`getAOBias`, 7.126.1), con radios grandes las zonas llanas se manchan; por eso 2,5 m y no los 8 m de ACC. `__vq.ao()` sigue llamando al método inexistente (fuera del bloque autorizado): para calibrar a mano, `__vqAoMetros = n; __applyViewerVisualQuality()`.
+NEXT EXACT ACTION:    push y Manual Deploy de `visor-ecd-frontend`.
+DO NOT TOUCH:         el WIP ajeno de Viewer.jsx y los demás protegidos; la migración 32 (aparcada).
+COMMIT/HEAD REF:      `fix(viewer): …` encima del commit del porcentaje
+
 ## FROZEN / DO NOT REOPEN
 
 - **Saved Views 2.0 está cerrado.** No se reabre la arquitectura salvo

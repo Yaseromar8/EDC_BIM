@@ -221,3 +221,149 @@ Lo que sí queda probado y es accionable por sí solo: si se fuerza un mínimo d
 píxel por píxel de pantalla, se acaba el estiramiento del 6,7 %. Es un cambio de
 una línea en el arranque del visor, pero **no se aplica todavía**: primero la
 medida contra ACC, para no cambiar el dibujado a ciegas.
+
+## 10 · Las otras dos que dijo el dueño (16-sep)
+
+### 10.1 · «los pdf están medio raros»
+
+> **Decisión del dueño (16-sep): no se incluye.** La migración 32 queda preparada y
+> probada, pero **sin commitear** (ficheros sin seguimiento en `backend/sql/` y
+> `backend/tests/`). Mientras no se ejecute, las marcas de PDF siguen sin funcionar y
+> cada apertura de un plano sigue dejando el error de abajo.
+
+Cada apertura de un plano deja en producción:
+
+```
+ERROR [db] invalid input syntax for type integer: "008db2c7-779a-4e6b-9872-7f5bf4148aca"
+  File "backend/routes/pdf_tools.py", line 134, in list_markups
+```
+
+`pdf_markups.file_node_id` y `pdf_calibrations.file_node_id` son INTEGER y
+`file_nodes.id` es UUID: las marcas y las calibraciones **no se leen ni se
+guardan nunca**.
+
+**Corrección a lo que se dijo antes en este informe:** no está bloqueado por
+`must be owner of table doc_redlines` —esa es otra tabla—. El motivo real es que
+la conversión (`_migrar_a_uuid`) cuelga de una función con `@solo_con_ddl`, y con
+el esquema congelado —que es como corre producción— **no se ejecuta jamás**.
+
+Por eso va como migración a mano, al estilo de la casa:
+`backend/sql/32_marcas_de_pdf_por_uuid.sql` y su rollback. Convierte el tipo y
+nada más: si alguna fila no convierte, **aborta y dice cuál**.
+
+Probada **ejecutándola de verdad** contra un PostgreSQL 18 de usar y tirar
+(`initdb` en el temporal), reproduciendo el esquema de hoy con sus cuatro
+índices. Nueve comprobaciones en verde:
+
+| | |
+|---|---|
+| Como `postgres` | aborta: `PDF_UUID_ROLE_GUARD` |
+| Con una fila rebelde (`123`) | aborta y **no toca el tipo** |
+| Conversión | las dos columnas quedan en `uuid` |
+| Índices | los cuatro sobreviven |
+| La consulta real de `list_markups` | devuelve la fila con un UUID |
+| Repetirla | no rompe (dice «ya es UUID») |
+| Rollback con datos | aborta antes que perder marcas |
+| Rollback vacía | vuelve a INTEGER |
+
+Más `backend/tests/test_migracion_marcas_de_pdf.py` (9 pruebas estáticas).
+
+### 10.2 · «al abrir el porcentaje tampoco es coherente»
+
+Tenía razón. Mientras el fichero viajaba a Autodesk no había manifiesto y
+`/status` contestaba **un `0%` fijo durante todo ese tramo** —3 min 32 s con el
+DWG de 260,3 MB— para saltar después al 99 % de Model Derivative. Y el visor ya
+decía «Traduciendo el modelo…» cuando la traducción ni había empezado.
+
+Ahora la subida por bloques **cuenta los que lleva** (`avisar(hechas, total)`) y
+eso se guarda en la versión; `/status` sin manifiesto devuelve `fase='subiendo'`
+y ese porcentaje, y el visor dice «Enviando el archivo a Autodesk…». Con un solo
+bloque no se inventa barra: se devuelve vacío y el visor gira.
+
+| | Antes | Ahora |
+|---|---|---|
+| Mientras sube (260 MB, 3 bloques) | «Traduciendo… 0 %» durante 3 min 32 s | «Enviando el archivo a Autodesk… 0 → 33 → 67 → 99 %» |
+| Al empezar la traducción | salta a 99 % | «Traduciendo el modelo… 45 %», sin retroceder a 0 |
+
+Probado con el **componente real** (`banco_fases`, el `CadViewer` de verdad con
+un backend de mentira): **10/10 en verde**, incluida la pantalla clara medida en
+`rgb(246, 247, 249)`. Más `backend/tests/test_porcentaje_de_preparacion.py`
+(8 pruebas), que incluye el caso feo: un bloque que Autodesk rechaza **no** se
+cuenta como hecho, y un fallo al anotar el avance no tumba la subida.
+
+## 11 · Topografía en 3D: por qué la nuestra se ve plana (16-sep, medido)
+
+El dueño comparó `PASTEADO_GENERAL.shared.dwg` en ACC y en el visor 3D
+(`visor.alephia.com.pe`): en ACC los huecos y el pie de los taludes se oscurecen
+y el relieve tiene volumen; en el nuestro se ve plano. Medido en los dos visores,
+con el mismo archivo abierto.
+
+**Los ajustes son los mismos.** LMV 7.126.1 frente a 7.126.0, perfil AEC, preset
+de luz 18 (Boardwalk), exposición −7, sombras ambientales, suavizado, aristas y
+sombra en el suelo encendidos en los dos, `devicePixelRatio` 0,9375 en los dos. No
+es un interruptor.
+
+**La diferencia está en las unidades de la escena:**
+
+| | ACC | Visor 3D de ALEPHIA |
+|---|---|---|
+| Unidades | metros (`getUnitScale` = 1) | **milímetros** (`getUnitScale` = 0,001) |
+| Diagonal de la topografía | 1.538 | 1.537.812 |
+| Radio de la sombra ambiental | **8** → 8 m | **10** → **10 mm** |
+| Intensidad | 1 | 1 |
+| Sesgo (`getAOBias`) | 0,01 (m) | no existe en 7.126.0 |
+
+El radio de la sombra ambiental es un número **en unidades de la escena**. Nuestro
+visor carga los modelos con `applyScaling: 'mm'`
+(`frontend-react/src/aps/utils/loadAlignedModels.js:83`, para georreferenciar con
+los Revit), así que el radio vale milímetros: **800 veces más pequeño** que el de
+ACC. Una sombra de un centímetro sobre un terreno de kilómetro y medio no se ve.
+
+El código ya quería lo contrario: `Viewer.jsx:778` pone un «radio amplio (escena
+civil grande)» de 12. Pero en una escena en milímetros, 12 son 12 mm (y lo medido
+fue 10: el visor lo pisa después; en cualquier caso, milímetros).
+
+**Comprobado en vivo** (misma vista, cámara a 150 m, dejado después como estaba):
+
+| Radio | Resultado |
+|---|---|
+| 10 mm (hoy) | plano, sin volumen |
+| 4 m | vuelve el volumen; manchas oscuras leves en las zonas llanas grandes |
+| 8 m (el de ACC) | volumen como en ACC; manchas más marcadas en las zonas llanas |
+
+`setAOHeuristics(model)` —la fórmula del propio SDK— no cambió el radio (siguió
+en 10), así que no sirve de atajo.
+
+**Aplicado (16-sep, autorizado: «con cuidado y sin romper nada»).** Al ir a tocarlo salió
+algo peor: la línea de `Viewer.jsx` **nunca funcionó**. Llamaba a
+`viewer.impl.setAOOptions`, que en LMV 7.126.0 no existe (vive en
+`viewer.impl.renderer()`), y el `typeof` la saltaba en silencio. Ahora:
+
+- se llama donde existe, con el antiguo como respaldo;
+- el radio va en **metros reales**: `metros / viewer.model.getUnitScale()`, así que da
+  igual si la escena está en metros o en milímetros;
+- `__vqAoRadius` sigue siendo el ajuste a mano en unidades de escena, y
+  `__vqAoMetros` lo da en metros;
+- sin modelo cargado no se toca: lo vuelve a aplicar el siguiente `GEOMETRY_LOADED`.
+
+**Calibrado midiendo píxeles**, con la misma cámara en ACC y en ALEPHIA y la captura
+de cada visor (`getScreenShot`, recorte central). Cifras: brillo medio · percentil 5 ·
+mediana · % de píxeles oscuros (< 90).
+
+| Vista | ACC | 10 mm (antes) | 2,5 m | 3 m | 4 m | 8 m |
+|---|---|---|---|---|---|---|
+| Topografía, 67 m de alto | 126 · 96 · 120 · **2,9** | 130 · 105 · 122 · 0,9 | 122 · 95 · 116 · **2,7** | 120 · 93 · 115 · 3,5 | 118 · 89 · 113 · 5,6 | 111 · 80 · 108 · 13,9 |
+| Topografía, 200 m de alto | 148 · 102 · 156 · **2,5** | 152 · 105 · 160 · 2,1 | 152 · 105 · 160 · 2,1 | — | — | 142 · 88 · 144 · 6,3 |
+
+- De cerca, **2,5 m** es el más parecido a ACC. De lejos no cambia nada: a esa distancia
+  la sombra mide pocos píxeles, y ya nos parecíamos.
+- 8 m —el valor de ACC— se pasa en las dos vistas: a 7.126.0 le falta el ajuste de
+  sesgo (`getAOBias`, 0,01 m en ACC 7.126.1) y las zonas llanas se ensucian.
+- **Estructuras** (tres `.rvt` de drenaje, `…DR-ST-011242@011244` y dos `…DR-HD`): con
+  Revit el visor ya usaba 0,25 m por su cuenta. Con 2,5 m, a 30 m y 12 m de alto, las
+  cifras son las mismas (un punto en el percentil 5). No las oscurece.
+- Comprobada la cuenta del código nuevo contra el visor real: escena en milímetros → 2500.
+
+Seguridad del cambio: solo ese bloque de `Viewer.jsx`, que tiene WIP ajeno y se commitea
+**sin** él; ESLint del fichero, 62 mensajes antes y 62 después, ninguno nuevo; el visor
+compila. Se despliega con **Manual Deploy de `visor-ecd-frontend`**.

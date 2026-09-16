@@ -731,11 +731,38 @@ const Viewer = ({
                             viewer.prefs.set('ambientShadows', true);
                             viewer.prefs.set('antialiasing', true);
                         }
-                        // SAO más profundo: radio amplio (escena civil grande) +
-                        // intensidad alta → el contacto entre elementos se lee
-                        // (estilo Tandem). Default LMV es tímido (5 / ~0.4).
-                        if (viewer.impl && typeof viewer.impl.setAOOptions === 'function') {
-                            viewer.impl.setAOOptions(window.__vqAoRadius ?? 12, window.__vqAoIntensity ?? 1.0);
+                        // SOMBRA AMBIENTAL (SAO), CON EL RADIO EN METROS REALES.
+                        //
+                        // Antes: `viewer.impl.setAOOptions(12, 1)`, pensado como «radio
+                        // amplio para escena civil grande». No hacía NADA: en LMV 7.126
+                        // ese método no existe en `viewer.impl` (vive en
+                        // `viewer.impl.renderer()`) y el `typeof` lo saltaba sin avisar.
+                        // Y aunque hubiera existido, el radio va en UNIDADES DE LA ESCENA
+                        // y los modelos se cargan en milímetros (applyScaling:'mm',
+                        // loadAlignedModels.js): 12 habrían sido 12 mm.
+                        //
+                        // Medido el 16-sep-2026 con la topografía PASTEADO_GENERAL frente
+                        // a ACC, misma cámara (docs/archivos/08 §11): aquí el radio era
+                        // el de fábrica, 10 mm, y el terreno salía plano. ACC usa 8 m,
+                        // pero esta versión no trae su ajuste de sesgo y con 8 m las zonas
+                        // llanas se ensucian (13,9 % de píxeles oscuros frente a 2,9 % en
+                        // ACC). 2,5 m es el que más se le parece: 2,7 %.
+                        //
+                        // `__vqAoRadius` sigue siendo el ajuste a mano en unidades de la
+                        // escena (el de `__vq.ao`); `__vqAoMetros` lo da en metros. Sin
+                        // modelo cargado no se sabe la unidad: se espera al siguiente
+                        // GEOMETRY_LOADED, que vuelve a pasar por aquí.
+                        const renderLMV = viewer.impl?.renderer?.();
+                        const ponerAO = (renderLMV && typeof renderLMV.setAOOptions === 'function')
+                            ? (radio, intensidad) => renderLMV.setAOOptions(radio, intensidad)
+                            : (viewer.impl && typeof viewer.impl.setAOOptions === 'function')
+                                ? (radio, intensidad) => viewer.impl.setAOOptions(radio, intensidad)
+                                : null;
+                        const metrosPorUnidad = viewer.model?.getUnitScale?.();
+                        const radioAO = window.__vqAoRadius
+                            ?? (metrosPorUnidad > 0 ? (window.__vqAoMetros ?? 2.5) / metrosPorUnidad : null);
+                        if (ponerAO && radioAO) {
+                            ponerAO(radioAO, window.__vqAoIntensity ?? 1.0);
                         }
                         // BORDES estilo Tandem: aristas oscuras en la geometría —
                         // es LO que hace que Tandem se vea "sólido" y definido.
