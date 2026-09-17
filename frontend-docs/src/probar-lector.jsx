@@ -32,23 +32,47 @@ const PLANOS = [
   { id: 'h', name: 'plano-H.pdf', gcs_urn: 'urn-h', url: '/_probar/plano-H.pdf' },
   // DOS PAGINAS (A y G juntos): para comprobar que la rueda no cambia de pagina.
   { id: 'i', name: 'plano-I.pdf', gcs_urn: 'urn-i', url: '/_probar/plano-I.pdf' },
+  // LA LAMINA PESADA de verdad (paisajismo 004120, 71,9 MB): la que tarda
+  // 33-43 s en produccion. Es la que mide P1.
+  { id: 'p', name: 'plano-P.pdf', gcs_urn: 'urn-p', url: '/_probar/plano-P.pdf' },
 ];
+
+// P1 · que vista previa sirve el banco: ?vista=2000 (por defecto), 1600, 2600,
+// 3200, 2000webp, o `off` para medir el lector tal como esta hoy.
+const VISTA = new URLSearchParams(window.location.search).get('vista') || '2000';
+const FICHERO_DE_VISTA = {
+  1600: '/_probar/vista-p-1600.jpg',
+  2000: '/_probar/vista-p-2000.jpg',
+  2600: '/_probar/vista-p-2600.jpg',
+  3200: '/_probar/vista-p-3200.jpg',
+  '2000webp': '/_probar/vista-p-2000.webp',
+}[VISTA] || null;
 
 // Lo que tarda el backend en devolver la URL firmada. Medido en produccion
 // entre 300 y 800 ms; se usa el punto medio.
 const MS_URL_FIRMADA = 500;
 
+// P1 · `?inicial=vacio` arranca SIN lector, como el explorador antes de abrir
+// un documento: asi la primera apertura se mide con el lienzo limpio y no con
+// la lamina anterior todavia puesta (que falsea «primera tinta» y los bordes).
+const EMPIEZA_VACIO = new URLSearchParams(window.location.search).get('inicial') === 'vacio';
+
 function Banco() {
   const [i, setI] = useState(0);
-  const [url, setUrl] = useState(PLANOS[0].url);
+  const [abierto, setAbierto] = useState(!EMPIEZA_VACIO);
+  const [url, setUrl] = useState(EMPIEZA_VACIO ? null : PLANOS[0].url);
   const [preparando, setPreparando] = useState(false);
   const t0 = useRef(0);
 
   const saltar = useCallback((destino) => {
-    if (destino === i) return;
+    // P1 · `irA(-1)` cierra el documento, como el aspa del explorador: asi se
+    // puede medir la reapertura sin añadir otra variable global al banco.
+    if (destino < 0) { setAbierto(false); setUrl(null); return; }
+    if (destino === i && abierto) return;
     t0.current = performance.now();
     document.getElementById('reloj').textContent = 'pedido…';
     setI(destino);
+    setAbierto(true);
     // EL PADRE NO BORRA LA URL: mantiene la anterior mientras pide la nueva,
     // que es lo que evita que el lector se desmonte (y con el, la cinta).
     setPreparando(true);
@@ -56,9 +80,11 @@ function Banco() {
       setUrl(PLANOS[destino].url);
       setPreparando(false);
     }, MS_URL_FIRMADA);
-  }, [i]);
+  }, [i, abierto]);
 
   window.irA = saltar;
+
+  if (!abierto) return <div className="banco-vacio" />;
 
   return (
     <PDFViewer
@@ -70,7 +96,7 @@ function Banco() {
       obraDelDocumento="banco"
       // Con nodo, el lector monta su capa de marcas: asi se ve si siguen a la
       // hoja durante el zoom. Las marcas las sirve el fetch simulado de abajo.
-      nodeId="banco-nodo"
+      nodeId={'banco-' + PLANOS[i].id}
       projectPrefix="banco"
       onClose={() => {}}
       versionLabel="V1"
@@ -117,6 +143,15 @@ window.fetch = (entrada, opciones) => {
     return Promise.resolve(new Response(JSON.stringify({ success: true, calibrations: {} }),
       { status: 200, headers: { 'Content-Type': 'application/json' } }));
   }
+  // P1 · LA VISTA PREVIA LEGIBLE, simulada con la misma espera que la URL
+  // firmada (500 ms, medido en produccion). Solo la lamina pesada tiene.
+  if (dir.includes('/api/docs/vista-previa/url')) {
+    const nodo = (() => { try { return JSON.parse(opciones && opciones.body).node_id; } catch { return null; } })();
+    const url = nodo === 'banco-p' ? FICHERO_DE_VISTA : null;
+    return new Promise(resolve => setTimeout(() => resolve(new Response(
+      JSON.stringify({ success: true, url, pendiente: false }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } })), MS_URL_FIRMADA));
+  }
   if (dir.includes('/api/docs/miniaturas/urls')) {
     return Promise.resolve(new Response(JSON.stringify({
       success: true,
@@ -129,6 +164,7 @@ window.fetch = (entrada, opciones) => {
         'urn-f': '/_probar/thumb-f.jpg',
         'urn-g': '/_probar/thumb-g.jpg',
         'urn-h': '/_probar/thumb-h.jpg',
+        'urn-p': '/_probar/thumb-p.jpg',
       },
       pendientes: [],
     }), { status: 200, headers: { 'Content-Type': 'application/json' } }));

@@ -748,3 +748,23 @@
 @media (prefers-reduced-motion: reduce) {
   .pdf-silueta { transition: none; }
 }
+
+/* LA VISTA PREVIA LEGIBLE (P1), SOBRE LA HOJA Y EN SU SITIO EXACTO.
+   A diferencia de la silueta, no flota sobre el visor: vive DENTRO de la caja
+   del lienzo, asi que ocupa el mismo rectangulo que ocupara el dibujo
+   vectorial. Por eso al retirarla no se mueve nada -- ni el zoom, ni el
+   centro, ni el scroll --: en el mismo sitio, la hoja pasa de rasterizada a
+   vectorial. Sin desvanecido: un cruce de opacidades entre dos versiones de
+   la MISMA hoja se ve como un parpadeo, no como una mejora. */
+.pdf-vista {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  pointer-events: none;
+  z-index: 7;
+  opacity: 0;
+}
+
+.pdf-vista.se-ve { opacity: 1; }

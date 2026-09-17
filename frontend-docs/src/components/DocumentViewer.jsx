@@ -645,6 +645,9 @@ export default function DocumentViewer({
               esAdmin={!isShared && isAdmin}
               obraDelDocumento={projectPrefix}
               versionLabel={vv ? `V${vv.version_number || 1}` : null}
+              // La vista previa legible se pide por documento Y VERSIÓN: con una
+              // versión fijada tiene que salir la de ESA, no la de la actual.
+              versionId={isShared ? null : (viewedVersionInfo ? viewedVersionInfo.id : null)}
               versionInfo={vv && (vv.updated_by || vv.updated)
                 ? `Cargado por ${vv.updated_by || '—'}${vv.updated ? ` · ${formatDate(vv.updated)}` : ''}`
                 : null} />;

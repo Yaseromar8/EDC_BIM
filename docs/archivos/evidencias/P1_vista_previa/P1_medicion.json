@@ -1,0 +1,184 @@
+{
+ "campanas": [
+  "2026-09-17T19-10-30 (off/2000, 2 rondas)",
+  "2026-09-17T19-14-26 (1600/2600/3200/2000webp)",
+  "2026-09-17T19-21-15 (sustitucion corregida)"
+ ],
+ "coste_generacion": {
+  "pdf": "C:/Users/ASUS/Downloads/500125-CSSP001-740-XX-DR-LS-004120.pdf",
+  "MB": 71.9,
+  "filas": [
+   {
+    "ancho_px": 420,
+    "imagen": [
+     420,
+     297
+    ],
+    "KB": 27.1,
+    "abrir_y_rasterizar_s": 0.85,
+    "total_s": 0.88,
+    "memoria_proceso_MB": null,
+    "memoria_subida_MB": null
+   },
+   {
+    "ancho_px": 1600,
+    "imagen": [
+     1600,
+     1131
+    ],
+    "KB": 301.8,
+    "abrir_y_rasterizar_s": 0.87,
+    "total_s": 0.89,
+    "memoria_proceso_MB": null,
+    "memoria_subida_MB": null
+   },
+   {
+    "ancho_px": 2000,
+    "imagen": [
+     2000,
+     1413
+    ],
+    "KB": 452.8,
+    "abrir_y_rasterizar_s": 0.92,
+    "total_s": 0.94,
+    "memoria_proceso_MB": null,
+    "memoria_subida_MB": null
+   },
+   {
+    "ancho_px": 2600,
+    "imagen": [
+     2600,
+     1837
+    ],
+    "KB": 729.9,
+    "abrir_y_rasterizar_s": 1.17,
+    "total_s": 1.21,
+    "memoria_proceso_MB": null,
+    "memoria_subida_MB": null
+   },
+   {
+    "ancho_px": 3200,
+    "imagen": [
+     3200,
+     2261
+    ],
+    "KB": 1049.8,
+    "abrir_y_rasterizar_s": 1.18,
+    "total_s": 1.24,
+    "memoria_proceso_MB": null,
+    "memoria_subida_MB": null
+   }
+  ]
+ },
+ "salto": [
+  {
+   "carpeta": "2026-09-17T19-21-15",
+   "variante": "off",
+   "ronda": 1,
+   "vista_KB": 0,
+   "marca_vista_ms": null,
+   "vector_s": 50.46,
+   "antes_del_salto_s": 50.45,
+   "trazos_estricto": 0.962,
+   "trazos_suave": 0.968,
+   "cajetin_estricto": 1.0,
+   "cajetin_suave": 1.0,
+   "salto_desplazamiento_px": [
+    0.0,
+    0.0,
+    0.0,
+    0.0
+   ],
+   "salto_diferencia_media": 1.42
+  },
+  {
+   "carpeta": "2026-09-17T19-21-15",
+   "variante": "2000",
+   "ronda": 1,
+   "vista_KB": 435.6,
+   "marca_vista_ms": 1103,
+   "vector_s": 50.96,
+   "antes_del_salto_s": 50.93,
+   "trazos_estricto": 0.586,
+   "trazos_suave": 0.811,
+   "cajetin_estricto": 0.632,
+   "cajetin_suave": 0.915,
+   "salto_desplazamiento_px": [
+    0.0,
+    -2.0,
+    1.0,
+    0.0
+   ],
+   "salto_diferencia_media": 10.04
+  }
+ ],
+ "mover": {
+  "vista": "2000",
+  "vistaVisible_s": 0.66,
+  "llegoElVector": true,
+  "antesDeMover": {
+   "scroll": [
+    1523,
+    872
+   ],
+   "lienzo": [
+    "1043.17px",
+    "737px"
+   ],
+   "enPantalla": [
+    405,
+    51,
+    1043,
+    737
+   ],
+   "vista": true
+  },
+  "trasMover": {
+   "scroll": [
+    1843,
+    1016
+   ],
+   "lienzo": [
+    "1043.17px",
+    "737px"
+   ],
+   "enPantalla": [
+    85,
+    -93,
+    1043,
+    737
+   ],
+   "vista": true
+  },
+  "trasElVector": {
+   "scroll": [
+    1843,
+    1016
+   ],
+   "lienzo": [
+    "1043.17px",
+    "736.87px"
+   ],
+   "enPantalla": [
+    85,
+    -93,
+    1043,
+    737
+   ],
+   "vista": false
+  },
+  "conservado": {
+   "scroll": [
+    0,
+    0
+   ],
+   "lienzoIgual": false,
+   "enPantalla": [
+    0,
+    0,
+    0,
+    0
+   ]
+  }
+ }
+}

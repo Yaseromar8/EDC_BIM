@@ -344,8 +344,13 @@ def complete_upload():
             # acotado que el sellado, no por un hilo suelto.
             if str(filename or '').lower().endswith(('.pdf', '.pdfx')):
                 from file_system_db import gcs_executor
-                from gcs_manager import get_or_create_thumbnail
+                from gcs_manager import get_or_create_thumbnail, crear_vista_previa
                 gcs_executor.submit(get_or_create_thumbnail, gcs_urn, 420)
+                # Y LA VISTA PREVIA LEGIBLE (2000 px), aqui y no al abrir: una
+                # lamina de 72 MB tarda 45-50 s en dibujarse y esta imagen la
+                # enseña legible en 1,1 s. Prepararla al subir es lo unico que
+                # hace que la PRIMERA apertura ya la encuentre hecha.
+                gcs_executor.submit(crear_vista_previa, gcs_urn)
         except Exception as _e:
             print(f"[uploads] no se pudo lanzar la pre-traduccion CAD: {_e}")
 

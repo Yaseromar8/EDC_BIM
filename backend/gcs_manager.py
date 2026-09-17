@@ -360,7 +360,42 @@ def _rasterizar_pdf_de_fichero(ruta, max_px):
     return None
 
 
-def get_or_create_thumbnail(blob_name, max_px=420):
+# ── LA VISTA PREVIA LEGIBLE DE UNA LAMINA (P1) ──────────────────────────────
+#
+# La miniatura de 420 px es una SILUETA: en un A1 son 12 DPI, asi que el
+# cajetin es una mancha. Con 2000 px de lado mayor la lamina SE LEE encuadrada
+# --medido el 17-sep-2026: 1,9 veces lo que muestra la pantalla-- y pesa unos
+# 450 KB, que en la red del propietario son dos decimas de segundo. Por encima
+# de ese tamaño la pantalla ya no puede enseñar mas detalle y solo pesa mas.
+#
+# Es el MISMO generador, el mismo bucket y el mismo patron de nombre que la
+# miniatura: `<blob>__thumb2000.jpg` convive con `<blob>__thumb420.jpg` sin
+# migracion ni colision, y cada version tiene la suya porque el nombre cuelga
+# del `gcs_urn`, que es unico por subida.
+PX_VISTA_PREVIA = 2000
+CALIDAD_VISTA_PREVIA = 85
+
+
+def nombre_de_vista_previa(blob_name):
+    return f"{blob_name}__thumb{PX_VISTA_PREVIA}.jpg"
+
+
+def vista_previa_lista(blob_name):
+    """¿Esta ya preparada la vista previa de esa version? Sin bajarla."""
+    try:
+        bucket = get_storage_client().bucket(os.environ.get("GCS_BUCKET_NAME"))
+        return bool(bucket.blob(nombre_de_vista_previa(blob_name)).exists())
+    except Exception as e:
+        print(f"[vista previa] no se pudo comprobar {blob_name}: {str(e)[:120]}")
+        return False
+
+
+def crear_vista_previa(blob_name):
+    """Prepara la vista previa legible de esa version (trabajo de segundo plano)."""
+    return get_or_create_thumbnail(blob_name, PX_VISTA_PREVIA, CALIDAD_VISTA_PREVIA)
+
+
+def get_or_create_thumbnail(blob_name, max_px=420, calidad=72):
     """Version reducida JPEG cacheada en el almacen ('<blob>__thumb<px>.jpg').
 
     Sirve para imagenes Y para PDF (su primera pagina), que es lo que
@@ -423,7 +458,7 @@ def get_or_create_thumbnail(blob_name, max_px=420):
             imagen.thumbnail((max_px, max_px), Image.LANCZOS)
 
         out = BytesIO()
-        imagen.save(out, format='JPEG', quality=72, optimize=True)
+        imagen.save(out, format='JPEG', quality=calidad, optimize=True)
         datos = out.getvalue()
         try:
             imagen.close()

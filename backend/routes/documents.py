@@ -1714,6 +1714,11 @@ def confirm_upload():
                     str(filename or '').lower().endswith(('.pdf', '.pdfx')):
                 from gcs_manager import get_or_create_thumbnail
                 threading.Thread(target=get_or_create_thumbnail, args=(gcs_urn, 420), daemon=True).start()
+            # La vista previa legible (2000 px) solo de los PDF, y tambien al
+            # subir: ver el motivo en routes/uploads.py.
+            if str(filename or '').lower().endswith(('.pdf', '.pdfx')):
+                from gcs_manager import crear_vista_previa
+                threading.Thread(target=crear_vista_previa, args=(gcs_urn,), daemon=True).start()
         except Exception as te:
             print(f"[upload-confirm] thumb bg: {te}")
 
@@ -2742,6 +2747,124 @@ def preparar_miniaturas():
 
     _encolar_miniaturas(urns[1:])
     return jsonify({'success': True, 'encolados': len(urns)})
+
+
+# ── LA VISTA PREVIA LEGIBLE DE UNA LAMINA ───────────────────────────────────
+#
+# Una lamina de paisajismo pesa 72 MB: medido en produccion, el lector no dibuja
+# nada hasta los 45-50 s porque pdf.js necesita el fichero entero. La imagen de
+# 2000 px preparada de antemano se enseña a 1,1 s y se lee; el PDF sigue bajando
+# por detras y el dibujo vectorial la sustituye cuando esta.
+#
+# NO VA POR `/miniaturas/urls` A PROPOSITO. Aquella ruta autoriza por OBRA (y su
+# silueta de 420 px no enseña nada legible). Una vista previa de 2000 px ES el
+# plano: tiene que pasar por la MISMA puerta que el PDF original --sesion, obra,
+# documento/version y permiso documental-- y esa puerta es `_acceso_al_recurso`.
+def _encolar_vistas_previas(urns):
+    """Encola la preparacion sin repetir. Devuelve cuantas entraron de verdad.
+
+    La misma cola de dos hilos que las miniaturas: preparar una vista previa
+    baja el PDF a disco y lo rasteriza, y eso no puede competir con las
+    peticiones normales. La marca de "ya encolada" lleva el tamaño dentro, asi
+    que la silueta de 420 y la vista previa de 2000 no se pisan entre ellas.
+    """
+    from gcs_manager import crear_vista_previa, nombre_de_vista_previa
+    nuevas = 0
+    for urn in urns:
+        marca = nombre_de_vista_previa(urn)
+        with _CANDADO_MINIATURAS:
+            if marca in _MINIATURAS_ENCOLADAS:
+                continue          # dos aperturas a la vez preparan UNA sola
+            _MINIATURAS_ENCOLADAS.add(marca)
+        nuevas += 1
+
+        def trabajo(u=urn, m=marca):
+            try:
+                crear_vista_previa(u)
+            finally:
+                with _CANDADO_MINIATURAS:
+                    _MINIATURAS_ENCOLADAS.discard(m)
+
+        _COLA_MINIATURAS.submit(trabajo)
+    return nuevas
+
+
+def _documento_para_vista_previa(node_id, version_id):
+    """El objeto de ESA version, comprobando que la version es de ESE documento.
+
+    Devuelve (gcs_urn, node_id) o (None, None). Sin `version_id` entrega la
+    version viva del documento. Con `version_id`, si la version pertenece a otro
+    documento se responde como si no existiera: quien pregunta no se entera de
+    que existe.
+    """
+    from db import get_db_connection
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            if version_id:
+                cursor.execute(
+                    "SELECT v.gcs_urn, v.file_node_id FROM file_versions v "
+                    "JOIN file_nodes n ON n.id = v.file_node_id "
+                    "WHERE v.id = %s AND n.is_deleted = FALSE",
+                    (version_id,))
+                fila = cursor.fetchone()
+                if not fila:
+                    return None, None
+                if node_id and str(fila[1]) != str(node_id):
+                    return None, None
+                return fila[0], str(fila[1])
+            if node_id:
+                cursor.execute(
+                    "SELECT gcs_urn FROM file_nodes WHERE id = %s AND is_deleted = FALSE",
+                    (node_id,))
+                fila = cursor.fetchone()
+                return (fila[0], str(node_id)) if fila else (None, None)
+    except Exception as e:
+        logger.error('vista previa: no se pudo resolver el documento: %s', e)
+        raise
+    return None, None
+
+
+@documents_bp.route('/api/docs/vista-previa/url', methods=['POST'])
+def url_de_vista_previa():
+    """La URL firmada de la vista previa legible de una version del documento.
+
+    Nunca dice mas de lo que el usuario puede ver: sin acceso responde lo mismo
+    que el PDF original, y no devuelve nombre, tamaño ni ninguna otra señal.
+    """
+    datos = request.get_json(silent=True) or {}
+    node_id = str(datos.get('node_id') or '').strip()
+    version_id = str(datos.get('version_id') or '').strip()
+    if not node_id and not version_id:
+        return jsonify({"success": False, "error": "Falta el documento"}), 400
+
+    try:
+        gcs_urn, node_real = _documento_para_vista_previa(node_id, version_id)
+    except Exception:
+        # FAIL-CLOSED, como la puerta del PDF: si no se puede decidir, no se da.
+        return jsonify({"success": False, "error": "No se pudo verificar el acceso"}), 503
+    if not gcs_urn:
+        return jsonify({"success": False, "error": "Documento no encontrado"}), 404
+
+    denegado = _acceso_al_recurso(gcs_urn=gcs_urn, node_id=node_real or None,
+                                  version_id=version_id or None)
+    if denegado:
+        return denegado
+
+    # Solo los PDF tienen vista previa; lo demas abre como siempre.
+    if not str(gcs_urn).lower().endswith(('.pdf', '.pdfx')):
+        return jsonify({"success": True, "url": None, "pendiente": False}), 200
+
+    from gcs_manager import nombre_de_vista_previa, vista_previa_lista
+    if vista_previa_lista(gcs_urn):
+        url = generate_signed_url(nombre_de_vista_previa(gcs_urn))
+        if url:
+            return jsonify({"success": True, "url": url, "pendiente": False}), 200
+
+    # Todavia no esta: se encola UNA vez y el lector sigue como hasta hoy. Nunca
+    # se prepara aqui mismo: eso seria mudar la espera del navegador al servidor.
+    _encolar_vistas_previas([gcs_urn])
+    return jsonify({"success": True, "url": None, "pendiente": True}), 200
 
 
 @documents_bp.route('/api/docs/shared/<share_id>', methods=['GET'])
