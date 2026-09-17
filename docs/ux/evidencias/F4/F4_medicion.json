@@ -1,0 +1,639 @@
+{
+ "fecha": "2026-09-17",
+ "viewport": [
+  1280,
+  800
+ ],
+ "versiones": {
+  "head": "desplegada, 4511e8f",
+  "wip": "arreglo sin commitear de la columna de iconos",
+  "despues": "F4"
+ },
+ "analisis": {
+  "head": {
+   "errores_de_pagina": [],
+   "errores_de_consola": [],
+   "entradas": 24,
+   "expandida": {
+    "ancho": 240,
+    "iconos_px": [
+     22,
+     22
+    ],
+    "con_texto": 24,
+    "titulos": 4,
+    "barra_desplazamiento_px": 15,
+    "nombre_boton_contraer": null
+   },
+   "contraida": {
+    "ancho": 60,
+    "iconos_px": [
+     1.1,
+     4.2
+    ],
+    "con_texto": 24,
+    "descentrado_iconos_px": [
+     -17.4,
+     -15.9
+    ],
+    "separadores": 0,
+    "barra_desplazamiento_px": 15,
+    "nombre_boton_contraer": null,
+    "flecha_girada": false
+   },
+   "reexpandida_con_enter": {
+    "ancho": 240,
+    "con_texto": 24
+   },
+   "hover": {
+    "fondo": [
+     255,
+     255,
+     255
+    ],
+    "contraste_con_la_barra": 1.0,
+    "cambia": false,
+    "primer_fotograma_con_fondo_final_ms": 0
+   },
+   "nombre_flotante": {
+    "hover_contraida": null,
+    "aparece_ms": null,
+    "hover_expandida": null,
+    "foco_contraida": null,
+    "foco_expandida": null,
+    "boton_contraer": [
+     null,
+     null
+    ],
+    "sobrevolable": null,
+    "se_va_al_salir": null,
+    "se_va_con_escape": null,
+    "colores": null
+   },
+   "foco": {
+    "focoExpandida": {
+     "elemento": "Revisiones",
+     "focus_visible": true,
+     "lados": {
+      "izquierda": {
+       "pasa": false,
+       "motivo": "sin sitio: el botón toca el borde de la lista"
+      },
+      "derecha": {
+       "pasa": true,
+       "anillo_vs_superficie": 3.32,
+       "exterior_vs_interior": 1.0,
+       "motivo": ""
+      },
+      "arriba": {
+       "pasa": true,
+       "anillo_vs_superficie": 5.4,
+       "exterior_vs_interior": 5.4,
+       "motivo": ""
+      },
+      "abajo": {
+       "pasa": true,
+       "anillo_vs_superficie": 5.4,
+       "exterior_vs_interior": 5.4,
+       "motivo": ""
+      }
+     },
+     "PUERTA": "FALLA"
+    },
+    "focoContraida": {
+     "elemento": "Revisiones",
+     "focus_visible": true,
+     "lados": {
+      "izquierda": {
+       "pasa": false,
+       "motivo": "sin sitio: el botón toca el borde de la lista"
+      },
+      "derecha": {
+       "pasa": true,
+       "anillo_vs_superficie": 3.32,
+       "exterior_vs_interior": 1.0,
+       "motivo": ""
+      },
+      "arriba": {
+       "pasa": true,
+       "anillo_vs_superficie": 5.4,
+       "exterior_vs_interior": 5.4,
+       "motivo": ""
+      },
+      "abajo": {
+       "pasa": true,
+       "anillo_vs_superficie": 5.4,
+       "exterior_vs_interior": 5.4,
+       "motivo": ""
+      }
+     },
+     "PUERTA": "FALLA"
+    },
+    "focoAlternar": {
+     "elemento": "",
+     "focus_visible": true,
+     "lados": {
+      "izquierda": {
+       "pasa": true,
+       "anillo_vs_superficie": 5.4,
+       "exterior_vs_interior": 5.4,
+       "motivo": ""
+      },
+      "derecha": {
+       "pasa": true,
+       "anillo_vs_superficie": 5.4,
+       "exterior_vs_interior": 5.4,
+       "motivo": ""
+      },
+      "arriba": {
+       "pasa": true,
+       "anillo_vs_superficie": 5.4,
+       "exterior_vs_interior": 5.4,
+       "motivo": ""
+      },
+      "abajo": {
+       "pasa": true,
+       "anillo_vs_superficie": 5.4,
+       "exterior_vs_interior": 5.4,
+       "motivo": ""
+      }
+     },
+     "PUERTA": "PASA"
+    }
+   },
+   "colores_expandida": {
+    "fondo_barra": [
+     255,
+     255,
+     255
+    ],
+    "texto_inactiva": [
+     95,
+     99,
+     104
+    ],
+    "texto_inactiva_contraste": 6.05,
+    "activa": "Archivos",
+    "fondo_activa": [
+     238,
+     242,
+     247
+    ],
+    "texto_activa": [
+     21,
+     55,
+     84
+    ],
+    "texto_activa_contraste": 10.95,
+    "titulo": [
+     154,
+     160,
+     166
+    ],
+    "titulo_contraste": 2.64,
+    "titulo_fuente": "11px",
+    "icono_contraer": [
+     153,
+     153,
+     153
+    ],
+    "icono_contraer_contraste": 2.85
+   },
+   "escape_con_fila_marcada": {
+    "marcadasAntes": 1,
+    "conAviso": false,
+    "avisoTrasEscape": false,
+    "marcadasDespues": 0,
+    "marcadasTrasSegundoEscape": 0
+   },
+   "navegacion_con_clic": {
+    "acierta": true,
+    "activaAntes": "Archivos",
+    "activaDespues": "Especificaciones",
+    "tituloContenido": "Especificaciones"
+   }
+  },
+  "wip": {
+   "errores_de_pagina": [],
+   "errores_de_consola": [],
+   "entradas": 24,
+   "expandida": {
+    "ancho": 240,
+    "iconos_px": [
+     22,
+     22
+    ],
+    "con_texto": 24,
+    "titulos": 4,
+    "barra_desplazamiento_px": 15,
+    "nombre_boton_contraer": null
+   },
+   "contraida": {
+    "ancho": 60,
+    "iconos_px": [
+     22,
+     22
+    ],
+    "con_texto": 0,
+    "descentrado_iconos_px": [
+     -8.0,
+     -8.0
+    ],
+    "separadores": 0,
+    "barra_desplazamiento_px": 15,
+    "nombre_boton_contraer": null,
+    "flecha_girada": false
+   },
+   "reexpandida_con_enter": {
+    "ancho": 240,
+    "con_texto": 24
+   },
+   "hover": {
+    "fondo": [
+     255,
+     255,
+     255
+    ],
+    "contraste_con_la_barra": 1.0,
+    "cambia": false,
+    "primer_fotograma_con_fondo_final_ms": 0
+   },
+   "nombre_flotante": {
+    "hover_contraida": null,
+    "aparece_ms": null,
+    "hover_expandida": null,
+    "foco_contraida": null,
+    "foco_expandida": null,
+    "boton_contraer": [
+     null,
+     null
+    ],
+    "sobrevolable": null,
+    "se_va_al_salir": null,
+    "se_va_con_escape": null,
+    "colores": null
+   },
+   "foco": {
+    "focoExpandida": {
+     "elemento": "Revisiones",
+     "focus_visible": true,
+     "lados": {
+      "izquierda": {
+       "pasa": false,
+       "motivo": "sin sitio: el botón toca el borde de la lista"
+      },
+      "derecha": {
+       "pasa": true,
+       "anillo_vs_superficie": 3.32,
+       "exterior_vs_interior": 1.0,
+       "motivo": ""
+      },
+      "arriba": {
+       "pasa": true,
+       "anillo_vs_superficie": 5.4,
+       "exterior_vs_interior": 5.4,
+       "motivo": ""
+      },
+      "abajo": {
+       "pasa": true,
+       "anillo_vs_superficie": 5.4,
+       "exterior_vs_interior": 5.4,
+       "motivo": ""
+      }
+     },
+     "PUERTA": "FALLA"
+    },
+    "focoContraida": {
+     "elemento": "Revisiones",
+     "focus_visible": true,
+     "lados": {
+      "izquierda": {
+       "pasa": false,
+       "motivo": "sin sitio: el botón toca el borde de la lista"
+      },
+      "derecha": {
+       "pasa": true,
+       "anillo_vs_superficie": 3.32,
+       "exterior_vs_interior": 1.0,
+       "motivo": ""
+      },
+      "arriba": {
+       "pasa": true,
+       "anillo_vs_superficie": 5.4,
+       "exterior_vs_interior": 5.4,
+       "motivo": ""
+      },
+      "abajo": {
+       "pasa": true,
+       "anillo_vs_superficie": 5.4,
+       "exterior_vs_interior": 5.4,
+       "motivo": ""
+      }
+     },
+     "PUERTA": "FALLA"
+    },
+    "focoAlternar": {
+     "elemento": "",
+     "focus_visible": true,
+     "lados": {
+      "izquierda": {
+       "pasa": true,
+       "anillo_vs_superficie": 5.4,
+       "exterior_vs_interior": 5.4,
+       "motivo": ""
+      },
+      "derecha": {
+       "pasa": true,
+       "anillo_vs_superficie": 5.4,
+       "exterior_vs_interior": 5.4,
+       "motivo": ""
+      },
+      "arriba": {
+       "pasa": true,
+       "anillo_vs_superficie": 5.4,
+       "exterior_vs_interior": 5.4,
+       "motivo": ""
+      },
+      "abajo": {
+       "pasa": true,
+       "anillo_vs_superficie": 5.4,
+       "exterior_vs_interior": 5.4,
+       "motivo": ""
+      }
+     },
+     "PUERTA": "PASA"
+    }
+   },
+   "colores_expandida": {
+    "fondo_barra": [
+     255,
+     255,
+     255
+    ],
+    "texto_inactiva": [
+     95,
+     99,
+     104
+    ],
+    "texto_inactiva_contraste": 6.05,
+    "activa": "Archivos",
+    "fondo_activa": [
+     238,
+     242,
+     247
+    ],
+    "texto_activa": [
+     21,
+     55,
+     84
+    ],
+    "texto_activa_contraste": 10.95,
+    "titulo": [
+     154,
+     160,
+     166
+    ],
+    "titulo_contraste": 2.64,
+    "titulo_fuente": "11px",
+    "icono_contraer": [
+     153,
+     153,
+     153
+    ],
+    "icono_contraer_contraste": 2.85
+   },
+   "escape_con_fila_marcada": {
+    "marcadasAntes": 1,
+    "conAviso": false,
+    "avisoTrasEscape": false,
+    "marcadasDespues": 0,
+    "marcadasTrasSegundoEscape": 0
+   },
+   "navegacion_con_clic": {
+    "acierta": true,
+    "activaAntes": "Archivos",
+    "activaDespues": "Especificaciones",
+    "tituloContenido": "Especificaciones"
+   }
+  },
+  "despues": {
+   "errores_de_pagina": [],
+   "errores_de_consola": [],
+   "entradas": 24,
+   "expandida": {
+    "ancho": 240,
+    "iconos_px": [
+     22,
+     22
+    ],
+    "con_texto": 24,
+    "titulos": 4,
+    "barra_desplazamiento_px": 10,
+    "nombre_boton_contraer": "Contraer la barra lateral"
+   },
+   "contraida": {
+    "ancho": 60,
+    "iconos_px": [
+     22,
+     22
+    ],
+    "con_texto": 0,
+    "descentrado_iconos_px": [
+     -0.5,
+     -0.5
+    ],
+    "separadores": 3,
+    "barra_desplazamiento_px": 20,
+    "nombre_boton_contraer": "Expandir la barra lateral",
+    "flecha_girada": true
+   },
+   "reexpandida_con_enter": {
+    "ancho": 240,
+    "con_texto": 24
+   },
+   "hover": {
+    "fondo": [
+     227,
+     230,
+     234
+    ],
+    "contraste_con_la_barra": 1.25,
+    "cambia": true,
+    "primer_fotograma_con_fondo_final_ms": 9
+   },
+   "nombre_flotante": {
+    "hover_contraida": "Planos",
+    "aparece_ms": 10,
+    "hover_expandida": null,
+    "foco_contraida": "Revisiones",
+    "foco_expandida": null,
+    "boton_contraer": [
+     "Contraer",
+     "Expandir"
+    ],
+    "sobrevolable": true,
+    "se_va_al_salir": true,
+    "se_va_con_escape": true,
+    "colores": {
+     "fondo": [
+      21,
+      55,
+      84
+     ],
+     "texto": [
+      255,
+      255,
+      255
+     ],
+     "contraste": 12.31
+    }
+   },
+   "foco": {
+    "focoExpandida": {
+     "elemento": "Revisiones",
+     "focus_visible": true,
+     "lados": {
+      "izquierda": {
+       "pasa": true,
+       "anillo_vs_superficie": 5.4,
+       "exterior_vs_interior": 5.4,
+       "motivo": ""
+      },
+      "derecha": {
+       "pasa": true,
+       "anillo_vs_superficie": 5.4,
+       "exterior_vs_interior": 5.4,
+       "motivo": ""
+      },
+      "arriba": {
+       "pasa": true,
+       "anillo_vs_superficie": 4.08,
+       "exterior_vs_interior": 5.4,
+       "motivo": ""
+      },
+      "abajo": {
+       "pasa": true,
+       "anillo_vs_superficie": 5.4,
+       "exterior_vs_interior": 5.4,
+       "motivo": ""
+      }
+     },
+     "PUERTA": "PASA"
+    },
+    "focoContraida": {
+     "elemento": "Revisiones",
+     "focus_visible": true,
+     "lados": {
+      "izquierda": {
+       "pasa": true,
+       "anillo_vs_superficie": 5.4,
+       "exterior_vs_interior": 5.4,
+       "motivo": ""
+      },
+      "derecha": {
+       "pasa": true,
+       "anillo_vs_superficie": 3.39,
+       "exterior_vs_interior": 5.46,
+       "motivo": ""
+      },
+      "arriba": {
+       "pasa": true,
+       "anillo_vs_superficie": 5.4,
+       "exterior_vs_interior": 5.4,
+       "motivo": ""
+      },
+      "abajo": {
+       "pasa": true,
+       "anillo_vs_superficie": 5.4,
+       "exterior_vs_interior": 5.4,
+       "motivo": ""
+      }
+     },
+     "PUERTA": "PASA"
+    },
+    "focoAlternar": {
+     "elemento": "Expandir la barra lateral",
+     "focus_visible": true,
+     "lados": {
+      "izquierda": {
+       "pasa": true,
+       "anillo_vs_superficie": 5.4,
+       "exterior_vs_interior": 5.4,
+       "motivo": ""
+      },
+      "derecha": {
+       "pasa": true,
+       "anillo_vs_superficie": 5.15,
+       "exterior_vs_interior": 5.46,
+       "motivo": ""
+      },
+      "arriba": {
+       "pasa": true,
+       "anillo_vs_superficie": 5.4,
+       "exterior_vs_interior": 5.4,
+       "motivo": ""
+      },
+      "abajo": {
+       "pasa": true,
+       "anillo_vs_superficie": 5.4,
+       "exterior_vs_interior": 5.4,
+       "motivo": ""
+      }
+     },
+     "PUERTA": "PASA"
+    }
+   },
+   "colores_expandida": {
+    "fondo_barra": [
+     255,
+     255,
+     255
+    ],
+    "texto_inactiva": [
+     74,
+     85,
+     97
+    ],
+    "texto_inactiva_contraste": 7.6,
+    "activa": "Archivos",
+    "fondo_activa": [
+     237,
+     243,
+     248
+    ],
+    "texto_activa": [
+     21,
+     55,
+     84
+    ],
+    "texto_activa_contraste": 11.0,
+    "titulo": [
+     102,
+     113,
+     128
+    ],
+    "titulo_contraste": 4.95,
+    "titulo_fuente": "11px",
+    "icono_contraer": [
+     102,
+     113,
+     128
+    ],
+    "icono_contraer_contraste": 4.95
+   },
+   "escape_con_fila_marcada": {
+    "marcadasAntes": 1,
+    "conAviso": true,
+    "avisoTrasEscape": false,
+    "marcadasDespues": 1,
+    "marcadasTrasSegundoEscape": 0
+   },
+   "navegacion_con_clic": {
+    "acierta": true,
+    "activaAntes": "Archivos",
+    "activaDespues": "Especificaciones",
+    "tituloContenido": "Especificaciones"
+   }
+  }
+ }
+}

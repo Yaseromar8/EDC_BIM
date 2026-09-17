@@ -29,6 +29,7 @@ import { pedirIdoneidad } from '../utils/idoneidad';
 // ── Ligeros (siempre presentes en el flujo de Archivos) → carga inmediata ──
 import DeleteModal from '../components/modals/DeleteModal';
 import HerramientasDeObra from '../components/HerramientasDeObra';
+import BarraLateral from '../components/BarraLateral';
 
 // CAPA 16 · el menu no puede ofrecer una herramienta apagada: seria prometer
 // lo que el servidor va a negar con 403. `modo` es el `sidebarView` de cada
@@ -592,18 +593,22 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
 
       {/* ─── MAIN LAYOUT ─── */}
       <main className="acc-main-layout" style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-        {/* GLOBAL SIDEBAR */}
-        <div style={{ width: globalSidebarWidth, flexShrink: 0, borderRight: '1px solid #dcdcdc', background: '#fff', display: 'flex', flexDirection: 'column' }}>
-          <div style={{ flex: 1, overflowY: 'auto' }}>
-            <ul style={{ listStyle: 'none', padding: '8px 0', margin: 0 }}>
-              {/* Tres bloques, no doce elementos planos. Medido sobre la obra real:
+        {/* GLOBAL SIDEBAR. Qué entradas hay, en qué grupos y quién las ve se
+            decide aquí; cómo se dibujan, en components/BarraLateral.jsx
+            (UI polish F4). */}
+        <BarraLateral
+          ancho={globalSidebarWidth}
+          onAlternar={() => setGlobalSidebarWidth(globalSidebarWidth > 100 ? 60 : 240)}
+          activo={fe.isTrashMode ? null : fe.sidebarView}
+          grupos={
+              /* Tres bloques, no doce elementos planos. Medido sobre la obra real:
                   Archivos tenia 2.831 registros y Revisiones, Transmittals y Conjuntos
                   tenian UNO cada uno, y todos ocupaban el mismo peso visual. Quien
                   entraba por primera vez no sabia por donde empezar y acababa usando
                   solo Archivos.
                   Cuarentena y Elementos suprimidos dejan de ser secciones: son formas
-                  de MIRAR los archivos, y viven como filtros dentro de Archivos. */}
-              {[
+                  de MIRAR los archivos, y viven como filtros dentro de Archivos. */
+              [
                 // POR QUE ESTOS GRUPOS Y NO OTROS.
                 //
                 // «Entregas» habia crecido hasta TRECE entradas y mezclaba tres
@@ -707,43 +712,8 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
                   return codigos.some(c => fe.herramientasDeObra?.[c] !== false);
                 }) }))
                 .filter(grupo => grupo.items.length > 0)
-                .map((grupo, gi, visibles) => (
-                // Aire entre grupos, menos tras el ultimo. Antes era `gi < 2`,
-                // que estaba atado a que hubiera exactamente tres grupos: al
-                // pasar a cuatro, el tercero se quedaba pegado al cuarto. Y el
-                // numero de grupos VISIBLES cambia solo, porque los vacios se
-                // filtran antes segun las herramientas de la obra.
-                <li key={grupo.titulo} style={{ marginBottom: gi < visibles.length - 1 ? 10 : 0 }}>
-                  {globalSidebarWidth > 100 && (
-                    <div style={{ padding: '8px 12px 4px', fontSize: 11, color: '#9aa0a6', letterSpacing: '0.04em' }}>
-                      {grupo.titulo}
-                    </div>
-                  )}
-                  <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-                    {grupo.items.map((item) => (
-                      <li key={item.label} style={{ marginBottom: 2 }}>
-                        <button onClick={() => { if (item.onClick) item.onClick(); }}
-                          title={item.label}
-                          style={{ display: 'flex', alignItems: 'center', gap: 12, width: '100%', padding: '8px 12px',
-                            background: fe.sidebarView === item.mode && !fe.isTrashMode ? '#eef2f7' : 'none', border: 'none',
-                            color: fe.sidebarView === item.mode && !fe.isTrashMode ? 'var(--accent)' : '#5f6368', fontSize: '13px',
-                            fontWeight: fe.sidebarView === item.mode && !fe.isTrashMode ? '500' : '400', borderRadius: '0 20px 20px 0', cursor: 'pointer' }}>
-                          {item.icon}
-                          <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.label}</span>
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                </li>
-              ))}
-            </ul>
-          </div>
-          <div className="sidebar-bottom" style={{ padding: '12px 16px', borderTop: '1px solid #eee' }}>
-            <button onClick={() => setGlobalSidebarWidth(globalSidebarWidth > 100 ? 60 : 240)} style={{ background: 'none', border: 'none', color: '#999', cursor: 'pointer' }}>
-               <svg height="24" width="24" viewBox="0 0 24 24" fill="currentColor"><path d="M20.75,12a.75.75,0,0,1-.75.75H10.49L12.76,15a.74.74,0,0,1,0,1.06.75.75,0,0,1-.53.22.79.79,0,0,1-.53-.22L8.15,12.53A.78.78,0,0,1,8,12.29a.73.73,0,0,1,0-.58.78.78,0,0,1,.16-.24L11.7,7.92a.75.75,0,0,1,1.06,0,.74.74,0,0,1,0,1.06l-2.27,2.27H20A.76.76,0,0,1,20.75,12Zm-16,8V4a.75.75,0,0,0-1.5,0V20a.75.75,0,0,0,1.5,0Z"></path></svg>
-            </button>
-          </div>
-        </div>
+          }
+        />
 
         {/* CONTENT AREA */}
         <div className="acc-docs-container" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>

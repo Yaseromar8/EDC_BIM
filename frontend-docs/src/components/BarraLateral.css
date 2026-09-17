@@ -1,0 +1,163 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   BARRA LATERAL DE LA OBRA · UI polish F4 (17-sep-2026)
+   ═══════════════════════════════════════════════════════════════════════
+   Solo tokens del canon. Antes todo iba en línea en FilesPage.jsx, con grises
+   que no eran de la paleta y sin hover posible. Medición y capturas:
+   docs/ux/UI_POLISH_03_F4_BARRA_LATERAL.md.
+   ─────────────────────────────────────────────────────────────────────── */
+
+.a-barra {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--a-surface-base);
+  border-right: 1px solid var(--a-border-default);
+}
+
+/* DESPLAZAMIENTO. Con 24 entradas la lista no cabe en una pantalla corriente.
+   La barra de Windows ocupaba 15 px y llevaba flechas; la fina ocupa 10 y toma
+   el color de los bordes. Contraída, el hueco se reserva a LOS DOS LADOS: si
+   solo se reserva a la derecha, los iconos quedan 8 px a la izquierda del
+   centro de la barra (medido con el primer arreglo de la columna de iconos). */
+.a-barra__lista {
+  flex: 1;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--a-border-strong) transparent;
+}
+.a-barra--iconos .a-barra__lista {
+  scrollbar-gutter: stable both-edges;
+}
+
+.a-barra__grupos,
+.a-barra__entradas {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.a-barra__grupos {
+  padding: 8px 0;
+}
+
+/* Aire entre grupos y ninguno tras el último, sean cuantos sean los grupos
+   visibles: los vacíos se filtran antes según las herramientas de la obra. */
+.a-barra__grupo + .a-barra__grupo {
+  margin-top: 10px;
+}
+
+/* Título de grupo. El gris claro anterior daba 2,6:1 sobre blanco con letra de
+   11 px; --a-text-muted da 4,9:1. */
+.a-barra__titulo {
+  padding: 8px 20px 4px;
+  font-size: 11px;
+  letter-spacing: .04em;
+  color: var(--a-text-muted);
+}
+
+/* Contraída no hay títulos: una línea separa los grupos. */
+.a-barra__separador {
+  height: 1px;
+  margin: 0 8px 10px;
+  background: var(--a-border-default);
+}
+
+.a-barra__entradas > li + li {
+  margin-top: 2px;
+}
+
+/* ENTRADA. Separada de los bordes de la lista porque el anillo de foco se
+   dibuja 4 px por fuera del botón: pegada al borde, la lista le recortaba el
+   lado izquierdo (medido desde F0). Hover al instante, como la fila de la
+   tabla. La activa conserva su fondo con el puntero encima. */
+.a-barra__entrada {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: calc(100% - 16px);
+  margin: 0 8px;
+  padding: 8px 12px;
+  border: none;
+  border-radius: var(--a-radius-lg);
+  background: none;
+  color: var(--a-text-secondary);
+  font-size: 13px;
+  font-weight: 400;
+  text-align: left;
+  cursor: pointer;
+}
+.a-barra__entrada:hover {
+  background: var(--a-state-hover);
+  color: var(--a-text-primary);
+}
+.a-barra__entrada.es-activa {
+  background: var(--a-state-selected);
+  color: var(--a-action-primary);
+  font-weight: 500;
+}
+
+/* COLUMNA DE ICONOS. Con los dos huecos de la barra fina quedan 39 px: la
+   entrada deja 4 px a cada lado, justo lo que ocupa el anillo de foco. */
+.a-barra--iconos .a-barra__entrada {
+  justify-content: center;
+  gap: 0;
+  width: calc(100% - 8px);
+  margin: 0 4px;
+  padding: 8px 0;
+}
+.a-barra__icono {
+  display: flex;
+  flex-shrink: 0;
+  line-height: 0;
+}
+.a-barra__texto {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* BOTÓN DE CONTRAER. Mismo alto de pie que antes; el icono cae donde estaba. */
+.a-barra__pie {
+  display: flex;
+  padding: 8px 12px;
+  border-top: 1px solid var(--a-border-default);
+}
+.a-barra--iconos .a-barra__pie {
+  justify-content: center;
+  padding: 8px 0;
+}
+.a-barra__alternar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  border-radius: var(--a-radius-lg);
+  background: none;
+  color: var(--a-text-muted);
+  cursor: pointer;
+}
+.a-barra__alternar:hover {
+  background: var(--a-state-hover);
+  color: var(--a-text-primary);
+}
+/* Contraída, la flecha apunta hacia fuera: expandir. */
+.a-barra--iconos .a-barra__flecha {
+  scale: -1 1;
+}
+
+/* NOMBRE FLOTANTE. Se pinta en el body y encima de todo menos el sistema. */
+.a-barra__aviso {
+  position: fixed;
+  z-index: var(--a-layer-tooltip);
+  translate: 0 -50%;
+  padding: 5px 8px;
+  border-radius: var(--a-radius-md);
+  background: var(--a-action-primary);
+  color: var(--a-text-on-action);
+  font-size: 12px;
+  line-height: 16px;
+  white-space: nowrap;
+  box-shadow: var(--a-shadow-md);
+}
