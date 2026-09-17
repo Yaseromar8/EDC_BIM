@@ -31,14 +31,24 @@ export default function MatrixGrid({
   const [pendientes, setPendientes] = useState(0);
   const reintento = useRef(null);
 
+  // LA FIRMA DE LOS ARCHIVOS CON VISTA, no el array. `files` llega como un
+  // array nuevo en cada renderizado de FilesPage (`filteredFiles` se calcula en
+  // cada pasada), así que el efecto volvía a pedir la MISMA lista con cada
+  // cambio de estado del explorador. Medido el 17-sep-2026: una carpeta en
+  // cuadrícula pedía sus 20 URLs 9-10 veces, y cada petición anulaba la
+  // anterior (`vivo`): sólo servía la última. La firma sólo cambia si cambian
+  // los archivos que se ven.
+  const firmaVista = JSON.stringify(
+    files.filter(f => f.gcs_urn && CON_VISTA.test(f.name || '')).map(f => f.gcs_urn));
+
   useEffect(() => {
     let vivo = true;
-    const conVista = files.filter(f => f.gcs_urn && CON_VISTA.test(f.name || ''));
-    if (!conVista.length) { setUrls({}); setPendientes(0); return undefined; }
+    const urns = JSON.parse(firmaVista);
+    if (!urns.length) { setUrls({}); setPendientes(0); return undefined; }
 
     const pedir = async () => {
       const { urls: mapa, pendientes: faltan } =
-        await urlsDeMiniaturas(projectPrefix, conVista.map(f => f.gcs_urn));
+        await urlsDeMiniaturas(projectPrefix, urns);
       if (!vivo) return;
       setUrls(prev => ({ ...prev, ...mapa }));
       setPendientes(faltan.length);
@@ -52,7 +62,7 @@ export default function MatrixGrid({
       vivo = false;
       if (reintento.current) clearTimeout(reintento.current);
     };
-  }, [files, projectPrefix]);
+  }, [firmaVista, projectPrefix]);
 
   return (
     <div className="rejilla">
