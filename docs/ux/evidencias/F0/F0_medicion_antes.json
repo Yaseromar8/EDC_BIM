@@ -1,0 +1,195 @@
+{
+  "fase": "antes",
+  "errores": [],
+  "reglasClonadas": 100,
+  "hoverFila": {
+    "puntero": {
+      "cx": 324,
+      "cy": 963.5,
+      "y": 939.5,
+      "h": 48,
+      "dentro": true,
+      "bajo": "DIV."
+    },
+    "inmediato": {
+      "hover": true,
+      "fondo": "rgb(255, 255, 255)",
+      "animaciones": [
+        {
+          "propiedad": "background-color",
+          "duracion": 400
+        }
+      ],
+      "transicion": "0.4s"
+    },
+    "a100ms": "rgb(251, 252, 253)",
+    "a500ms": "rgb(243, 246, 248)"
+  },
+  "pulsado": {
+    "btnPrimary": {
+      "antes": {
+        "translate": "none",
+        "transform": "none",
+        "y": 82.5
+      },
+      "durante": {
+        "activo": true,
+        "translate": "none",
+        "transform": "none",
+        "y": 82.5
+      },
+      "desplazamientoPx": 0
+    },
+    "btnSecondary": {
+      "antes": {
+        "translate": "none",
+        "transform": "none",
+        "y": 147
+      },
+      "durante": {
+        "activo": true,
+        "translate": "none",
+        "transform": "none",
+        "y": 147
+      },
+      "desplazamientoPx": 0
+    },
+    "primitivaPrimary": {
+      "antes": {
+        "translate": "none",
+        "transform": "none",
+        "y": 213.5
+      },
+      "durante": {
+        "activo": true,
+        "translate": "none",
+        "transform": "matrix(1, 0, 0, 1, 0, 1)",
+        "y": 214.5
+      },
+      "desplazamientoPx": 1
+    }
+  },
+  "foco": [
+    {
+      "tag": "BUTTON",
+      "clase": "btn btn-primary ",
+      "tipo": "submit",
+      "estado": "DEFAULT",
+      "componente": "Botón primario (.btn-primary)",
+      "focusVisible": true,
+      "boxShadow": "none",
+      "outline": "auto 1px rgb(51, 51, 51)",
+      "boxShadowA300ms": "none"
+    },
+    {
+      "tag": "BUTTON",
+      "clase": "btn btn-secondary ",
+      "tipo": "submit",
+      "estado": "DEFAULT",
+      "componente": "Botón secundario (.btn-secondary)",
+      "focusVisible": true,
+      "boxShadow": "none",
+      "outline": "auto 1px rgb(23, 24, 25)",
+      "boxShadowA300ms": "none"
+    },
+    {
+      "tag": "BUTTON",
+      "clase": "a-btn a-btn--primary a-btn--md  ",
+      "tipo": "button",
+      "estado": "DEFAULT",
+      "componente": "Primitiva primary (a-btn)",
+      "focusVisible": true,
+      "boxShadow": "rgba(62, 111, 145, 0.3) 0px 0px 0px 3px",
+      "outline": "none 3px rgb(255, 255, 255)",
+      "boxShadowA300ms": "rgba(62, 111, 145, 0.3) 0px 0px 0px 3px"
+    },
+    {
+      "tag": "BUTTON",
+      "clase": "a-btn a-btn--secondary a-btn--md  ",
+      "tipo": "button",
+      "estado": "DEFAULT",
+      "componente": "Primitiva secondary (a-btn)",
+      "focusVisible": true,
+      "boxShadow": "rgba(62, 111, 145, 0.3) 0px 0px 0px 3px",
+      "outline": "none 3px rgb(11, 14, 18)",
+      "boxShadowA300ms": "rgba(62, 111, 145, 0.3) 0px 0px 0px 3px"
+    },
+    {
+      "tag": "INPUT",
+      "clase": "",
+      "tipo": "checkbox",
+      "estado": "DEFAULT",
+      "componente": "Casilla sin marcar",
+      "focusVisible": true,
+      "boxShadow": "rgb(255, 255, 255) 0px 0px 0px 2px, rgb(37, 99, 235) 0px 0px 0px 4px, rgba(0, 0, 0, 0) 0px 0px 0px 0px",
+      "outline": "solid 2px rgba(0, 0, 0, 0)",
+      "boxShadowA300ms": "rgb(255, 255, 255) 0px 0px 0px 2px, rgb(37, 99, 235) 0px 0px 0px 4px, rgba(0, 0, 0, 0) 0px 0px 0px 0px"
+    },
+    {
+      "tag": "INPUT",
+      "clase": "",
+      "tipo": "checkbox",
+      "estado": "DEFAULT",
+      "componente": "Casilla marcada",
+      "focusVisible": true,
+      "boxShadow": "rgb(255, 255, 255) 0px 0px 0px 2px, rgb(37, 99, 235) 0px 0px 0px 4px, rgba(0, 0, 0, 0) 0px 0px 0px 0px",
+      "outline": "solid 2px rgba(0, 0, 0, 0)",
+      "boxShadowA300ms": "rgb(255, 255, 255) 0px 0px 0px 2px, rgb(37, 99, 235) 0px 0px 0px 4px, rgba(0, 0, 0, 0) 0px 0px 0px 0px"
+    }
+  ],
+  "t1Secundaria": {
+    "reposo": {
+      "fondo": "rgb(243, 246, 248)",
+      "borde": "rgb(227, 230, 234)"
+    },
+    "encima": {
+      "hover": true,
+      "fondo": "rgb(243, 246, 248)",
+      "borde": "rgb(203, 210, 217)"
+    },
+    "fondoCambia": false
+  },
+  "casilla": {
+    "sinMarcar": {
+      "fondo": "rgb(255, 255, 255)",
+      "borde": "rgb(107, 114, 128)",
+      "color": "rgb(37, 99, 235)"
+    },
+    "marcada": {
+      "fondo": "rgb(37, 99, 235)",
+      "borde": "rgba(0, 0, 0, 0)",
+      "color": "rgb(37, 99, 235)"
+    },
+    "hoverReal": {
+      "hover": true,
+      "fondo": "rgb(255, 255, 255)",
+      "borde": "rgb(107, 114, 128)"
+    }
+  },
+  "spinner": {
+    "arriba": "rgb(0, 0, 0)",
+    "izquierda": "rgb(0, 0, 0)",
+    "derecha": "rgba(0, 0, 0, 0)"
+  },
+  "movimiento": [
+    {
+      "accion": "__reordenar",
+      "filas": 7,
+      "filasConPosicionIntermedia": 0,
+      "transicionesVistas": [
+        "background-color 400"
+      ]
+    },
+    {
+      "accion": "__insertar",
+      "filas": 8,
+      "filasConPosicionIntermedia": 0,
+      "transicionesVistas": [
+        "filter 400",
+        "opacity 400",
+        "background-color 400"
+      ]
+    }
+  ],
+  "transicionFila": "0.4s"
+}

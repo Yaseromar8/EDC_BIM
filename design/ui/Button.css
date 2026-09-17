@@ -45,14 +45,12 @@
   border-color: var(--a-border-default);
   color: var(--a-text-primary);
 }
-/* HOVER DE SECONDARY · el relleno solo NO basta, y no por culpa del componente.
-   `--a-state-hover` y `--a-action-secondary` resuelven al MISMO hex en los dos
-   temas (#F3F6F8 en claro, #18212A en oscuro), asi que la linea de fondo es hoy
-   un no-op comprobado con puntero real: cinco muestras, cero cambio. Separar
-   esos dos tokens es asunto del canon y queda FUERA de la enmienda autorizada,
-   asi que aqui se resuelve con lo que ya existe: el borde sube a
-   --a-border-strong. La linea de fondo se conserva porque expresa la intencion
-   y funcionara sola el dia que el canon los separe. */
+/* HOVER DE SECONDARY · fondo Y borde.
+   Hasta UI polish F0 `--a-state-hover` y `--a-action-secondary` resolvian al
+   MISMO valor en los dos temas, y la linea de fondo era un no-op comprobado con
+   puntero real; por eso el aviso lo daba solo el borde. T1 (16-sep-2026) los
+   separo en el canon: ahora cambian los dos, y el borde se conserva porque
+   refuerza el estado sobre cualquier superficie. */
 .a-btn--secondary:hover:not(:disabled) {
   background: var(--a-state-hover);
   border-color: var(--a-border-strong);
@@ -79,12 +77,11 @@
   background: transparent;
   color: var(--a-action-text);
 }
-/* HOVER DE GHOST · el relleno se aplica, pero no se VE.
-   --a-state-hover sobre la superficie base da 1.09:1 en claro y 1.19:1 en
-   oscuro: la regla funciona (comprobado forzandola por CSSOM) y aun asi la
-   captura de pantalla no muestra diferencia. Un realce que no se percibe no
-   es un estado. Se refuerza con el borde, igual que secondary y danger, para
-   que los cuatro rangos respondan de forma perceptible y por el mismo medio. */
+/* HOVER DE GHOST · relleno y borde.
+   Antes de T1, --a-state-hover sobre la superficie base daba 1.09:1 en claro:
+   la regla funcionaba y la captura no mostraba diferencia. Tras T1 da 1.25:1.
+   El borde se mantiene para que los cuatro rangos respondan de forma
+   perceptible y por el mismo medio. */
 .a-btn--ghost:hover:not(:disabled) {
   background: var(--a-state-hover);
   border-color: var(--a-border-strong);
@@ -95,9 +92,11 @@
    resuelve con desplazamiento, no con color, por dos razones: danger no tiene
    margen cromatico (ver arriba) y un mecanismo comun mantiene los cuatro
    rangos coherentes. Sin token nuevo y sin depender del tema.
-   No es animacion -- transform no esta en la lista de transiciones -- asi que
-   no hay nada que atenuar bajo prefers-reduced-motion. */
-.a-btn:active:not(:disabled) { transform: translateY(1px); }
+   Propiedad `translate` y no `transform` (UI polish F0): se compone con
+   cualquier transform en vez de pisarlo, y es la misma que usa el portal en
+   sus familias de boton. No es animacion -- translate no esta en la lista de
+   transiciones -- asi que no hay nada que atenuar bajo prefers-reduced-motion. */
+.a-btn:active:not(:disabled) { translate: 0 1px; }
 
 .a-btn:disabled { color: var(--a-text-disabled); cursor: default; opacity: .7; }
 

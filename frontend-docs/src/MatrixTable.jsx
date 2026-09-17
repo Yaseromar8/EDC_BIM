@@ -343,7 +343,13 @@ const TableRow = ({ index, style, data }) => {
         filter: processingIds[item.id] ? 'grayscale(1)' : 'none',
         pointerEvents: processingIds[item.id] ? 'none' : 'auto',
         color: isGrey ? '#999' : 'inherit',
-        transition: 'all 0.4s ease'
+        // SIN TRANSICIÓN (UI polish F0, 16-sep-2026). Antes era `all 0.4s ease`:
+        // el hover tardaba 400 ms en llegar (medido: seguía en blanco a los 0 ms y
+        // solo tenía su color final a los 500) y, al reordenar o insertar, el fondo de selección, la opacidad
+        // y el filtro de «procesando» se arrastraban 400 ms detrás del dato que
+        // ya había cambiado de fila. `none` y no una lista corta: así esta fila
+        // tampoco puede animar su posición el día que la lista cambie de clave.
+        transition: 'none'
       }}
       // La fila no hace nada por sí sola. Abrir es de la columna Nombre y solo de
       // ella (como ACC); seleccionar es de la casilla y solo de ella. Antes el clic

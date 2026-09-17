@@ -218,9 +218,22 @@
   --a-action-danger:        var(--a-red-600);
 
   /* Estados de interacción */
-  --a-state-hover:    var(--a-neutral-100);
+  /* HOVER (UI polish F0 · T1, 16-sep-2026): era neutral-100, EL MISMO hex que
+     --a-action-secondary, y el hover del botón secundario no se veía
+     (comprobado con puntero real en UX-08). neutral-200 da 1,15:1 frente al
+     secundario, 1,25:1 frente a la superficie base y 1,12:1 frente al
+     seleccionado; el texto primario sobre él, 15,5:1. Sin hex nuevo. */
+  --a-state-hover:    var(--a-neutral-200);
   --a-state-selected: var(--a-blue-100);
-  --a-focus-ring:     0 0 0 3px rgb(var(--a-blue-600-rgb) / .30);
+  /* FOCO (UI polish F0 · T2, 16-sep-2026). Era `0 0 0 3px rgb(blue-600 / .30)`:
+     1,52:1 medido en píxeles sobre blanco, por debajo del 3:1 de WCAG 1.4.11,
+     que también rige para los indicadores de estado. Ahora son DOS bandas:
+     una de 2 px del color de la superficie y otra de 2 px de action-text.
+     Sobre claro contrasta la de fuera (Signal: 5,4:1 en blanco, 4,98:1 en
+     Mist); sobre Navy, la de dentro (12,3:1), porque Signal allí solo da
+     2,28:1. Entre las dos, 5,4:1: el anillo se lee sobre cualquier fondo y
+     no depende del color del control, que queda por dentro. */
+  --a-focus-ring:     0 0 0 2px var(--a-surface-base), 0 0 0 4px var(--a-action-text);
 
   /* Sombras */
   --a-shadow-sm: 0 1px 2px rgb(var(--a-ink-900-rgb) / .06);
@@ -287,9 +300,14 @@
   --a-action-secondary:     var(--a-ink-700);
   --a-action-danger:        var(--a-red-500);
 
-  --a-state-hover:    var(--a-ink-700);
+  /* HOVER (T1): ink-700 era el mismo hex que el secundario. ink-600 NO sirve:
+     es el seleccionado. ink-500 da 2,13:1 frente al secundario y 1,57:1
+     frente al seleccionado, con el texto primario a 7:1. */
+  --a-state-hover:    var(--a-ink-500);
   --a-state-selected: var(--a-ink-600);
-  --a-focus-ring:     0 0 0 3px rgb(var(--a-blue-400-rgb) / .45);
+  /* FOCO (T2): la misma construcción. Resuelve a ink-900 por dentro y a
+     blue-400 por fuera: 7,10:1 sobre la base, 5,98:1 sobre raised. */
+  --a-focus-ring:     0 0 0 2px var(--a-surface-base), 0 0 0 4px var(--a-action-text);
 
   /* Sobre #0B0E12 una sombra no se ve: en oscuro el mismo token resuelve
      a un borde luminoso, que es como se separa una superficie elevada. */

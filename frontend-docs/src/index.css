@@ -2417,8 +2417,10 @@ th {
   width: 32px;
   height: 32px;
   border: 3px solid transparent;
-  border-top-color: #000;
-  border-left-color: #000;
+  /* Color de la acción principal (UI polish F0 · QW7). Era #000: el único
+     indicador de carga del portal no hablaba el idioma de la marca. */
+  border-top-color: var(--a-action-primary);
+  border-left-color: var(--a-action-primary);
   border-radius: 50%;
   animation: spin 0.8s cubic-bezier(0.5, 0, 0.5, 1) infinite;
   margin: 20px 0;
@@ -4255,3 +4257,80 @@ th {
   border: 1px solid #d9e6f2; border-radius: 6px;
   background: #f2f8fd; color: #2c4d67; font-size: 12px;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   INTERACCIÓN CANÓNICA · UI POLISH F0 (16-sep-2026)
+   ═══════════════════════════════════════════════════════════════════════
+   Informe y medición: docs/ux/UI_POLISH_01_CONTRATO_DE_INTERACCION.md.
+   Solo estados COMPARTIDOS: foco visible, pulsado de las familias de botón y
+   casilla. No toca navegación, menús, Reviews, Mi Trabajo ni la barra lateral;
+   lo que esas pantallas pintan en línea queda para su propia fase.
+   ─────────────────────────────────────────────────────────────────────── */
+
+/* FOCO VISIBLE · un solo anillo, el del canon (QW3).
+   Medido antes, con Tab real: los botones con clase solo mostraban el contorno
+   por defecto del navegador; las casillas, el anillo azul que inyecta
+   Tailwind; y en el código hay 62 `outline: none`. Esta regla es el reemplazo
+   de todos ellos:
+   - `!important` en la sombra: 45 de esos `outline: none` van en línea en el
+     JSX, y una sombra en línea le ganaría a una regla normal. Solo actúa con
+     foco de teclado, que es justo cuando hace falta verlo.
+   - contorno TRANSPARENTE y no `none`: en el alto contraste de Windows el
+     navegador lo pinta, y el foco sigue viéndose.
+   - `:where()` deja la especificidad en la de `:focus-visible`, para que un
+     contenedor pueda llevar el anillo en lugar de su campo (ver abajo). */
+:where(a[href], button, input:not([type="hidden"]), select, textarea, summary,
+       [role="button"], [role="tab"], [role="menuitem"], [role="option"],
+       [role="checkbox"], [role="switch"], [contenteditable]:not([contenteditable="false"]),
+       [tabindex]:not([tabindex="-1"])):focus-visible {
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+  box-shadow: var(--a-focus-ring) !important;
+}
+
+/* Cambio de nombre en línea: el cuadro ya dibuja su borde, y su campo lleva
+   `outline: none`. El anillo va en el cuadro entero, no encima del campo. */
+.inline-edit-box:focus-within { box-shadow: var(--a-focus-ring); }
+.inline-edit-box input:focus-visible { box-shadow: none !important; }
+
+/* PULSADO · el desplazamiento de 1 px de ALEPHIA, el mismo que la primitiva
+   (QW4). Medido antes, con el ratón abajo de verdad: .btn-primary y
+   .btn-secondary se movían 0 px.
+   Propiedad `translate`, NO `transform`: son independientes y se componen, así
+   que no pisa ningún transform que el botón ya tenga (un icono que gira, un
+   centrado). Solo en las familias de BOTÓN del portal: navegación, pestañas,
+   árbol y opciones de menú quedan fuera de esta fase. */
+:is(.btn, .btn-icon, .toolbar-btn, .row-menu-btn, .adsk-btn, .btn-main-blue,
+    .btn-main-blue-arrow, .btn-split-blue, .btn-outline-wide, .btn-v-action,
+    .acc-btn-flat, .acc-btn-primary-2, .btn-copy-link, .btn-share-done,
+    .restore-btn-acc, .modal-actions button, .inline-edit-box button):active:not(:disabled):not([aria-disabled="true"]) {
+  translate: 0 1px;
+}
+
+/* CASILLA · paleta ALEPHIA, con hover y foco (QW5).
+   Medido antes: marcada en el azul de Tailwind forms y con su borde gris, no
+   con los de ALEPHIA. Llega por CDN (index.html) y su hoja se inyecta DESPUÉS de esta, así
+   que los selectores llevan `input` delante: una especificidad más que los
+   suyos, sin !important. Tailwind rellena la marcada con `currentColor`, así
+   que basta con darle el color de la acción principal. */
+input[type="checkbox"] {
+  color: var(--a-action-primary);
+  /* El contorno de un control pide 3:1 (WCAG 1.4.11). --a-border-strong da
+     1,5:1 sobre blanco y la casilla casi desaparecía: se probó en el banco. El
+     canon no tiene aún un «borde de control» de 3:1 (el mismo hueco que el
+     botón secundario), así que se usa el gris de texto atenuado: 4,9:1. */
+  border-color: var(--a-text-muted);
+  border-radius: var(--a-radius-sm);
+}
+input[type="checkbox"]:hover:not(:disabled) {
+  border-color: var(--a-text-secondary);
+  background-color: var(--a-state-hover);
+}
+input[type="checkbox"]:checked:hover:not(:disabled),
+input[type="checkbox"]:indeterminate:hover:not(:disabled) {
+  border-color: transparent;
+  background-color: var(--a-action-primary-hover);
+}
+/* El anillo azul de Tailwind salía también al CLICAR. El de teclado lo pone
+   la regla de foco visible de arriba. */
+input[type="checkbox"]:focus { box-shadow: none; }

@@ -780,6 +780,46 @@ NEXT EXACT ACTION:    push y Manual Deploy de `visor-ecd-frontend`.
 DO NOT TOUCH:         el WIP ajeno de Viewer.jsx y los demás protegidos; la migración 32 (aparcada).
 COMMIT/HEAD REF:      `fix(viewer): …` encima del commit del porcentaje
 
+### Unidad UX · UI POLISH · F0 + T2 — UN COMMIT AUTORIZADO, SIN PUSH NI DESPLIEGUE, 16/17-sep
+
+Autorizado por el propietario («ALEPHIA · UI POLISH — AUTORIZACIÓN F0»): QW1, QW3, QW4, QW5, QW7 y T1. Decisiones suyas: pulsado =
+desplazamiento de 1 px propio de ALEPHIA; `--a-state-hover` autorizado a corregir; barra lateral y FilesPage.jsx NO en F0 (van a
+F4). Después, antes del commit, «ALEPHIA · UI POLISH F0 — T2 AUTORIZADO ANTES DEL COMMIT»: corregir el token canónico de foco
+(1,52:1) sin soluciones por componente. Revisada la evidencia, dictamen del propietario (17-sep): `F0 + T2 = CODE/TEST GREEN · PASS
+PARA COMMIT`, un único commit; sin push, despliegue ni F1. Informe: `docs/ux/UI_POLISH_02_F0_RESULTADOS.md`; evidencias en
+`docs/ux/evidencias/F0/`.
+
+[WIP HANDOFF]
+TAREA:                F0 del pase de pulido de interacción (hover de fila instantáneo, foco visible canónico, pulsado, casilla con paleta, spinner con token y T1) y T2 (anillo de foco canónico con contraste >= 3:1).
+IMPLEMENTADO:         MatrixTable.jsx fila `transition: 'none'`; index.css `.adsk-spinner` con `--a-action-primary` y bloque final «INTERACCIÓN CANÓNICA · UI POLISH F0» (`:where(…):focus-visible` con `box-shadow: var(--a-focus-ring) !important` y contorno transparente; `.inline-edit-box:focus-within`; pulsado `translate: 0 1px` solo en familias de botón; casilla `input[type=checkbox]` con color `--a-action-primary`, borde `--a-text-muted`, hover `--a-state-hover`/`--a-text-secondary`, marcada-hover `--a-action-primary-hover`, sin anillo de Tailwind al clicar); tokens T1 `--a-state-hover` claro neutral-200 y oscuro ink-500; T2 `--a-focus-ring` en los dos temas `0 0 0 2px var(--a-surface-base), 0 0 0 4px var(--a-action-text)` (antes `0 0 0 3px` Signal al 30 % / blue-400 al 45 %); Button.css pulsado con `translate` y comentarios al día.
+ESTADO:               F0 = CODE/TEST GREEN · TOKEN T1 = PASS · TOKEN T2 / FOCUS CONTRAST = PASS · FOCUS WITH KEYBOARD = PASS · PRESSED = PASS · ROW HOVER INSTANT = PASS · ROW STATE TRANSITION LAG = REMOVED · POSITION ANIMATION = NOT PRESENT · FOCUS INSTANTANEITY .btn-* = OBSERVED / DEFER TO F1 · TRIPWIRES = 9 PASS · T7b PREEXISTING FAIL 3.903 · WIP AJENO = INTACTO.
+PENDIENTE:            1) push y despliegue NO autorizados. 2) F1 NO autorizado ni empezado; candidatos: `transition: all` en `.btn` (por él el anillo tarda en `.btn-*`: 3:1 a 43–71 ms, entero a ~150 ms; FOCUS INSTANTANEITY .btn-* = OBSERVED / DEFER TO F1), hover `#4d6a8f` de `.btn-primary`, reglas duplicadas de fila/árbol/menú. 3) F2: `--a-opacity-disabled` (deshabilitado sigue sin estado en `.btn-*` y casilla) y un «borde de control» de 3:1 en el canon (T9 avisa del secundario, 1,25:1, desde antes de F0). 4) Frente aparte: Tailwind Play CDN en `frontend-docs/index.html:18`.
+ARCHIVOS MODIFICADOS: frontend-docs/src/MatrixTable.jsx, frontend-docs/src/index.css, design/alephia.tokens.css, design/ui/Button.css, docs/ux/UI_POLISH_01_CONTRATO_DE_INTERACCION.md (corrección: la posición de las filas NO se animaba), docs/AI_WORKSTATE.md; nuevos: docs/ux/UI_POLISH_02_F0_RESULTADOS.md, docs/ux/evidencias/F0/ (3 PNG y 4 JSON: F0_* sin T2, F0_medicion_con_T2.json, T2_*). WIP ajeno intacto (sha256, 7/7).
+TESTS EJECUTADOS:     banco F0 (scratchpad: MatrixTable real + .btn-* + primitiva + casilla + spinner, Tailwind por CDN) construido ANTES y DESPUÉS y medido con Chrome sin ventana y entrada real CDP (ratón pulsado sin soltar, Tab, puntero): hover de fila final a 0 ms (antes 400 ms), pulsado 1 px en .btn-primary/.btn-secondary (antes 0), T1 cambia el fondo de la secundaria, casilla Navy con borde 4,95:1, spinner Navy, 0 transiciones y 0 posiciones intermedias al reordenar/insertar, 0 errores; repetido sobre el árbol con T2: idéntico salvo el anillo. Banco T2 con Tab y clic reales y contraste en PÍXELES por los cuatro lados: 0/30 con el token anterior (1,27–2,32:1) y 30/30 con T2 (blanco 5,40; Mist 4,98; Navy 12,31 por la banda de separación, Signal sola 2,28; oscuro 7,10; tabla de Archivos 4,40–5,40 en cabecera, fila, fila con puntero, fila seleccionada, renombrar y descripción), sin lados recortados; casillas, primitivas y cuadros enteros en el primer fotograma, `.btn-*` en tres pasadas. Tripwires después de T2 idénticos a la base (9 PASA con T4a y T9, T7b 3903 previo); autoprueba 5/5; ESLint MatrixTable igual que HEAD; npm test 10 bancos.
+TESTS PENDIENTES:     la mirada del propietario sobre las evidencias; producción tras un eventual despliegue.
+FALLO CONOCIDO:       en `.btn-*` el anillo crece con su `transition: all 0.15s` (3:1 a 43–71 ms, entero a ~150 ms); antes de F0 esos botones mostraban el contorno del navegador al instante. El propietario lo registró como `FOCUS INSTANTANEITY .btn-* = OBSERVED / DEFER TO F1`: no bloquea el commit y no se cambia todavía. Deshabilitado sin estado en `.btn-*` y casilla.
+NEXT EXACT ACTION:    esperar orden del propietario para push/despliegue o para F1. No empezar F1.
+DO NOT TOUCH:         FilesPage.jsx y barra lateral (F4); navegación, menús, Reviews y Mi Trabajo; `transition: all` de `.btn-*` (F1), deshabilitado y Tailwind CDN sin orden; UX-05; WIP ajeno.
+COMMIT/HEAD REF:      `fix(ui-polish/f0): …` sobre d86b1db; sin push
+
+### Unidad UX · UI POLISH · CONTRATO DE INTERACCIÓN FRENTE A ACC — SOLO ANÁLISIS, 16-sep
+
+Pedido del propietario («ALEPHIA · UI POLISH / PROFESSIONAL INTERACTION PASS»): profesionalizar la interacción de lo que ya
+existe tomando ACC como referencia de calidad; sin funciones nuevas, sin backend, «todavía no implementes». Informe:
+`docs/ux/UI_POLISH_01_CONTRATO_DE_INTERACCION.md`.
+
+[WIP HANDOFF]
+TAREA:                inventario de patrones visuales del portal (Archivos, Revisiones, Mi Trabajo, navegación, menús y paneles), comparación con ACC, quick wins, primitivas, tokens y orden por impacto.
+IMPLEMENTADO:         NADA de código. Solo el informe (sin commitear).
+PENDIENTE:            que el propietario elija por dónde empezar (propuesta: F0 = QW1 transición de fila, QW3 foco visible, QW4 pulsado, QW5 casilla, QW7 spinner). Decisiones abiertas: mecanismo de pulsado (recomendado: el de la primitiva, translateY 1px); T1 separar `--a-state-hover` de `--a-action-secondary` (cambio del canon: autorización y tripwires); la barra lateral vive en `FilesPage.jsx`, que tiene WIP del propietario.
+ARCHIVOS MODIFICADOS: docs/ux/UI_POLISH_01_CONTRATO_DE_INTERACCION.md (nuevo), docs/AI_WORKSTATE.md.
+TESTS EJECUTADOS:     medición en vivo en ACC (2.120 reglas CSS, fila, botones, casilla, menú ⋮, selección, carga con MutationObserver) y en ALEPHIA (856 reglas, fila, menú contextual, selección) + censo del código de frontend-docs/src. Sin tocar datos; en ACC se reordenó la tabla y se marcaron filas por un error de calibración y se deshizo comprobando orden y selección.
+TESTS PENDIENTES:     tooltips de ACC (una muestra, no concluyente), teclado en menús de ACC (teclas sintéticas no prueban nada), paneles laterales y desplegables de ACC, equivalente de Mi Trabajo en ACC.
+FALLO CONOCIDO:       ninguno nuevo; los hallazgos están clasificados en el informe.
+NEXT EXACT ACTION:    superada: el propietario eligió F0 y autorizó T2 (unidad F0 + T2).
+DO NOT TOUCH:         UX-05 (contrato congelado, se continúa desde L0); `Toolbar` sigue aplazado; WIP de FilesPage.jsx.
+COMMIT/HEAD REF:      el informe entra en el commit de F0 + T2 (`fix(ui-polish/f0): …`), sobre d86b1db
+
 ## FROZEN / DO NOT REOPEN
 
 - **Saved Views 2.0 está cerrado.** No se reabre la arquitectura salvo
