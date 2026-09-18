@@ -498,7 +498,14 @@ export default function PDFViewer({ url, preparando = false,
   //
   // SOLO EN LA PAGINA 1: la miniatura ES la primera pagina. Enseñarla mientras
   // se abre la 3 seria mentir sobre lo que se esta viendo.
-  const [siluetaLista, setSiluetaLista] = useState(false);
+  //
+  // DENTRO DE LA HOJA Y HASTA QUE EL DIBUJO ESTA COMPLETO (18-sep-2026). Flotaba
+  // sobre todo el visor y se retiraba con el PRIMER trazo. Medido con una lamina
+  // pesada sin vista previa: al abrirse el documento la tapaba una hoja EN
+  // BLANCO durante 10,5 s, y despues el plano se pintaba por trozos. El dueño lo
+  // describio tal cual: «se ve borroso, es como si se actualizara y vuelve a
+  // aparecer incompleto». Ahora ocupa la misma capa que la vista previa legible
+  // (ver `imagenProvisional`): borroso -> nitido de un solo paso.
   const [tiraAbierta, _setTiraAbierta] = useState(tiraEstaAbierta);
   const setTiraAbierta = (v) => {
     const valor = typeof v === 'function' ? v(tiraAbierta) : v;
@@ -507,7 +514,6 @@ export default function PDFViewer({ url, preparando = false,
   };
   useEffect(() => {
     setSaltandoA(null);
-    setSiluetaLista(false);   // la silueta es la del plano NUEVO, no la anterior
     // EL PLANO EN PANTALLA YA NO ES EL QUE SE PIDIO -- desde el clic, no desde
     // que llega la URL firmada. Medido en el banco: con dos señales distintas
     // (`preparando` para el principio y `planoListo` para el resto) quedaba un
@@ -583,6 +589,11 @@ export default function PDFViewer({ url, preparando = false,
     });
     return () => { vivo = false; };
   }, [nodeId, versionId]);
+
+  // Lo que se enseña en la hoja mientras el dibujo vectorial no esta completo:
+  // la vista previa legible si la hay y, si no, la miniatura. Una sola capa para
+  // las dos, dentro de la caja de la hoja (ver el render).
+  const imagenProvisional = vistaPrevia || siluetaUrl;
 
   // LA CINTA SE CENTRA UNA SOLA VEZ: AL ABRIRLA.
   //
@@ -756,9 +767,10 @@ export default function PDFViewer({ url, preparando = false,
   // cambio instantaneo no oculta nada ni enseña nada --sin parpadeo-- y uno
   // lento oculta la hoja y avisa EN EL MISMO INSTANTE.
   //
-  // CON VISTA PREVIA NO SE APARTA NADA (P1): lo que hay en la zona de la hoja
-  // ya no es el plano anterior, es ESTE plano en version ligera. Atenuarlo
-  // dejaria la pantalla en blanco justo cuando por fin hay algo que mirar.
+  // CON IMAGEN PROVISIONAL NO SE APARTA NADA (vista previa o miniatura): lo que
+  // hay en la zona de la hoja ya no es el plano anterior, es ESTE plano en
+  // version ligera. Atenuarlo dejaria la pantalla en blanco justo cuando por fin
+  // hay algo que mirar.
   const esperandoDocumento = mostrarEspera && !vistaPuesta;
   const ocupadoRef = useRef(false);
   useEffect(() => { ocupadoRef.current = ocupado; }, [ocupado]);
@@ -854,6 +866,15 @@ export default function PDFViewer({ url, preparando = false,
   const [vectorDibujado, setVectorDibujado] = useState(-1);
   const docNonceRef = useRef(0);
   useEffect(() => { docNonceRef.current = docNonce; }, [docNonce]);
+  // ¿EL DOCUMENTO ABIERTO ES YA EL DE LA LAMINA PEDIDA? El lector no se desmonta
+  // al cambiar de lamina: hasta que pdf.js abre la nueva, `docNonce` sigue siendo
+  // el de la anterior, cuyo dibujo ya esta completo. Mirando solo eso, la imagen
+  // provisional de la lamina pedida no salia hasta abrirse su documento, y caia
+  // en la caja --quiza ampliada-- de la anterior. `pedidoDesde` es el documento
+  // que habia cuando se pidio esta: el suyo sera uno posterior.
+  const [pedidoDesde, setPedidoDesde] = useState(0);
+  useEffect(() => { setPedidoDesde(docNonceRef.current); }, [fileName, url]);
+  const documentoAbierto = docNonce > pedidoDesde;
 
   // QUE DOCUMENTO ESTA YA ENCUADRADO.
   //
@@ -1687,10 +1708,13 @@ export default function PDFViewer({ url, preparando = false,
   const encajarConLaVista = useCallback((img) => {
     const cont = containerRef.current, lienzo = canvasRef.current;
     if (!cont || !lienzo || !img || !img.naturalWidth || !img.naturalHeight) return;
-    // Ya encuadro el documento: manda el. (`docNonce` empieza en 0 igual que
-    // el ref, asi que sin comprobarlo el primer documento nunca se encuadraba
-    // con la vista previa: se quedaba con el lienzo de 300x150 de fabrica.)
-    if (docNonce && encuadradoRef.current === docNonce) return;
+    // Ya encuadro su documento: manda el. (Tiene que ser el de ESTA lamina: el
+    // encuadre de la anterior no cuenta, y con el primer documento `docNonce`
+    // empieza en 0 igual que el ref.)
+    if (documentoAbierto && encuadradoRef.current === docNonce) return;
+    // Llega la vista previa con la miniatura ya puesta y el usuario ya la movio:
+    // la caja ya esta, y recentrarla le quitaria el sitio.
+    if (vistaTocadaRef.current) return;
     const proporcion = img.naturalWidth / img.naturalHeight;
     const ancho = Math.max(40, Math.min(cont.clientWidth - 64, (cont.clientHeight - 64) * proporcion));
     lienzo.style.width = `${ancho}px`;
@@ -1703,20 +1727,20 @@ export default function PDFViewer({ url, preparando = false,
       c.scrollLeft = (c.scrollWidth - c.clientWidth) / 2;
       c.scrollTop = (c.scrollHeight - c.clientHeight) / 2;
     });
-  }, [docNonce]);
+  }, [documentoAbierto, docNonce]);
 
   // MIENTRAS SOLO HAY VISTA PREVIA, LO QUE HAGA EL USUARIO MANDA. Se apunta si
   // movio la hoja (arrastre, rueda o barras); el centrado propio de arriba no
   // cuenta, por eso la marca de tiempo.
   useEffect(() => {
     const cont = containerRef.current;
-    if (!vistaPuesta || numPages || !cont) return undefined;
+    if (!vistaPuesta || documentoAbierto || !cont) return undefined;
     // Basta con el scroll: arrastrar la hoja y las barras lo mueven, y el zoom
     // todavia no hace nada porque no hay documento del que sacar la escala.
     const tocar = () => { if (performance.now() - centrandoRef.current > 400) vistaTocadaRef.current = true; };
     cont.addEventListener('scroll', tocar, { passive: true });
     return () => { cont.removeEventListener('scroll', tocar); };
-  }, [vistaPuesta, numPages]);
+  }, [vistaPuesta, documentoAbierto]);
 
   // El encuadre que respeta lo que ya estaba en pantalla: la hoja se queda del
   // mismo tamaño y en el mismo sitio, y solo cambia de rasterizada a vectorial.
@@ -2179,9 +2203,10 @@ export default function PDFViewer({ url, preparando = false,
                 250 ms que gobiernan la marca), la hoja vieja se retira y queda
                 la marca sola. Si el cambio es instantaneo --lamina ya
                 preparada-- no se aparta nada: no hay parpadeo. */}
-            {/* SIN DOCUMENTO LA ZONA SE OCULTA... salvo que haya vista previa
-                (P1): entonces la hoja ligera ya ocupa su sitio y es lo unico
-                que se puede enseñar hasta que pdf.js abra el fichero. */}
+            {/* SIN DOCUMENTO LA ZONA SE OCULTA... salvo que haya imagen
+                provisional (vista previa o miniatura): entonces la hoja ligera
+                ya ocupa su sitio y es lo unico que se puede enseñar hasta que
+                pdf.js abra el fichero. */}
             <div className={`pdf-page-pad${numPages || vistaPuesta ? '' : ' sin-documento'}${esperandoDocumento ? ' esperando' : ''}`}>
               <div ref={wrapRef}
                 // ATENUADO HASTA QUE EL PLANO NUEVO ESTA PINTADO, no hasta
@@ -2197,15 +2222,26 @@ export default function PDFViewer({ url, preparando = false,
                 <canvas ref={canvasRef} />
                 {/* El detalle nitido de lo visible (ver dibujarDetalle). */}
                 <canvas ref={detalleRef} className="pdf-detalle" aria-hidden="true" />
-                {/* LA VISTA PREVIA LEGIBLE, EXACTAMENTE SOBRE LA HOJA (ver arriba).
+                {/* LA IMAGEN PROVISIONAL, EXACTAMENTE SOBRE LA HOJA (ver arriba):
+                    la vista previa legible si la hay y, si no, la miniatura.
                     Ocupa la caja del lienzo, asi que al retirarla no se mueve
                     ni el zoom, ni el centro, ni el scroll: solo cambia lo que
-                    se ve dentro del mismo rectangulo. */}
-                {vistaPrevia && vectorDibujado !== docNonce && !renderError && currentPage === 1 && (
+                    se ve dentro del mismo rectangulo. Si llega la vista previa
+                    con la miniatura ya puesta, el navegador sigue enseñando la
+                    miniatura hasta tener la otra: se afina, no parpadea. */}
+                {imagenProvisional && !(documentoAbierto && vectorDibujado === docNonce) && !renderError && currentPage === 1 && (
                   <img className={`pdf-vista${vistaPuesta ? ' se-ve' : ''}`}
-                       src={vistaPrevia} alt="" aria-hidden="true"
-                       onLoad={(e) => { encajarConLaVista(e.currentTarget); cronoMarca('VISTA-PREVIA'); setVistaPuesta(true); }}
-                       onError={() => setVistaPuesta(false)} />
+                       src={imagenProvisional} alt="" aria-hidden="true"
+                       onLoad={(e) => {
+                         encajarConLaVista(e.currentTarget);
+                         cronoMarca(e.currentTarget.getAttribute('src') === vistaPrevia ? 'VISTA-PREVIA' : 'SILUETA');
+                         setVistaPuesta(true);
+                       }}
+                       onError={(e) => {
+                         // Si falla la vista previa, se vuelve a la miniatura.
+                         if (vistaPrevia && e.currentTarget.getAttribute('src') === vistaPrevia) setVistaPrevia(null);
+                         else setVistaPuesta(false);
+                       }} />
                 )}
                 {highlights.map(h => (
                   <div key={h.key} style={{
@@ -2274,22 +2310,12 @@ export default function PDFViewer({ url, preparando = false,
             </div>
         )}
 
-          {/* LA SILUETA (ver arriba): aparece al instante y se afina sola.
-              Con vista previa legible puesta sobra: se retira para no tapar
-              con 420 px borrosos lo que ya se lee. */}
-          {siluetaUrl && !vistaPuesta && !planoListo && currentPage === 1 && (
-            <img className={`pdf-silueta${siluetaLista ? ' se-ve' : ''}`}
-                 src={siluetaUrl} alt="" aria-hidden="true"
-                 onLoad={() => setSiluetaLista(true)}
-                 onError={() => setSiluetaLista(false)} />
-          )}
-
           {/* LA MARCA SE ANCLA A LA ZONA, NO AL CONTENEDOR QUE SE DESPLAZA.
               Estaba dentro del contenedor con scroll, asi que su «centro» era
               el centro del CONTENIDO: al alejar la lamina y cambiar de plano
               aparecia lejos, fuera de la vista. Aqui el centro es el de lo que
               se ve, siempre. */}
-          <div className={`pdf-espera-encima${mostrarEspera && !siluetaLista && !vistaPuesta ? ' se-ve' : ''}`}>
+          <div className={`pdf-espera-encima${mostrarEspera && !vistaPuesta ? ' se-ve' : ''}`}>
             <MarcaEsperando
                 porcentaje={loading && progress > 0 && progress < 100 ? progress : null} />
           </div>

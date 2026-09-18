@@ -8,8 +8,10 @@ previsualización/proxy por versión y **sin** montar todavía una infraestructu
 sin trabajo repetido, ya desplegado en septiembre.)*
 
 **Estado:** prototipo aceptado por el propietario (`P1 CONCEPT = PASS`, `2000 px JPEG q85 = CANDIDATO`) e
-**integrado de verdad en el backend**, con su autorización, su generación al subir y su cola. Medido en local.
-**Sin commit, push ni despliegue.**
+**integrado de verdad en el backend**, con su autorización, su generación al subir y su cola. Medido en local con
+las dos láminas (`004120` y `004122`, §11). **`979c2d7` empujado el 17-sep por orden del propietario y desplegado
+por él; verificado en producción** (`/api/health` 979c2d7 y el portal sirve el código nuevo). La apertura de las
+láminas SIN vista previa se trató después: informe 13 §7.
 
 El cierre exigido está en §9.
 
@@ -329,3 +331,40 @@ CODE CHANGES                    = 1 línea en frontend-docs/src/components/PDFVi
    desactivada, así que se descargó otra vez (450 KB) y hubo ~1 s sin imagen. En producción el objeto es inmutable
    con `max-age=86400`, así que saldría de la caché del navegador. Se puede evitar del todo manteniendo el elemento
    montado y ocultándolo; no se ha tocado porque no estaba autorizado.
+
+
+## 11 · La segunda lámina: `004122` (17-sep, medición local autorizada)
+
+`500125-CSSP001-740-XX-DR-LS-004122.pdf` · 23,4 MB · una página A1 (2384 × 1684 pt). Mismo banco, mismo
+contrato y misma red emulada que `004120` (2,4 MB/s y 200 ms), dos rondas con vista previa y sin ella, la lámina
+montada en el banco sólo durante la medición y el banco devuelto después a `004120`. Sin tocar código.
+
+| | Hoy (sin vista previa) | Con vista previa (2000 px) |
+|---|---|---|
+| Peso de la vista previa | — | **458 KB** (2000 × 1413, JPEG q85) |
+| Generarla (PyMuPDF, render + JPEG) | — | **1,79 s** |
+| Generarla por el camino del servidor, sin la red a GCS | — | **2,6–2,8 s de reloj, 2,5–2,7 s de CPU**, pico del proceso 161–171 MB (la miniatura de 420 px de hoy: 2,0–2,2 s) |
+| Clic → algo en pantalla | ~0,45 s, miniatura de 420 px **ilegible** | **1,14 s**, legible |
+| Clic → lámina legible | 17,5–17,9 s (cuando termina el vector) | **1,14 s** |
+| Descarga del PDF | 11,8–11,9 s | 12,2 s (igual) |
+| Clic → primera tinta del vector | 15,6–15,7 s | 15,7–15,8 s (igual) |
+| Clic → dibujo completo | 17,5–17,8 s | 17,8–17,9 s (igual) |
+| Sustitución vista previa → vector | — | con el dibujo **completo**; la hoja no se mueve (recuadro dentro de 2 px, diferencia media 12,8/255) |
+| Fallback sin vista previa | igual que el lector de hoy | — |
+| Reapertura | 1,04–1,10 s | 1,02–1,06 s, con la lámina ligera a 0,5–0,7 s |
+| CPU del renderizador / pico de heap | 11,4–11,6 s / 10–11 MB | 11,5–11,6 s / 12–16 MB |
+
+**Se lee de verdad:** `docs/archivos/evidencias/P1_vista_previa/P1_cajetin_004122.png` compara el mismo cajetín a
+1,1 s con la miniatura de hoy (una mancha), con la vista previa (se lee entero: «PLANO DE ÁRBOLES EXISTENTES»,
+especialidad, uso, zona, escala, fecha, revisión y el código `…LS-004122`) y con el dibujo vectorial al final. La
+vista previa reproduce el **90 %** de los trazos del vector con el umbral suave y el **67 %** con el estricto
+(**96 %** y **69 %** en el cajetín): algo más que en `004120`, porque esta lámina es de líneas y fotos pequeñas.
+
+**Lo que cambia frente a `004120`:** la lámina pesa un tercio, así que el vector llega antes (17,8 s en vez de
+49,9 s) y la ventaja absoluta es menor —16,7 s en vez de 48,8 s—, pero el punto de llegada es el mismo: **legible
+a 1,1 s**, que es lo que fija la vista previa y no el tamaño del PDF.
+
+```
+004122 = 1,14 s A LEGIBLE · preview 458 KB · generación local 1,79 s · vector completo 17,8 s (sin cambio) ·
+         sustitución sin movimiento · fallback = lector de hoy · reapertura 1,0–1,1 s
+```

@@ -1,0 +1,828 @@
+{
+ "que": "Apertura de la lamina 004120 (71,9 MB) en el banco local: fotograma a fotograma, antes y despues del arreglo",
+ "como": "Chrome sin ventana 1920x945, escala 1, CDP screencast, red emulada 2,4 MB/s + 200 ms, cache desactivada; clasificacion por tramos con clasificar_apertura.py (fuera del repositorio; reglas en el informe 13 §7)",
+ "mediciones": [
+  {
+   "medicion": "2026-09-17T19-21-15",
+   "variante": "off",
+   "codigo": "979c2d7 (antes)",
+   "se_ve_la_lamina_entera_en_su_sitio_s": 50.45,
+   "nitida_s": 50.46,
+   "fotogramas_en_blanco_o_a_medias_tras_verse": 0,
+   "marcas_del_lector_ms": {
+    "url": 482,
+    "descargado": 34894,
+    "encuadrado": 34900,
+    "tinta": 47196,
+    "total": 50373
+   },
+   "capa_provisional": null,
+   "tramos": [
+    {
+     "desde_s": 0.02,
+     "hasta_s": 0.06,
+     "etiqueta": "EN BLANCO",
+     "nitidez": 0.0,
+     "blanco": 1.0,
+     "dif": 0.525,
+     "fotogramas": 2
+    },
+    {
+     "desde_s": 0.06,
+     "hasta_s": 0.3,
+     "etiqueta": "VACIA",
+     "nitidez": 0.0,
+     "blanco": 0.0,
+     "dif": 0.33,
+     "fotogramas": 4
+    },
+    {
+     "desde_s": 0.3,
+     "hasta_s": 0.33,
+     "etiqueta": "A MEDIAS",
+     "nitidez": 0.0,
+     "blanco": 0.0,
+     "dif": 0.283,
+     "fotogramas": 2
+    },
+    {
+     "desde_s": 0.33,
+     "hasta_s": 36.55,
+     "etiqueta": "A MEDIAS",
+     "nitidez": 0.0,
+     "blanco": 0.002,
+     "dif": 0.244,
+     "fotogramas": 15
+    },
+    {
+     "desde_s": 36.55,
+     "hasta_s": 36.58,
+     "etiqueta": "VACIA",
+     "nitidez": 0.0,
+     "blanco": 0.0,
+     "dif": 0.33,
+     "fotogramas": 4
+    },
+    {
+     "desde_s": 36.58,
+     "hasta_s": 47.09,
+     "etiqueta": "EN BLANCO",
+     "nitidez": 0.0,
+     "blanco": 0.996,
+     "dif": 0.438,
+     "fotogramas": 9
+    },
+    {
+     "desde_s": 47.09,
+     "hasta_s": 47.14,
+     "etiqueta": "EN BLANCO",
+     "nitidez": 0.021,
+     "blanco": 0.954,
+     "dif": 0.495,
+     "fotogramas": 1
+    },
+    {
+     "desde_s": 47.14,
+     "hasta_s": 47.18,
+     "etiqueta": "EN BLANCO",
+     "nitidez": 0.03,
+     "blanco": 0.906,
+     "dif": 0.459,
+     "fotogramas": 1
+    },
+    {
+     "desde_s": 47.18,
+     "hasta_s": 47.23,
+     "etiqueta": "A MEDIAS",
+     "nitidez": 0.032,
+     "blanco": 0.876,
+     "dif": 0.435,
+     "fotogramas": 1
+    },
+    {
+     "desde_s": 47.23,
+     "hasta_s": 47.29,
+     "etiqueta": "A MEDIAS",
+     "nitidez": 0.042,
+     "blanco": 0.829,
+     "dif": 0.407,
+     "fotogramas": 1
+    },
+    {
+     "desde_s": 47.29,
+     "hasta_s": 47.32,
+     "etiqueta": "A MEDIAS",
+     "nitidez": 0.063,
+     "blanco": 0.764,
+     "dif": 0.371,
+     "fotogramas": 1
+    },
+    {
+     "desde_s": 47.32,
+     "hasta_s": 47.34,
+     "etiqueta": "A MEDIAS",
+     "nitidez": 0.073,
+     "blanco": 0.712,
+     "dif": 0.335,
+     "fotogramas": 1
+    },
+    {
+     "desde_s": 47.34,
+     "hasta_s": 47.38,
+     "etiqueta": "A MEDIAS",
+     "nitidez": 0.074,
+     "blanco": 0.686,
+     "dif": 0.318,
+     "fotogramas": 1
+    },
+    {
+     "desde_s": 47.38,
+     "hasta_s": 47.41,
+     "etiqueta": "A MEDIAS",
+     "nitidez": 0.078,
+     "blanco": 0.643,
+     "dif": 0.29,
+     "fotogramas": 1
+    },
+    {
+     "desde_s": 47.41,
+     "hasta_s": 47.44,
+     "etiqueta": "A MEDIAS",
+     "nitidez": 0.081,
+     "blanco": 0.6,
+     "dif": 0.259,
+     "fotogramas": 1
+    },
+    {
+     "desde_s": 47.44,
+     "hasta_s": 47.47,
+     "etiqueta": "A MEDIAS",
+     "nitidez": 0.085,
+     "blanco": 0.546,
+     "dif": 0.22,
+     "fotogramas": 1
+    },
+    {
+     "desde_s": 47.47,
+     "hasta_s": 47.5,
+     "etiqueta": "A MEDIAS",
+     "nitidez": 0.087,
+     "blanco": 0.503,
+     "dif": 0.194,
+     "fotogramas": 1
+    },
+    {
+     "desde_s": 47.5,
+     "hasta_s": 47.52,
+     "etiqueta": "A MEDIAS",
+     "nitidez": 0.089,
+     "blanco": 0.473,
+     "dif": 0.18,
+     "fotogramas": 1
+    },
+    {
+     "desde_s": 47.52,
+     "hasta_s": 50.24,
+     "etiqueta": "A MEDIAS",
+     "nitidez": 0.09,
+     "blanco": 0.444,
+     "dif": 0.172,
+     "fotogramas": 3
+    },
+    {
+     "desde_s": 50.24,
+     "hasta_s": 50.24,
+     "etiqueta": "A MEDIAS",
+     "nitidez": 0.093,
+     "blanco": 0.397,
+     "dif": 0.15,
+     "fotogramas": 1
+    },
+    {
+     "desde_s": 50.24,
+     "hasta_s": 50.25,
+     "etiqueta": "A MEDIAS",
+     "nitidez": 0.096,
+     "blanco": 0.347,
+     "dif": 0.128,
+     "fotogramas": 1
+    },
+    {
+     "desde_s": 50.25,
+     "hasta_s": 50.27,
+     "etiqueta": "A MEDIAS",
+     "nitidez": 0.096,
+     "blanco": 0.311,
+     "dif": 0.117,
+     "fotogramas": 1
+    },
+    {
+     "desde_s": 50.27,
+     "hasta_s": 50.38,
+     "etiqueta": "A MEDIAS",
+     "nitidez": 0.098,
+     "blanco": 0.28,
+     "dif": 0.106,
+     "fotogramas": 4
+    },
+    {
+     "desde_s": 50.38,
+     "hasta_s": 50.4,
+     "etiqueta": "A MEDIAS",
+     "nitidez": 0.244,
+     "blanco": 0.261,
+     "dif": 0.098,
+     "fotogramas": 1
+    },
+    {
+     "desde_s": 50.4,
+     "hasta_s": 50.45,
+     "etiqueta": "A MEDIAS",
+     "nitidez": 0.452,
+     "blanco": 0.217,
+     "dif": 0.08,
+     "fotogramas": 1
+    },
+    {
+     "desde_s": 50.45,
+     "hasta_s": 50.46,
+     "etiqueta": "ENTERA BORROSA",
+     "nitidez": 0.962,
+     "blanco": 0.143,
+     "dif": 0.011,
+     "fotogramas": 1
+    },
+    {
+     "desde_s": 50.46,
+     "hasta_s": 50.46,
+     "etiqueta": "NITIDA",
+     "nitidez": 1.0,
+     "blanco": 0.141,
+     "dif": 0.0,
+     "fotogramas": 1
+    }
+   ]
+  },
+  {
+   "medicion": "2026-09-17T19-21-15",
+   "variante": "2000",
+   "codigo": "979c2d7 (antes)",
+   "se_ve_la_lamina_entera_en_su_sitio_s": 1.26,
+   "nitida_s": 50.96,
+   "fotogramas_en_blanco_o_a_medias_tras_verse": 0,
+   "marcas_del_lector_ms": {
+    "url": 490,
+    "vistaUrl": 505,
+    "vista": 1103,
+    "descargado": 34749,
+    "encuadrado": 34752,
+    "tinta": 47866,
+    "total": 50900
+   },
+   "capa_provisional": null,
+   "tramos": [
+    {
+     "desde_s": 0.01,
+     "hasta_s": 0.04,
+     "etiqueta": "EN BLANCO",
+     "nitidez": 0.0,
+     "blanco": 1.0,
+     "dif": 0.525,
+     "fotogramas": 1
+    },
+    {
+     "desde_s": 0.04,
+     "hasta_s": 0.29,
+     "etiqueta": "VACIA",
+     "nitidez": 0.0,
+     "blanco": 0.0,
+     "dif": 0.33,
+     "fotogramas": 5
+    },
+    {
+     "desde_s": 0.29,
+     "hasta_s": 0.32,
+     "etiqueta": "A MEDIAS",
+     "nitidez": 0.0,
+     "blanco": 0.0,
+     "dif": 0.283,
+     "fotogramas": 2
+    },
+    {
+     "desde_s": 0.32,
+     "hasta_s": 1.17,
+     "etiqueta": "A MEDIAS",
+     "nitidez": 0.0,
+     "blanco": 0.002,
+     "dif": 0.244,
+     "fotogramas": 13
+    },
+    {
+     "desde_s": 1.17,
+     "hasta_s": 1.2,
+     "etiqueta": "VACIA",
+     "nitidez": 0.0,
+     "blanco": 0.0,
+     "dif": 0.33,
+     "fotogramas": 3
+    },
+    {
+     "desde_s": 1.2,
+     "hasta_s": 1.23,
+     "etiqueta": "A MEDIAS",
+     "nitidez": 0.0,
+     "blanco": 0.0,
+     "dif": 0.301,
+     "fotogramas": 3
+    },
+    {
+     "desde_s": 1.23,
+     "hasta_s": 1.23,
+     "etiqueta": "A MEDIAS",
+     "nitidez": 0.106,
+     "blanco": 0.116,
+     "dif": 0.215,
+     "fotogramas": 1
+    },
+    {
+     "desde_s": 1.23,
+     "hasta_s": 1.24,
+     "etiqueta": "A MEDIAS",
+     "nitidez": 0.155,
+     "blanco": 0.115,
+     "dif": 0.134,
+     "fotogramas": 1
+    },
+    {
+     "desde_s": 1.24,
+     "hasta_s": 1.25,
+     "etiqueta": "A MEDIAS",
+     "nitidez": 0.269,
+     "blanco": 0.148,
+     "dif": 0.096,
+     "fotogramas": 1
+    },
+    {
+     "desde_s": 1.25,
+     "hasta_s": 1.26,
+     "etiqueta": "A MEDIAS",
+     "nitidez": 0.318,
+     "blanco": 0.147,
+     "dif": 0.089,
+     "fotogramas": 1
+    },
+    {
+     "desde_s": 1.26,
+     "hasta_s": 1.28,
+     "etiqueta": "ENTERA BORROSA",
+     "nitidez": 0.389,
+     "blanco": 0.153,
+     "dif": 0.074,
+     "fotogramas": 2
+    },
+    {
+     "desde_s": 1.28,
+     "hasta_s": 47.49,
+     "etiqueta": "ENTERA BORROSA",
+     "nitidez": 0.446,
+     "blanco": 0.158,
+     "dif": 0.06,
+     "fotogramas": 12
+    },
+    {
+     "desde_s": 47.49,
+     "hasta_s": 50.96,
+     "etiqueta": "ENTERA BORROSA",
+     "nitidez": 0.586,
+     "blanco": 0.164,
+     "dif": 0.054,
+     "fotogramas": 26
+    },
+    {
+     "desde_s": 50.96,
+     "hasta_s": 50.96,
+     "etiqueta": "NITIDA",
+     "nitidez": 1.0,
+     "blanco": 0.141,
+     "dif": 0.0,
+     "fotogramas": 1
+    }
+   ]
+  },
+  {
+   "medicion": "2026-09-18T13-26-40",
+   "variante": "off",
+   "codigo": "arreglo local, sin commit",
+   "se_ve_la_lamina_entera_en_su_sitio_s": 0.33,
+   "nitida_s": 47.86,
+   "fotogramas_en_blanco_o_a_medias_tras_verse": 0,
+   "marcas_del_lector_ms": {
+    "silueta": 233,
+    "url": 476,
+    "descargado": 33471,
+    "encuadrado": 33475,
+    "tinta": 44751,
+    "total": 47723
+   },
+   "capa_provisional": [
+    {
+     "ms": 0,
+     "estado": "sin-imagen | espera:no | pad:-"
+    },
+    {
+     "ms": 10,
+     "estado": "sin-imagen | espera:no | pad:sin-documento"
+    },
+    {
+     "ms": 34,
+     "estado": "imagen-oculta | espera:no | pad:sin-documento"
+    },
+    {
+     "ms": 262,
+     "estado": "imagen:thumb-p.jpg | espera:no | pad:visible"
+    },
+    {
+     "ms": 47755,
+     "estado": "sin-imagen | espera:no | pad:visible"
+    }
+   ],
+   "tramos": [
+    {
+     "desde_s": 0.01,
+     "hasta_s": 0.09,
+     "etiqueta": "EN BLANCO",
+     "nitidez": 0.0,
+     "blanco": 1.0,
+     "dif": 0.525,
+     "fotogramas": 2
+    },
+    {
+     "desde_s": 0.09,
+     "hasta_s": 0.33,
+     "etiqueta": "VACIA",
+     "nitidez": 0.0,
+     "blanco": 0.0,
+     "dif": 0.33,
+     "fotogramas": 3
+    },
+    {
+     "desde_s": 0.33,
+     "hasta_s": 47.86,
+     "etiqueta": "ENTERA BORROSA",
+     "nitidez": 0.029,
+     "blanco": 0.142,
+     "dif": 0.062,
+     "fotogramas": 33
+    },
+    {
+     "desde_s": 47.86,
+     "hasta_s": 47.86,
+     "etiqueta": "NITIDA",
+     "nitidez": 1.0,
+     "blanco": 0.141,
+     "dif": 0.0,
+     "fotogramas": 1
+    }
+   ]
+  },
+  {
+   "medicion": "2026-09-18T13-26-40",
+   "variante": "2000",
+   "codigo": "arreglo local, sin commit",
+   "se_ve_la_lamina_entera_en_su_sitio_s": 0.25,
+   "nitida_s": 48.28,
+   "fotogramas_en_blanco_o_a_medias_tras_verse": 0,
+   "marcas_del_lector_ms": {
+    "silueta": 227,
+    "url": 498,
+    "vistaUrl": 503,
+    "vista": 1116,
+    "descargado": 33456,
+    "encuadrado": 33459,
+    "tinta": 45404,
+    "total": 48245
+   },
+   "capa_provisional": [
+    {
+     "ms": 0,
+     "estado": "sin-imagen | espera:no | pad:-"
+    },
+    {
+     "ms": 5,
+     "estado": "sin-imagen | espera:no | pad:sin-documento"
+    },
+    {
+     "ms": 8,
+     "estado": "imagen-oculta | espera:no | pad:sin-documento"
+    },
+    {
+     "ms": 234,
+     "estado": "imagen:thumb-p.jpg | espera:no | pad:visible"
+    },
+    {
+     "ms": 509,
+     "estado": "imagen:vista-p-2000.jpg | espera:no | pad:visible"
+    },
+    {
+     "ms": 48253,
+     "estado": "sin-imagen | espera:no | pad:visible"
+    }
+   ],
+   "tramos": [
+    {
+     "desde_s": 0.01,
+     "hasta_s": 0.04,
+     "etiqueta": "EN BLANCO",
+     "nitidez": 0.0,
+     "blanco": 1.0,
+     "dif": 0.525,
+     "fotogramas": 2
+    },
+    {
+     "desde_s": 0.04,
+     "hasta_s": 0.25,
+     "etiqueta": "VACIA",
+     "nitidez": 0.0,
+     "blanco": 0.0,
+     "dif": 0.33,
+     "fotogramas": 2
+    },
+    {
+     "desde_s": 0.25,
+     "hasta_s": 1.18,
+     "etiqueta": "ENTERA BORROSA",
+     "nitidez": 0.029,
+     "blanco": 0.142,
+     "dif": 0.062,
+     "fotogramas": 1
+    },
+    {
+     "desde_s": 1.18,
+     "hasta_s": 45.25,
+     "etiqueta": "ENTERA BORROSA",
+     "nitidez": 0.519,
+     "blanco": 0.16,
+     "dif": 0.054,
+     "fotogramas": 4
+    },
+    {
+     "desde_s": 45.25,
+     "hasta_s": 48.28,
+     "etiqueta": "ENTERA BORROSA",
+     "nitidez": 0.586,
+     "blanco": 0.164,
+     "dif": 0.054,
+     "fotogramas": 25
+    },
+    {
+     "desde_s": 48.28,
+     "hasta_s": 48.28,
+     "etiqueta": "NITIDA",
+     "nitidez": 1.0,
+     "blanco": 0.141,
+     "dif": 0.0,
+     "fotogramas": 1
+    }
+   ]
+  },
+  {
+   "medicion": "salto-2026-09-18T13-30-20",
+   "variante": "off-desde-x1",
+   "codigo": "arreglo local, sin commit",
+   "se_ve_la_lamina_entera_en_su_sitio_s": 0.28,
+   "nitida_s": 47.87,
+   "fotogramas_en_blanco_o_a_medias_tras_verse": 0,
+   "marcas_del_lector_ms": {
+    "silueta": 237,
+    "url": 503,
+    "descargado": 32982,
+    "encuadrado": 32986,
+    "tinta": 44461,
+    "total": 47768
+   },
+   "capa_provisional": [
+    {
+     "ms": 0,
+     "estado": "sin-imagen | espera:no | pad:visible"
+    },
+    {
+     "ms": 322,
+     "estado": "imagen-oculta | espera:no | pad:visible"
+    },
+    {
+     "ms": 561,
+     "estado": "imagen:thumb-p.jpg [406,51,1042,737] | espera:no | pad:visible"
+    },
+    {
+     "ms": 33306,
+     "estado": "imagen:thumb-p.jpg [406,51,1043,737] | espera:no | pad:visible"
+    },
+    {
+     "ms": 48098,
+     "estado": "sin-imagen | espera:no | pad:visible"
+    }
+   ],
+   "tramos": [
+    {
+     "desde_s": -0.3,
+     "hasta_s": 0.27,
+     "etiqueta": "A MEDIAS",
+     "nitidez": 0.715,
+     "blanco": 0.379,
+     "dif": 0.428,
+     "fotogramas": 3
+    },
+    {
+     "desde_s": 0.27,
+     "hasta_s": 0.28,
+     "etiqueta": "A MEDIAS",
+     "nitidez": 0.716,
+     "blanco": 0.375,
+     "dif": 0.427,
+     "fotogramas": 1
+    },
+    {
+     "desde_s": 0.28,
+     "hasta_s": 47.87,
+     "etiqueta": "ENTERA BORROSA",
+     "nitidez": 0.029,
+     "blanco": 0.142,
+     "dif": 0.062,
+     "fotogramas": 29
+    },
+    {
+     "desde_s": 47.87,
+     "hasta_s": 47.87,
+     "etiqueta": "NITIDA",
+     "nitidez": 1.0,
+     "blanco": 0.141,
+     "dif": 0.0,
+     "fotogramas": 1
+    }
+   ]
+  },
+  {
+   "medicion": "salto-2026-09-18T13-30-20",
+   "variante": "off-desde-x3",
+   "codigo": "arreglo local, sin commit",
+   "se_ve_la_lamina_entera_en_su_sitio_s": 0.27,
+   "nitida_s": 47.11,
+   "fotogramas_en_blanco_o_a_medias_tras_verse": 0,
+   "marcas_del_lector_ms": {
+    "silueta": 229,
+    "url": 513,
+    "descargado": 33005,
+    "encuadrado": 33011,
+    "total": 47011
+   },
+   "capa_provisional": [
+    {
+     "ms": 0,
+     "estado": "sin-imagen | espera:no | pad:visible"
+    },
+    {
+     "ms": 305,
+     "estado": "imagen-oculta | espera:no | pad:visible"
+    },
+    {
+     "ms": 535,
+     "estado": "imagen:thumb-p.jpg [-711,-738,1042,737] | espera:no | pad:visible"
+    },
+    {
+     "ms": 1669,
+     "estado": "imagen:thumb-p.jpg [406,51,1042,737] | espera:no | pad:visible"
+    },
+    {
+     "ms": 33315,
+     "estado": "imagen:thumb-p.jpg [406,51,1043,737] | espera:no | pad:visible"
+    },
+    {
+     "ms": 47319,
+     "estado": "sin-imagen | espera:no | pad:visible"
+    }
+   ],
+   "tramos": [
+    {
+     "desde_s": -0.29,
+     "hasta_s": 0.27,
+     "etiqueta": "A MEDIAS",
+     "nitidez": 0.169,
+     "blanco": 0.767,
+     "dif": 0.476,
+     "fotogramas": 3
+    },
+    {
+     "desde_s": 0.27,
+     "hasta_s": 47.11,
+     "etiqueta": "ENTERA BORROSA",
+     "nitidez": 0.029,
+     "blanco": 0.142,
+     "dif": 0.062,
+     "fotogramas": 19
+    },
+    {
+     "desde_s": 47.11,
+     "hasta_s": 47.11,
+     "etiqueta": "NITIDA",
+     "nitidez": 1.0,
+     "blanco": 0.141,
+     "dif": 0.0,
+     "fotogramas": 1
+    }
+   ]
+  },
+  {
+   "medicion": "salto-2026-09-18T13-30-20",
+   "variante": "2000-desde-x3",
+   "codigo": "arreglo local, sin commit",
+   "se_ve_la_lamina_entera_en_su_sitio_s": 0.26,
+   "nitida_s": 46.62,
+   "fotogramas_en_blanco_o_a_medias_tras_verse": 0,
+   "marcas_del_lector_ms": {
+    "silueta": 235,
+    "url": 511,
+    "vista": 1113,
+    "descargado": 32897,
+    "encuadrado": 32901,
+    "total": 46572
+   },
+   "capa_provisional": [
+    {
+     "ms": 0,
+     "estado": "sin-imagen | espera:no | pad:visible"
+    },
+    {
+     "ms": 319,
+     "estado": "imagen-oculta | espera:no | pad:visible"
+    },
+    {
+     "ms": 555,
+     "estado": "imagen:thumb-p.jpg [-711,-738,1042,737] | espera:no | pad:visible"
+    },
+    {
+     "ms": 829,
+     "estado": "imagen:vista-p-2000.jpg [406,51,1042,737] | espera:no | pad:visible"
+    },
+    {
+     "ms": 1431,
+     "estado": "imagen:vista-p-2000.jpg [406,51,1043,737] | espera:no | pad:visible"
+    },
+    {
+     "ms": 1863,
+     "estado": "imagen:vista-p-2000.jpg [405,51,1043,737] | espera:no | pad:visible"
+    },
+    {
+     "ms": 46893,
+     "estado": "sin-imagen | espera:no | pad:visible"
+    }
+   ],
+   "tramos": [
+    {
+     "desde_s": -0.3,
+     "hasta_s": 0.26,
+     "etiqueta": "A MEDIAS",
+     "nitidez": 0.169,
+     "blanco": 0.767,
+     "dif": 0.475,
+     "fotogramas": 3
+    },
+    {
+     "desde_s": 0.26,
+     "hasta_s": 1.18,
+     "etiqueta": "ENTERA BORROSA",
+     "nitidez": 0.029,
+     "blanco": 0.142,
+     "dif": 0.062,
+     "fotogramas": 1
+    },
+    {
+     "desde_s": 1.18,
+     "hasta_s": 32.93,
+     "etiqueta": "ENTERA BORROSA",
+     "nitidez": 0.519,
+     "blanco": 0.16,
+     "dif": 0.053,
+     "fotogramas": 1
+    },
+    {
+     "desde_s": 32.93,
+     "hasta_s": 46.62,
+     "etiqueta": "ENTERA BORROSA",
+     "nitidez": 0.586,
+     "blanco": 0.164,
+     "dif": 0.054,
+     "fotogramas": 14
+    },
+    {
+     "desde_s": 46.62,
+     "hasta_s": 46.62,
+     "etiqueta": "NITIDA",
+     "nitidez": 1.0,
+     "blanco": 0.141,
+     "dif": 0.0,
+     "fotogramas": 1
+    }
+   ]
+  }
+ ]
+}

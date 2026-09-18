@@ -727,35 +727,15 @@
   .pdf-marca-trazo, .pdf-marca-simbolo { animation: none; }
 }
 
-/* LA SILUETA DEL PLANO, MIENTRAS SE DIBUJA EL VECTOR.
-   Es la miniatura que el servidor ya rasterizo y que el navegador ya bajo para
-   la cinta: aparece en el acto, sin red. Debajo del muelle (8) y de la marca
-   (13), encima del lienzo. El porque completo, en PDFViewer.jsx. */
-.pdf-silueta {
-  position: absolute;
-  inset: 10px;
-  width: calc(100% - 20px);
-  height: calc(100% - 20px);
-  object-fit: contain;
-  pointer-events: none;
-  z-index: 6;
-  opacity: 0;
-  transition: opacity 0.16s ease;
-}
-
-.pdf-silueta.se-ve { opacity: 1; }
-
-@media (prefers-reduced-motion: reduce) {
-  .pdf-silueta { transition: none; }
-}
-
-/* LA VISTA PREVIA LEGIBLE (P1), SOBRE LA HOJA Y EN SU SITIO EXACTO.
-   A diferencia de la silueta, no flota sobre el visor: vive DENTRO de la caja
-   del lienzo, asi que ocupa el mismo rectangulo que ocupara el dibujo
-   vectorial. Por eso al retirarla no se mueve nada -- ni el zoom, ni el
-   centro, ni el scroll --: en el mismo sitio, la hoja pasa de rasterizada a
-   vectorial. Sin desvanecido: un cruce de opacidades entre dos versiones de
-   la MISMA hoja se ve como un parpadeo, no como una mejora. */
+/* LA IMAGEN PROVISIONAL, SOBRE LA HOJA Y EN SU SITIO EXACTO: la vista previa
+   legible (P1) o, mientras no la haya, la miniatura. La miniatura flotaba antes
+   sobre todo el visor y la tapaba el lienzo en blanco al abrirse el documento;
+   ahora las dos viven DENTRO de la caja del lienzo, asi que ocupan el mismo
+   rectangulo que ocupara el dibujo vectorial. Por eso al retirarla no se mueve
+   nada -- ni el zoom, ni el centro, ni el scroll --: en el mismo sitio, la hoja
+   pasa de rasterizada a vectorial. Sin desvanecido: un cruce de opacidades
+   entre dos versiones de la MISMA hoja se ve como un parpadeo, no como una
+   mejora. */
 .pdf-vista {
   position: absolute;
   inset: 0;
