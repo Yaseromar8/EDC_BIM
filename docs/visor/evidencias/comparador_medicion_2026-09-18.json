@@ -1,0 +1,37 @@
+{
+  "que": "Comparador de modelos del visor: medicion en produccion antes del arreglo (18-sep-2026)",
+  "como": "Chrome del propietario, pestaña nueva del grupo de la extension, visor.alephia.com.pe con su sesion; sondas de solo lectura: contadores sobre CAMERA_CHANGE_EVENT, VIEWER_RENDER_TICK, RENDER_PRESENTED_EVENT y los parametros BeginScene.clear / BeginScene.signalCameraChanged del sistema de comandos de LMV; entradas sinteticas de la extension (rueda, hover, arrastre). La pestaña quedo oculta parte del tiempo: los tiempos de dibujo no valen, los recuentos de eventos si.",
+  "visor_principal_con_el_comparador_abierto": {
+    "frente": "1_CANAL",
+    "modelos_cargados": 6,
+    "typeof_viewer_stop": "undefined",
+    "typeof_viewer_impl_stop": "function",
+    "viewer_impl_renderLoopOn": true,
+    "progresivo": true,
+    "aristas": true,
+    "conclusion": "la pausa del commit 0e6d18d (viewer.stop && viewer.stop()) nunca corrio; tres visores en el bucle de dibujo"
+  },
+  "sincronia_de_camaras": {
+    "modelo": "500125-CSSP001-740-XX-DR-ST-004120@004145.rvt en A y en B (misma version, 8767 elementos)",
+    "en_reposo_tras_cargar_5s": { "camara_A": 0, "camara_B": 0, "ticks_A": 0, "ticks_B": 0 },
+    "rueda_5_muescas_en_A": { "camara_A": 12, "camara_B": 12, "ticks_A": 12, "ticks_B": 12, "dirty_A_despues": true, "dirty_B_despues": false, "en_reposo_5s_despues": { "camara_por_segundo": 0.0 } },
+    "rueda_5_muescas_y_6_movimientos_en_A": { "camara_A": 7, "camara_B": 7, "hover_A": 1, "dirty_A_despues": true },
+    "arrastre_orbita_en_A": { "camara_A": 5, "camara_B": 5, "BeginScene_clear_A": 5, "BeginScene_clear_B": 5, "signalCameraChanged_A": 5, "signalCameraChanged_B": 5, "presentado_A": 5, "presentado_B": 5, "dirty_A_despues": true, "en_reposo_4s_despues": { "todo": 0 } },
+    "conclusion": "cada cambio de camara en un lado es un redibujado desde cero en los dos; no hay bucle infinito, pero el lado que se movio se queda con la camara sucia y en su siguiente tick redibuja entera y vuelve a avisar al otro"
+  },
+  "lmv_leido_en_el_codigo": {
+    "Navigation.setView": "copia posicion y objetivo y pone _camera.dirty = true sin comparar",
+    "ToolController.update": "cameraUpdated = navigation.getCamera().dirty; refresh ||= cameraUpdated; refresh && navigation.updateCamera()",
+    "Viewer3DImpl.tick": "moved = controlsMoved || ...; _needsClear ||= moved; BeginScene.signalCameraChanged = moved || canvasSizeUpdated",
+    "RenderCommandSystem.cmdBeginScene": "si signalCameraChanged: viewer.api.dispatchEvent(viewer.cameraChangedEvent)",
+    "Viewer3D.prototype": "tiene run() y finish(); NO tiene stop()",
+    "Viewer3DImpl": "run() registra el visor en el MainLoop comun; stop() lo quita con splice(indexOf(viewer), 1)",
+    "MainLoop.unregisterViewer": "con un visor que no esta registrado, indexOf = -1 y splice(-1, 1) quita al ULTIMO registrado"
+  },
+  "error_409": {
+    "frente": "1_DRENAJE",
+    "500125-CSSP001-780-XX-DR-ST-011242@011244 v40 vs v41": { "compare_extracted_v40": false, "prepare_version": "ready", "inventory_extract": 202, "status_final": "success, 506 activos", "diff": "ok" },
+    "500125-CSSP001-780-XX-DR-HD-011259@011263 v23 vs v24": { "compare_extracted_v23": false, "prepare_version": "ready", "inventory_extract": { "status": 409, "cuerpo": { "code": "SOURCE_SCOPE_AMBIGUOUS", "error": "SOURCE_SCOPE_AMBIGUOUS" } }, "estado_en_pantalla": "Error: No se pudo iniciar la extracción de lado A · vínculo 1" },
+    "limpieza_al_salir": { "primera": { "deleted": 506 }, "segunda": { "deleted": 0 } }
+  }
+}

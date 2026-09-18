@@ -208,7 +208,7 @@ def sanitize_urn(urn):
     urn = urn.replace('+', '-').replace('/', '_').rstrip('=')
     return urn
 
-def _extraction_source_context(conn, urn, target_urn):
+def _extraction_source_context(conn, urn, target_urn, scope_hint=None):
     """Identidad demostrable y destino exacto; no afirma propiedad APS de un URN nuevo.
 
     La admision previa al vinculo se conserva para DOCS: un Source nunca
@@ -216,6 +216,17 @@ def _extraction_source_context(conn, urn, target_urn):
     lo atribuye a otra obra, se rechaza; no se acepta una declaracion cliente
     como prueba de propiedad. __cmp__ exige un linaje registrado y una obra
     inequivoca; su scope de almacenamiento es interno, no una obra nueva.
+
+    `scope_hint` (solo __cmp__): el FRENTE desde el que se compara. Un mismo
+    documento de ACC puede estar vinculado en frentes de MAS DE UNA obra --
+    medido en produccion el 18-sep-2026: los modelos HD de drenaje viven en
+    `1_DRENAJE` (PQT8_TALARA) y en el frente de interferencias--, y entonces
+    el registro solo no dice de que obra es la extraccion temporal: el
+    comparador de versiones de esos modelos moria con SOURCE_SCOPE_AMBIGUOUS.
+    El frente declarado NO es una prueba de propiedad: solo sirve para elegir
+    entre las obras que el registro YA conoce para ese linaje, y la sesion
+    tiene que poder entrar en el (lo comprueba la ruta con `authorize_scope`).
+    Un frente que no este registrado para el linaje no cambia nada.
     """
     from db import resolve_project_id
     from inventory_identity import IdentityError, source_identity
@@ -242,13 +253,22 @@ def _extraction_source_context(conn, urn, target_urn):
         related.append((configured_scope, configured_project, configured_item,
                         configured_normalized))
     known_projects = {entry[1] for entry in related}
+    # Las filas del registro que cuentan para decidir el item_id: todas, salvo
+    # cuando el frente declarado resuelve una ambiguedad entre obras (abajo).
+    candidates = related
     if target_urn == '__cmp__':
         if not related:
             raise IdentityError('SOURCE_NOT_REGISTERED')
-        if len(known_projects) != 1:
-            raise IdentityError('SOURCE_SCOPE_AMBIGUOUS')
-        project_id = next(iter(known_projects))
-        authorization_scopes = sorted({entry[0] for entry in related})
+        if len(known_projects) == 1:
+            project_id = next(iter(known_projects))
+        else:
+            elegidas = [entry for entry in related
+                        if isinstance(scope_hint, str) and entry[0] == scope_hint]
+            if not elegidas:
+                raise IdentityError('SOURCE_SCOPE_AMBIGUOUS')
+            project_id = elegidas[0][1]
+            candidates = [entry for entry in related if entry[1] == project_id]
+        authorization_scopes = sorted({entry[0] for entry in candidates})
     else:
         project_id = resolve_project_id(target_urn)
         if not project_id:
@@ -258,7 +278,7 @@ def _extraction_source_context(conn, urn, target_urn):
         authorization_scopes = [target_urn]
     exact = [entry for entry in related
              if entry[0] == target_urn and entry[3] == normalized]
-    applicable = exact or [entry for entry in related if entry[0] == target_urn] or related
+    applicable = exact or [entry for entry in related if entry[0] == target_urn] or candidates
     item_ids = {entry[2] for entry in applicable if entry[2] is not None}
     if len(item_ids) > 1:
         raise IdentityError('ITEM_LINEAGE_CONFLICT')
@@ -284,13 +304,15 @@ def _aps_collection(response):
     return collection
 
 
-def extract_metadata_task(urn, target_urn, job_id, purge_source_urns=None):
+def extract_metadata_task(urn, target_urn, job_id, purge_source_urns=None, scope_hint=None):
     """ Tarea en segundo plano para extraer metadata de Autodesk.
 
     purge_source_urns: Sources de OTRO linaje que se retiran (sin borrar historia)
     en la misma transaccion que publica la extraccion completa. CAS se captura
     ANTES de APS; una descarga antigua no puede reactivar un modelo retirado.
-    La firma se conserva para los callers update/relink/upload. """
+    La firma se conserva para los callers update/relink/upload.
+    scope_hint: el frente desde el que compara el usuario (solo __cmp__); ver
+    `_extraction_source_context`. """
     # Clave de concurrencia: mismo modelo + mismo scope
     _key = None
     try:
@@ -313,7 +335,7 @@ def extract_metadata_task(urn, target_urn, job_id, purge_source_urns=None):
         from db import get_db_connection
         from inventory_identity import InventoryIdentityRepository, IdentityError, source_identity
         with get_db_connection() as conn:
-            source_context = _extraction_source_context(conn, urn, target_urn)
+            source_context = _extraction_source_context(conn, urn, target_urn, scope_hint=scope_hint)
             urn = source_context['source_urn']
             expected = InventoryIdentityRepository(conn).active_snapshot(
                 target_urn, urn, allowed_scopes=[target_urn])
@@ -857,6 +879,11 @@ def start_extraction():
     data = request.get_json() or {}
     urn = data.get('urn')
     target_urn = data.get('target_urn') or urn
+    # El frente desde el que se compara. Solo lo lee la extraccion temporal
+    # del comparador; en las demas el destino ES el frente.
+    scope_hint = data.get('scope') if target_urn == '__cmp__' else None
+    if scope_hint is not None and not isinstance(scope_hint, str):
+        scope_hint = None
 
     if not urn:
         return jsonify({'error': 'Missing urn'}), 400
@@ -870,7 +897,7 @@ def start_extraction():
         with get_db_connection() as conn:
             if target_urn != '__cmp__':
                 authorize_scope(conn, target_urn)
-            context = _extraction_source_context(conn, urn, target_urn)
+            context = _extraction_source_context(conn, urn, target_urn, scope_hint=scope_hint)
             if target_urn == '__cmp__':
                 for authorized_scope in context['authorization_scopes']:
                     authorize_scope(conn, authorized_scope)
@@ -894,10 +921,11 @@ def start_extraction():
                      'message': 'En cola', 'model_urn': context['project_id'] if target_urn == '__cmp__' else target_urn})
 
     # Iniciar hilo secundario
-    thread = threading.Thread(target=extract_metadata_task, args=(urn, target_urn, job_id))
+    thread = threading.Thread(target=extract_metadata_task, args=(urn, target_urn, job_id),
+                              kwargs={'scope_hint': scope_hint})
     thread.daemon = True
     thread.start()
-    
+
     return jsonify({'job_id': job_id}), 202
 
 

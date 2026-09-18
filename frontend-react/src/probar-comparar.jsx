@@ -12,6 +12,8 @@
  *   window.__vistasPorUrn   { <urn>: [{guid,name}] }  lo que declara cada versión
  *   window.__msManifiesto   cuánto tarda en leerse el manifiesto
  *   window.__cargas         lo que recibió `loadAlignedModels` (urn + viewGuid)
+ *   window.__extraccion     la extracción temporal: si la versión ya está
+ *                           extraída, qué contesta el servidor y qué recibió
  *
  * No entra en producción: `vite.config.js` no lo conoce.
  */
@@ -23,6 +25,7 @@ import CompareView from './components/CompareView';
 
 window.__msManifiesto = 80;
 window.__cargas = [];
+window.__extraccion = { extracted: true, respuesta: { status: 202, cuerpo: { job_id: 'job-banco' } }, recibido: [] };
 
 // Dos modelos, cada uno con dos versiones. Las vistas por versión son la palanca.
 const MODELOS = [
@@ -70,7 +73,19 @@ window.fetch = (url, opciones = {}) => {
         return responder({ versions: VERSIONES[id] || [] });
     }
     if (u.includes('/api/compare/cleanup')) return responder({ ok: true });
-    if (u.includes('/api/compare/extracted')) return responder({ extracted: true, count: 10 });
+    // EXTRACCIÓN TEMPORAL de una versión histórica. Por defecto todo está ya
+    // extraído y no se pide nada. La palanca `window.__extraccion` deja simular
+    // lo que contesta el servidor y apunta el cuerpo que recibió: así se ve qué
+    // frente manda el comparador y qué le dice al usuario cuando el servidor no
+    // arranca la extracción (18-sep-2026: un 409 se leía «No se pudo iniciar»).
+    if (u.includes('/api/compare/extracted')) return responder({ extracted: window.__extraccion.extracted, count: window.__extraccion.extracted ? 10 : 0 });
+    if (u.includes('/api/compare/prepare-version')) return responder({ status: 'ready' });
+    if (u.includes('/api/inventory/extract/status/')) return responder({ status: 'success', progress: 100 });
+    if (u.includes('/api/inventory/extract')) {
+        try { window.__extraccion.recibido.push(JSON.parse(opciones.body)); } catch { /* sin cuerpo */ }
+        const r = window.__extraccion.respuesta;
+        return Promise.resolve(new Response(JSON.stringify(r.cuerpo), { status: r.status, headers: { 'Content-Type': 'application/json' } }));
+    }
     if (u.includes('/api/compare/diff')) return responder({
         // `unchanged` lo devuelve siempre el backend (compare.py:337) y el panel
         // lo pinta: omitirlo aqui hacia estallar el BANCO, no el producto.

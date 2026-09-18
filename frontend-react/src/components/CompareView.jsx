@@ -97,6 +97,22 @@ const vistas3DDe = (urn) => new Promise((resolve) => {
     } catch { resolve([]); }
 });
 
+// Lo que contesta el servidor cuando NO arranca la extraccion, en palabras.
+// Antes se perdia: el usuario veia «No se pudo iniciar la extraccion» y el
+// motivo real (18-sep-2026: 409 SOURCE_SCOPE_AMBIGUOUS) habia que ir a buscarlo
+// a la consola. El codigo se deja entre parentesis para poder buscarlo.
+const MOTIVOS_DE_EXTRACCION = {
+    SOURCE_SCOPE_AMBIGUOUS: 'este documento está vinculado en más de una obra y no se pudo saber desde cuál comparas',
+    SOURCE_NOT_REGISTERED: 'esta versión no pertenece a ningún modelo vinculado',
+    FORBIDDEN_SCOPE: 'no tienes acceso a la obra de este modelo',
+    AUTH_REQUIRED: 'la sesión ha caducado; vuelve a entrar',
+};
+const explicarExtraccion = (label, status, cuerpo) => {
+    const code = cuerpo && cuerpo.code;
+    const motivo = MOTIVOS_DE_EXTRACCION[code] || (cuerpo && cuerpo.error) || `el servidor contestó ${status}`;
+    return `No se pudo iniciar la extracción de ${label}: ${motivo}${code ? ` (${code})` : ''}`;
+};
+
 const modelKey = (model) => {
     if (!model) return '__unknown__';
     try {
@@ -149,12 +165,30 @@ export default function CompareView({ BACKEND_URL, projectId, onExit }) {
     }, [BACKEND_URL, onExit]);
 
     // Pausar el visor PRINCIPAL mientras comparamos. Tener 3 visores LMV activos
-    // satura GPU/RAM (geometría que desaparece al moverse, parpadeo). stop() detiene
-    // su render loop y libera el hilo de render para los 2 visores del comparador;
-    // start() lo reanuda al salir. Reversible: NO destruye el modelo ya cargado.
+    // satura GPU/RAM (geometría que desaparece al moverse, parpadeo). Se para
+    // su bucle de dibujo y se reanuda al salir. Reversible: NO destruye el
+    // modelo ya cargado.
+    //
+    // NUNCA LLEGO A PARAR NADA (18-sep-2026). `viewer.stop()` no existe en la API
+    // publica de LMV 7.x (hay `run()`, no `stop()`), asi que el `&&` de antes lo
+    // saltaba en silencio y el visor principal seguia dibujando DEBAJO del
+    // comparador: medido en produccion, `_renderLoopOn` seguia en true con seis
+    // modelos cargados. El bucle vive en `viewer.impl` (`run`/`stop`: quitan y
+    // ponen el visor en el bucle comun de LMV). Se paran los dos globales por si
+    // `NOP_VIEWER` apunta al visor de laminas y no al 3D principal. Solo se para
+    // el que esta corriendo: `impl.stop()` sobre un visor ya parado quita del
+    // bucle a OTRO (LMV hace `splice(indexOf, 1)` con -1).
     useEffect(() => {
-        try { window.NOP_VIEWER && window.NOP_VIEWER.stop && window.NOP_VIEWER.stop(); } catch (e) { /* noop */ }
-        return () => { try { window.NOP_VIEWER && window.NOP_VIEWER.start && window.NOP_VIEWER.start(); } catch (e) { /* noop */ } };
+        const principales = [...new Set([window.__mainViewer, window.NOP_VIEWER].filter(Boolean))];
+        const pausados = principales.filter(v => {
+            try { return !!(v.impl && v.impl._renderLoopOn); } catch { return false; }
+        });
+        pausados.forEach(v => { try { v.impl.stop(); } catch { /* noop */ } });
+        return () => {
+            // Si el visor se destruyo mientras tanto, `impl` ya no esta: no hay
+            // nada que reanudar. `run()` ignora al que ya corre.
+            pausados.forEach(v => { try { v.impl && v.impl.run(); } catch { /* noop */ } });
+        };
     }, []);
 
     const frentes = useMemo(() => [...new Set(models.map(m => m.appProjectId).filter(Boolean))], [models]);
@@ -384,16 +418,37 @@ export default function CompareView({ BACKEND_URL, projectId, onExit }) {
         });
     });
 
+    // ¿Son el mismo punto? Tolerancia relativa: la escena va en milimetros y las
+    // coordenadas rondan el millon; un 1e-9 relativo son nanometros.
+    const mismoVector = (p, q) => !!(p && q) && ['x', 'y', 'z'].every(k =>
+        Number.isFinite(p[k]) && Number.isFinite(q[k])
+        && Math.abs(p[k] - q[k]) <= 1e-9 * Math.max(1, Math.abs(p[k])));
+
     const wireSync = useCallback(() => {
         const { a, b } = vs.current;
         if (!a || !b || vs.current.synced) return;
+        // COPIAR SOLO CUANDO HAY ALGO QUE COPIAR. `setView` de LMV marca la camara
+        // del destino como cambiada aunque reciba los mismos numeros (pone
+        // `dirty` sin comparar), y el evento de camara no sale en el acto: sale
+        // en el siguiente tick de ese visor, cuando redibuja la hoja DESDE CERO y
+        // avisa. Ese aviso volvia aqui y dejaba al visor de origen con la camara
+        // «sucia» esperando a redibujar otra vez. Medido en produccion el
+        // 18-sep-2026: tras un zoom en A, A se quedaba sucio. Con modelos
+        // pesados cada redibujado de mas se ve como un parpadeo, y la bandera
+        // `syncing` no lo evitaba porque el rebote es asincrono.
         const sync = (src, dst) => () => {
             if (vs.current.syncing) return;
             vs.current.syncing = true;
             try {
-                const nav = src.navigation;
-                dst.navigation.setView(nav.getPosition(), nav.getTarget());
-                dst.navigation.setCameraUpVector(nav.getCameraUpVector());
+                const nav = src.navigation, destino = dst.navigation;
+                const pos = nav.getPosition(), objetivo = nav.getTarget(), arriba = nav.getCameraUpVector();
+                const igual = mismoVector(pos, destino.getPosition())
+                    && mismoVector(objetivo, destino.getTarget())
+                    && mismoVector(arriba, destino.getCameraUpVector());
+                if (!igual) {
+                    destino.setView(pos, objetivo);
+                    destino.setCameraUpVector(arriba);
+                }
             } catch (e) { /* montando */ }
             vs.current.syncing = false;
         };
@@ -497,11 +552,18 @@ export default function CompareView({ BACKEND_URL, projectId, onExit }) {
         }
 
         setStatus(`Extrayendo metadata de ${label} (versión histórica)…`);
+        // `scope` es el frente DESDE el que se compara. Un mismo documento de ACC
+        // puede estar vinculado en frentes de dos obras (los HD de drenaje: en
+        // `1_DRENAJE` y en el de interferencias) y sin esto el servidor no sabia
+        // de que obra era la extraccion temporal: 409 SOURCE_SCOPE_AMBIGUOUS y el
+        // comparador se paraba (medido en produccion el 18-sep-2026). El servidor
+        // solo lo acepta si el frente esta registrado para ese documento.
         const res = await apiFetch(`${BACKEND_URL}/api/inventory/extract`, {
-            method: 'POST', body: JSON.stringify({ urn, target_urn: '__cmp__' })
+            method: 'POST', body: JSON.stringify({ urn, target_urn: '__cmp__', scope: projectId || undefined })
         });
-        const { job_id } = await res.json();
-        if (!job_id) throw new Error('No se pudo iniciar la extracción de ' + label);
+        const cuerpo = await res.json().catch(() => ({}));
+        const { job_id } = cuerpo;
+        if (!job_id) throw new Error(explicarExtraccion(label, res.status, cuerpo));
         for (let i = 0; i < 150; i++) {                       // hasta ~7.5 min
             await new Promise(r => setTimeout(r, 3000));
             const st = await apiFetch(`${BACKEND_URL}/api/inventory/extract/status/${job_id}`).then(r => r.json()).catch(() => null);
