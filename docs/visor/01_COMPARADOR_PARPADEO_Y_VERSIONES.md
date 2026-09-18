@@ -18,6 +18,7 @@ por él (backend y visor) y verificado en producción.**
 | Síntoma | Causa medida | Arreglo |
 |---|---|---|
 | Parpadeo y el otro lado que «desaparece» | **Pimpón de cámaras.** Al mover un lado, el otro copiaba su cámara; LMV marca la cámara como cambiada aunque reciba los mismos números, así que el segundo avisaba al primero, que copiaba otra vez… sin fin. Medido: **los dos visores se redibujaban desde cero ~29 veces por segundo, sin parar**, tras cualquier movimiento. Con el dibujo progresivo y modelos pesados eso es la hoja que parpadea y el lado que nunca termina de pintarse. | Copiar la cámara solo cuando de verdad cambió (`28c2f49`). Medido después: un redibujado por lado y quietos. |
+| El lado rojo sigue parpadeando al girar o acercarse (§5) | **Piezas semitransparentes.** La v2 de `004120` trae 2.749 piezas al 50 %; LMV las dibuja solo al terminar todas las opacas, y con el dibujo progresivo no termina mientras la cámara se mueve: desaparecen en cada movimiento y vuelven al parar. | El lado que tiene piezas transparentes se dibuja entero en cada fotograma (en local, sin commit). Medido: 0 fotogramas sin ellas. |
 | Error al comparar versiones de drenaje | `409 SOURCE_SCOPE_AMBIGUOUS`: los modelos HD de drenaje están vinculados en **dos obras** (`1_DRENAJE` de PQT8_TALARA y el frente de interferencias). La extracción temporal de una versión histórica exige una obra única y no sabía desde cuál se comparaba. El mensaje además se perdía («No se pudo iniciar la extracción»). | El comparador manda el **frente desde el que compara**; el servidor lo usa solo para elegir entre las obras que ya tiene registradas para ese documento. Y el motivo real se enseña. |
 
 El `404` que salía en su consola (`/api/civil/…?scope_urn=1_DRENAJE`) es otra cosa: el frente de drenaje no tiene
@@ -107,11 +108,79 @@ contiene el código nuevo; el pimpón no se produce (§2.1, tramos 1, 2 y 5).
 
 ## 4 · Lo que queda
 
-- **El parpadeo, a la vista del propietario**, con los modelos de drenaje. La causa está medida y quitada; que ya
-  no se vea lo tiene que decir él.
+- **El parpadeo, a la vista del propietario.** El del pimpón está quitado; él vio que seguía y era otro (§5).
 - **El 409 de drenaje en producción:** comparar `…DR-HD-011259@011263` v23 → v24 desde `1_DRENAJE` tras el
   despliegue. No se ha repetido: crearía una extracción temporal en su base, y eso lo lanza él.
 - Al salir del comparador, el visor principal se vuelve a crear y recarga todos sus modelos (por cómo lo monta
   App desde junio). No es un fallo nuevo; se anota porque cuesta una espera al volver.
 - `LOB4DWorkspace.jsx` (4D) pausa el visor principal con el mismo `stop?.()` que no existe. Es fichero protegido y
   no se ha tocado.
+
+## 5 · Segundo parpadeo: el lado con piezas semitransparentes (18-sep-2026, noche)
+
+El propietario, ya desplegado `28c2f49`: «el lado de rojo parpadea cuando me acerco o giro al otro lado». Y corrigió
+cómo lo probaba yo: «estás probando mal, en un modelo que son los mismos, no elegiste versiones distintas […] ese
+parpadeo se da cuando en A se pone un modelo inicial». Él mismo dejó el caso en pantalla: «solo gira el de B y
+verás cómo parpadea el A». **Medido en su Chrome, pestaña visible; arreglo en local, sin commit.**
+
+### 5.1 · El caso
+
+Frente `1_CANAL`. A = `…DR-ST-004120@004145.rvt` **v2** (la primera que Autodesk traduce), vista `{3D}`: 6.998
+elementos, 304.373 piezas, y **2.749 piezas con material al 50 % de transparencia** (2.155 rojas, eliminadas; 594
+magenta, modificadas). B = la v58: 8.767 elementos, 265.542 piezas, **ninguna transparente**. La transparencia es
+configuración suya en esa versión y no se toca.
+
+### 5.2 · Qué pasa
+
+LMV dibuja las piezas transparentes **solo cuando ha terminado todas las opacas** (`RenderScene.renderSome`: entre
+un lote opaco y uno transparente elige siempre el opaco). Con el dibujo progresivo, cada movimiento de cámara
+empieza la hoja de cero; con 304.000 piezas el lado A no termina las opacas mientras la cámara se mueve, así que las
+transparentes **no salen en ningún fotograma del movimiento** y vuelven de golpe al pararse: eso es el parpadeo del
+lado rojo. B no lo tiene porque no tiene transparentes. Por eso con «los mismos modelos» no se veía.
+
+### 5.3 · Medido
+
+40 puntos de A sobre piezas transparentes; en cada fotograma que A presenta se lee el color de esos píxeles
+(pieza dibujada = rojo o rosa; sin ella = fondo). B gira por código a 40°/s durante 2,5 s, desde la misma cámara;
+la sincronía del comparador lleva la cámara a A. Fotogramas de A **sin** las piezas durante el giro:
+
+| Ronda | Como hoy | A sin dibujo progresivo |
+|---|---|---|
+| 1 | **6 de 6** | 0 de 8 |
+| 2 | **7 de 7** | 0 de 9 |
+| 3 | **45 de 74** (entran y salen: el parpadeo literal) | 0 de 53 |
+
+Al parar, como hoy, A tarda 1,0–1,2 s en enseñarlas (0,03 s en la ronda 3); sin progresivo, 0,03–0,05 s. La
+fluidez de B no empeora: intervalo mediano entre fotogramas de B 369→169 ms, 267→80 ms y 21→29 ms. La velocidad
+cambia mucho de una ronda a otra (la 3 fue mucho más rápida), así que no se usa para decidir; el parpadeo sí es
+estable. Detalle: `docs/visor/evidencias/comparador_transparentes_2026-09-18.json`.
+
+**Con el código exacto del arreglo**, aplicado a mano en su pestaña (temporal, se va al recargar): A pasa a dibujo
+entero, B no; la decisión tarda 8 ms; girando B, **16 de 16 fotogramas de A con las piezas**, y completa a los 47 ms
+de parar.
+
+Descartado: que A no siga a B mientras se arrastra y salte al soltar. B va más fluido, pero A no se mueve durante el
+gesto y al soltar sigue ~1 s sin las piezas. Y un tropiezo mío durante la prueba: al deshacer esa variante borré la
+función `setView` propia de la navegación de A y A dejó de seguir a B; se restauró con la misma función de LMV sobre
+la cámara de A, se comprobó que A vuelve a seguir, y las rondas 2 y 3 se repitieron.
+
+### 5.4 · Arreglo (en local, sin commit)
+
+`frontend-react/src/components/CompareView.jsx`: `dibujarEnteroSiHayTransparentes(visor)`, llamada para A y para B
+después de cargar. Cuando la geometría de ese lado ha terminado de cargar (`isLoadDone`, o al llegar
+`GEOMETRY_LOADED_EVENT`), si alguna pieza tiene material transparente, ese visor pasa a dibujo entero
+(`setProgressiveRendering(false)`). Solo el lado que las tiene, sea A o B; la carga no se frena porque se decide al
+final. El ajuste no se guarda en el navegador (LMV no lo tiene entre sus 31 preferencias persistentes), así que no
+pasa al visor principal.
+
+**Pruebas:** banco `probar-comparar` con el `CompareView` real (palancas nuevas: `__transparentesPorUrn`,
+`__geometriaCargada`/`__terminarGeometria()`, `__progresivo`): transparentes en A → solo A pasa a dibujo entero;
+geometría sin terminar → nada hasta que termina, luego solo A, y el aviso se quita (un segundo aviso no repite);
+transparentes en B → solo B; sin transparentes → nada. ESLint de `CompareView.jsx` 4 = HEAD; banco 0.
+
+### 5.5 · Nota lateral, sin tocar
+
+El visor principal tiene una receta «ANTI-PARPADEO» para este mismo síntoma («los sólidos rojos de excavación
+desaparecían al acercarse», `Viewer.jsx`), que pone `viewer.impl.targetFrameBudget = 100`. En esta versión de LMV
+esa propiedad no existe (`'targetFrameBudget' in impl` → `false`): hoy no hace nada. Si esta versión parpadea
+también en el visor principal, es la misma causa. `Viewer.jsx` tiene trabajo ajeno sin commitear y no se ha tocado.

@@ -1,0 +1,42 @@
+{
+  "fecha": "2026-09-18",
+  "donde": "Chrome del propietario, https://visor.alephia.com.pe, pestaña visible (document.visibilityState = visible en cada medida)",
+  "caso": {
+    "frente": "1_CANAL",
+    "A": { "documento": "500125-CSSP001-740-XX-DR-ST-004120@004145.rvt", "version": 2, "vista": "{3D}", "elementos": 6998, "piezas": 304373, "piezas_transparentes": 2749, "opacidad": 0.501961, "transparentes_rojas_eliminadas": 2155, "transparentes_magenta_modificadas": 594 },
+    "B": { "documento": "500125-CSSP001-740-XX-DR-ST-004120@004145.rvt", "version": 58, "elementos": 8767, "piezas": 265542, "piezas_transparentes": 0 },
+    "nota": "La transparencia es la configuracion del propietario en esa version; no se toca."
+  },
+  "metodo": {
+    "muestras": "40 puntos de A sobre piezas transparentes que son lo primero que se ve (hitTest sin ignorar transparentes), proyectados con la camara de cada fotograma",
+    "lectura": "gl.readPixels del lienzo de A en cada RENDER_PRESENTED_EVENT de A",
+    "rojo": "r - max(g, b) > 45; una pieza semitransparente dibujada da rojo o rosa, sin ella se ve el fondo",
+    "fotograma_con_piezas": ">= 25 de 40 puntos rojos",
+    "fotograma_sin_piezas": "< 5 de 40 puntos rojos",
+    "gesto": "B gira por codigo alrededor de su objetivo a 40 grados/s durante 2,5 s, desde la misma camara cada vez; la sincronia del comparador lleva la camara a A"
+  },
+  "primera_medida_como_hoy": {
+    "reposo_final": "36 de 40 rojos",
+    "giro_lento_0_03_grados_por_paso": { "fotogramas_A": 29, "con_piezas": 0, "lotes_transparentes_dibujados_0_en": 27 },
+    "giro_0_8_grados_por_paso": { "fotogramas_A": 20, "con_piezas": 0 },
+    "al_parar": "las piezas vuelven en el tercer o cuarto fotograma, 0,5 a 0,9 s despues"
+  },
+  "rondas": [
+    { "ronda": 1, "variante": "como_hoy", "A_fotogramas": 6, "A_sin_piezas": 6, "A_intervalo_mediano_ms": 431, "B_intervalo_mediano_ms": 369, "A_completa_tras_parar_ms": 968 },
+    { "ronda": 1, "variante": "A_sin_dibujo_progresivo", "A_fotogramas": 8, "A_sin_piezas": 0, "A_intervalo_mediano_ms": 325, "B_intervalo_mediano_ms": 169, "A_completa_tras_parar_ms": 52 },
+    { "ronda": 1, "variante": "A_sigue_al_parar (descartada)", "A_fotogramas": 0, "B_intervalo_mediano_ms": 34, "A_completa_tras_parar_ms": 949 },
+    { "ronda": 2, "variante": "como_hoy", "A_fotogramas": 7, "A_sin_piezas": 7, "A_intervalo_mediano_ms": 392, "B_intervalo_mediano_ms": 267, "A_completa_tras_parar_ms": 1192 },
+    { "ronda": 2, "variante": "A_sin_dibujo_progresivo", "A_fotogramas": 9, "A_sin_piezas": 0, "A_intervalo_mediano_ms": 375, "B_intervalo_mediano_ms": 80, "A_completa_tras_parar_ms": 52 },
+    { "ronda": 2, "variante": "A_y_B_sin_dibujo_progresivo", "A_fotogramas": 49, "A_sin_piezas": 0, "A_intervalo_mediano_ms": 46, "B_intervalo_mediano_ms": 30, "A_completa_tras_parar_ms": 29 },
+    { "ronda": 3, "variante": "como_hoy", "A_fotogramas": 74, "A_sin_piezas": 45, "A_con_piezas": 29, "A_intervalo_mediano_ms": 33, "B_intervalo_mediano_ms": 21, "A_completa_tras_parar_ms": 31 },
+    { "ronda": 3, "variante": "A_sin_dibujo_progresivo", "A_fotogramas": 53, "A_sin_piezas": 0, "A_intervalo_mediano_ms": 44, "B_intervalo_mediano_ms": 29, "A_completa_tras_parar_ms": 25 },
+    { "ronda": 3, "variante": "A_y_B_sin_dibujo_progresivo", "A_fotogramas": 18, "A_sin_piezas": 0, "A_intervalo_mediano_ms": 133, "B_intervalo_mediano_ms": 67, "A_completa_tras_parar_ms": 49 }
+  ],
+  "nota_rondas": "Las rondas 2 y 3 se repitieron: en la primera tanda A no seguia a B porque al deshacer la variante 'A_sigue_al_parar' se borro el setView propio de la navegacion de A (se restauro con la misma funcion de LMV sobre la camara de A y se comprobo que A vuelve a seguir). La velocidad cambia mucho entre rondas (ronda 3 mucho mas rapida): no se usa para decidir; el parpadeo si es estable.",
+  "codigo_exacto_aplicado_en_su_pestana": { "A_progresivo": false, "B_progresivo": true, "ms_en_decidir": 8, "A_fotogramas": 16, "A_con_piezas": 16, "A_sin_piezas": 0, "A_completa_tras_parar_ms": 47 },
+  "lmv": {
+    "renderSome": "entre un lote transparente y uno opaco elige el opaco; las transparentes se redibujan cuando se han terminado todas las opacas (#doneOpaques, #transparentsNeedRedraw); USE_WBOIT = false en WebGL",
+    "preferencias_persistentes": "PROGRESSIVE_RENDERING no esta en la lista persistente por defecto (31 preferencias): setProgressiveRendering no se guarda en el navegador",
+    "targetFrameBudget": "'targetFrameBudget' in viewer.impl = false en esta version: la receta ANTI-PARPADEO de Viewer.jsx (targetFrameBudget = 100) no hace nada hoy"
+  }
+}

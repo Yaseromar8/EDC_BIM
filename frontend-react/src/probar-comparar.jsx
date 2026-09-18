@@ -14,6 +14,11 @@
  *   window.__cargas         lo que recibió `loadAlignedModels` (urn + viewGuid)
  *   window.__extraccion     la extracción temporal: si la versión ya está
  *                           extraída, qué contesta el servidor y qué recibió
+ *   window.__transparentesPorUrn  { <urn>: true } la versión trae piezas
+ *                           semitransparentes (una de sus piezas)
+ *   window.__geometriaCargada     false = la geometría aún no ha terminado;
+ *                           `__terminarGeometria()` la termina y avisa
+ *   window.__progresivo     a qué visor se le cambió el dibujo progresivo
  *
  * No entra en producción: `vite.config.js` no lo conoce.
  */
@@ -32,6 +37,13 @@ window.__pintado = [];
 window.__seleccion = [];
 window.__aislado = [];
 window.__detalles = [];
+window.__transparentesPorUrn = {};
+window.__geometriaCargada = true;
+window.__progresivo = [];
+window.__terminarGeometria = () => {
+    window.__geometriaCargada = true;
+    window.__visores.forEach(v => v.__disparar('geometryLoaded', {}));
+};
 
 // URN de ACC de verdad (base64 URL-safe de `…fs.file:vf.<item>?version=<n>`):
 // de ahí sale el linaje, y sin linaje no hay modo por documento que probar.
@@ -182,7 +194,9 @@ function VisorDeBanco() {
     visor.start = () => {};
     visor.finish = () => {};
     visor.addEventListener = (tipo, fn) => { (visor.__oyentes[tipo] = visor.__oyentes[tipo] || []).push(fn); };
-    visor.__disparar = (tipo, ev) => (visor.__oyentes[tipo] || []).forEach(fn => fn(ev));
+    visor.removeEventListener = (tipo, fn) => { visor.__oyentes[tipo] = (visor.__oyentes[tipo] || []).filter(f => f !== fn); };
+    visor.__disparar = (tipo, ev) => [...(visor.__oyentes[tipo] || [])].forEach(fn => fn(ev));
+    visor.setProgressiveRendering = (valor) => window.__progresivo.push({ visor: visor.__nombre, valor });
     visor.getAllModels = () => visor.__modelos;
     Object.defineProperty(visor, 'model', { get: () => visor.__modelos[0] });
     visor.navigation = { getPosition: () => ({}), getTarget: () => ({}), getCameraUpVector: () => ({}), setView: () => {}, setCameraUpVector: () => {} };
@@ -199,6 +213,12 @@ function VisorDeBanco() {
             getData: () => ({ globalOffset: { x: 0, y: 0, z: 0 } }),
             getDocumentNode: () => ({ getRootNode: () => ({ urn: () => doc.__urn }) }),
             getExternalIdMapping: (ok) => ok(window.__idsPorUrn[doc.__urn] || {}),
+            // Cinco piezas; si la versión es de las transparentes, la última lo es.
+            getFragmentList: () => ({
+                getCount: () => 5,
+                getMaterial: (f) => ({ transparent: !!window.__transparentesPorUrn[doc.__urn] && f === 4 }),
+            }),
+            isLoadDone: () => window.__geometriaCargada,
         };
         visor.__modelos.push(modelo);
         return Promise.resolve(modelo);
@@ -211,6 +231,7 @@ window.Autodesk = {
     Viewing: {
         Viewer3D: VisorDeBanco,
         CAMERA_CHANGE_EVENT: 'camera',
+        GEOMETRY_LOADED_EVENT: 'geometryLoaded',
         OBJECT_UNDER_MOUSE_CHANGED: 'hover',
         SELECTION_CHANGED_EVENT: 'sel',
         Document: {

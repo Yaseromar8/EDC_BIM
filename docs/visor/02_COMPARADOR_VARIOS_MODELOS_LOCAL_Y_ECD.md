@@ -73,8 +73,38 @@ se sigue emparejando solo por identificador. Un frente entero, igual que antes.
   elemento. Con un documento por lado, el detalle sigue mandando los lados enteros.
 - Suite backend 1997 pasan / 1 falla (la de siempre); ESLint de `CompareView.jsx` 4 = antes; banco 0.
 
-**Falta:** desplegar backend y visor, y repetir en producción A = `…011264@011268` v64 contra B = el mismo +
-encofrados: tiene que dar 3.443 agregados y 0 modificados (antes 3.442 y 1).
+**Desplegado y verificado (18-sep):** `/api/health` → `1bc97ae0296a` y el paquete del visor con el código nuevo.
+Medido en producción (su Chrome, frente `1_CANAL`, versiones actuales, sin extracción temporal): A =
+`…DR-ST-004120@004145` v58 (8.767 elementos) contra B = el mismo v58 + `…004120@004145-ENCOFRADO` v24 → **0
+modificados, 0 eliminados, 6.094 agregados, todos del fichero de encofrado**, emparejado por documento. El caso de
+drenaje (`011264`, esperado 3.443 y 0) no se repitió: su visor estaba en Canal y no se le cambió de frente.
+
+## 5 · Modelo contractual contra modelos de ejecución (pregunta del propietario, 18-sep)
+
+«Contractualmente nos entregaron un modelo, y yo comparo añadiendo otros que por la naturaleza de la ejecución se
+agregaron; no necesariamente existen en el contractual.»
+
+La medición de §2.1 lo ilustra: con el encofrado en B, el comparador dice **6.094 agregados**. Es correcto en lo que
+mide —elementos que en A no existen—, pero leído como «agregados al contrato» engaña: son el método de ejecución,
+no alcance nuevo. Que el modelo contractual no los dibuje tampoco los convierte en adicionales: encofrado y
+excavación suelen ser partidas del presupuesto que el modelo no dibuja.
+
+**Recomendación:**
+
+1. **Para la pregunta contractual, un modelo contra sí mismo:** A = la versión que se entregó como contractual del
+   modelo principal; B = su versión actual. Un documento por lado: agregados, eliminados y modificados son cambios
+   sobre lo que dibuja el contrato, y son los candidatos a revisar como adicionales o deductivos (el comparador no
+   los decide).
+2. **Los modelos de ejecución, cada uno contra sus propias versiones** (p. ej. encofrado v10 → v24): responden
+   cómo avanzó ese trabajo, no qué cambió del contrato. Nunca contra el contractual.
+3. **Mejora propuesta (no hecha):** si alguien los pone juntos, que el comparador no los cuente como agregados:
+   un documento que solo está en un lado se enseña aparte —«solo en B, sin equivalente contractual: …ENCOFRADO,
+   6.094 elementos»—, en un color neutro en 3D. El servidor ya sabe qué documentos están en un solo lado (el
+   emparejamiento por documento lo calcula), así que es un cambio pequeño.
+
+Si algún día el contractual es un fichero DISTINTO en ACC (no una versión antigua del mismo), compararlo solo
+contra el modelo principal, un documento por lado: el emparejamiento por documento sólo empareja versiones del
+mismo linaje, y con varios documentos en un lado lo daría todo por agregado y eliminado.
 
 ## 3 · Archivo local y ECD Docs
 

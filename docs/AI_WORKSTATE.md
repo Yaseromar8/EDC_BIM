@@ -789,6 +789,15 @@ tras un movimiento los dos visores se redibujaban desde cero ~29 veces/s sin par
 arreglo de la sincronía de `28c2f49` la quita (medido: un redibujado por lado). La «pausa» es inocua y no hace nada.
 Informe corregido: `docs/visor/01_…`; preguntas siguientes (varios modelos, archivo local, ECD Docs): `docs/visor/02_…`.
 
+SEGUNDO PARPADEO (18-sep, noche; `docs/visor/01_…` §5, EN LOCAL, SIN COMMIT): «el lado de rojo parpadea cuando me acerco o
+giro», y solo con una versión inicial en A. Caso suyo: canal `004120@004145` v2 (2.749 de 304.373 piezas con material al 50 %,
+configuración suya) contra v58 (ninguna). LMV dibuja las transparentes solo al terminar todas las opacas; con el dibujo
+progresivo no termina mientras la cámara se mueve → desaparecen en cada movimiento. Medido girando B, fotogramas de A sin
+ellas: 6/6, 7/7, 45/74; con A sin dibujo progresivo 0/8, 0/9, 0/53, y con el código exacto aplicado a mano en su pestaña
+16/16 con ellas. Arreglo: `dibujarEnteroSiHayTransparentes` en `CompareView.jsx` (solo el lado con transparentes, al terminar
+su geometría; no se guarda en el navegador). Banco `probar-comparar` 4 casos; ESLint 4 = HEAD. Lección: probar con SU caso
+(versiones distintas, de cerca); con «los mismos modelos» no sale. Evidencia: `docs/visor/evidencias/comparador_transparentes_2026-09-18.json`.
+
 El propietario, tras desplegar la apertura del lector: «cuando hago comparar los modelos empiezan a parpadear; cuando me acerco
 en uno, el otro desaparece; y al comparar modelos de drenaje urbano sale error» (consola: `POST /api/inventory/extract` 409 y
 «[Compare] Error: No se pudo iniciar la extracción de lado A · vínculo 1»). Informe: `docs/visor/01_COMPARADOR_PARPADEO_Y_VERSIONES.md`;
@@ -803,7 +812,7 @@ ARCHIVOS MODIFICADOS: backend/routes/inventory.py, frontend-react/src/components
 TESTS EJECUTADOS:     `pytest tests/test_comparador_documento_en_dos_obras.py tests/test_comparador_perimetro.py tests/test_compare.py tests/test_inventory_identity_core.py` 39/39; suite completa 1989 pasan / 1 falla (`test_capacidades_con_puerta`, preexistente); ESLint `CompareView.jsx` 4 (HEAD 6) y `probar-comparar.jsx` 0; `vite build --config vite.banco.config.js` OK; banco en Chrome integrado (5181) con dos casos.
 TESTS PENDIENTES:     producción tras desplegar: comparar `…DR-HD-011259` v23 vs v24 desde `1_DRENAJE` (debe extraer y comparar) y mirar el parpadeo con drenaje.
 FALLO CONOCIDO:       el 404 de `/api/civil/…?scope_urn=1_DRENAJE` de su consola es otra cosa (el frente no tiene datos civiles) y no se toca.
-NEXT EXACT ACTION:    commit y push autorizados por el propietario («si, vamos», 18-sep) para la corrección (`1befc04`) y el EMPAREJAR POR DOCUMENTO; falta el Manual Deploy de backend (Virginia) y visor, que hace él, y repetir en producción el caso de encofrados. Detalle de lo que entra (`docs/visor/02` §2.1): `routes/compare.py` (diff por `external_id` + `source_lineage` cuando un lado tiene varios documentos; filas con `fa`/`fb` y `fuentes`; `/api/compare/element` acepta un lado ausente), `CompareView.jsx` (mapa por fichero; pintar, aislar, espejo y detalle por documento), banco `probar-comparar.jsx`, `tests/test_comparador_por_documento.py` (8) y `herramientas/ensayo_comparador_por_documento.py` (12/12 contra PostgreSQL desechable, reproduce el «antes»). Suite 1997/1 (la de siempre). Tras desplegar: repetir en producción el caso de encofrados (esperado 3.443 agregados, 0 modificados). Lo segundo de §4 (identidad de los documentos del ECD en el inventario) es una decisión sobre B1: su «si, vamos» respondía al commit/push; se le pide aparte, explícitamente, antes de tocar nada.
+NEXT EXACT ACTION:    `1befc04` (corrección) y `1bc97ae` (emparejar por documento) empujados («si, vamos») y DESPLEGADOS por el propietario; verificado: /api/health 1bc97ae0296a, paquete del visor con el código nuevo, y en producción canal `004120` v58 contra v58 + ENCOFRADO v24 → 0 modificados, 0 eliminados, 6.094 agregados (todos del encofrado). El propietario pregunta qué recomiendo porque los modelos de ejecución no existen en el contractual: respuesta en `docs/visor/02` §5 (contractual contra sí mismo; ejecución contra sus propias versiones; mejora propuesta y no hecha: enseñar aparte los documentos que solo están en un lado). Esperar su decisión sobre esa mejora y sobre el contrato de identidad del ECD (B1). Detalle de lo que entró (`docs/visor/02` §2.1): `routes/compare.py` (diff por `external_id` + `source_lineage` cuando un lado tiene varios documentos; filas con `fa`/`fb` y `fuentes`; `/api/compare/element` acepta un lado ausente), `CompareView.jsx` (mapa por fichero; pintar, aislar, espejo y detalle por documento), banco `probar-comparar.jsx`, `tests/test_comparador_por_documento.py` (8) y `herramientas/ensayo_comparador_por_documento.py` (12/12 contra PostgreSQL desechable, reproduce el «antes»). Suite 1997/1 (la de siempre). Tras desplegar: repetir en producción el caso de encofrados (esperado 3.443 agregados, 0 modificados). Lo segundo de §4 (identidad de los documentos del ECD en el inventario) es una decisión sobre B1: su «si, vamos» respondía al commit/push; se le pide aparte, explícitamente, antes de tocar nada.
 DO NOT TOUCH:         los protegidos de siempre (incluido LOB4DWorkspace.jsx) y el WIP ajeno.
 COMMIT/HEAD REF:      `fix(compare): pause the main viewer for real, sync cameras only on change, and compare versions of documents linked in two projects`, sobre `f9345b4`.
 
@@ -1009,6 +1018,7 @@ Observaciones reales, ya conocidas y aceptadas. Ninguna bloquea nada.
 (pimpón: ~29 redibujados desde cero por segundo en los dos visores, medido con la pestaña visible); el 409 de drenaje, un
 documento vinculado en dos obras. CORRECCIÓN: lo de «tres visores» era falso (App desmonta el principal al comparar).
 Ver «Unidad VISOR · COMPARADOR» y `docs/visor/02_…` (varios modelos por lado, archivo local, ECD Docs).
+Después, un SEGUNDO parpadeo (el lado con piezas semitransparentes, `docs/visor/01_…` §5): arreglo en local, sin commit.
 
 **18-sep-2026 · ARCHIVOS · LECTOR · APERTURA SIN HOJA EN BLANCO — `f9345b4` EMPUJADO Y DESPLEGADO POR EL PROPIETARIO.**
 La miniatura va dentro de la hoja hasta que el dibujo está completo, también al cambiar de lámina: sin los 10,5 s de hoja en
@@ -1121,8 +1131,9 @@ autorreferencial del presente documento. Consultar HEAD real por separado.
 
 ## EXACT NEXT ACTION
 
-**VISOR · COMPARADOR (18-sep-2026):** `28c2f49` desplegado y verificado. Pendiente de su decisión: commit de la corrección
-del diagnóstico (comentarios + docs) y qué hacer de `docs/visor/02_…` §4.
+**VISOR · COMPARADOR (18-sep-2026):** `28c2f49`, `1befc04` y `1bc97ae` desplegados y verificados. Segundo parpadeo (piezas
+semitransparentes, `docs/visor/01_…` §5): arreglo en local, probado; pedir commit + push y que él despliegue el visor.
+Siguen pendientes de su decisión la mejora «sin equivalente contractual» (`docs/visor/02_…` §5) y la identidad del ECD (B1).
 
 **ARCHIVOS · LECTOR · APERTURA SIN HOJA EN BLANCO (18-sep-2026):** `f9345b4` empujado y desplegado por el propietario en el portal
 (sin verificar por contenido: él pidió no probarlo).

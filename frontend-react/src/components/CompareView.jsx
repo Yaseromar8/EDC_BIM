@@ -174,6 +174,41 @@ const modelKey = (model) => {
     }
 };
 
+// EL LADO CON PIEZAS SEMITRANSPARENTES SE DIBUJA ENTERO EN CADA FOTOGRAMA.
+// LMV pinta las transparentes solo cuando ha terminado TODAS las opacas, y con
+// el dibujo progresivo cada movimiento de camara empieza la hoja de cero: con
+// un modelo pesado no termina mientras la camara se mueve, y las transparentes
+// no salen hasta que se para. Ese era el parpadeo del lado rojo. Medido el
+// 18-sep-2026 en produccion (A = 004120 v2, 304.373 piezas, 2.749 al 50 %;
+// B = v58): girando B, A salio SIN ellas en 6 de 6, 7 de 7 y 45 de 74
+// fotogramas; dibujandolo entero, en 0 de 8, 9 y 53, y completo ~50 ms despues
+// de parar (antes, ~1 s). La transparencia es del modelo y no se toca. Se
+// decide con la geometria ya cargada, para no frenar la carga. El ajuste no se
+// guarda en el navegador: LMV no lo tiene entre sus preferencias persistentes.
+const conPiezasTransparentes = (viewer) => (viewer.getAllModels ? viewer.getAllModels() : []).some(model => {
+    const lista = model.getFragmentList && model.getFragmentList();
+    if (!lista) return false;
+    for (let f = 0, n = lista.getCount(); f < n; f++) {
+        const material = lista.getMaterial(f);
+        if (material && material.transparent) return true;
+    }
+    return false;
+});
+const dibujarEnteroSiHayTransparentes = (viewer) => {
+    const evento = window.Autodesk.Viewing.GEOMETRY_LOADED_EVENT;
+    const todoCargado = () => viewer.getAllModels().every(m => !m.isLoadDone || m.isLoadDone());
+    const decidir = () => {
+        if (conPiezasTransparentes(viewer)) viewer.setProgressiveRendering(false);
+    };
+    if (todoCargado()) { decidir(); return; }
+    const alCargar = () => {
+        if (!todoCargado()) return;
+        viewer.removeEventListener(evento, alCargar);
+        decidir();
+    };
+    viewer.addEventListener(evento, alCargar);
+};
+
 export default function CompareView({ BACKEND_URL, projectId, onExit }) {
     const [phase, setPhase] = useState('setup');           // 'setup' | 'view'
     const [models, setModels] = useState([]);
@@ -698,6 +733,8 @@ export default function CompareView({ BACKEND_URL, projectId, onExit }) {
                 const offset = await loadAlignedModels(vs.current.a, conVista(side.a, urnsA));
                 await loadAlignedModels(vs.current.b, conVista(side.b, urnsB), { sharedOffset: offset });
                 wireSync();
+                dibujarEnteroSiHayTransparentes(vs.current.a);
+                dibujarEnteroSiHayTransparentes(vs.current.b);
 
                 const lookupA = await buildExternalLookups(vs.current.a);
                 const lookupB = await buildExternalLookups(vs.current.b);
