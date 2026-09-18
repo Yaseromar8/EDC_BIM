@@ -164,20 +164,19 @@ export default function CompareView({ BACKEND_URL, projectId, onExit }) {
         onExit();
     }, [BACKEND_URL, onExit]);
 
-    // Pausar el visor PRINCIPAL mientras comparamos. Tener 3 visores LMV activos
-    // satura GPU/RAM (geometría que desaparece al moverse, parpadeo). Se para
-    // su bucle de dibujo y se reanuda al salir. Reversible: NO destruye el
-    // modelo ya cargado.
+    // Pausar el visor PRINCIPAL mientras comparamos, por si sigue vivo. Tener 3
+    // visores LMV activos satura GPU/RAM. Se para su bucle de dibujo y se
+    // reanuda al salir.
     //
-    // NUNCA LLEGO A PARAR NADA (18-sep-2026). `viewer.stop()` no existe en la API
-    // publica de LMV 7.x (hay `run()`, no `stop()`), asi que el `&&` de antes lo
-    // saltaba en silencio y el visor principal seguia dibujando DEBAJO del
-    // comparador: medido en produccion, `_renderLoopOn` seguia en true con seis
-    // modelos cargados. El bucle vive en `viewer.impl` (`run`/`stop`: quitan y
-    // ponen el visor en el bucle comun de LMV). Se paran los dos globales por si
-    // `NOP_VIEWER` apunta al visor de laminas y no al 3D principal. Solo se para
-    // el que esta corriendo: `impl.stop()` sobre un visor ya parado quita del
-    // bucle a OTRO (LMV hace `splice(indexOf, 1)` con -1).
+    // HOY NO HAY NADA QUE PAUSAR (medido en produccion el 18-sep-2026): App
+    // desmonta el visor principal mientras se compara (`{!compareMode &&
+    // <Viewer/>}`, desde el 12-jun) y lo vuelve a crear al salir, asi que cuando
+    // corre esto ya esta destruido y no se toca. Queda por si algun dia se deja
+    // montado. La version anterior llamaba a `viewer.stop()`, que no existe en
+    // LMV 7.x: el bucle vive en `viewer.impl` (`run`/`stop` lo ponen y lo quitan
+    // del bucle comun). Solo se para el que esta corriendo: `impl.stop()` sobre
+    // un visor ya parado quita del bucle a OTRO (LMV hace `splice(indexOf, 1)`
+    // con -1). (El parpadeo NO venia de aqui: ver `wireSync`.)
     useEffect(() => {
         const principales = [...new Set([window.__mainViewer, window.NOP_VIEWER].filter(Boolean))];
         const pausados = principales.filter(v => {
@@ -427,15 +426,19 @@ export default function CompareView({ BACKEND_URL, projectId, onExit }) {
     const wireSync = useCallback(() => {
         const { a, b } = vs.current;
         if (!a || !b || vs.current.synced) return;
-        // COPIAR SOLO CUANDO HAY ALGO QUE COPIAR. `setView` de LMV marca la camara
-        // del destino como cambiada aunque reciba los mismos numeros (pone
-        // `dirty` sin comparar), y el evento de camara no sale en el acto: sale
-        // en el siguiente tick de ese visor, cuando redibuja la hoja DESDE CERO y
-        // avisa. Ese aviso volvia aqui y dejaba al visor de origen con la camara
-        // «sucia» esperando a redibujar otra vez. Medido en produccion el
-        // 18-sep-2026: tras un zoom en A, A se quedaba sucio. Con modelos
-        // pesados cada redibujado de mas se ve como un parpadeo, y la bandera
-        // `syncing` no lo evitaba porque el rebote es asincrono.
+        // COPIAR SOLO CUANDO HAY ALGO QUE COPIAR. ESTA ERA LA CAUSA DEL PARPADEO.
+        // `setView` de LMV marca la camara del destino como cambiada aunque
+        // reciba los mismos numeros (pone `dirty` sin comparar), y el evento de
+        // camara no sale en el acto: sale en el siguiente tick de ese visor,
+        // cuando redibuja la hoja DESDE CERO y avisa. Ese aviso volvia aqui, se
+        // copiaba otra vez al primero, y asi sin fin: un pimpon. La bandera
+        // `syncing` no lo evitaba porque el rebote es asincrono. Medido en
+        // produccion el 18-sep-2026, pestaña visible: con la copia de siempre,
+        // tras mover un lado, los DOS visores se redibujaban desde cero ~29
+        // veces por segundo sin parar (y el resto de ticks caia de ~100 a ~28);
+        // con esta, un redibujado por lado y quietos. Con modelos pesados y el
+        // dibujo progresivo, redibujar sin parar es la hoja que parpadea y el
+        // lado que «desaparece».
         const sync = (src, dst) => () => {
             if (vs.current.syncing) return;
             vs.current.syncing = true;

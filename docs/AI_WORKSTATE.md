@@ -780,7 +780,14 @@ NEXT EXACT ACTION:    push y Manual Deploy de `visor-ecd-frontend`.
 DO NOT TOUCH:         el WIP ajeno de Viewer.jsx y los demás protegidos; la migración 32 (aparcada).
 COMMIT/HEAD REF:      `fix(viewer): …` encima del commit del porcentaje
 
-### Unidad VISOR · COMPARADOR · PARPADEO, «EL OTRO DESAPARECE» Y 409 EN DRENAJE — COMMIT Y PUSH AUTORIZADOS («SI HAZLO», 18-sep); FALTA DESPLEGAR BACKEND Y VISOR
+### Unidad VISOR · COMPARADOR · PARPADEO, «EL OTRO DESAPARECE» Y 409 EN DRENAJE — `28c2f49` DESPLEGADO Y VERIFICADO; CORRECCIÓN DEL DIAGNÓSTICO SIN COMMIT, 18-sep
+
+CORRECCIÓN (18-sep, tarde): el diagnóstico de la mañana decía que el visor principal seguía dibujando bajo el comparador
+(«tres visores») y que la sincronía «no es un bucle». FALSO: App desmonta el visor principal mientras se compara
+(`{!compareMode && <Viewer/>}`, desde `666f21a`), y la sincronía antigua SÍ era un bucle: medido con la pestaña visible,
+tras un movimiento los dos visores se redibujaban desde cero ~29 veces/s sin parar. Esa era la causa del parpadeo y el
+arreglo de la sincronía de `28c2f49` la quita (medido: un redibujado por lado). La «pausa» es inocua y no hace nada.
+Informe corregido: `docs/visor/01_…`; preguntas siguientes (varios modelos, archivo local, ECD Docs): `docs/visor/02_…`.
 
 El propietario, tras desplegar la apertura del lector: «cuando hago comparar los modelos empiezan a parpadear; cuando me acerco
 en uno, el otro desaparece; y al comparar modelos de drenaje urbano sale error» (consola: `POST /api/inventory/extract` 409 y
@@ -791,12 +798,12 @@ medición: `docs/visor/evidencias/comparador_medicion_2026-09-18.json`.
 TAREA:                que el comparador no parpadee ni pierda un lado al mover, y que compare versiones de los modelos de drenaje.
 IMPLEMENTADO:         `frontend-react/src/components/CompareView.jsx`: la pausa del visor principal usa `viewer.impl.stop()`/`run()` (la de junio llamaba a `viewer.stop()`, que NO existe en LMV 7.x: nunca pausó nada y tres visores dibujaban a la vez), sobre `__mainViewer` y `NOP_VIEWER` y solo sobre el que corre; la sincronía de cámaras copia solo si posición/objetivo/vertical cambiaron (evita la cámara «sucia» y el redibujado de más); la extracción temporal manda `scope` (frente desde el que se compara) y enseña el motivo real si el servidor no la arranca. `backend/routes/inventory.py`: `_extraction_source_context(…, scope_hint)` elige, entre las obras YA registradas para el linaje, la del frente declarado (no es prueba de propiedad; sin frente o con frente no registrado sigue el 409); `start_extraction` lo lee solo para `__cmp__` y lo pasa al hilo. `frontend-react/src/probar-comparar.jsx`: palanca `window.__extraccion`.
 ESTADO:               medido en producción con el Chrome del dueño: `typeof viewer.stop` undefined y `_renderLoopOn` true con 6 modelos debajo del comparador; tras un gesto en A los dos lados reciben los mismos eventos (5/5, 7/7, 12/12) y A queda `dirty`; sin bucle infinito (0 eventos/s en reposo). 409 reproducido: `…DR-HD-011259@011263` v23 vs v24 → `SOURCE_SCOPE_AMBIGUOUS` (el HD está vinculado en `1_DRENAJE` y en el frente de interferencias); `…DR-ST-011242` v40 vs v41 funciona. Arreglo probado: backend 10 pruebas nuevas + suite 1989/1 (fallo preexistente); ESLint CompareView 4 (HEAD 6); banco `probar-comparar` construido y recorrido (409 → mensaje con código; 202 → «Listo»; el cuerpo lleva `scope`).
-PENDIENTE:            commit y push autorizados por el propietario («SI HAZLO», 18-sep); falta el Manual Deploy del BACKEND (Virginia) y del VISOR (`visor-ecd-frontend`), no del portal, que hace él. El parpadeo en sí no se ha visto desaparecer (entradas sintéticas y pestaña oculta): lo juzga él con drenaje tras desplegar. Si no basta: aligerar los visores del comparador al navegar (`setOptimizeNavigation`, calidad, aristas), no autorizado. `LOB4DWorkspace.jsx` tiene el mismo `stop?.()` muerto (protegido, sin tocar).
+PENDIENTE:            `28c2f49` empujado («SI HAZLO») y desplegado por el propietario en backend y visor; verificado: /api/health 28c2f49b5c91 y el paquete del visor con el código nuevo; en producción, sin pimpón (medido). Sin commit: la corrección del diagnóstico (comentarios de `CompareView.jsx`, sin cambio de comportamiento; `docs/visor/01_…` corregido; evidencia JSON ampliada) y el análisis nuevo `docs/visor/02_…`. Falta: que el propietario mire el parpadeo con drenaje, y repetir `…DR-HD-011259` v23→v24 (crea extracción temporal: lo lanza él). De `docs/visor/02`: emparejar por documento cuando un lado tiene varios (1 «modificado» falso medido con encofrados) y la decisión sobre la identidad de los modelos del ECD/locales (hoy se quedan sin datos: `INVALID_SOURCE_URN`). `LOB4DWorkspace.jsx` tiene el mismo `stop?.()` muerto (protegido, sin tocar).
 ARCHIVOS MODIFICADOS: backend/routes/inventory.py, frontend-react/src/components/CompareView.jsx, frontend-react/src/probar-comparar.jsx; nuevos: backend/tests/test_comparador_documento_en_dos_obras.py, docs/visor/01_COMPARADOR_PARPADEO_Y_VERSIONES.md, docs/visor/evidencias/comparador_medicion_2026-09-18.json; docs/AI_WORKSTATE.md.
 TESTS EJECUTADOS:     `pytest tests/test_comparador_documento_en_dos_obras.py tests/test_comparador_perimetro.py tests/test_compare.py tests/test_inventory_identity_core.py` 39/39; suite completa 1989 pasan / 1 falla (`test_capacidades_con_puerta`, preexistente); ESLint `CompareView.jsx` 4 (HEAD 6) y `probar-comparar.jsx` 0; `vite build --config vite.banco.config.js` OK; banco en Chrome integrado (5181) con dos casos.
 TESTS PENDIENTES:     producción tras desplegar: comparar `…DR-HD-011259` v23 vs v24 desde `1_DRENAJE` (debe extraer y comparar) y mirar el parpadeo con drenaje.
 FALLO CONOCIDO:       el 404 de `/api/civil/…?scope_urn=1_DRENAJE` de su consola es otra cosa (el frente no tiene datos civiles) y no se toca.
-NEXT EXACT ACTION:    tras el despliegue de backend y visor, comprobar en producción: `/api/health` con el commit nuevo, y desde `1_DRENAJE` comparar `…DR-HD-011259` v23 vs v24 (debe extraer la v23 y comparar); después, que el propietario mire el parpadeo con drenaje.
+NEXT EXACT ACTION:    el propietario aceptó («si», 18-sep) el commit de la corrección (comentarios + docs; sin push, no pedido) y el orden de `docs/visor/02` §4: primero EMPAREJAR POR DOCUMENTO cuando un lado tiene varios. Lo segundo (identidad de los documentos del ECD en el inventario) es una decisión sobre B1 que hay que pedirle explícitamente antes de tocar nada.
 DO NOT TOUCH:         los protegidos de siempre (incluido LOB4DWorkspace.jsx) y el WIP ajeno.
 COMMIT/HEAD REF:      `fix(compare): pause the main viewer for real, sync cameras only on change, and compare versions of documents linked in two projects`, sobre `f9345b4`.
 
@@ -998,9 +1005,10 @@ Observaciones reales, ya conocidas y aceptadas. Ninguna bloquea nada.
    propietario (7-sep-2026). No bloquea B1.
 ## CURRENT TASK
 
-**18-sep-2026 · VISOR · COMPARADOR — COMMIT Y PUSH AUTORIZADOS («SI HAZLO»); FALTA DESPLEGAR BACKEND Y VISOR.** Tres síntomas del propietario con causa medida en
-producción: la pausa del visor principal nunca funcionó (`viewer.stop()` no existe), la sincronía de cámaras dejaba un lado
-«sucio», y los modelos HD de drenaje están vinculados en dos obras (`409 SOURCE_SCOPE_AMBIGUOUS`). Ver «Unidad VISOR · COMPARADOR».
+**18-sep-2026 · VISOR · COMPARADOR — `28c2f49` DESPLEGADO Y VERIFICADO.** La causa del parpadeo era la sincronía de cámaras
+(pimpón: ~29 redibujados desde cero por segundo en los dos visores, medido con la pestaña visible); el 409 de drenaje, un
+documento vinculado en dos obras. CORRECCIÓN: lo de «tres visores» era falso (App desmonta el principal al comparar).
+Ver «Unidad VISOR · COMPARADOR» y `docs/visor/02_…` (varios modelos por lado, archivo local, ECD Docs).
 
 **18-sep-2026 · ARCHIVOS · LECTOR · APERTURA SIN HOJA EN BLANCO — `f9345b4` EMPUJADO Y DESPLEGADO POR EL PROPIETARIO.**
 La miniatura va dentro de la hoja hasta que el dibujo está completo, también al cambiar de lámina: sin los 10,5 s de hoja en
@@ -1113,8 +1121,8 @@ autorreferencial del presente documento. Consultar HEAD real por separado.
 
 ## EXACT NEXT ACTION
 
-**VISOR · COMPARADOR (18-sep-2026):** commit y push autorizados; falta el Manual Deploy del backend (Virginia) y del visor
-(`visor-ecd-frontend`), que hace el propietario, y comprobar en producción `…DR-HD-011259` v23 vs v24 desde `1_DRENAJE`.
+**VISOR · COMPARADOR (18-sep-2026):** `28c2f49` desplegado y verificado. Pendiente de su decisión: commit de la corrección
+del diagnóstico (comentarios + docs) y qué hacer de `docs/visor/02_…` §4.
 
 **ARCHIVOS · LECTOR · APERTURA SIN HOJA EN BLANCO (18-sep-2026):** `f9345b4` empujado y desplegado por el propietario en el portal
 (sin verificar por contenido: él pidió no probarlo).

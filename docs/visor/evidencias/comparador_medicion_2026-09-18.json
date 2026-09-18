@@ -1,23 +1,36 @@
 {
-  "que": "Comparador de modelos del visor: medicion en produccion antes del arreglo (18-sep-2026)",
-  "como": "Chrome del propietario, pestaña nueva del grupo de la extension, visor.alephia.com.pe con su sesion; sondas de solo lectura: contadores sobre CAMERA_CHANGE_EVENT, VIEWER_RENDER_TICK, RENDER_PRESENTED_EVENT y los parametros BeginScene.clear / BeginScene.signalCameraChanged del sistema de comandos de LMV; entradas sinteticas de la extension (rueda, hover, arrastre). La pestaña quedo oculta parte del tiempo: los tiempos de dibujo no valen, los recuentos de eventos si.",
-  "visor_principal_con_el_comparador_abierto": {
-    "frente": "1_CANAL",
-    "modelos_cargados": 6,
-    "typeof_viewer_stop": "undefined",
-    "typeof_viewer_impl_stop": "function",
-    "viewer_impl_renderLoopOn": true,
-    "progresivo": true,
-    "aristas": true,
-    "conclusion": "la pausa del commit 0e6d18d (viewer.stop && viewer.stop()) nunca corrio; tres visores en el bucle de dibujo"
+  "que": "Comparador de modelos del visor: mediciones en produccion (18-sep-2026)",
+  "correccion": "La primera tanda (manana) concluyo dos cosas falsas: que el visor principal seguia dibujando bajo el comparador y que la sincronia no era un bucle. El _renderLoopOn=true se leyo ANTES de abrir el comparador, y la pestaña estaba oculta (sin dibujo) al medir el reposo. La tanda de la tarde, con la pestaña visible, es la que vale para el parpadeo.",
+  "tanda_tarde_pestaña_visible": {
+    "como": "Chrome del propietario, pestaña nueva visible y con foco (document.visibilityState=visible), codigo 28c2f49 desplegado. Mismo modelo en A y B: 500125-CSSP001-780-XX-DR-ST-011242@011244.rvt v41. Contadores por lado: CAMERA_CHANGE_EVENT, VIEWER_RENDER_TICK y BeginScene.clear (redibujado desde cero). La camara de A se mueve 1 m por codigo (navigation.setView). En los tramos 3-4 se añade, ademas, la sincronia ANTIGUA tal cual (setView + setCameraUpVector sin comparar, con su bandera syncing).",
+    "por_segundo": [
+      { "tramo": "1 reposo, codigo nuevo", "camara_A": 0, "camara_B": 0, "desde_cero_A": 0, "desde_cero_B": 0, "ticks_A": 122.3, "ticks_B": 122.3 },
+      { "tramo": "2 tras mover A 1 m, codigo nuevo", "camara_A": 0.3, "camara_B": 0.3, "desde_cero_A": 0.3, "desde_cero_B": 0.3, "ticks_A": 101.3, "ticks_B": 100.7 },
+      { "tramo": "3 tras mover A 1 m, con la sincronia ANTIGUA", "camara_A": 27.7, "camara_B": 27.7, "desde_cero_A": 27.7, "desde_cero_B": 27.7, "ticks_A": 27.7, "ticks_B": 27.7 },
+      { "tramo": "4 sigue la antigua, sin tocar nada", "camara_A": 29.3, "camara_B": 29.3, "desde_cero_A": 29.3, "desde_cero_B": 29.3, "ticks_A": 29.3, "ticks_B": 29.3 },
+      { "tramo": "5 quitada la antigua, solo el codigo nuevo", "camara_A": 0.3, "camara_B": 0, "desde_cero_A": 0.3, "desde_cero_B": 0, "ticks_A": 102, "ticks_B": 102.3 }
+    ],
+    "conclusion": "la sincronia antigua es un bucle infinito: tras un movimiento, los dos visores se redibujan desde cero ~29 veces por segundo sin parar; la de 28c2f49 hace un redibujado por lado y se para",
+    "visor_principal_con_el_comparador_abierto": { "__mainViewer_impl": null, "motivo": "App.jsx lo desmonta mientras se compara: {!compareMode && <Viewer/>} desde 666f21a (12-jun); al salir se crea otro y recarga sus modelos" }
   },
-  "sincronia_de_camaras": {
-    "modelo": "500125-CSSP001-740-XX-DR-ST-004120@004145.rvt en A y en B (misma version, 8767 elementos)",
-    "en_reposo_tras_cargar_5s": { "camara_A": 0, "camara_B": 0, "ticks_A": 0, "ticks_B": 0 },
-    "rueda_5_muescas_en_A": { "camara_A": 12, "camara_B": 12, "ticks_A": 12, "ticks_B": 12, "dirty_A_despues": true, "dirty_B_despues": false, "en_reposo_5s_despues": { "camara_por_segundo": 0.0 } },
-    "rueda_5_muescas_y_6_movimientos_en_A": { "camara_A": 7, "camara_B": 7, "hover_A": 1, "dirty_A_despues": true },
-    "arrastre_orbita_en_A": { "camara_A": 5, "camara_B": 5, "BeginScene_clear_A": 5, "BeginScene_clear_B": 5, "signalCameraChanged_A": 5, "signalCameraChanged_B": 5, "presentado_A": 5, "presentado_B": 5, "dirty_A_despues": true, "en_reposo_4s_despues": { "todo": 0 } },
-    "conclusion": "cada cambio de camara en un lado es un redibujado desde cero en los dos; no hay bucle infinito, pero el lado que se movio se queda con la camara sucia y en su siguiente tick redibuja entera y vuelve a avisar al otro"
+  "varios_modelos_en_un_lado": {
+    "como": "misma sesion; frente 1_DRENAJE; solo versiones actuales (sin extraccion temporal). A = 500125-CSSP001-780-XX-DR-HD-011264@011268.rvt v64; B = el mismo v64 + 500125-CSSP001-780-XX-DR-HD-011264@011268-ENCOFRADOS.rvt v31. Mapeos de externalId de LMV por modelo (getExternalIdMapping).",
+    "diff": { "total_a": 406, "total_b": 3849, "added": 3442, "removed": 0, "modified": 1, "unchanged": 406, "ids_repetidos_en_las_listas": 0 },
+    "ids_en_los_mapeos_de_LMV": { "A": 474995, "B_principal": 474995, "B_encofrados": 399144 },
+    "ids_compartidos": { "A_y_B_principal": 474995, "A_y_B_encofrados": 131833, "B_principal_y_B_encofrados": 131833 },
+    "reparto": { "agregados_solo_en_encofrados": 3442, "modificados_en_los_dos_modelos_de_B": 1 },
+    "alineacion_3D": "los tres modelos con el mismo globalOffset; el principal centrado en los dos visores y el de encofrados desplazado (-12,3; -7,6; -28,4) m por su propia extension",
+    "conclusion": "funciona; salvedad medida: el de encofrados comparte 131.833 ids con el principal (es un derivado), y como el diff empareja solo por id, sale 1 'modificado' que no puede serlo (el principal es la misma version en los dos lados) y en 3D los ids compartidos se pintan y seleccionan en uno solo de los dos ficheros"
+  },
+  "tanda_manana": {
+    "visor_principal": { "frente": "1_CANAL", "modelos_cargados": 6, "typeof_viewer_stop": "undefined", "typeof_viewer_impl_stop": "function", "viewer_impl_renderLoopOn": true, "ojo": "leido ANTES de abrir el comparador; durante la comparacion la sonda devolvia undefined (visor destruido) y no se miro" },
+    "sincronia": { "rueda_5_muescas_en_A": { "camara_A": 12, "camara_B": 12 }, "arrastre_en_A": { "camara_A": 5, "camara_B": 5, "desde_cero_A": 5, "desde_cero_B": 5 }, "reposo": 0, "ojo": "pestaña en segundo plano: sin dibujo, el bucle no podia avanzar" },
+    "error_409": {
+      "frente": "1_DRENAJE",
+      "500125-CSSP001-780-XX-DR-ST-011242@011244 v40 vs v41": { "compare_extracted_v40": false, "prepare_version": "ready", "inventory_extract": 202, "status_final": "success, 506 activos", "diff": "ok" },
+      "500125-CSSP001-780-XX-DR-HD-011259@011263 v23 vs v24": { "compare_extracted_v23": false, "prepare_version": "ready", "inventory_extract": { "status": 409, "cuerpo": { "code": "SOURCE_SCOPE_AMBIGUOUS", "error": "SOURCE_SCOPE_AMBIGUOUS" } }, "estado_en_pantalla": "Error: No se pudo iniciar la extracción de lado A · vínculo 1" },
+      "limpieza_al_salir": { "primera": { "deleted": 506 }, "segunda": { "deleted": 0 } }
+    }
   },
   "lmv_leido_en_el_codigo": {
     "Navigation.setView": "copia posicion y objetivo y pone _camera.dirty = true sin comparar",
@@ -27,11 +40,5 @@
     "Viewer3D.prototype": "tiene run() y finish(); NO tiene stop()",
     "Viewer3DImpl": "run() registra el visor en el MainLoop comun; stop() lo quita con splice(indexOf(viewer), 1)",
     "MainLoop.unregisterViewer": "con un visor que no esta registrado, indexOf = -1 y splice(-1, 1) quita al ULTIMO registrado"
-  },
-  "error_409": {
-    "frente": "1_DRENAJE",
-    "500125-CSSP001-780-XX-DR-ST-011242@011244 v40 vs v41": { "compare_extracted_v40": false, "prepare_version": "ready", "inventory_extract": 202, "status_final": "success, 506 activos", "diff": "ok" },
-    "500125-CSSP001-780-XX-DR-HD-011259@011263 v23 vs v24": { "compare_extracted_v23": false, "prepare_version": "ready", "inventory_extract": { "status": 409, "cuerpo": { "code": "SOURCE_SCOPE_AMBIGUOUS", "error": "SOURCE_SCOPE_AMBIGUOUS" } }, "estado_en_pantalla": "Error: No se pudo iniciar la extracción de lado A · vínculo 1" },
-    "limpieza_al_salir": { "primera": { "deleted": 506 }, "segunda": { "deleted": 0 } }
   }
 }
