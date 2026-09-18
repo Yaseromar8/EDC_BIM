@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { apiFetch } from '../utils/apiFetch';
 import { loadAlignedModels } from '../aps/utils/loadAlignedModels';
+import { linajeDeUrn } from '../lib/savedViewV2';
 
 /**
  * CompareView — Comparador (contractual vs avance), estilo ACC Compare pero propio.
@@ -113,6 +114,57 @@ const explicarExtraccion = (label, status, cuerpo) => {
     return `No se pudo iniciar la extracción de ${label}: ${motivo}${code ? ` (${code})` : ''}`;
 };
 
+// El documento de un modelo, escrito como lo guarda el inventario: base64
+// URL-safe sin relleno. Asi se casa con las `fuentes` que devuelve el diff.
+const normalizarUrn = (u) => {
+    let s = String(u || '').trim();
+    if (/^urn:adsk\.[a-z0-9]+:fs\.file:/i.test(s)) {
+        try { s = btoa(s); } catch { return ''; }
+    }
+    return s.replace(/^urn:/i, '').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+};
+
+// De que documento es un modelo cargado. LMV lo lleva en el nodo raiz de su
+// documento (`getSeedUrn` no sirve: es la ruta del derivado, no el documento).
+const urnDelModelo = (model) => {
+    try {
+        const raiz = model?.getDocumentNode?.()?.getRootNode?.();
+        const u = raiz && (typeof raiz.urn === 'function' ? raiz.urn() : raiz.data?.urn);
+        return normalizarUrn(u || model?.getData?.()?.urn || '');
+    } catch { return ''; }
+};
+
+// DONDE ESTA, EN EL VISOR DE UN LADO, UN ELEMENTO DEL DIFF. `estado` es el de
+// los visores (`vs.current`). Con varios documentos en algun lado el diff dice
+// de que documento es cada fila (`fa`/`fb`, indices en `fuentes`) y se busca
+// SOLO en ese fichero: un derivado como «…-ENCOFRADOS» comparte miles de
+// identificadores con su padre (131.833, medido el 18-sep-2026), y el mapa de
+// siempre pintaba el elemento en el fichero que se hubiera cargado el ultimo.
+const objetivoEn = (estado, k, it) => {
+    const { porDocumento, fuentes, docs, maps } = estado;
+    if (porDocumento && fuentes) {
+        const indice = k === 'a' ? it.fa : it.fb;
+        if (indice === undefined || !fuentes[k]) return null;
+        const modelo = docs?.[k]?.modeloPorUrn.get(normalizarUrn(fuentes[k][indice]));
+        const dbId = modelo ? docs[k].porModelo.get(modelo)?.[it.id] : undefined;
+        return dbId === undefined ? null : { id: dbId, model: modelo };
+    }
+    return maps?.[k]?.[it.id] || null;
+};
+
+// El mismo elemento en el otro lado. Por documento: en el fichero del MISMO
+// linaje, o en ninguno; nunca en otro que solo comparta el identificador.
+const destinoEspejo = (estado, k, otro, modelo, ext) => {
+    const { porDocumento, docs, maps } = estado;
+    if (porDocumento && docs?.[k] && docs?.[otro]) {
+        const linaje = docs[k].linajePorModelo.get(modelo);
+        const suyo = linaje ? docs[otro].modeloPorLinaje.get(linaje) : null;
+        const dbId = suyo ? docs[otro].porModelo.get(suyo)?.[ext] : undefined;
+        return dbId === undefined ? null : { id: dbId, model: suyo };
+    }
+    return maps?.[otro] ? maps[otro][ext] || null : null;
+};
+
 const modelKey = (model) => {
     if (!model) return '__unknown__';
     try {
@@ -139,7 +191,7 @@ export default function CompareView({ BACKEND_URL, projectId, onExit }) {
     const contB = useRef(null);
     const tipEl = useRef(null);
     const scopesRef = useRef(null);
-    const vs = useRef({ a: null, b: null, maps: {}, rev: {}, syncing: false, selSyncing: false });
+    const vs = useRef({ a: null, b: null, maps: {}, rev: {}, docs: {}, porDocumento: false, fuentes: null, syncing: false, selSyncing: false });
 
     useEffect(() => {
         // La obra viaja en la peticion. Sin ella, el control de acceso por obra
@@ -391,9 +443,14 @@ export default function CompareView({ BACKEND_URL, projectId, onExit }) {
         if (scope.type === 'sources') return scope.values || [];
         return [];
     };
+    // `map` es el de siempre: un identificador -> un elemento, y con varios
+    // ficheros que compartan identificador gana el ultimo. `docs` guarda lo mismo
+    // POR FICHERO, y de que documento (y linaje) es cada uno: es lo que usa el
+    // modo por documento para pintar y seleccionar en el fichero que toca.
     const buildExternalLookups = (viewer) => new Promise(resolve => {
         const modelsInViewer = viewer.getAllModels ? viewer.getAllModels() : (viewer.model ? [viewer.model] : []);
-        if (!modelsInViewer.length) return resolve({ map: {}, rev: { byModel: {}, flat: {} } });
+        const docs = { porModelo: new Map(), modeloPorUrn: new Map(), modeloPorLinaje: new Map(), linajePorModelo: new Map() };
+        if (!modelsInViewer.length) return resolve({ map: {}, rev: { byModel: {}, flat: {} }, docs });
 
         const map = {};
         const rev = { byModel: {}, flat: {} };
@@ -402,20 +459,26 @@ export default function CompareView({ BACKEND_URL, projectId, onExit }) {
         modelsInViewer.forEach(model => {
             const key = modelKey(model);
             rev.byModel[key] = rev.byModel[key] || {};
+            const urn = urnDelModelo(model);
+            const linaje = linajeDeUrn(urn);
+            if (urn) docs.modeloPorUrn.set(urn, model);
+            if (linaje) { docs.modeloPorLinaje.set(linaje, model); docs.linajePorModelo.set(model, linaje); }
             model.getExternalIdMapping((extMap) => {
+                docs.porModelo.set(model, extMap || {});
                 Object.entries(extMap || {}).forEach(([ext, dbId]) => {
                     map[ext] = { id: dbId, model };
                     rev.byModel[key][dbId] = ext;
                     if (!rev.flat[dbId]) rev.flat[dbId] = ext;
                 });
                 pending -= 1;
-                if (pending === 0) resolve({ map, rev });
+                if (pending === 0) resolve({ map, rev, docs });
             }, () => {
                 pending -= 1;
-                if (pending === 0) resolve({ map, rev });
+                if (pending === 0) resolve({ map, rev, docs });
             });
         });
     });
+
 
     // ¿Son el mismo punto? Tolerancia relativa: la escena va en milimetros y las
     // coordenadas rondan el millon; un 1e-9 relativo son nanometros.
@@ -501,23 +564,33 @@ export default function CompareView({ BACKEND_URL, projectId, onExit }) {
                         const rev = vs.current.rev[k];
                         const revByModel = rev && ev.model ? rev.byModel?.[modelKey(ev.model)] : null;
                         const ext = revByModel?.[dbId] || rev?.flat?.[dbId] || null;
-                        const target = ext && vs.current.maps[other] ? vs.current.maps[other][ext] : null;
+                        const target = ext ? destinoEspejo(vs.current, k, other, ev.model, ext) : null;
                         if (ov) {
                             if (target) ov.select([target.id], target.model);
                             else ov.clearSelection();
                         }
-                        if (ext) openDetailRef.current({ id: ext, name: 'Elemento …' + String(ext).slice(-10) });
+                        if (ext) {
+                            // El detalle, de ESTOS dos ficheros (por documento lo usa;
+                            // con un documento por lado se ignora).
+                            const propio = urnDelModelo(ev.model) || null;
+                            const suyo = target ? urnDelModelo(target.model) || null : null;
+                            openDetailRef.current({
+                                id: ext, name: 'Elemento …' + String(ext).slice(-10),
+                                fuenteA: k === 'a' ? propio : suyo, fuenteB: k === 'a' ? suyo : propio,
+                            });
+                        }
                     }
                 } finally { vs.current.selSyncing = false; }
             });
         });
     }, []);
 
-    const themeSide = (viewer, map, list, rgb) => {
-        if (!viewer || !viewer.model || !map) return;
+    const themeSide = (k, list, rgb) => {
+        const viewer = vs.current[k];
+        if (!viewer || !viewer.model) return;
         const color = new window.THREE.Vector4(rgb[0], rgb[1], rgb[2], 1);
         list.forEach(it => {
-            const target = map[it.id];
+            const target = objetivoEn(vs.current, k, it);
             if (target) viewer.setThemingColor(target.id, color, target.model, true);
         });
     };
@@ -630,12 +703,17 @@ export default function CompareView({ BACKEND_URL, projectId, onExit }) {
                 const lookupB = await buildExternalLookups(vs.current.b);
                 vs.current.maps = { a: lookupA.map, b: lookupB.map };
                 vs.current.rev = { a: lookupA.rev, b: lookupB.rev };
+                vs.current.docs = { a: lookupA.docs, b: lookupB.docs };
+                // Con varios documentos en algun lado el diff dice de cual es cada
+                // fila; si el servidor es anterior, no lo dice y todo sigue como antes.
+                vs.current.porDocumento = !!d.por_documento;
+                vs.current.fuentes = d.fuentes || null;
                 if (!sideEmpty) {
                     setStatus('Pintando diferencias…');
-                    themeSide(vs.current.b, lookupB.map, d.added, COLORS.added);
-                    themeSide(vs.current.b, lookupB.map, d.modified, COLORS.modified);
-                    themeSide(vs.current.a, lookupA.map, d.removed, COLORS.removed);
-                    themeSide(vs.current.a, lookupA.map, d.modified, COLORS.modified);
+                    themeSide('b', d.added, COLORS.added);
+                    themeSide('b', d.modified, COLORS.modified);
+                    themeSide('a', d.removed, COLORS.removed);
+                    themeSide('a', d.modified, COLORS.modified);
                 }
                 wireHover();
                 wireMirror();
@@ -665,7 +743,7 @@ export default function CompareView({ BACKEND_URL, projectId, onExit }) {
 
     const editSelection = () => {
         ['a', 'b'].forEach(k => { try { vs.current[k] && vs.current[k].finish(); } catch (e) { /* noop */ } });
-        vs.current = { a: null, b: null, maps: {}, rev: {}, syncing: false, selSyncing: false };
+        vs.current = { a: null, b: null, maps: {}, rev: {}, docs: {}, porDocumento: false, fuentes: null, syncing: false, selSyncing: false };
         setDiff(null); setDetail(null); setActiveList(null); setTip(null);
         setStatus('');
         setPhase('setup');
@@ -673,9 +751,8 @@ export default function CompareView({ BACKEND_URL, projectId, onExit }) {
 
     const isolate = (k, list) => {
         const viewer = vs.current[k];
-        const map = vs.current.maps[k];
-        if (!viewer || !viewer.model || !map) return;
-        const targets = list.map(it => map[it.id]).filter(Boolean);
+        if (!viewer || !viewer.model) return;
+        const targets = list.map(it => objetivoEn(vs.current, k, it)).filter(Boolean);
         if (!targets.length) return;
         const aggregate = targets.reduce((acc, target) => {
             const key = modelKey(target.model);
@@ -702,8 +779,26 @@ export default function CompareView({ BACKEND_URL, projectId, onExit }) {
         try {
             const scopes = scopesRef.current;
             if (!scopes) return;
+            // POR DOCUMENTO se pregunta solo por el fichero del elemento, y el
+            // lado donde no esta va vacio (null): mandar el lado entero traia la
+            // copia de OTRO fichero que comparta el identificador, o nada si hay
+            // dos (el servidor no elige). La fila de la lista dice su documento
+            // con `fa`/`fb`; la seleccion en 3D, con `fuenteA`/`fuenteB`.
+            let a = scopes.a, b = scopes.b;
+            const { porDocumento, fuentes } = vs.current;
+            if (porDocumento) {
+                const fuente = (lado, explicita, indice) => {
+                    if (explicita !== undefined) return explicita;
+                    return fuentes && fuentes[lado] && indice !== undefined ? fuentes[lado][indice] : null;
+                };
+                const fuenteA = fuente('a', item.fuenteA, item.fa);
+                const fuenteB = fuente('b', item.fuenteB, item.fb);
+                a = fuenteA ? { type: 'source', value: fuenteA } : null;
+                b = fuenteB ? { type: 'source', value: fuenteB } : null;
+                if (!a && !b) { setDetail({ name: item.name || item.id, changes: [] }); return; }
+            }
             const res = await apiFetch(`${BACKEND_URL}/api/compare/element`, {
-                method: 'POST', body: JSON.stringify({ external_id: item.id, a: scopes.a, b: scopes.b })
+                method: 'POST', body: JSON.stringify({ external_id: item.id, a, b })
             });
             const d = await res.json();
             const flat = (props) => {

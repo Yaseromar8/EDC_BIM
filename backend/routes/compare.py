@@ -275,6 +275,56 @@ def _guardia_scopes(data, accion='comparar versiones'):
     return None
 
 
+def _urns_del_scope(scope):
+    """Las versiones que nombra un scope `source`/`sources`; None si es un frente."""
+    if not isinstance(scope, dict):
+        return None
+    if scope.get('type') == 'source':
+        return [scope.get('value')] if scope.get('value') else []
+    if scope.get('type') == 'sources':
+        return [u for u in (scope.get('values') or []) if u]
+    return None
+
+
+def _emparejar_por_documento(a, b):
+    """¿El mismo elemento es mismo identificador Y mismo documento?
+
+    POR QUE (medido en produccion el 18-sep-2026)
+    --------------------------------------------
+    El diff emparejaba SOLO por `external_id`, que es el identificador de Revit.
+    Con un documento por lado es lo correcto: son versiones del mismo modelo, o
+    un modelo y una copia derivada de el, y Revit conserva los identificadores.
+    Pero un lado puede tener VARIOS documentos, y un derivado --los
+    «…-ENCOFRADOS», hechos a partir del principal-- conserva los del principal:
+    `…011264@011268-ENCOFRADOS` comparte 131.833 con su padre. Con A = principal
+    v64 y B = principal v64 + encofrados, el diff daba 1 «modificado» que no
+    podia serlo (el principal es la misma version en los dos lados): comparaba
+    el elemento del principal con su COPIA dentro de los encofrados.
+
+    LA REGLA
+    --------
+    Si algun lado tiene mas de un documento, cada documento se compara solo
+    consigo mismo (otra version del mismo linaje); uno que solo esta en un lado
+    cuenta entero como agregado o eliminado. Con un documento por lado se sigue
+    emparejando solo por identificador, como siempre: es lo que permite comparar
+    un modelo con un derivado suyo. Un frente entero tambien sigue como siempre.
+    """
+    ua, ub = _urns_del_scope(a), _urns_del_scope(b)
+    if ua is None or ub is None:
+        return False
+
+    def distintas(urns):
+        salida = set()
+        for u in urns:
+            try:
+                from routes.inventory import sanitize_urn
+                salida.add(sanitize_urn(u))
+            except Exception:
+                salida.add(u)
+        return salida
+    return len(distintas(ua)) > 1 or len(distintas(ub)) > 1
+
+
 @compare_bp.route('/api/compare/diff', methods=['POST'])
 def compare_diff():
     data = request.get_json(silent=True) or {}
@@ -286,6 +336,16 @@ def compare_diff():
     if not cond_a or not cond_b:
         return jsonify({'error': 'Scopes a/b invalidos. Formato: {type: frente|source, value}'}), 400
 
+    # El mismo elemento en los dos lados (ver `_emparejar_por_documento`). En ese
+    # modo cada fila dice ademas de que documento es, para que el visor la pinte
+    # en SU fichero y no en otro que comparta el identificador.
+    por_documento = _emparejar_por_documento(data.get('a'), data.get('b'))
+    mismo = 'a.external_id = b.external_id'
+    if por_documento:
+        mismo += ' AND a.source_lineage = b.source_lineage'
+    col_a = ', a.source_urn' if por_documento else ''
+    col_b = ', b.source_urn' if por_documento else ''
+
     try:
         with get_db_connection() as conn:
             cur = conn.cursor()
@@ -293,33 +353,33 @@ def compare_diff():
 
             # AGREGADOS: en B y no en A (ids + nombre para la lista clickeable)
             cur.execute(f"""
-                SELECT b.external_id, b.name FROM inventory_assets b
+                SELECT b.external_id, b.name{col_b} FROM inventory_assets b
                 WHERE {cond_b} AND NOT EXISTS (
-                    SELECT 1 FROM inventory_assets a WHERE {cond_a} AND a.external_id = b.external_id)
+                    SELECT 1 FROM inventory_assets a WHERE {cond_a} AND {mismo})
                 LIMIT {MAX_IDS}
             """, par_b + par_a)
-            added = [{'id': r[0], 'name': r[1]} for r in cur.fetchall()]
+            filas_added = cur.fetchall()
 
             # ELIMINADOS: en A y no en B
             cur.execute(f"""
-                SELECT a.external_id, a.name FROM inventory_assets a
+                SELECT a.external_id, a.name{col_a} FROM inventory_assets a
                 WHERE {cond_a} AND NOT EXISTS (
-                    SELECT 1 FROM inventory_assets b WHERE {cond_b} AND b.external_id = a.external_id)
+                    SELECT 1 FROM inventory_assets b WHERE {cond_b} AND {mismo})
                 LIMIT {MAX_IDS}
             """, par_a + par_b)
-            removed = [{'id': r[0], 'name': r[1]} for r in cur.fetchall()]
+            filas_removed = cur.fetchall()
 
             # MODIFICADOS: en ambos, properties distintas. El hash se calcula EN la
             # BD (no se transfieren los JSONB). DISTINCT por si hay filas repetidas.
             cur.execute(f"""
-                SELECT DISTINCT a.external_id, a.name
+                SELECT DISTINCT a.external_id, a.name{col_a}{col_b}
                 FROM inventory_assets a
-                JOIN inventory_assets b ON b.external_id = a.external_id AND {cond_b}
+                JOIN inventory_assets b ON {mismo} AND {cond_b}
                 WHERE {cond_a}
                   AND md5(a.properties::text) IS DISTINCT FROM md5(b.properties::text)
                 LIMIT {MAX_IDS}
             """, par_b + par_a)
-            modified = [{'id': r[0], 'name': r[1]} for r in cur.fetchall()]
+            filas_modified = cur.fetchall()
 
             # Totales por lado (contexto del resumen)
             cur.execute(f"SELECT COUNT(*) FROM inventory_assets a WHERE {cond_a}", par_a)
@@ -327,7 +387,27 @@ def compare_diff():
             cur.execute(f"SELECT COUNT(*) FROM inventory_assets b WHERE {cond_b}", par_b)
             total_b = cur.fetchone()[0]
 
-        return jsonify({
+        if por_documento:
+            # El documento de cada fila va como indice en `fuentes`: son unos
+            # pocos URN largos, y repetirlos en miles de filas engordaba la
+            # respuesta sin decir nada nuevo.
+            fuentes = {'a': [], 'b': []}
+
+            def indice(lado, urn):
+                if urn not in fuentes[lado]:
+                    fuentes[lado].append(urn)
+                return fuentes[lado].index(urn)
+            added = [{'id': r[0], 'name': r[1], 'fb': indice('b', r[2])} for r in filas_added]
+            removed = [{'id': r[0], 'name': r[1], 'fa': indice('a', r[2])} for r in filas_removed]
+            modified = [{'id': r[0], 'name': r[1], 'fa': indice('a', r[2]), 'fb': indice('b', r[3])}
+                        for r in filas_modified]
+        else:
+            fuentes = None
+            added = [{'id': r[0], 'name': r[1]} for r in filas_added]
+            removed = [{'id': r[0], 'name': r[1]} for r in filas_removed]
+            modified = [{'id': r[0], 'name': r[1]} for r in filas_modified]
+
+        respuesta = {
             'summary': {
                 'total_a': total_a,
                 'total_b': total_b,
@@ -339,7 +419,11 @@ def compare_diff():
             'added': added,
             'removed': removed,
             'modified': modified,
-        })
+        }
+        if por_documento:
+            respuesta['por_documento'] = True
+            respuesta['fuentes'] = fuentes
+        return jsonify(respuesta)
     except Exception as e:
         logger.error(f"diff fallo: {e}")
         return jsonify({'error': str(e)}), 500
@@ -703,9 +787,16 @@ def compare_element():
     if negada:
         return negada
     ext_id = data.get('external_id')
-    cond_a, par_a = _scope_filter(data.get('a'), 'ia')
-    cond_b, par_b = _scope_filter(data.get('b'), 'ia')
-    if not ext_id or not cond_a or not cond_b:
+    # UN LADO PUEDE NO VENIR. Con varios documentos por lado, el visor pide el
+    # detalle solo en el documento del elemento (ver `_emparejar_por_documento`):
+    # uno agregado no esta en A, y mandar A entero traia la copia de OTRO
+    # documento de A que compartiera el identificador. Un lado que viene tiene
+    # que ser valido; los dos ausentes no es una peticion.
+    sa, sb = data.get('a'), data.get('b')
+    cond_a, par_a = _scope_filter(sa, 'ia') if sa is not None else (None, None)
+    cond_b, par_b = _scope_filter(sb, 'ia') if sb is not None else (None, None)
+    if (not ext_id or (sa is None and sb is None)
+            or (sa is not None and not cond_a) or (sb is not None and not cond_b)):
         return jsonify({'error': 'Faltan external_id o scopes a/b'}), 400
 
     try:
@@ -713,6 +804,8 @@ def compare_element():
             cur = conn.cursor()
 
             def fetch(cond, params):
+                if not cond:
+                    return None
                 # ANTES: LIMIT 1 sin orden. Con un scope que abarca varias Sources
                 # --`{type:'sources'}`-- dos documentos distintos pueden traer el
                 # mismo externalId, y el motor devolvia el que le convenia: el

@@ -44,12 +44,37 @@ fichero es cada uno:
   selección espejo caen en uno de los dos ficheros (el último cargado), no en los dos.
 - Con ficheros independientes entre sí (sin elementos compartidos) no pasa nada de esto.
 
-**Arreglo propuesto (no hecho):** cuando un lado tiene varios documentos, emparejar por **documento + elemento**:
-un documento que está en los dos lados se compara consigo mismo por identificador; uno que solo está en un lado
-aporta todo como agregado o eliminado. Con un documento por lado —el caso de siempre, y el que permite comparar un
-modelo con un derivado suyo— se sigue emparejando por identificador como hoy. En 3D, el mapa de identificadores
-pasa a ser por modelo. El inventario ya guarda de qué documento es cada fila (`source_urn`), así que no hay
-migración. Se puede medir con este mismo caso: el resultado correcto es 3.443 agregados y 0 modificados.
+### 2.1 · Arreglo: emparejar por documento (18-sep; commit y push autorizados, falta desplegar)
+
+Aceptado por el propietario («si»). La regla: **si algún lado tiene más de un documento, cada documento se compara
+solo consigo mismo** (otra versión del mismo linaje) y uno que solo está en un lado cuenta entero como agregado o
+eliminado. Con un documento por lado —el caso de siempre, y el que permite comparar un modelo con un derivado suyo—
+se sigue emparejando solo por identificador. Un frente entero, igual que antes.
+
+- **Backend** (`routes/compare.py`): en ese modo el diff empareja por `external_id` **y** `source_lineage` (la
+  vista de B1 ya lo trae: sin migración) y cada fila dice de qué documento es (`fa`/`fb`, índices en `fuentes`).
+  `/api/compare/element` acepta un lado ausente, para no traer la copia de otro documento.
+- **Visor** (`CompareView.jsx`): mapa de identificadores por fichero; pintar, aislar y el detalle usan el
+  documento de cada fila; la selección espejo va al fichero del mismo linaje en el otro lado, o a ninguno.
+  Con un servidor anterior (sin `por_documento`) todo sigue como antes, así que el orden de despliegue da igual.
+
+**Probado:**
+- `tests/test_comparador_por_documento.py` (8, sin base): qué modo se elige; con un documento por lado ni la
+  consulta ni la respuesta cambian; con varios, la consulta empareja por linaje y cada fila lleva su documento;
+  el detalle con un lado ausente.
+- `herramientas/ensayo_comparador_por_documento.py`, **12/12 contra PostgreSQL de verdad** (cluster desechable,
+  ruta real): el caso de encofrados en pequeño da agregados = el fichero de encofrados entero, **0 modificados**
+  y 0 eliminados; sobre los MISMOS datos, la consulta de antes reproduce el modificado falso; principal v60 contra
+  v64 + encofrados da el p2 modificado entre versiones del principal (no contra su copia); con un documento por
+  lado —versiones, o el principal contra su derivado— todo sale igual que antes.
+- Banco `probar-comparar` (visores de mentira con ficheros que comparten identificadores): el modificado se pinta
+  en el principal y no en su copia, la copia en encofrados; la selección de `p2` en A va al `p2` del principal en
+  B, y la de la copia no selecciona nada en A; aislar agrupa por fichero; el detalle pide solo el documento del
+  elemento. Con un documento por lado, el detalle sigue mandando los lados enteros.
+- Suite backend 1997 pasan / 1 falla (la de siempre); ESLint de `CompareView.jsx` 4 = antes; banco 0.
+
+**Falta:** desplegar backend y visor, y repetir en producción A = `…011264@011268` v64 contra B = el mismo +
+encofrados: tiene que dar 3.443 agregados y 0 modificados (antes 3.442 y 1).
 
 ## 3 · Archivo local y ECD Docs
 
@@ -87,10 +112,10 @@ se ve en 3D, pero Filters e Inventory no tienen nada suyo (la extracción falla 
 manifiesto de P0 (6-sep, `docs/filters/P0_PRECHECK.md` §3) los 12 modelos configurados son de ACC, así que no
 afecta a nadie todavía; afectará al primero que use cualquiera de esas dos vías.
 
-## 4 · Orden propuesto (nada hecho ni autorizado)
+## 4 · Orden (aceptado por el propietario el 18-sep)
 
-1. **Emparejar por documento** cuando un lado tiene varios (§2). Pequeño, backend + comparador, medible con el caso
-   de encofrados.
-2. **Decisión:** ¿los documentos del ECD entran en el inventario con su propia identidad? Si sí: ECD Docs como
-   fuente del comparador, y de paso los modelos publicados desde el ECD tendrían datos en Filters.
+1. **Emparejar por documento** cuando un lado tiene varios (§2.1): hecho, empujado; falta desplegar y medir.
+2. **Decisión pendiente:** ¿los documentos del ECD entran en el inventario con su propia identidad? Si sí: ECD
+   Docs como fuente del comparador, y de paso los modelos publicados desde el ECD tendrían datos en Filters. Es
+   cambiar la regla de identidad de B1: hay que pedirla explícitamente antes de tocar nada.
 3. **Archivo local** como lado temporal de una comparación, solo admin por el coste de traducir.
