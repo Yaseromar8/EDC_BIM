@@ -12,6 +12,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { API } from '../utils/helpers';
 import { apiFetch } from '../utils/apiFetch';
 import toast from 'react-hot-toast';
+import { visiblesDelDwg, capasQueApagar } from '../utils/capasDelDwg';
 
 const VIEWER_JS = 'https://developer.api.autodesk.com/modelderivative/v2/viewers/7.*/viewer3D.min.js';
 const VIEWER_CSS = 'https://developer.api.autodesk.com/modelderivative/v2/viewers/7.*/style.min.css';
@@ -50,6 +51,28 @@ function loadViewerScript() {
 // Autodesk devuelve el avance como texto ("35% complete", "complete"). Se saca
 // el numero para poder pintar una barra; si no hay numero, se devuelve null y se
 // vuelve al giro.
+// LAS CAPAS APAGADAS DEL DWG, TAMBIEN EN LAS PRESENTACIONES (ver
+// utils/capasDelDwg.js). El espacio modelo trae la lista de capas encendidas y
+// se guarda; en cada vista 2D se apagan las que no estan en ella. Si algo falla
+// aqui, la vista se queda como la dio Autodesk: nunca rompe el visor.
+function aplicarCapasDelDwg(viewer, visiblesRef) {
+  try {
+    const model = viewer && viewer.model;
+    if (!model || !model.is2d || !model.is2d()) return;
+    const datos = model.getData && model.getData();
+    const propia = visiblesDelDwg(datos && datos.metadata);
+    if (propia) visiblesRef.current = propia;
+    const capas = viewer.impl && viewer.impl.layers;
+    if (!visiblesRef.current || !capas || !capas.getRoot) return;
+    const hojas = [];
+    const recorrer = (n) => { if (!n) return; if (n.isLayer) hojas.push(n); (n.children || []).forEach(recorrer); };
+    recorrer(capas.getRoot());
+    const apagar = new Set(capasQueApagar(hojas.map(h => h.name), visiblesRef.current));
+    const nodos = hojas.filter(h => apagar.has(h.name));
+    if (nodos.length) viewer.setLayerVisible(nodos, false);
+  } catch { /* la vista se queda como la dio Autodesk */ }
+}
+
 function porcentajeDe(texto) {
   if (!texto) return null;
   if (/complete/i.test(texto) && !/\d/.test(texto)) return 100;
@@ -292,6 +315,13 @@ export default function CadViewer({ file, projectPrefix = '', urnDirecto = null 
   const [vistas, setVistas] = useState([]);
   const [vistaActiva, setVistaActiva] = useState(null);
   const documentoRef = useRef(null);
+  // Las capas encendidas del DWG, leidas de su espacio modelo (ver
+  // aplicarCapasDelDwg). Una por documento: se vacia al abrir otro.
+  const visiblesDelDwgRef = useRef(null);
+  // LAS VISTAS DE AUTOCAD (backend: routes/docs_cad.py, '2dviews': 'pdf'). Se
+  // piden siempre; si Autodesk no puede con ellas para un dibujo, el servidor
+  // dice `retry_legacy` y este visor vuelve a la traduccion de siempre.
+  const sinVistasAutocadRef = useRef(false);
   const soltarRueda = useRef(null);
 
   // Un reloj que corre. Aunque Autodesk no de porcentaje durante el envio, ver
@@ -309,6 +339,11 @@ export default function CadViewer({ file, projectPrefix = '', urnDirecto = null 
   useEffect(() => {
     let cancelled = false;
     let timer = null;
+    sinVistasAutocadRef.current = false;
+    // Lo que se pide al servidor: las vistas del DWG dibujadas por AutoCAD,
+    // como las ve el cadista (ver sinVistasAutocadRef).
+    const pedirVistas = () => (sinVistasAutocadRef.current ? {} : { vistas: 'autocad' });
+    const consultaVistas = () => (sinVistasAutocadRef.current ? '' : '&vistas=autocad');
 
     const fail = (msg) => {
       if (cancelled) return;
@@ -369,6 +404,7 @@ export default function CadViewer({ file, projectPrefix = '', urnDirecto = null 
             const raiz = doc.getRoot();
             const todas = raiz.search({ type: 'geometry' }) || [];
             documentoRef.current = doc;
+            visiblesDelDwgRef.current = null;
             setVistas(todas.map(v => describirVista(v)));
 
             // MODEL PRIMERO (peticion del dueno). En un DWG de Civil, el
@@ -392,6 +428,7 @@ export default function CadViewer({ file, projectPrefix = '', urnDirecto = null 
             setVistaActiva(node.data.guid);
             viewer.loadDocumentNode(doc, node).then(() => {
               if (cancelled) return;
+              aplicarCapasDelDwg(viewer, visiblesDelDwgRef);
               setPhase('listo');
             });
           },
@@ -430,12 +467,20 @@ export default function CadViewer({ file, projectPrefix = '', urnDirecto = null 
     const poll = async () => {
       if (cancelled) return;
       try {
-        const r = await apiFetch(`${API}/api/docs/cad/status?node_id=${encodeURIComponent(file.id)}`);
+        const r = await apiFetch(`${API}/api/docs/cad/status?node_id=${encodeURIComponent(file.id)}${consultaVistas()}`);
         const d = await r.json();
         if (cancelled) return;
         if (!d.success) return reintentarPoll(d.error || 'No se pudo consultar el estado.');
         fallosSeguidos = 0;
         if (d.status === 'success') return mount(d.urn);
+        if (d.status === 'retry_legacy') {
+          // Autodesk no pudo dibujar este plano con AutoCAD: se muestra con la
+          // traduccion de siempre, y se dice.
+          sinVistasAutocadRef.current = true;
+          setAviso('Este plano se muestra con la traducción anterior: Autodesk no pudo dibujar sus vistas con AutoCAD.');
+          setPhase('preparando');
+          return arrancar();
+        }
         if (d.status === 'retry_plain') {
           // El paquete con la imagen adjunta fracasó; el backend ya se rindió
           // con ella. Se pide de nuevo, ahora del dibujo suelto.
@@ -478,7 +523,7 @@ export default function CadViewer({ file, projectPrefix = '', urnDirecto = null 
         const d = await pedirTraduccion(file.id + ':' + Date.now(), async () => {
           const r = await apiFetch(`${API}/api/docs/cad/translate`, {
             method: 'POST',
-            body: JSON.stringify(verificar ? { node_id: file.id, verificar: true } : { node_id: file.id }),
+            body: JSON.stringify({ node_id: file.id, ...pedirVistas(), ...(verificar ? { verificar: true } : {}) }),
           });
           return r.json();
         });
@@ -488,6 +533,12 @@ export default function CadViewer({ file, projectPrefix = '', urnDirecto = null 
         // version, sin ir a Autodesk. Si ese URN no abre, se pide otra vez
         // verificando contra Autodesk, y esa ya no tiene segunda vuelta.
         if (d.status === 'success') {
+          // MIENTRAS SE PREPARAN LAS VISTAS DE AUTOCAD se ve la traduccion de
+          // siempre: el plano se abre ya, y se dice que la proxima vez saldra
+          // como en el CAD.
+          if (d.preparando_vistas) {
+            setAviso('Preparando este plano tal como se ve en AutoCAD. Mientras tanto se muestra la versión anterior.');
+          }
           return mount(d.urn, d.origen === 'guardado' && !verificar
             ? () => arrancar({ verificar: true }) : null);
         }
@@ -557,7 +608,9 @@ export default function CadViewer({ file, projectPrefix = '', urnDirecto = null 
               .find(n => n.data.guid === guid);
             if (!node) return;
             setVistaActiva(guid);
-            viewer.loadDocumentNode(doc, node);
+            // Una presentacion no trae el estado de capas del DWG: se le aplica
+            // el del espacio modelo, que ya se leyo al abrir.
+            viewer.loadDocumentNode(doc, node).then(() => aplicarCapasDelDwg(viewer, visiblesDelDwgRef));
           }}
         />
       )}

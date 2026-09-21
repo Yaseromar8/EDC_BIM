@@ -253,7 +253,7 @@ def _urn_of(object_id):
 
 
 def _start_translation(token, urn, force=False, root_filename=None,
-                       master_views=False):
+                       master_views=False, vistas_pdf=False):
     """Lanza la traduccion a SVF2 (2D y 3D).
 
     SIN forzar por defecto. Con `x-ads-force` cada peticion rehace el trabajo
@@ -287,6 +287,18 @@ def _start_translation(token, urn, force=False, root_filename=None,
     # eso significa.
     if master_views and root_filename and str(root_filename).lower().endswith('.rvt'):
         formato['advanced'] = {'generateMasterViews': True}
+
+    # LAS VISTAS 2D DE UN DWG, DIBUJADAS POR AUTOCAD (21-sep-2026). Sin esto,
+    # Autodesk traduce el DWG con su conversor antiguo, que lo redibuja con sus
+    # propias reglas: en las presentaciones salian capas que el cadista dejo
+    # apagadas. El dueno: «debemos respetar el CAD original; lo que se ve en CAD
+    # en mi PC, que se vea igual en la web». Con '2dviews': 'pdf' cada vista 2D
+    # --el espacio modelo y cada presentacion-- la dibuja el motor de AutoCAD,
+    # como al imprimir: capas, ventanas, capas inutilizadas por ventana, orden
+    # de dibujo. Es lo que hace ACC: medido en su visor con el mismo DWG, sus
+    # cuatro vistas 2D son PDF.
+    if vistas_pdf:
+        formato.setdefault('advanced', {})['2dviews'] = 'pdf'
 
     payload = {
         'input': {'urn': urn},
@@ -399,20 +411,25 @@ def _manifest(token, urn):
     return r.json(), None
 
 
-def _object_key_for(node):
+def _object_key_for(node, pdf=False):
     """Clave estable del objeto en APS para esta VERSION del archivo.
 
     Cambia si el dibujo pasa a llevar referencias: subir una ortofoto a la
     carpeta cambia la clave, luego cambia el URN, luego se retraduce. Es lo
     correcto — el dibujo completo NO es el mismo modelo que el dibujo suelto.
+
+    Con `pdf` --las vistas dibujadas por AutoCAD, ver `_start_translation`-- es
+    OTRO objeto y por tanto otro URN: la traduccion de siempre se sigue viendo
+    mientras se prepara la nueva, y ningun plano se queda sin poder abrirse.
     """
+    marca = '-pdf2d' if pdf else ''
     if node.get('refs'):
-        return 'docs-%s-pkg.zip' % (node['v_id'] or node['id'])
+        return 'docs-%s%s-pkg.zip' % (node['v_id'] or node['id'], marca)
     ext = os.path.splitext(node['name'])[1].lower()
-    return 'docs-%s%s' % (node['v_id'] or node['id'], ext)
+    return 'docs-%s%s%s' % (node['v_id'] or node['id'], marca, ext)
 
 
-def _urn_for(node, bucket):
+def _urn_for(node, bucket, pdf=False):
     """URN deducido de bucket + clave. Deterministico.
 
     Antes el URN se guardaba en la base y esa copia era la fuente de verdad;
@@ -420,7 +437,7 @@ def _urn_for(node, bucket):
     Autodesk ya lo hubiera traducido. Ahora se recalcula siempre y la fuente de
     verdad es el manifiesto de APS. La base solo cachea el estado.
     """
-    return _urn_of('urn:adsk.objects:os.object:%s/%s' % (bucket, _object_key_for(node)))
+    return _urn_of('urn:adsk.objects:os.object:%s/%s' % (bucket, _object_key_for(node, pdf=pdf)))
 
 
 # ── Persistencia: la traduccion se guarda en la VERSION, no en el nodo ──────
@@ -492,6 +509,50 @@ def _save_cad_meta(node, patch):
     return meta
 
 
+# ── LAS VISTAS DE AUTOCAD ('2dviews': 'pdf') ─────────────────────────────────
+
+def _admite_vistas_pdf(node):
+    """Solo los DWG: la opcion '2dviews' de Autodesk es para dibujos de AutoCAD."""
+    return str((node or {}).get('name') or '').lower().endswith('.dwg')
+
+
+def _save_cad_meta_pdf(node, patch):
+    """El estado de la traduccion con vistas de AutoCAD, en `cad.vistas_pdf`.
+
+    Aparte del de siempre (`cad.urn`, `cad.status`), que sigue siendo el de la
+    traduccion antigua: el lector anterior la usa, y es la que se enseña
+    mientras se prepara la nueva. Se acumula en el propio nodo para que los
+    avisos de un mismo trabajo no se pisen entre si.
+    """
+    cad = dict((node.get('meta') or {}).get('cad') or {})
+    rama = dict(cad.get('vistas_pdf') or {})
+    rama.update(patch)
+    meta = _save_cad_meta(node, {'vistas_pdf': rama})
+    cad['vistas_pdf'] = rama
+    node['meta'] = dict(node.get('meta') or {}, cad=meta if isinstance(meta, dict) else cad)
+    return rama
+
+
+def _copiar_en_oss(token, bucket, origen, destino):
+    """Copia un objeto dentro del almacen de Autodesk, sin volver a subirlo.
+
+    Pasar a las vistas de AutoCAD un DWG que ya estaba en Autodesk no exige
+    mover otra vez sus cientos de MB desde nuestro almacen: la copia la hace
+    Autodesk en su lado. Si no la acepta, se sube como siempre.
+    """
+    from urllib.parse import quote
+    try:
+        r = requests.put('%s/oss/v2/buckets/%s/objects/%s/copyto/%s'
+                         % (APS_BASE, bucket, quote(origen, safe=''), quote(destino, safe='')),
+                         headers=_headers(token), timeout=300)
+        if r.ok:
+            return True
+        print('[CAD pdf] Autodesk no hizo la copia (%s): se sube desde el almacen' % r.status_code)
+    except Exception as e:
+        print('[CAD pdf] la copia en Autodesk fallo: %s' % str(e)[:120])
+    return False
+
+
 def _build_package(node):
     """Arma el ZIP con el dibujo y sus referencias. Devuelve (fichero, tam, raiz).
 
@@ -558,17 +619,22 @@ _COLA_TRADUCCION = _ThreadPoolExecutor(max_workers=4,
                                        thread_name_prefix='cad-pretrad')
 
 
-def encolar_pretraduccion(node_id, forzar=False, master=False):
-    """Mete una pre-traduccion en la cola. Nunca lanza hilos sueltos."""
+def encolar_pretraduccion(node_id, forzar=False, master=False, vistas_pdf=False):
+    """Mete una pre-traduccion en la cola. Nunca lanza hilos sueltos.
+
+    `vistas_pdf`: si es un DWG, con sus vistas 2D dibujadas por AutoCAD (ver
+    `_start_translation`). Lo piden la subida y el lector nuevo.
+    """
     try:
-        _COLA_TRADUCCION.submit(pretraducir_en_fondo, str(node_id), forzar, master)
+        extra = (True,) if vistas_pdf else ()
+        _COLA_TRADUCCION.submit(pretraducir_en_fondo, str(node_id), forzar, master, *extra)
         return True
     except Exception as e:
         print('[CAD pre] no se pudo encolar %s: %s' % (node_id, str(e)[:120]))
         return False
 
 
-def pretraducir_en_fondo(node_id, forzar=False, master=False):
+def pretraducir_en_fondo(node_id, forzar=False, master=False, vistas_pdf=False):
     """Traduce un CAD sin que nadie espere: el camino de ACC.
 
     Mismo flujo idempotente que el endpoint /translate pero fuera de una
@@ -581,20 +647,30 @@ def pretraducir_en_fondo(node_id, forzar=False, master=False):
     porque /status cuenta la verdad y reintentar siempre es posible. Refleja
     rama a rama el endpoint — incluido que el fichero suelto recien subido va
     SIN root_filename (pasarlo hizo que Autodesk tratara un RVT como un ZIP).
+
+    Con `vistas_pdf` y un DWG, prepara la traduccion con las vistas dibujadas
+    por AutoCAD: otro objeto (ver `_object_key_for`), su estado en
+    `cad.vistas_pdf`, y si el dibujo ya estaba en Autodesk se copia alli mismo.
     """
+    clave = '%s:pdf' % node_id if vistas_pdf else node_id
     with _CANDADO_PRETRADUCCION:
-        if node_id in _PRETRADUCCIONES_EN_CURSO:
+        if clave in _PRETRADUCCIONES_EN_CURSO:
             return
-        _PRETRADUCCIONES_EN_CURSO.add(node_id)
+        _PRETRADUCCIONES_EN_CURSO.add(clave)
     try:
         node = _load_node(node_id)
         if not node or not is_cad_file(node['name']) or not node['gcs_urn']:
             return
+        pdf = bool(vistas_pdf) and _admite_vistas_pdf(node)
+
+        def guardar(patch):
+            return _save_cad_meta_pdf(node, patch) if pdf else _save_cad_meta(node, patch)
+        extra = {'vistas_pdf': True} if pdf else {}
         # SE ANOTA QUE EMPIEZA, para que la lista pueda decirlo. Hasta hoy el
         # primer rastro llegaba al TERMINAR de mover el fichero a Autodesk
         # (minutos con un plano grande), asi que durante ese rato la pantalla no
         # tenia nada que contar y parecia que la traduccion no habia arrancado.
-        _save_cad_meta(node, {'status': 'subiendo', 'started_at': time.time()})
+        guardar({'status': 'subiendo', 'started_at': time.time()})
         token, error = get_internal_token()
         if error or not token:
             print('[CAD pre] sin credenciales APS: %s' % error)
@@ -603,32 +679,31 @@ def pretraducir_en_fondo(node_id, forzar=False, master=False):
         if error:
             print('[CAD pre] bucket: %s' % error)
             return
-        urn = _urn_for(node, bucket)
+        urn = _urn_for(node, bucket, pdf=pdf)
 
         manifest, _err = _manifest(token, urn)
         if not forzar and manifest and manifest.get('status') in ('success', 'inprogress', 'pending'):
-            _save_cad_meta(node, {'urn': urn, 'status': 'success' if manifest.get('status') == 'success' else 'inprogress'})
+            guardar({'urn': urn, 'status': 'success' if manifest.get('status') == 'success' else 'inprogress'})
             return
 
-        object_key = _object_key_for(node)
+        object_key = _object_key_for(node, pdf=pdf)
         ya_subido = _esta_entero(token, bucket, object_key, node)
 
         if ya_subido and not node.get('refs'):
             ok, error = _start_translation(token, urn, force=forzar or master,
                                            root_filename=node.get('name'),
-                                           master_views=master)
+                                           master_views=master, **extra)
             if error:
                 print('[CAD pre] traduccion: %s' % error)
                 return
-            _save_cad_meta(node, {'urn': urn, 'status': 'inprogress'})
+            guardar({'urn': urn, 'status': 'inprogress'})
             print('[CAD pre] %s: ya estaba en Autodesk, traduccion lanzada' % node['name'])
             return
 
         # Lo que se cuenta aqui es el UNICO avance real de este tramo: no hay
         # manifiesto hasta que Autodesk acepta el fichero.
         def _avance(hechas, total):
-            _save_cad_meta(node, {'status': 'subiendo', 'bloques': hechas,
-                                  'bloques_total': total})
+            guardar({'status': 'subiendo', 'bloques': hechas, 'bloques_total': total})
 
         raiz = None
         if node.get('refs'):
@@ -645,6 +720,11 @@ def pretraducir_en_fondo(node_id, forzar=False, master=False):
             if error:
                 print('[CAD pre] subida: %s' % error)
                 return
+        elif pdf and _esta_entero(token, bucket, _object_key_for(node), node) \
+                and _copiar_en_oss(token, bucket, _object_key_for(node), object_key):
+            # El dibujo ya estaba en Autodesk (el de la traduccion de siempre):
+            # se copia alli mismo en vez de volver a subir sus cientos de MB.
+            object_id = 'urn:adsk.objects:os.object:%s/%s' % (bucket, object_key)
         else:
             tmp = tempfile.NamedTemporaryFile(delete=False, suffix='.cad')
             try:
@@ -670,10 +750,10 @@ def pretraducir_en_fondo(node_id, forzar=False, master=False):
                 return
 
         urn = _urn_of(object_id)
-        _save_cad_meta(node, {'urn': urn, 'status': 'inprogress', 'bloques': None,
-                              'bloques_total': None,
-                              'started_at': time.time(), 'object_key': object_key,
-                              'refs': [r['name'] for r in node.get('refs') or []], 'error': None})
+        guardar({'urn': urn, 'status': 'inprogress', 'bloques': None,
+                 'bloques_total': None,
+                 'started_at': time.time(), 'object_key': object_key,
+                 'refs': [r['name'] for r in node.get('refs') or []], 'error': None})
         # SE FUERZA SIEMPRE, porque acabamos de cambiar los bytes. La clave del
         # objeto es estable, asi que el URN de despues es el MISMO de antes: si
         # Autodesk ya tenia un resultado para ese URN --por ejemplo el `failed`
@@ -684,17 +764,17 @@ def pretraducir_en_fondo(node_id, forzar=False, master=False):
         # No hay riesgo del 409 que evita el `force` por defecto: aqui dentro
         # solo se entra tras subir, y con el candado de `_PRETRADUCCIONES_EN_CURSO`.
         _job, error = _start_translation(token, urn, force=True, root_filename=raiz,
-                                         master_views=master)
+                                         master_views=master, **extra)
         if error:
-            _save_cad_meta(node, {'status': 'failed', 'error': error})
+            guardar({'status': 'failed', 'error': error})
             print('[CAD pre] traduccion: %s' % error)
             return
-        print('[CAD pre] %s: subido y traduciendose' % node['name'])
+        print('[CAD pre] %s: subido y traduciendose%s' % (node['name'], ' (vistas de AutoCAD)' if pdf else ''))
     except Exception as e:
         print('[CAD pre] %s' % e)
     finally:
         with _CANDADO_PRETRADUCCION:
-            _PRETRADUCCIONES_EN_CURSO.discard(node_id)
+            _PRETRADUCCIONES_EN_CURSO.discard(clave)
 
 
 def _guardia_del_plano(node):
@@ -724,6 +804,97 @@ def _guardia_del_plano(node):
         # no se entrega.
         print('[CAD] permiso del plano sin resolver: %s' % e)
         return jsonify({'success': False, 'error': 'No se pudo verificar el acceso'}), 503
+
+
+def _traducir_con_vistas_autocad(node, forzar, master, verificar):
+    """El camino del lector nuevo para un DWG: sus vistas dibujadas por AutoCAD.
+
+    Nunca deja un plano sin abrir:
+      - si la traduccion nueva ya esta, se da esa;
+      - si no, se encola UNA vez y MIENTRAS TANTO se da la de siempre, si
+        existe, con `preparando_vistas` para que el lector lo diga;
+      - si no hay ninguna, se espera a la nueva como a cualquier traduccion.
+    Si la nueva FALLO, devuelve None y sigue el camino de siempre: mejor el
+    plano como hasta hoy que ningun plano. Solo un administrador con `force`
+    la vuelve a intentar.
+
+    Devuelve (cuerpo, codigo), o None.
+    """
+    cad = (node.get('meta') or {}).get('cad') or {}
+    rama = cad.get('vistas_pdf') or {}
+    if rama.get('status') in ('failed', 'timeout') and not forzar:
+        return None
+    urn_pdf = _urn_for(node, _bucket_key(), pdf=True)
+    if (not forzar and not master and not verificar and rama.get('status') == 'success'
+            and rama.get('urn') == urn_pdf):
+        return {'success': True, 'status': 'success', 'urn': urn_pdf, 'cached': True,
+                'origen': 'guardado', 'vistas': 'autocad'}, 200
+
+    token, error = get_internal_token()
+    if error or not token:
+        return {'success': False, 'error': 'Sin credenciales APS'}, 502
+    bucket, error = _ensure_bucket(token)
+    if error:
+        return {'success': False, 'error': error}, 502
+    urn_pdf = _urn_for(node, bucket, pdf=True)
+
+    en_curso = False
+    if not forzar:
+        manifest, _err = _manifest(token, urn_pdf)
+        estado = (manifest or {}).get('status')
+        if estado == 'success':
+            _save_cad_meta_pdf(node, {'urn': urn_pdf, 'status': 'success'})
+            return {'success': True, 'status': 'success', 'urn': urn_pdf, 'cached': True,
+                    'vistas': 'autocad'}, 200
+        if estado in ('inprogress', 'pending'):
+            en_curso = True
+        elif estado in ('failed', 'timeout'):
+            _save_cad_meta_pdf(node, {'urn': urn_pdf, 'status': estado,
+                                      'error': _first_error(manifest)})
+            print('[CAD pdf] %s: Autodesk no pudo con las vistas de AutoCAD; se sigue con la '
+                  'traduccion de siempre' % node.get('name'))
+            return None
+    if not en_curso:
+        encolar_pretraduccion(node['id'], forzar, master, vistas_pdf=True)
+        _save_cad_meta_pdf(node, {'urn': urn_pdf, 'status': 'inprogress',
+                                  'started_at': time.time()})
+
+    # Mientras tanto, la de siempre, si ya existe.
+    urn_antigua = _urn_for(node, bucket)
+    lista = cad.get('status') == 'success' and cad.get('urn') == urn_antigua
+    if not lista:
+        antigua, _err = _manifest(token, urn_antigua)
+        lista = bool(antigua and antigua.get('status') == 'success')
+    if lista:
+        return {'success': True, 'status': 'success', 'urn': urn_antigua, 'cached': True,
+                'origen': 'guardado', 'vistas': 'anteriores', 'preparando_vistas': True}, 200
+    return {'success': True, 'status': 'inprogress', 'urn': urn_pdf, 'vistas': 'autocad',
+            'progress': 'Preparando las vistas del dibujo…'}, 200
+
+
+def _estado_con_vistas_autocad(node):
+    """/status para la traduccion con vistas de AutoCAD de un DWG."""
+    rama = ((node.get('meta') or {}).get('cad') or {}).get('vistas_pdf') or {}
+    token, error = get_internal_token()
+    if error or not token:
+        return jsonify({'success': False, 'error': 'Sin credenciales APS'}), 502
+    urn = rama.get('urn') or _urn_for(node, _bucket_key(), pdf=True)
+    manifest, error = _manifest(token, urn)
+    if error:
+        return jsonify({'success': False, 'error': error}), 502
+    if manifest is None:
+        return jsonify({'success': True, 'status': 'inprogress', 'fase': 'subiendo',
+                        'progress': _progreso_de_subida(rama), 'urn': urn, 'vistas': 'autocad'})
+    status = manifest.get('status', 'inprogress')
+    if status in ('success', 'failed', 'timeout') and rama.get('status') != status:
+        _save_cad_meta_pdf(node, {'status': status, 'finished_at': time.time(),
+                                  'error': _first_error(manifest) if status != 'success' else None})
+    if status in ('failed', 'timeout'):
+        # No salio: el lector vuelve a pedir la traduccion de siempre.
+        return jsonify({'success': True, 'status': 'retry_legacy',
+                        'detalle': _first_error(manifest) or ''})
+    return jsonify({'success': True, 'status': status, 'progress': manifest.get('progress', ''),
+                    'urn': urn, 'vistas': 'autocad'})
 
 
 @docs_cad_bp.route('/api/docs/cad/translate', methods=['POST'])
@@ -760,6 +931,14 @@ def translate_cad():
     forzar = bool(data.get('force')) and es_admin
     # Peticion explicita de vista 3D completa (ver _start_translation).
     master = bool(data.get('vista_3d_completa')) and es_admin
+
+    # LAS VISTAS DE AUTOCAD, si las pide el lector y es un DWG (ver
+    # `_traducir_con_vistas_autocad`). Quien no las pide sigue exactamente como
+    # hasta hoy.
+    if data.get('vistas') == 'autocad' and _admite_vistas_pdf(node):
+        respuesta = _traducir_con_vistas_autocad(node, forzar, master, bool(data.get('verificar')))
+        if respuesta is not None:
+            return jsonify(respuesta[0]), respuesta[1]
 
     # YA TRADUCIDO: SE CONTESTA CON LO GUARDADO, SIN IR A AUTODESK.
     #
@@ -901,6 +1080,12 @@ def cad_de_enlace_publico(share_id):
     if error or not token:
         return jsonify({'success': True, 'es_cad': True, 'listo': False})
     cad = node['meta'].get('cad') or {}
+    rama = cad.get('vistas_pdf') or {}
+    if _admite_vistas_pdf(node) and rama.get('status') == 'success' and rama.get('urn'):
+        manifest, error = _manifest(token, rama['urn'])
+        if manifest and manifest.get('status') == 'success':
+            return jsonify({'success': True, 'es_cad': True, 'listo': True,
+                            'urn': rama['urn'], 'nombre': nombre})
     urn = cad.get('urn') or _urn_for(node, _bucket_key())
     manifest, error = _manifest(token, urn)
     listo = bool(manifest and manifest.get('status') == 'success')
@@ -922,6 +1107,8 @@ def cad_status():
     negativa = _guardia_del_plano(node)
     if negativa:
         return negativa
+    if request.args.get('vistas') == 'autocad' and _admite_vistas_pdf(node):
+        return _estado_con_vistas_autocad(node)
 
     cad = node['meta'].get('cad') or {}
 
@@ -1031,6 +1218,11 @@ def cad_estados():
             continue
         cad = ((meta or {}).get('cad') or {})
         estado = cad.get('status') or 'sin_preparar'
+        # Un DWG con vistas de AutoCAD: manda su estado, salvo que la
+        # traduccion de siempre ya este lista (se abre con ella mientras tanto).
+        rama = cad.get('vistas_pdf') or {}
+        if rama.get('status') and estado != 'success':
+            cad, estado = rama, rama['status']
         if estado in ('subiendo', 'inprogress'):
             empezo = cad.get('started_at')
             try:

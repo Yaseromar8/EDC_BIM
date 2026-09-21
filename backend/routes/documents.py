@@ -1733,7 +1733,8 @@ def confirm_upload():
         try:
             from routes.docs_cad import is_cad_file, encolar_pretraduccion
             if is_cad_file(filename):
-                encolar_pretraduccion(file_id)
+                # Un DWG, con sus vistas 2D dibujadas por AutoCAD (docs_cad).
+                encolar_pretraduccion(file_id, vistas_pdf=filename.lower().endswith('.dwg'))
         except Exception as te:
             print(f"[upload-confirm] cad bg: {te}")
 

@@ -337,7 +337,8 @@ def complete_upload():
         try:
             from routes.docs_cad import is_cad_file, encolar_pretraduccion
             if is_cad_file(filename):
-                encolar_pretraduccion(node_id)
+                # Un DWG, con sus vistas 2D dibujadas por AutoCAD (docs_cad).
+                encolar_pretraduccion(node_id, vistas_pdf=filename.lower().endswith('.dwg'))
             # El PDF deja lista su miniatura (primera pagina) para la tira de
             # documentos del lector: generarla al abrirla, 45 a la vez, era
             # justo lo que las dejaba en blanco. Va por el mismo ejecutor
