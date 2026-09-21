@@ -7,6 +7,24 @@ import { apiFetch } from '../utils/apiFetch';
 
 const BACKEND_URL = (typeof window !== 'undefined' && window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()) ? 'https://visor-ecd-backend.onrender.com' : (import.meta.env.VITE_BACKEND_URL || (typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3000' : (typeof window !== 'undefined' && window.location.hostname.match(/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/) ? `http://${window.location.hostname}:3000` : 'https://visor-ecd-backend.onrender.com')));
 
+// Un eje con sus estaciones: el mismo icono para todos los frentes (gris medio,
+// maqueta v4, 21-sep-2026). El nombre ya los distingue; el emoji de cada frente
+// ya no se muestra ni se pide.
+const ICONO_FRENTE = (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M3 17c3-1 4-8 9-8s6 5 9 4" />
+        <path d="M7 11.5v3M12 7.5v3M17 10.5v3" />
+    </svg>
+);
+
+// Iniciales del avatar, como en Docs (getInitials): antes decía «VE» para todos.
+function inicialesDe(user) {
+    const nombre = String(user?.name || '').trim();
+    if (nombre) return nombre.split(' ').filter(w => w).map(w => w[0]).join('').toUpperCase().slice(0, 2);
+    const correo = String(user?.email || '').trim();
+    return correo ? correo[0].toUpperCase() : 'U';
+}
+
 // ─── LandingPage (ACC-Style Hub + Project Selector) ─────────────────────────
 /*
   Replica el flujo de Autodesk ACC:
@@ -47,7 +65,9 @@ const LandingPage = ({ onSelectProject, user }) => {
     const [showNewFrente, setShowNewFrente] = useState(false);
     const [newFrenteName, setNewFrenteName] = useState('');
     const [newFrenteDesc, setNewFrenteDesc] = useState('');
-    const [newFrenteIcon, setNewFrenteIcon] = useState('⚠️');
+    // El icono ya no se elige (no se muestra en ningún sitio): se guarda el de
+    // siempre para no cambiar lo que recibe /api/frentes.
+    const newFrenteIcon = '📌';
     const [newFrenteType, setNewFrenteType] = useState('');
     // Tipos de componente de obra lineal (agrupan el navegador de frentes)
     const FRENTE_TYPES = ['Aportante', 'Canal', 'Disipador', 'Estructura', 'Vial', 'Otro'];
@@ -191,6 +211,49 @@ const LandingPage = ({ onSelectProject, user }) => {
     // (Se retiró typeColor: el tipo de proyecto ya no se pinta de colores; es
     //  texto como el resto de los metadatos.)
 
+    // ── Cabecera ──────────────────────────────────────────────────────────────
+    // La misma en la lista de proyectos y en la de frentes, que antes no tenía
+    // ninguna. En los frentes, «Proyectos» vuelve a la lista y no hay buscador.
+    const cabecera = (enFrentes) => (
+        <header className="acc-topbar">
+            <div className="acc-topbar-left">
+                {/* MARCA (logo oficial blanco, cabecera oscura) + PRODUCTO.
+                    El proyecto se elige abajo — no se mezcla aquí. */}
+                <div className="acc-logo">
+                    <img src="/brand/ALEPHIA_Logo_Horizontal_White.svg" alt="ALEPHIA"
+                         style={{ height: 22, width: 'auto', display: 'block' }} />
+                    <span style={{ fontSize: 13, fontWeight: 600, color: 'rgba(255,255,255,0.85)', letterSpacing: '0.4px', paddingLeft: 10, borderLeft: '1px solid rgba(255,255,255,0.25)' }}>View</span>
+                </div>
+                <nav className="acc-topnav">
+                    {/* "Inicio" = volver al Hub (elegir producto). El atajo
+                        lateral a Documentación queda apagado: se llega a
+                        Docs por el Hub (ver utils/hubLink.js). */}
+                    <span className="acc-topnav-item" onClick={goToHub} title="Volver al inicio (elegir producto)">Inicio</span>
+                    <span className="acc-topnav-item active"
+                          onClick={enFrentes ? () => setSelectedBaseProject(null) : undefined}>Proyectos</span>
+                    {VISOR_DOCS_SHORTCUT && (
+                        <span className="acc-topnav-item" onClick={() => window.open(DOCS_URL, '_blank')}>Documentación</span>
+                    )}
+                </nav>
+            </div>
+            <div className="acc-topbar-right">
+                {!enFrentes && (
+                    <div className="acc-search-bar">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+                        </svg>
+                        <input
+                            placeholder="Buscar proyecto..."
+                            value={searchQuery}
+                            onChange={e => setSearchQuery(e.target.value)}
+                        />
+                    </div>
+                )}
+                <div className="acc-avatar">{inicialesDe(user)}</div>
+            </div>
+        </header>
+    );
+
     if (selectedBaseProject) {
         // Navegador agrupado por TIPO de componente (Aportantes/Canales/...),
         // con "General" (sin tipo) al final. Escala igual con 3 o 30 frentes.
@@ -207,6 +270,7 @@ const LandingPage = ({ onSelectProject, user }) => {
 
         return (
             <div className="acc-home-wrapper frente-selection">
+                {cabecera(true)}
                 <div className="frente-container">
                     <button className="back-to-projects" onClick={() => setSelectedBaseProject(null)}>
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -225,30 +289,28 @@ const LandingPage = ({ onSelectProject, user }) => {
                             un proyecto nuevo nace vacío, como en ACC). Los 3 frentes
                             históricos se sembraron como datos de los proyectos existentes. */}
                         {customFrentes.length === 0 && !showNewFrente && (
-                            <div style={{ gridColumn: '1 / -1', textAlign: 'center', color: '#8a919c', fontSize: 14, padding: '10px 0 2px' }}>
+                            <div className="frente-vacio">
                                 Este proyecto aún no tiene frentes. Crea el primero para empezar.
                             </div>
                         )}
                         {frenteGroups.map(([type, list]) => (
                             <React.Fragment key={type}>
                                 {(frenteGroups.length > 1 || type !== 'General') && (
-                                    <div style={{ gridColumn: '1 / -1', display: 'flex', alignItems: 'center', gap: 10, marginTop: 6 }}>
-                                        <span style={{ fontSize: 11.5, fontWeight: 800, letterSpacing: 1.2, color: '#7e9bbd', textTransform: 'uppercase' }}>
-                                            {type} ({list.length})
-                                        </span>
-                                        <span style={{ flex: 1, height: 1, background: 'rgba(255,255,255,0.08)' }} />
+                                    <div className="frente-grupo">
+                                        <span>{type} ({list.length})</span>
+                                        <span className="frente-grupo-linea" />
                                     </div>
                                 )}
                                 {list.map(f => (
                             <div key={f.frontId} className="frente-card" style={{ position: 'relative' }} onClick={() => handleFrontSelect(f.frontId, f.name)}>
-                                <div className="frente-card-icon">{f.icon || '·'}</div>
+                                <div className="frente-card-icon">{ICONO_FRENTE}</div>
                                 <div className="frente-card-content">
                                     <h3>{f.name}</h3>
                                     {/* Lo único que se muestra bajo el nombre es el
                                         estado de la extracción Civil: es dato, no adorno.
                                         La descripción quedó fuera de la ficha. */}
                                     {f.civil && (f.civil.ejes > 0 || f.civil.estaciones > 0) ? (
-                                        <p style={{ color: '#4ade80' }}>
+                                        <p className="frente-card-civil">
                                             {f.civil.ejes} {f.civil.ejes === 1 ? 'eje' : 'ejes'} · {f.civil.estaciones} est
                                         </p>
                                     ) : (
@@ -278,57 +340,48 @@ const LandingPage = ({ onSelectProject, user }) => {
 
                         {/* Crear frente nuevo */}
                         {showNewFrente ? (
-                            <div className="frente-card" style={{ cursor: 'default', flexDirection: 'column', alignItems: 'stretch', gap: 10 }} onClick={(e) => e.stopPropagation()}>
-                                <div style={{ display: 'flex', gap: 10 }}>
-                                    <input
-                                        value={newFrenteIcon}
-                                        onChange={e => setNewFrenteIcon(e.target.value)}
-                                        maxLength={4}
-                                        title="Ícono (emoji)"
-                                        style={{ width: 52, textAlign: 'center', fontSize: 20, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.14)', borderRadius: 8, color: '#fff', padding: '8px 4px' }}
-                                    />
-                                    <input
-                                        autoFocus
-                                        value={newFrenteName}
-                                        onChange={e => setNewFrenteName(e.target.value)}
-                                        onKeyDown={e => { if (e.key === 'Enter') handleCreateFrente(); }}
-                                        placeholder="Nombre del frente (ej. Interferencias)"
-                                        style={{ flex: 1, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.14)', borderRadius: 8, color: '#fff', padding: '8px 12px', fontSize: 14 }}
-                                    />
-                                </div>
+                            <div className="frente-card frente-form" onClick={(e) => e.stopPropagation()}>
+                                <input
+                                    className="frente-campo"
+                                    autoFocus
+                                    value={newFrenteName}
+                                    onChange={e => setNewFrenteName(e.target.value)}
+                                    onKeyDown={e => { if (e.key === 'Enter') handleCreateFrente(); }}
+                                    placeholder="Nombre del frente (ej. Interferencias)"
+                                />
                                 {/* Tipo de componente: agrupa el navegador (Aportantes/Canales/...) */}
                                 <select
+                                    className={`frente-campo${newFrenteType ? '' : ' vacio'}`}
                                     value={newFrenteType}
                                     onChange={e => setNewFrenteType(e.target.value)}
-                                    style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.14)', borderRadius: 8, color: newFrenteType ? '#fff' : '#8a919c', padding: '8px 12px', fontSize: 13 }}
                                 >
-                                    <option value="" style={{ color: '#111' }}>Tipo de componente (opcional)</option>
-                                    {FRENTE_TYPES.map(t => <option key={t} value={t} style={{ color: '#111' }}>{t}</option>)}
+                                    <option value="">Tipo de componente (opcional)</option>
+                                    {FRENTE_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
                                 </select>
                                 <input
+                                    className="frente-campo"
                                     value={newFrenteDesc}
                                     onChange={e => setNewFrenteDesc(e.target.value)}
                                     onKeyDown={e => { if (e.key === 'Enter') handleCreateFrente(); }}
                                     placeholder="Descripción (ej. Modelo contractual con interferencias de campo)"
-                                    style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.14)', borderRadius: 8, color: '#ccc', padding: '8px 12px', fontSize: 13 }}
                                 />
-                                {frenteError && <span style={{ color: '#ef4444', fontSize: 12 }}>{frenteError}</span>}
+                                {frenteError && <span className="frente-error">{frenteError}</span>}
                                 <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-                                    <button onClick={() => { setShowNewFrente(false); setFrenteError(''); }}
-                                        style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.18)', color: '#aab', borderRadius: 7, padding: '7px 14px', cursor: 'pointer', fontSize: 13 }}>
+                                    <button className="acc-btn-ghost" onClick={() => { setShowNewFrente(false); setFrenteError(''); }}>
                                         Cancelar
                                     </button>
-                                    <button onClick={handleCreateFrente} disabled={!newFrenteName.trim() || savingFrente}
-                                        style={{ background: '#5f7fa3', border: 'none', color: '#fff', borderRadius: 7, padding: '7px 16px', cursor: 'pointer', fontSize: 13, fontWeight: 700, opacity: (!newFrenteName.trim() || savingFrente) ? 0.5 : 1 }}>
+                                    <button className="acc-btn-primary" onClick={handleCreateFrente} disabled={!newFrenteName.trim() || savingFrente}>
                                         {savingFrente ? 'Creando…' : 'Crear frente'}
                                     </button>
                                 </div>
                             </div>
                         ) : (
-                            <div className="frente-card" style={{ borderStyle: 'dashed' }} onClick={() => setShowNewFrente(true)}>
-                                <div className="frente-card-icon">+</div>
+                            <div className="frente-card frente-card-nuevo" onClick={() => setShowNewFrente(true)}>
+                                <div className="frente-card-icon">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+                                </div>
                                 <div className="frente-card-content">
-                                    <h3 style={{ color: '#98a1ad', fontWeight: 500 }}>Crear frente</h3>
+                                    <h3>Crear frente</h3>
                                 </div>
                             </div>
                         )}
@@ -346,41 +399,7 @@ const LandingPage = ({ onSelectProject, user }) => {
 
     return (
         <div className="acc-home-wrapper">
-            {/* ── Top Bar ──────────────────────────────────────────────────── */}
-            <header className="acc-topbar">
-                <div className="acc-topbar-left">
-                    {/* MARCA (logo oficial blanco, cabecera oscura) + PRODUCTO.
-                        El proyecto se elige abajo — no se mezcla aquí. */}
-                    <div className="acc-logo">
-                        <img src="/brand/ALEPHIA_Logo_Horizontal_White.svg" alt="ALEPHIA"
-                             style={{ height: 26, width: 'auto', display: 'block' }} />
-                        <span style={{ fontSize: 13, fontWeight: 600, color: 'rgba(255,255,255,0.72)', letterSpacing: '0.4px', paddingLeft: 10, borderLeft: '1px solid rgba(255,255,255,0.25)' }}>View</span>
-                    </div>
-                    <nav className="acc-topnav">
-                        {/* "Inicio" = volver al Hub (elegir producto). El atajo
-                            lateral a Documentación queda apagado: se llega a
-                            Docs por el Hub (ver utils/hubLink.js). */}
-                        <span className="acc-topnav-item" onClick={goToHub} title="Volver al inicio (elegir producto)">Inicio</span>
-                        <span className="acc-topnav-item active">Proyectos</span>
-                        {VISOR_DOCS_SHORTCUT && (
-                            <span className="acc-topnav-item" onClick={() => window.open(DOCS_URL, '_blank')}>Documentación</span>
-                        )}
-                    </nav>
-                </div>
-                <div className="acc-topbar-right">
-                    <div className="acc-search-bar">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
-                        </svg>
-                        <input
-                            placeholder="Buscar proyecto..."
-                            value={searchQuery}
-                            onChange={e => setSearchQuery(e.target.value)}
-                        />
-                    </div>
-                    <div className="acc-avatar">VE</div>
-                </div>
-            </header>
+            {cabecera(false)}
 
             <div className="acc-layout">
                 {/* ── Sidebar de Hubs ──────────────────────────────────────── */}
@@ -425,7 +444,7 @@ const LandingPage = ({ onSelectProject, user }) => {
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                             <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
                         </svg>
-                        Nuevo Portafolio
+                        Nuevo portafolio
                     </button>
                     )}
                 </aside>
@@ -451,7 +470,7 @@ const LandingPage = ({ onSelectProject, user }) => {
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                                 <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
                             </svg>
-                            Nuevo Proyecto
+                            Nuevo proyecto
                         </button>
                         )}
                     </div>

@@ -314,11 +314,18 @@ def asegurar_columnas(cursor):
 def exigido_para(rol):
     """¿A quien se le exige?
 
-    Por defecto, a quien puede destruir el expediente. Se puede endurecer a todos
-    con EXIGIR_2FA=todos, pero NO se puede aflojar por debajo de admin: la cuenta
-    que archiva obras es exactamente la que motivo este hallazgo.
+    A nadie por defecto: el segundo factor es OPCIONAL y cada cuenta decide si lo
+    activa, como en Autodesk (decision del propietario, 10 y 21-sep-2026). Hasta
+    entonces se exigia siempre al admin, sin forma de aflojarlo.
+
+    La entidad que lo quiera obligatorio lo pide con EXIGIR_2FA: `admin` para
+    quien puede destruir el expediente, `todos` para cualquiera. Solo esos dos
+    valores lo encienden. EXIGIR_2FA_ESTRICTO, ademas, cierra la puerta a quien se
+    le exige y no lo tiene puesto; sin EXIGIR_2FA no deja fuera a nadie.
     """
-    alcance = os.getenv('EXIGIR_2FA', 'admin').strip().lower()
+    alcance = os.getenv('EXIGIR_2FA', '').strip().lower()
     if alcance == 'todos':
         return True
-    return rol == 'admin'
+    if alcance == 'admin':
+        return rol == 'admin'
+    return False

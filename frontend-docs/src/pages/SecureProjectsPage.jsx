@@ -12,6 +12,7 @@ import FichaDePersona from '../components/FichaDePersona';
 import PerfilesDeAcceso from '../components/PerfilesDeAcceso';
 import FacultadesDeEntidad from '../components/FacultadesDeEntidad';
 import PlantillasDeObra from '../components/PlantillasDeObra';
+import './entradaGris.css';
 
 // ─── USERS TAB ───
 function UsersTab() {
@@ -592,7 +593,9 @@ export default function SecureProjectsPage({ user, onSelectProject, onLogout, on
   const filtered = projects.filter(p => p.name.toLowerCase().includes(search.toLowerCase()) || (p.number || '').toLowerCase().includes(search.toLowerCase()));
 
   return (
-    <div className="app-shell">
+    // `entrada-gris`: la paleta gris medio del inicio (entradaGris.css), solo en
+    // esta pantalla y en la portada.
+    <div className="app-shell entrada-gris">
       <header className="top-header">
         <div className="header-left">
           {/* El logo regresa al Hub (única puerta entre productos — sin puentes
@@ -616,9 +619,9 @@ export default function SecureProjectsPage({ user, onSelectProject, onLogout, on
           </div>
         </div>
       </header>
-      <div style={{ flex: 1, overflow: 'auto', padding: '32px 48px', background: '#fafafa' }}>
-        <h1 style={{ fontSize: 22, fontWeight: 600, marginBottom: 4, color: '#1e1e1e' }}>Le damos la bienvenida, {user.name.split(' ')[0]}</h1>
-        <p style={{ color: '#999', marginBottom: 24, fontSize: 13 }}>¿Qué desea hacer hoy?</p>
+      <div style={{ flex: 1, overflow: 'auto', padding: '32px 48px', background: 'var(--eg-fondo)' }}>
+        <h1 style={{ fontSize: 26, fontWeight: 400, letterSpacing: '-0.01em', marginBottom: 6, color: 'var(--eg-texto)' }}>Le damos la bienvenida, {user.name.split(' ')[0]}</h1>
+        <p style={{ color: 'var(--eg-texto-3)', marginBottom: 22, fontSize: 15 }}>¿Qué desea hacer hoy?</p>
         <div className="tabs">
           <span className={`tab ${activeTab === 'projects' ? 'active' : ''}`} onClick={() => setActiveTab('projects')}>Proyectos</span>
           {isAdmin && <span className={`tab ${activeTab === 'users' ? 'active' : ''}`} onClick={() => setActiveTab('users')}>Usuarios</span>}
@@ -630,11 +633,14 @@ export default function SecureProjectsPage({ user, onSelectProject, onLogout, on
             <div style={{ display: 'flex', alignItems: 'center', marginBottom: 16, gap: 12 }}>
               {isAdmin && (<button className="btn btn-create" onClick={() => setShowCreate(true)}>+ Crear proyecto</button>)}
               <div style={{ flex: 1 }} />
-              <input type="text" placeholder="Buscar proyectos..." value={search} onChange={e => setSearch(e.target.value)} style={{ width: 280, padding: '7px 12px', background: '#fff', border: '1px solid #ddd', borderRadius: 4, fontSize: 13, outline: 'none' }} />
+              <label className="eg-buscar">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
+                <input type="text" placeholder="Buscar proyectos..." aria-label="Buscar proyectos" value={search} onChange={e => setSearch(e.target.value)} />
+              </label>
             </div>
             {loading ? <div className="loading"><div className="spinner" /><span>Cargando proyectos...</span></div> :
               falloDeCarga ? (
-                <div style={{ maxWidth: 460, margin: '48px auto', background: '#fff', padding: 28,
+                <div style={{ maxWidth: 460, margin: '48px auto', background: 'var(--eg-sup)', padding: 28,
                               borderRadius: 8, border: '1px solid var(--border-danger, #eec6c3)',
                               textAlign: 'center' }} role="alert">
                   <h3 style={{ margin: '0 0 6px', fontSize: 16 }}>
@@ -658,10 +664,10 @@ export default function SecureProjectsPage({ user, onSelectProject, onLogout, on
               ) :
               filtered.length === 0 ? (
                 isAdmin ? (
-                  <div className="empty-state"><span className="empty-icon">🏗️</span><p>No hay proyectos. Haz clic en "+ Crear proyecto".</p></div>
+                  <div className="empty-state"><span className="empty-icon"><svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2" /><line x1="3" y1="10" x2="21" y2="10" /><line x1="9" y1="10" x2="9" y2="20" /></svg></span><p>No hay proyectos. Haz clic en "+ Crear proyecto".</p></div>
                 ) : (
-                  <div style={{ maxWidth: 400, margin: '40px auto', background: '#fff', padding: 32, borderRadius: 8, border: '1px solid #e0e0e0', textAlign: 'center', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
-                    <div style={{ fontSize: 40, marginBottom: 16 }}>🤝</div>
+                  <div style={{ maxWidth: 400, margin: '40px auto', background: 'var(--eg-sup)', padding: 32, borderRadius: 4, border: '1px solid var(--eg-linea)', textAlign: 'center' }}>
+                    <div style={{ marginBottom: 16, color: 'var(--eg-texto-3)' }}><svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" /><path d="M10 17l5-5-5-5" /><path d="M15 12H3" /></svg></div>
                     <h3 style={{ marginBottom: 8, fontSize: 18 }}>Únete a tu primer proyecto</h3>
                     <p style={{ color: '#777', fontSize: 13, marginBottom: 24, lineHeight: 1.5 }}>Ingresa el código de invitación de 6 caracteres proporcionado por el administrador para acceder.</p>
                     
@@ -682,23 +688,23 @@ export default function SecureProjectsPage({ user, onSelectProject, onLogout, on
                   </div>
                 )
               ) : (
-                <table className="data-table" style={{ background: '#fff', borderRadius: 6, overflow: 'hidden' }}>
-                  <thead><tr><th style={{ width: 140 }}>Municipalidad</th><th>Nombre</th><th style={{ width: 100 }}>Número</th><th style={{ width: 140 }}>Acceso por defecto</th><th style={{ width: 150 }}>Cuenta</th>{isAdmin && <th style={{ width: 100 }}>Cód. Acceso</th>}<th style={{ width: 120 }}>Creado el</th>{isAdmin && <th style={{ width: 120 }}>Gestión</th>}</tr></thead>
+                <table className="data-table eg-tabla">
+                  <thead><tr><th style={{ width: 140 }}>Municipalidad</th><th>Nombre</th><th style={{ width: 100 }}>Número</th><th style={{ width: 150 }}>Acceso por defecto</th><th style={{ width: 150 }}>Cuenta</th>{isAdmin && <th style={{ width: 112 }}>Cód. Acceso</th>}<th style={{ width: 120 }}>Creado el</th>{isAdmin && <th style={{ width: 120 }}>Gestión</th>}</tr></thead>
                   <tbody>
                     {filtered.map(p => (
                       <tr key={p.id} onClick={() => onSelectProject(p)}>
-                        <td style={{ fontSize: 12, color: 'var(--accent)', fontWeight: 600 }}>{p.hub_name || 'Gral'}</td>
+                        <td style={{ fontSize: 13, fontWeight: 500 }}>{p.hub_name || 'Gral'}</td>
                         <td><div className="project-name-main">{p.name}</div>{p.location && <div className="project-name-sub">{p.location}</div>}</td>
                         <td>{p.number || '—'}</td>
-                        <td><span className="access-badge access-badge-docs">📁 Docs</span></td>
-                        <td style={{ fontSize: 12 }}>{p.account}</td>
+                        <td><span className="access-badge access-badge-docs"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /></svg>Docs</span></td>
+                        <td style={{ fontSize: 13 }}>{p.account}</td>
                         {isAdmin && (
-                          <td style={{ fontSize: 13, fontFamily: 'monospace', fontWeight: 'bold' }}>
+                          <td style={{ fontSize: 12.5, fontFamily: 'ui-monospace, SFMono-Regular, Consolas, monospace', fontWeight: 500, letterSpacing: '0.06em' }}>
                             {p.invite_code || '---'}
                           </td>
                         )}
-                        <td style={{ fontSize: 12 }}>{formatDate(p.created_at)}</td>
-                        {isAdmin && (<td><button className="btn btn-secondary" style={{ padding: '4px 10px', fontSize: 11, display: 'inline-flex', alignItems: 'center', gap: 5 }} title="Elegir qué usuarios acceden a este proyecto" onClick={(e) => openAccess(p, e)}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /></svg>Accesos</button></td>)}
+                        <td style={{ fontSize: 13 }}>{formatDate(p.created_at)}</td>
+                        {isAdmin && (<td><button className="btn btn-secondary" style={{ padding: '0 10px', fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 6 }} title="Elegir qué usuarios acceden a este proyecto" onClick={(e) => openAccess(p, e)}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /></svg>Accesos</button></td>)}
                       </tr>
                     ))}
                   </tbody>

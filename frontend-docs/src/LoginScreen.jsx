@@ -52,6 +52,7 @@ const T = {
         password: 'Contraseña',
         ver: 'Mostrar contraseña',
         ocultar: 'Ocultar contraseña',
+        recordar: 'Mantener la sesión 30 días en este equipo',
         entrar: 'Ingresar',
         entrando: 'Verificando…',
         despertando: 'El servidor estaba en reposo y está arrancando. Puede tardar hasta un minuto.',
@@ -108,6 +109,7 @@ const T = {
         password: 'Password',
         ver: 'Show password',
         ocultar: 'Hide password',
+        recordar: 'Keep me signed in on this device for 30 days',
         entrar: 'Sign in',
         entrando: 'Checking…',
         despertando: 'The server was asleep and is starting up. This can take up to a minute.',
@@ -197,6 +199,9 @@ const LoginScreen = ({ onLogin }) => {
     // y para poder entrar solo tras restablecer la contraseña.
     const [correo, setCorreo] = useState(() => correoDeInvitacion(invitacion || tokenReset));
     const [clave, setClave] = useState('');
+    // Sin marcar, la sesión dura los 7 días de siempre; marcada, 30. Lo decide
+    // el servidor (`recordar` en /api/auth/login), no el navegador.
+    const [recordar, setRecordar] = useState(false);
     const [verClave, setVerClave] = useState(false);
     const [nombre, setNombre] = useState('');
     const [clave2, setClave2] = useState('');
@@ -261,7 +266,7 @@ const LoginScreen = ({ onLogin }) => {
     const acceder = async (e) => {
         e.preventDefault();
         if (enviando || !correo.trim() || !clave) return;
-        const { ok, estado, datos } = await pedir('/api/auth/login', { email: correo.trim(), password: clave });
+        const { ok, estado, datos } = await pedir('/api/auth/login', { email: correo.trim(), password: clave, recordar });
         if (ok && datos.requiere_2fa) {
             // NO se entra: la contraseña solo ha ganado el derecho a que le
             // pidan el código. Se limpia la clave para no dejarla en memoria
@@ -337,7 +342,7 @@ const LoginScreen = ({ onLogin }) => {
         });
         if (ok) {
             // La contraseña ya cambió; se entra con ella para no pedirla dos veces.
-            const acceso = await pedir('/api/auth/login', { email: correo.trim(), password: clave });
+            const acceso = await pedir('/api/auth/login', { email: correo.trim(), password: clave, recordar });
             if (acceso.ok) { setEntrado(true); onLogin(acceso.datos); }
             else { window.history.replaceState({}, '', window.location.pathname); setPidiendoEnlace(false); }
         } else {
@@ -501,6 +506,18 @@ const LoginScreen = ({ onLogin }) => {
                                 de sesion normal seria ruido -- la clave ya existe. */}
                             {pideRepetir && <p className="cta-pista">{t.clavePista}</p>}
                         </div>
+                        )}
+
+                        {/* Como en Autodesk: una casilla, no un plazo más largo para
+                            todos. Con segundo factor la elección viaja firmada en el
+                            desafío y la sesión nace al canjear el código. */}
+                        {!modo2fa && !modoRecuperar && !modoNuevaClave && !modoRegistro && (
+                            <label className="cta-recordar">
+                                <input type="checkbox" checked={recordar}
+                                    onChange={(e) => setRecordar(e.target.checked)}
+                                    disabled={enviando} />
+                                <span>{t.recordar}</span>
+                            </label>
                         )}
 
                         {pideRepetir && (

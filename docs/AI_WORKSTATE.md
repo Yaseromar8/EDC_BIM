@@ -816,6 +816,90 @@ NEXT EXACT ACTION:    `1befc04` (corrección) y `1bc97ae` (emparejar por documen
 DO NOT TOUCH:         los protegidos de siempre (incluido LOB4DWorkspace.jsx) y el WIP ajeno.
 COMMIT/HEAD REF:      `fix(compare): pause the main viewer for real, sync cameras only on change, and compare versions of documents linked in two projects`, sobre `f9345b4`.
 
+### Unidad ACCESO · 30 DÍAS EN DOCS Y SEGUNDO FACTOR OPCIONAL — CHECKPOINT AUTORIZADO, 21-sep
+
+El propietario (21-sep, repitiendo lo del 10-sep): «la verificación de dos pasos debe ser opcional, y cuando iniciemos
+sesión debemos poder marcar que queremos estar por 30 días».
+
+[WIP HANDOFF]
+TAREA:                casilla de 30 días en el acceso de Docs y segundo factor opcional.
+IMPLEMENTADO:
+- La casilla solo existía en el acceso del VISOR (`f24e8f4`, 10-sep). Docs (alephia.com.pe), por donde entra él, no la tenía:
+  - `frontend-docs/src/LoginScreen.jsx` y `LoginScreen.css`: «Mantener la sesión 30 días en este equipo», que manda `recordar`.
+  - El backend la admite desde `f24e8f4`: 7 días sin marcar, 30 marcada; con 2FA la elección viaja firmada en el desafío.
+- Los dos arreglos de sesión de `f24e8f4` tampoco llegaron a Docs. Se portan igual:
+  - `App_Refactor.jsx`: al arrancar, solo un 401 de `/api/auth/me` cierra la sesión; la red caída o un 5xx no.
+  - `utils/apiFetch.js`: solo cierran sesión los 401 con `NO_TOKEN`/`INVALID_TOKEN` o los de `/api/auth/me`.
+- `backend/segundo_factor.py` (`exigido_para`): el segundo factor es opcional salvo con `EXIGIR_2FA=admin|todos`.
+  - Antes se exigía siempre al admin, sin forma de aflojarlo.
+  - `EXIGIR_2FA_ESTRICTO` sin `EXIGIR_2FA` ya no deja fuera a nadie.
+- `docs/entidad/11-guia-despliegue-instancia.md`: filas de `EXIGIR_2FA` y `EXIGIR_2FA_ESTRICTO` al día.
+- Maqueta v2 del acceso con la casilla: `docs/ux/maquetas/pantallas_de_entrada_v2.html` (sin commitear).
+TESTS EJECUTADOS:
+- 2FA: 54 pasan, y 5 de ellas fallan con la regla anterior.
+- Suite backend: 2054 pasan sin `test_capacidades_con_puerta.py`, cuyo fallo conocido sigue (1 falla y 3 pasan).
+- ESLint: 0 → 0 en los tres ficheros del portal.
+- Docs local (5182) reconstruido: la casilla se ve y el cuerpo del login lleva `recordar`.
+PENDIENTE:
+1. Él entra en `http://localhost:5182` con la casilla marcada. Docs local habla con el backend de producción, que ya admite los 30 días.
+2. Commit y push autorizados en este chat. Manual Deploy del backend VA y del portal NO ejecutado ni autorizado en esta entrega.
+3. ANTES de quitarse su propio 2FA:
+   - que el backend nuevo esté desplegado;
+   - que en Render no exista `EXIGIR_2FA` ni `EXIGIR_2FA_ESTRICTO`. La guía 11 los recomendaba, y con el estricto encendido y el 2FA quitado el admin se queda fuera.
+DO NOT TOUCH:         no quitar ni cambiar el 2FA de ninguna cuenta; lo hace cada uno en «Mi cuenta».
+COMMIT/HEAD REF:      checkpoint conjunto con ENTRADA sobre `2635719`; resolver por `git log -1 -- backend/segundo_factor.py`. Sin cambios funcionales del agente que empaqueta; pruebas anteriores de Claude conservadas, no repetidas por instrucción del propietario.
+
+### Unidad ENTRADA · GRIS MEDIO EN EL INICIO, LOS PROYECTOS DE DOCS Y LA ENTRADA DE VIEW — CHECKPOINT AUTORIZADO, 21-sep
+
+El propietario pidió estas tres cosas:
+- «No tan blanco sino como escala de grises».
+- «Que sea como la maqueta y solo a esas pantallas».
+- «Con cuidado y sin romper nada».
+
+La maqueta es `docs/ux/maquetas/pantallas_de_entrada_v4.html`, en el tono gris medio, que es con el que abre. El acceso se queda como está.
+
+[WIP HANDOFF]
+TAREA:                aplicar el aspecto de la maqueta v4 (gris medio) a cuatro pantallas sin cambiar la lógica.
+IMPLEMENTADO:
+- Docs:
+  - `pages/entradaGris.css` (nuevo): la paleta y las reglas cuelgan de `.entrada-gris`, así que Archivos y el resto de Docs no cambian.
+  - `pages/HubPage.jsx`:
+    - cabecera gris carbón y fondo gris;
+    - fichas sólidas con borde fino;
+    - fuera la luz difusa y el efecto cristal.
+  - `components/MiTrabajo.jsx`: colores de la paleta (solo se usa en el inicio) y el contador en Navy.
+  - `pages/SecureProjectsPage.jsx`:
+    - cabecera, bienvenida, pestañas y buscador con icono;
+    - la tabla lleva la clase propia `eg-tabla`, sin tocar `.data-table` de Archivos;
+    - sin emojis: 📁, 🏗️ y 🤝 pasan a iconos de línea.
+- View:
+  - `components/LandingPage.css`: la paleta se redefine en `.acc-home-wrapper`, no en `:root`. Incluye las ventanas de nuevo proyecto y nuevo portafolio.
+  - `components/LandingPage.jsx`:
+    - la cabecera compartida también sale en la pantalla de frentes, que antes no tenía ninguna;
+    - el avatar muestra las iniciales (antes decía «VE» para todos);
+    - todos los frentes llevan el mismo icono de línea;
+    - al crear un frente ya no se pide emoji, porque no se mostraba en ningún sitio (se sigue guardando 📌);
+    - los estilos en línea pasan a clases.
+  - `App.css`: `.acc-main-title`, `.frente-header h1` y sus subtítulos salen de la regla global con `!important` que los ponía en mayúsculas. Solo los usa LandingPage.
+- Bancos incluidos en el checkpoint autorizado:
+  - `frontend-docs/probar-entrada.html` y `src/probar-entrada.jsx`: inicio y proyectos con datos de ejemplo;
+  - `frontend-react/probar-entrada.html` y `src/probar-entrada.jsx`: lista, frente y formulario.
+TESTS EJECUTADOS:
+- ESLint: 0 en todos los ficheros tocados, igual que en HEAD.
+- Tripwires: T7b baja de 4006 a 3969 literales. Ese fallo ya existía; el resto de comprobaciones siguen igual.
+- Capturas de los bancos: las cuatro pantallas salen como la maqueta.
+- Corregida la raya de la pestaña activa de View, que quedaba 8 px por debajo de la cabecera.
+- Reconstruidos Docs local (5182) y el banco del visor (5181).
+PENDIENTE:
+1. Él lo revisa con sus datos:
+   - Docs en `http://localhost:5182`;
+   - View en `http://localhost:5181`, entrando con su usuario (ahí ya está la casilla de 30 días).
+   - Ojo: la ficha View de Docs local apunta a 5173, el servidor de desarrollo, que está parado.
+2. Commit y push junto con ACCESO autorizados expresamente en este chat.
+   Manual Deploy del backend VA, portal y visor queda pendiente de autorización separada.
+DO NOT TOUCH:         el acceso (se queda como está), Archivos y el resto de pantallas.
+COMMIT/HEAD REF:      checkpoint conjunto con ACCESO sobre `2635719`; resolver por `git log -1 -- frontend-docs/src/pages/entradaGris.css`. Sólo estos dos bloques del handoff entran al commit; WIP de 4D/perfiles/reextracción/ViewerFacade, migración32 y demás notas ajenas permanecen fuera. Empaquetado sin auditoría funcional ni repetición de pruebas por instrucción del propietario.
+
 ### Unidad ARCHIVOS · LECTOR · APERTURA SIN HOJA EN BLANCO — COMMIT Y PUSH AUTORIZADOS («si», 18-sep); FALTA DESPLEGAR EL PORTAL
 
 Tras desplegar P1, el propietario: «abro cualquier PDF, se ve borroso, espero a que cargue, y es como si se actualizara y

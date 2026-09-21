@@ -363,15 +363,28 @@ export default function App() {
     if (!user) return;
     if (new URLSearchParams(window.location.search).get('sso_ticket')) return;
     let cancelado = false;
+    // SOLO UN 401 CIERRA LA SESIÓN. Antes el `.catch` se tragaba todo: un corte
+    // de red, un tiempo agotado, un 500 o un 502 mientras Render recicla un worker
+    // o despliega. Cualquiera de esas cosas cerraba la sesión y devolvía al acceso
+    // con la sesión intacta en la base: abrir Docs con el backend frío bastaba.
+    // Sobre la sesión solo tiene autoridad el servidor, y lo dice con un 401.
+    // Es el mismo arreglo que el visor tiene desde f24e8f4.
     apiFetch(`${API}/api/auth/me`)
-      .then(r => (r.ok ? r.json() : Promise.reject(new Error('sesión no válida'))))
-      .then(u => {
-        if (cancelado || !u?.id) return;
+      .then(r => {
+        if (r.status === 401) return { sesionInvalida: true };
+        if (!r.ok) return null;          // problema del servidor, no de tu sesión
+        return r.json().then(u => ({ usuario: u }));
+      })
+      .then(res => {
+        if (cancelado || !res) return;
+        if (res.sesionInvalida) { logout(); return; }
+        const u = res.usuario;
+        if (!u?.id) return;
         if (u.role !== user.role || u.email !== user.email) {
           saveUser({ ...user, ...u });   // se conserva el token guardado
         }
       })
-      .catch(() => { if (!cancelado) logout(); });
+      .catch(() => { /* red caída o respuesta ilegible: la sesión NO se toca */ });
     return () => { cancelado = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

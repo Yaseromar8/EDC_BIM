@@ -81,7 +81,7 @@ export default function MiTrabajo({ compacto = false, onAbrir = null }) {
         <div style={S.vacio}>No tienes nada pendiente.</div>
       ) : (
         <ul style={S.lista}>
-          {pendientes.slice(0, compacto ? 5 : 50).map((p) => {
+          {pendientes.slice(0, compacto ? 5 : 50).map((p, i) => {
             const dias = diasPara(p.vence_en);
             const vencido = dias !== null && dias < 0;
             const abrible = Boolean(onAbrir) && p.objeto_tipo === 'REVIEW' && p.objeto_id && p.project_id;
@@ -105,7 +105,7 @@ export default function MiTrabajo({ compacto = false, onAbrir = null }) {
               </>
             );
             return (
-              <li key={p.id} style={abrible ? S.filaAbrible : S.fila}>
+              <li key={p.id} style={{ ...(abrible ? S.filaAbrible : S.fila), ...(i === 0 ? S.primera : {}) }}>
                 {abrible ? (
                   <button type="button" style={S.boton} title="Abrir la revisión"
                           onClick={() => onAbrir({ obra: p.project_id, revision: p.objeto_id })}>
@@ -121,29 +121,33 @@ export default function MiTrabajo({ compacto = false, onAbrir = null }) {
   );
 }
 
+// Colores de la paleta gris del inicio (pages/entradaGris.css): «Mi trabajo»
+// solo vive dentro de `.entrada-gris`, en la portada.
 const S = {
-  caja: { background: 'var(--panel, #14161a)', border: '1px solid rgba(255,255,255,.08)',
-          borderRadius: 12, padding: '18px 20px', color: '#e8eaed', maxWidth: 720 },
-  titulo: { fontSize: 15, fontWeight: 600, letterSpacing: .2, marginBottom: 12,
+  caja: { background: 'var(--eg-sup)', border: '1px solid var(--eg-linea)',
+          borderRadius: 4, padding: '14px 18px 6px', color: 'var(--eg-texto)',
+          width: 536, maxWidth: '100%', boxSizing: 'border-box' },
+  titulo: { fontSize: 14, fontWeight: 600, marginBottom: 6,
             display: 'flex', alignItems: 'center', gap: 8 },
-  contador: { background: '#2f6fed', color: '#fff', borderRadius: 10, padding: '1px 8px',
-              fontSize: 12, fontWeight: 700 },
-  vacio: { opacity: .55, fontSize: 13, padding: '6px 0' },
+  contador: { background: 'var(--eg-acento)', color: '#fff', borderRadius: 9, padding: '1px 7px',
+              fontSize: 11, fontWeight: 600 },
+  vacio: { color: 'var(--eg-texto-3)', fontSize: 13, padding: '6px 0 10px' },
   lista: { listStyle: 'none', margin: 0, padding: 0 },
   fila: { display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0',
-          borderTop: '1px solid rgba(255,255,255,.06)' },
-  filaAbrible: { borderTop: '1px solid rgba(255,255,255,.06)' },
+          borderTop: '1px solid var(--eg-fila)' },
+  filaAbrible: { borderTop: '1px solid var(--eg-fila)' },
+  primera: { borderTop: 'none' },
   boton: { display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', width: '100%',
            background: 'none', border: 'none', color: 'inherit', font: 'inherit',
            textAlign: 'left', cursor: 'pointer' },
-  tipo: { fontSize: 11, fontWeight: 700, letterSpacing: .4, textTransform: 'uppercase',
-          background: 'rgba(255,255,255,.07)', borderRadius: 6, padding: '3px 8px',
-          minWidth: 92, textAlign: 'center' },
-  tipoVencido: { background: 'rgba(220,80,80,.18)', color: '#ff9d9d' },
+  tipo: { fontSize: 10.5, fontWeight: 600, letterSpacing: '.05em', textTransform: 'uppercase',
+          background: 'var(--eg-chip)', color: 'var(--eg-chip-texto)', borderRadius: 2,
+          padding: '4px 6px', minWidth: 92, textAlign: 'center' },
+  tipoVencido: { background: 'var(--eg-peligro-fondo)', color: 'var(--eg-peligro)' },
   centro: { flex: 1, minWidth: 0 },
-  asunto: { fontSize: 13.5, whiteSpace: 'nowrap', overflow: 'hidden',
+  asunto: { fontSize: 13.5, color: 'var(--eg-texto)', whiteSpace: 'nowrap', overflow: 'hidden',
             textOverflow: 'ellipsis' },
-  meta: { fontSize: 11.5, opacity: .5, marginTop: 2 },
-  plazo: { fontSize: 12, opacity: .6, whiteSpace: 'nowrap' },
-  plazoVencido: { fontSize: 12, color: '#ff9d9d', fontWeight: 600, whiteSpace: 'nowrap' },
+  meta: { fontSize: 12, color: 'var(--eg-texto-3)', marginTop: 2 },
+  plazo: { fontSize: 12, color: 'var(--eg-texto-3)', whiteSpace: 'nowrap' },
+  plazoVencido: { fontSize: 12, color: 'var(--eg-peligro)', fontWeight: 500, whiteSpace: 'nowrap' },
 };

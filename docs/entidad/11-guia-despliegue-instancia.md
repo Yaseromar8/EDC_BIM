@@ -118,8 +118,8 @@ Sin alguna de estas, la instancia no funciona o no es segura.
 | variable | valor | por qué |
 |---|---|---|
 | `ADMIN_NAME` | nombre del admin | si falta se usa la parte local del correo |
-| `EXIGIR_2FA` | `admin` (ya es el defecto) | explícito es mejor que heredado |
-| `EXIGIR_2FA_ESTRICTO` | **`false` ahora; `true` en el paso 5.4** | ver el aviso de abajo |
+| `EXIGIR_2FA` | `admin` solo si la entidad quiere el segundo factor obligatorio para administradores (`todos` para cualquiera) | sin la variable es **opcional** para todas las cuentas (desde el 21-sep-2026) |
+| `EXIGIR_2FA_ESTRICTO` | **`false` ahora; `true` en el paso 5.4**, y solo si se definió `EXIGIR_2FA` | ver el aviso de abajo |
 | `LOG_LEVEL` | `INFO` | ya es el defecto |
 | `SESSION_CACHE_TTL` | `15` | segundos hasta que una revocación surte efecto |
 | `APS_CLIENT_ID` / `APS_CLIENT_SECRET` / `APS_AUTH_URL` / `APS_DATA_URL` | credencial APS | solo si la entidad va a ver DWG/RVT dentro de Documentos |

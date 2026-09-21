@@ -15,6 +15,45 @@
     --acc-sidebar-w: 248px;
 }
 
+/* ENTRADA EN GRIS MEDIO (21-sep-2026). El propietario: «no tan blanco sino como
+   escala de grises», «que sea como la maqueta y solo a esas pantallas»
+   (docs/ux/maquetas/pantallas_de_entrada_v4.html, tono gris medio). La misma
+   paleta que Docs (frontend-docs/src/pages/entradaGris.css). Se redefine en el
+   contenedor y no en :root: solo cambian la lista de proyectos, la de frentes y
+   sus ventanas. */
+.acc-home-wrapper {
+    --acc-bg: #E1E4E8;
+    --acc-sidebar-bg: #D9DDE2;
+    --acc-card-bg: #EDEFF2;
+    --acc-card-hover: #EDEFF2;
+    --acc-border: #C8CDD3;
+    --acc-border-fuerte: #B3B9C0;
+    --acc-fila: #D8DCE0;
+    --acc-hover: #E5E8EB;
+    --acc-accent: #153754;
+    --acc-accent-hover: #0F2940;
+    --acc-foco: #3E6F91;
+    --acc-enlace: #2F5F80;
+    --acc-text: #1C2024;
+    --acc-text-2: #464C53;
+    --acc-muted: #62686F;
+    --acc-cab: #3B4046;
+    --acc-cab-linea: #2F3439;
+    --acc-cab-texto: #C9CED4;
+    --acc-cab-activo: #FFFFFF;
+    --acc-cab-buscar: #474D54;
+    --acc-cab-buscar-borde: #596067;
+    --acc-avatar: #3E6F91;
+    --acc-chip: #DCE0E4;
+    --acc-activo: #CDD5DE;
+    --acc-activo-texto: #153754;
+    --acc-campo: #F7F8F9;
+    --acc-ok: #2E7D4F;
+    --acc-peligro: #B3261E;
+    --acc-sombra: 0 1px 3px rgb(11 14 18 / .10);
+    --acc-topbar-h: 48px;
+}
+
 /* ── WRAPPER ── */
 .acc-home-wrapper {
     width: 100vw;
@@ -30,8 +69,8 @@
 /* ── TOP BAR ── */
 .acc-topbar {
     height: var(--acc-topbar-h);
-    background: #0e0f12;
-    border-bottom: 1px solid var(--acc-border);
+    background: var(--acc-cab);
+    border-bottom: 1px solid var(--acc-cab-linea);
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -66,23 +105,25 @@
 .acc-topnav-item {
     padding: 4px 14px;
     height: 100%;
+    box-sizing: border-box;   /* la raya de la pestaña activa, en el borde de la cabecera */
     display: flex;
     align-items: center;
-    font-size: 13px;
+    font-size: 14px;
     font-weight: 500;
-    color: var(--acc-muted);
+    color: var(--acc-cab-texto);
     cursor: pointer;
     border-bottom: 2px solid transparent;
-    transition: all 0.15s;
+    transition: color 0.15s, border-color 0.15s;
 }
 
 .acc-topnav-item:hover {
-    color: var(--acc-text);
+    color: var(--acc-cab-activo);
 }
 
 .acc-topnav-item.active {
-    color: var(--acc-text);
-    border-bottom-color: var(--acc-accent);
+    color: var(--acc-cab-activo);
+    font-weight: 600;
+    border-bottom-color: var(--acc-cab-activo);
 }
 
 .acc-topbar-right {
@@ -95,42 +136,41 @@
     display: flex;
     align-items: center;
     gap: 8px;
-    background: rgba(255, 255, 255, 0.06);
-    border: 1px solid var(--acc-border);
-    border-radius: 6px;
+    background: var(--acc-cab-buscar);
+    border: 1px solid var(--acc-cab-buscar-borde);
+    border-radius: 4px;
     padding: 6px 12px;
-    color: var(--acc-muted);
-    transition: background 0.2s;
+    color: var(--acc-cab-texto);
+    transition: border-color 0.2s;
 }
 
 .acc-search-bar:focus-within {
-    background: rgba(255, 255, 255, 0.1);
-    border-color: rgba(255, 255, 255, 0.15);
+    border-color: var(--acc-cab-texto);
 }
 
 .acc-search-bar input {
     background: none;
     border: none;
     outline: none;
-    color: var(--acc-text);
+    color: var(--acc-cab-activo);
     font-size: 13px;
     width: 200px;
 }
 
 .acc-search-bar input::placeholder {
-    color: var(--acc-muted);
+    color: var(--acc-cab-texto);
 }
 
 .acc-avatar {
-    width: 32px;
-    height: 32px;
+    width: 28px;
+    height: 28px;
     border-radius: 50%;
-    background: linear-gradient(135deg, var(--acc-accent), #6366f1);
+    background: var(--acc-avatar);
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 11px;
-    font-weight: 700;
+    font-size: 11.5px;
+    font-weight: 600;
     color: #fff;
     cursor: pointer;
     flex-shrink: 0;
@@ -158,10 +198,8 @@
 }
 
 .acc-sidebar-title {
-    font-size: 10px;
-    font-weight: 700;
-    letter-spacing: 1px;
-    text-transform: uppercase;
+    font-size: 12px;
+    font-weight: 600;
     color: var(--acc-muted);
     padding: 0 8px 10px 8px;
 }
@@ -171,24 +209,24 @@
     align-items: center;
     gap: 10px;
     padding: 8px 10px;
-    border-radius: 8px;
+    border-radius: 4px;
     cursor: pointer;
     transition: background 0.15s;
     user-select: none;
 }
 
 .acc-hub-item:hover {
-    background: rgba(255, 255, 255, 0.05);
+    background: var(--acc-hover);
 }
 
 .acc-hub-item.active {
-    background: rgba(68, 136, 204, 0.18);
+    background: var(--acc-activo);
 }
 
 .acc-hub-icon {
-    width: 30px;
-    height: 30px;
-    border-radius: 6px;
+    width: 28px;
+    height: 28px;
+    border-radius: 4px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -198,15 +236,20 @@
 }
 
 .acc-hub-icon.all {
-    background: rgba(255, 255, 255, 0.08);
-    color: var(--acc-muted);
+    background: var(--acc-card-bg);
+    border: 1px solid var(--acc-border);
+    color: var(--acc-text-2);
 }
 
 .acc-hub-icon.hub {
-    background: #2a2d33;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    color: var(--acc-accent);
+    background: var(--acc-card-bg);
+    border: 1px solid var(--acc-border);
+    color: var(--acc-activo-texto);
     font-size: 14px;
+}
+
+.acc-hub-item.active .acc-hub-icon {
+    color: var(--acc-activo-texto);
 }
 
 .acc-hub-info {
@@ -216,7 +259,7 @@
 }
 
 .acc-hub-name {
-    font-size: 13px;
+    font-size: 13.5px;
     font-weight: 500;
     color: var(--acc-text);
     white-space: nowrap;
@@ -225,16 +268,17 @@
 }
 
 .acc-hub-item.active .acc-hub-name {
-    color: #6aaeee;
+    color: var(--acc-activo-texto);
+    font-weight: 600;
 }
 
 .acc-hub-count {
-    font-size: 11px;
+    font-size: 12px;
     color: var(--acc-muted);
 }
 
 .acc-hub-region {
-    font-size: 10px;
+    font-size: 11px;
     color: var(--acc-muted);
     opacity: 0.7;
 }
@@ -246,18 +290,19 @@
     margin: 8px 8px 0;
     padding: 8px 10px;
     background: none;
-    border: 1px dashed rgba(255, 255, 255, 0.12);
-    border-radius: 8px;
-    color: var(--acc-muted);
-    font-size: 12px;
+    border: none;
+    border-radius: 4px;
+    color: var(--acc-enlace);
+    font-size: 13px;
+    font-weight: 500;
+    font-family: inherit;
     cursor: pointer;
-    transition: all 0.15s;
+    transition: color 0.15s;
     width: calc(100% - 16px);
 }
 
 .acc-add-hub-btn:hover {
-    border-color: var(--acc-accent);
-    color: var(--acc-accent);
+    color: var(--acc-foco);
 }
 
 /* ── MAIN AREA ── */
@@ -277,14 +322,15 @@
 }
 
 .acc-main-title {
-    font-size: 22px;
-    font-weight: 700;
-    margin: 0 0 2px 0;
-    color: #fff;
+    font-size: 24px;
+    font-weight: 400;
+    letter-spacing: -0.01em;
+    margin: 0 0 4px 0;
+    color: var(--acc-text);
 }
 
 .acc-main-subtitle {
-    font-size: 12px;
+    font-size: 14px;
     color: var(--acc-muted);
 }
 
@@ -292,13 +338,15 @@
     display: flex;
     align-items: center;
     gap: 6px;
-    padding: 8px 16px;
+    height: 36px;
+    padding: 0 14px;
     background: var(--acc-accent);
     color: #fff;
     border: none;
-    border-radius: 6px;
-    font-size: 13px;
+    border-radius: 4px;
+    font-size: 14px;
     font-weight: 600;
+    font-family: inherit;
     cursor: pointer;
     transition: background 0.15s;
     white-space: nowrap;
@@ -306,7 +354,7 @@
 }
 
 .acc-new-project-btn:hover {
-    background: #5599dd;
+    background: var(--acc-accent-hover);
 }
 
 .acc-new-project-btn:disabled {
@@ -318,39 +366,38 @@
 .acc-projects-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-    gap: 16px;
+    gap: 14px;
 }
 
 .acc-project-card {
     background: var(--acc-card-bg);
     border: 1px solid var(--acc-border);
-    border-radius: 8px;
-    padding: 16px 18px;
+    border-radius: 4px;
+    padding: 14px 16px 12px;
     cursor: pointer;
-    transition: background 0.15s, border-color 0.15s;
+    transition: border-color 0.15s, box-shadow 0.15s;
 }
 
 .acc-project-card:hover {
     background: var(--acc-card-hover);
-    border-color: rgba(255, 255, 255, 0.18);
+    border-color: var(--acc-foco);
+    box-shadow: var(--acc-sombra);
 }
 
 /* Punto de estado: en linea con el nombre, sin halo. */
 .acc-card-status-dot {
     display: inline-block;
-    width: 6px;
-    height: 6px;
+    width: 7px;
+    height: 7px;
     border-radius: 50%;
-    background: #22c55e;
+    background: var(--acc-ok);
     margin-right: 8px;
     flex-shrink: 0;
 }
 
 .acc-card-hub {
-    font-size: 10px;
-    font-weight: 600;
-    letter-spacing: 0.5px;
-    text-transform: uppercase;
+    font-size: 12px;
+    font-weight: 400;
     color: var(--acc-muted);
     margin-bottom: 6px;
 }
@@ -358,9 +405,9 @@
 .acc-card-name {
     display: flex;
     align-items: center;
-    font-size: 14px;
+    font-size: 14.5px;
     font-weight: 600;
-    color: #fff;
+    color: var(--acc-text);
     margin: 0 0 4px 0;
     white-space: nowrap;
     overflow: hidden;
@@ -384,20 +431,22 @@
     align-items: center;
     gap: 8px;
     flex-wrap: wrap;
-    margin-top: 12px;
+    margin-top: 14px;
+    padding-top: 10px;
+    border-top: 1px solid var(--acc-fila);
 }
 
 .acc-card-tag {
-    font-size: 11px;
+    font-size: 12.5px;
     font-weight: 500;
-    color: var(--acc-muted);
+    color: var(--acc-text-2);
     padding: 0;
     border: none;
     background: transparent;
 }
 
 .acc-card-date {
-    font-size: 11px;
+    font-size: 12.5px;
     color: var(--acc-muted);
     margin-left: auto;
 }
@@ -417,7 +466,7 @@
 .acc-spinner {
     width: 28px;
     height: 28px;
-    border: 2px solid rgba(255, 255, 255, 0.1);
+    border: 2px solid var(--acc-border);
     border-top-color: var(--acc-accent);
     border-radius: 50%;
     animation: spin 0.7s linear infinite;
@@ -471,13 +520,13 @@
 }
 
 .acc-modal {
-    background: #1e2028;
+    background: var(--acc-card-bg);
     border: 1px solid var(--acc-border);
-    border-radius: 12px;
+    border-radius: 6px;
     padding: 28px 32px;
     width: 420px;
     max-width: 90vw;
-    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+    box-shadow: 0 12px 32px rgb(11 14 18 / .25);
     display: flex;
     flex-direction: column;
     gap: 10px;
@@ -485,25 +534,23 @@
 
 .acc-modal h2 {
     font-size: 18px;
-    font-weight: 700;
-    color: #fff;
+    font-weight: 600;
+    color: var(--acc-text);
     margin: 0 0 4px 0;
 }
 
 .acc-modal label {
-    font-size: 12px;
+    font-size: 12.5px;
     font-weight: 600;
-    color: var(--acc-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
+    color: var(--acc-text-2);
 }
 
 .acc-modal input,
 .acc-modal select,
 .acc-modal textarea {
-    background: rgba(255, 255, 255, 0.06);
-    border: 1px solid var(--acc-border);
-    border-radius: 6px;
+    background: var(--acc-campo);
+    border: 1px solid var(--acc-border-fuerte);
+    border-radius: 4px;
     padding: 9px 12px;
     color: var(--acc-text);
     font-size: 13px;
@@ -517,11 +564,11 @@
 .acc-modal input:focus,
 .acc-modal select:focus,
 .acc-modal textarea:focus {
-    border-color: var(--acc-accent);
+    border-color: var(--acc-foco);
 }
 
 .acc-modal select option {
-    background: #1e2028;
+    background: var(--acc-campo);
 }
 
 .acc-modal-actions {
@@ -533,11 +580,11 @@
 
 .acc-modal-hint {
     font-size: 12px;
-    color: var(--acc-muted);
-    background: rgba(255, 255, 255, 0.04);
+    color: var(--acc-text-2);
+    background: var(--acc-chip);
     padding: 8px 12px;
-    border-radius: 6px;
-    border-left: 3px solid var(--acc-accent);
+    border-radius: 4px;
+    border-left: 3px solid var(--acc-foco);
     margin: 0;
 }
 
@@ -545,16 +592,17 @@
     background: var(--acc-accent);
     color: #fff;
     border: none;
-    border-radius: 6px;
+    border-radius: 4px;
     padding: 8px 20px;
     font-size: 13px;
     font-weight: 600;
+    font-family: inherit;
     cursor: pointer;
     transition: background 0.15s;
 }
 
 .acc-btn-primary:hover {
-    background: #5599dd;
+    background: var(--acc-accent-hover);
 }
 
 .acc-btn-primary:disabled {
@@ -564,18 +612,19 @@
 
 .acc-btn-ghost {
     background: none;
-    color: var(--acc-muted);
-    border: 1px solid var(--acc-border);
-    border-radius: 6px;
+    color: var(--acc-text-2);
+    border: 1px solid var(--acc-border-fuerte);
+    border-radius: 4px;
     padding: 8px 16px;
     font-size: 13px;
+    font-family: inherit;
     cursor: pointer;
-    transition: all 0.15s;
+    transition: color 0.15s, border-color 0.15s;
 }
 
 .acc-btn-ghost:hover {
     color: var(--acc-text);
-    border-color: rgba(255, 255, 255, 0.2);
+    border-color: var(--acc-muted);
 }
 
 /* ── SCROLLBAR ── */
@@ -591,7 +640,7 @@
 
 .acc-sidebar::-webkit-scrollbar-thumb,
 .acc-main::-webkit-scrollbar-thumb {
-    background: #333;
+    background: var(--acc-border-fuerte);
     border-radius: 2px;
 }
 
@@ -621,53 +670,60 @@
 }
 
 /* ── FRENTE SELECTION ── */
+/* Con la cabecera de View arriba (antes esta pantalla no tenía ninguna), el
+   contenido va arriba y centrado a lo ancho, no en medio de la pantalla. */
 .acc-home-wrapper.frente-selection {
-    justify-content: center;
-    align-items: center;
+    justify-content: flex-start;
+    align-items: stretch;
 }
 
 .frente-container {
     width: 100%;
     max-width: 760px;
-    padding: 40px;
+    margin: 0 auto;
+    padding: 30px 40px 40px;
+    box-sizing: border-box;
+    overflow-y: auto;
     display: flex;
     flex-direction: column;
-    gap: 24px;
+    gap: 18px;
 }
 
 .back-to-projects {
     display: flex;
     align-items: center;
-    gap: 8px;
+    align-self: flex-start;
+    gap: 6px;
     border: none;
     background: none;
-    color: var(--acc-muted);
-    font-size: 14px;
+    color: var(--acc-enlace);
+    font-size: 13px;
     font-weight: 500;
+    font-family: inherit;
     cursor: pointer;
     padding: 0;
     transition: color 0.2s;
 }
 
 .back-to-projects:hover {
-    color: var(--acc-text);
+    color: var(--acc-foco);
 }
 
 .frente-header {
-    text-align: center;
+    text-align: left;
 }
 
 .frente-header h1 {
-    font-size: 22px;
-    font-weight: 600;
-    letter-spacing: -0.2px;
-    margin: 0 0 6px 0;
-    color: #fff;
+    font-size: 24px;
+    font-weight: 400;
+    letter-spacing: -0.01em;
+    margin: 0 0 4px 0;
+    color: var(--acc-text);
 }
 
 .frente-header p {
     color: var(--acc-muted);
-    font-size: 13px;
+    font-size: 14px;
     margin: 0;
 }
 
@@ -680,28 +736,36 @@
 .frente-card {
     background: var(--acc-card-bg);
     border: 1px solid var(--acc-border);
-    border-radius: 8px;
-    padding: 16px 18px;
+    border-radius: 4px;
+    min-height: 68px;
+    padding: 0 14px;
+    box-sizing: border-box;
     display: flex;
     align-items: center;
     gap: 12px;
     cursor: pointer;
-    transition: background 0.15s, border-color 0.15s;
+    transition: border-color 0.15s, box-shadow 0.15s;
     position: relative;
 }
 
 .frente-card:hover {
     background: var(--acc-card-hover);
-    border-color: rgba(255, 255, 255, 0.18);
+    border-color: var(--acc-foco);
+    box-shadow: var(--acc-sombra);
 }
 
-/* El icono lo elige el usuario al crear el frente: se muestra a tamano de
-   texto, sin recuadro. Antes era un mosaico de 64 px que dominaba la ficha. */
+/* Un mismo icono de línea para todos los frentes (un eje con sus estaciones):
+   el nombre ya los distingue. Antes se pintaba el emoji de cada uno. */
 .frente-card-icon {
-    font-size: 16px;
-    line-height: 1;
+    width: 36px;
+    height: 36px;
+    border-radius: 4px;
+    background: var(--acc-chip);
+    color: var(--acc-text-2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
     flex-shrink: 0;
-    opacity: 0.85;
 }
 
 .frente-card-content {
@@ -711,17 +775,17 @@
 
 .frente-card-content h3 {
     margin: 0;
-    font-size: 15px;
+    font-size: 14.5px;
     font-weight: 600;
-    color: #fff;
+    color: var(--acc-text);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
 }
 
 .frente-card-content p {
-    margin: 2px 0 0;
-    font-size: 12px;
+    margin: 3px 0 0;
+    font-size: 12.5px;
     color: var(--acc-muted);
     line-height: 1.4;
     white-space: nowrap;
@@ -765,7 +829,96 @@
 }
 
 .frente-card-del:hover {
-    color: #ef4444;
+    color: var(--acc-peligro);
+}
+
+/* El estado de la extracción Civil: dato, en un verde sereno. */
+.frente-card-content .frente-card-civil {
+    color: var(--acc-ok);
+    font-weight: 500;
+}
+
+/* «Crear frente»: la ficha punteada de siempre. */
+.frente-card.frente-card-nuevo {
+    border-style: dashed;
+    border-color: var(--acc-border-fuerte);
+    background: transparent;
+}
+
+.frente-card-nuevo .frente-card-icon {
+    background: transparent;
+    border: 1px dashed var(--acc-border-fuerte);
+    color: var(--acc-muted);
+}
+
+.frente-card-nuevo .frente-card-content h3 {
+    color: var(--acc-text-2);
+    font-weight: 500;
+}
+
+/* El formulario de un frente nuevo, dentro de su ficha. */
+.frente-card.frente-form {
+    cursor: default;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+    padding: 14px;
+}
+
+.frente-card.frente-form:hover {
+    border-color: var(--acc-border);
+    box-shadow: none;
+}
+
+.frente-campo {
+    background: var(--acc-campo);
+    border: 1px solid var(--acc-border-fuerte);
+    border-radius: 4px;
+    color: var(--acc-text);
+    padding: 8px 12px;
+    font-size: 13px;
+    font-family: inherit;
+    outline: none;
+    transition: border-color 0.15s;
+}
+
+.frente-campo:focus {
+    border-color: var(--acc-foco);
+}
+
+.frente-campo.vacio {
+    color: var(--acc-muted);
+}
+
+.frente-error {
+    color: var(--acc-peligro);
+    font-size: 12px;
+}
+
+/* Grupos por tipo de componente (Aportantes, Canales...). */
+.frente-grupo {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--acc-text-2);
+}
+
+.frente-grupo-linea {
+    flex: 1;
+    height: 1px;
+    background: var(--acc-border);
+}
+
+.frente-vacio {
+    grid-column: 1 / -1;
+    text-align: center;
+    color: var(--acc-muted);
+    font-size: 14px;
+    padding: 10px 0 2px;
 }
 
 /* Removed specific tag colors to let inline styles work properly */
@@ -773,9 +926,9 @@
 .frente-footer {
     display: flex;
     justify-content: center;
-    gap: 16px;
+    gap: 10px;
     color: var(--acc-muted);
-    font-size: 12px;
+    font-size: 12.5px;
     margin-top: 16px;
 }
 
@@ -803,9 +956,9 @@
     margin-top: 14px;
     padding: 8px 14px;
     display: inline-block;
-    background: rgba(20, 115, 230, .10);
-    border: 1px solid rgba(20, 115, 230, .30);
-    border-radius: 6px;
+    background: var(--acc-chip);
+    border: 1px solid var(--acc-border);
+    border-radius: 4px;
     font-family: monospace;
     font-size: .9rem;
 }

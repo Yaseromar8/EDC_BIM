@@ -9,7 +9,8 @@ ciclo de la aplicacion no tenga atajos:
   · el desafio esta firmado, caduca y no vale para otro proposito
   · un codigo de recuperacion sirve UNA vez
   · tener la sesion NO basta para quitarse el segundo factor
-  · con EXIGIR_2FA_ESTRICTO se cierra la puerta al admin que no lo tiene puesto
+  · es opcional: solo si la entidad lo exige (EXIGIR_2FA) y enciende
+    EXIGIR_2FA_ESTRICTO se cierra la puerta a quien no lo tiene puesto
 
 DB-free: se mockea get_db_connection.
 """
@@ -31,6 +32,7 @@ def entorno(monkeypatch):
     monkeypatch.setenv('ENFORCE_PROJECT_AUTHZ', 'false')
     monkeypatch.setenv('ALLOW_DEMO_TOKEN', 'false')
     monkeypatch.setenv('EXIGIR_2FA_ESTRICTO', 'false')
+    monkeypatch.delenv('EXIGIR_2FA', raising=False)
 
     # El limitador guarda sus contadores en memoria de proceso y sobrevive entre
     # modulos de test: con la suite entera, los logins de otros ficheros agotaban
@@ -181,7 +183,16 @@ def test_sin_segundo_factor_el_login_sigue_funcionando(entorno):
     r = c.post('/api/auth/login', json={'email': 'ana@contratista.com', 'password': CLAVE})
     assert r.status_code == 200
     assert r.get_json()['session_token'] == 'sesion-de-7'
-    # ...pero se avisa de que a esta cuenta se le exige
+    # ...y como es opcional, no se avisa de nada
+    assert r.get_json()['segundo_factor_pendiente'] is False
+
+
+def test_si_la_entidad_lo_exige_se_avisa(entorno, monkeypatch):
+    c, e, _ra = entorno
+    e['totp_activo'] = False
+    monkeypatch.setenv('EXIGIR_2FA', 'admin')
+    r = c.post('/api/auth/login', json={'email': 'ana@contratista.com', 'password': CLAVE})
+    assert r.status_code == 200
     assert r.get_json()['segundo_factor_pendiente'] is True
 
 
@@ -406,29 +417,46 @@ def test_con_el_codigo_si_se_desactiva_y_se_borra_el_secreto(entorno):
 # ── Obligatoriedad ─────────────────────────────────────────────────────────
 
 def test_en_modo_estricto_el_admin_sin_segundo_factor_no_entra(entorno, monkeypatch):
+    """Cuando la entidad lo exige al admin y ademas cierra la puerta."""
     c, e, _ra = entorno
     e['totp_activo'] = False
+    monkeypatch.setenv('EXIGIR_2FA', 'admin')
     monkeypatch.setenv('EXIGIR_2FA_ESTRICTO', 'true')
     r = c.post('/api/auth/login', json={'email': 'ana@contratista.com', 'password': CLAVE})
     assert r.status_code == 403
     assert r.get_json()['code'] == 'SEGUNDO_FACTOR_OBLIGATORIO'
 
 
-def test_en_modo_estricto_un_usuario_normal_sigue_entrando(entorno, monkeypatch):
-    """Solo se exige a quien puede destruir el expediente."""
+def test_sin_politica_el_modo_estricto_no_deja_fuera_a_nadie(entorno, monkeypatch):
+    """Quien apaga su segundo factor no puede quedarse fuera de su cuenta por un
+    interruptor que se encendio cuando era obligatorio."""
     c, e, _ra = entorno
     e['totp_activo'] = False
-    e['rol'] = 'user'
     monkeypatch.setenv('EXIGIR_2FA_ESTRICTO', 'true')
     r = c.post('/api/auth/login', json={'email': 'ana@contratista.com', 'password': CLAVE})
     assert r.status_code == 200
     assert r.get_json()['segundo_factor_pendiente'] is False
 
 
-def test_el_estado_dice_si_esta_activo_y_si_se_exige(entorno):
+def test_en_modo_estricto_un_usuario_normal_sigue_entrando(entorno, monkeypatch):
+    """Con EXIGIR_2FA=admin solo se exige a quien puede destruir el expediente."""
+    c, e, _ra = entorno
+    e['totp_activo'] = False
+    e['rol'] = 'user'
+    monkeypatch.setenv('EXIGIR_2FA', 'admin')
+    monkeypatch.setenv('EXIGIR_2FA_ESTRICTO', 'true')
+    r = c.post('/api/auth/login', json={'email': 'ana@contratista.com', 'password': CLAVE})
+    assert r.status_code == 200
+    assert r.get_json()['segundo_factor_pendiente'] is False
+
+
+def test_el_estado_dice_si_esta_activo_y_si_se_exige(entorno, monkeypatch):
     c, _e, _ra = entorno
     d = c.get('/api/auth/2fa/estado').get_json()
-    assert d['activo'] is True and d['exigido'] is True
+    assert d['activo'] is True and d['exigido'] is False
+    monkeypatch.setenv('EXIGIR_2FA', 'admin')
+    d = c.get('/api/auth/2fa/estado').get_json()
+    assert d['exigido'] is True
 
 
 # ── Rotar la clave del servidor mata los codigos de recuperacion ──────────

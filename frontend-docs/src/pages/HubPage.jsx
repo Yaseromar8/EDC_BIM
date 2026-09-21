@@ -5,21 +5,17 @@
 // ya sabe qué es cada cosa. Detrás, una única luz difusa que centra la
 // mirada. Es una bifurcación de caminos: se entra, se elige y se sale.
 //
-// Identidad (ETAPA 3): fondo Ink, profundidad en Navy, logo oficial blanco,
-// Signal SOLO en interacción (hover, foco). La jerarquía la hacen la
-// tipografía y el espacio, no colores por producto ni brillos.
+// Identidad: gris medio desde el 21-sep-2026 («no tan blanco sino como escala de
+// grises», maqueta v4). Cabecera gris carbón con el logo oficial blanco, fondo
+// gris y fichas con borde fino; Signal SOLO en interacción (hover, foco). Sin
+// brillos ni transparencias. La paleta vive en entradaGris.css.
 import React, { useState } from 'react';
 import { API, VISOR_URL } from '../utils/helpers';
 import { apiFetch } from '../utils/apiFetch';
 import MiTrabajo from '../components/MiTrabajo';
 import SegundoFactorPanel from '../components/SegundoFactorPanel';
 import MiCuentaPanel from '../components/MiCuentaPanel';
-
-// Paleta oficial ALEPHIA (03_Web). El Hub es zona oscura: Ink de fondo,
-// Navy como profundidad, Signal únicamente cuando el usuario interactúa.
-const INK = '#0B0E12';
-const NAVY = '#153754';
-const SIGNAL = '#3E6F91';
+import './entradaGris.css';
 
 function ProductCard({ icon, producto, onClick, locked = false, lockNote }) {
   const [hover, setHover] = useState(false);
@@ -36,37 +32,35 @@ function ProductCard({ icon, producto, onClick, locked = false, lockNote }) {
       onFocus={() => setFoco(true)}
       onBlur={() => setFoco(false)}
       style={{
-        width: 250, maxWidth: '88vw', padding: '30px 26px',
-        // Translúcida a propósito: la luz Navy del fondo se cuela por debajo.
-        background: active ? 'rgba(17,28,42,0.85)' : 'rgba(11,14,18,0.72)',
-        // La interacción es Signal; el reposo, un borde neutro casi invisible.
-        border: `1px solid ${active ? 'rgba(62,111,145,0.60)' : 'rgba(255,255,255,0.09)'}`,
+        width: 260, maxWidth: '88vw', padding: '22px 22px 20px',
+        // Ficha sólida con borde fino; la interacción es Signal.
+        background: 'var(--eg-sup)',
+        border: `1px solid ${active ? 'var(--eg-foco)' : 'var(--eg-linea)'}`,
         outline: 'none',
-        boxShadow: foco ? `0 0 0 3px rgba(62,111,145,0.30)` : 'none',
-        borderRadius: 10,
-        backdropFilter: 'blur(6px)',
+        boxShadow: foco ? '0 0 0 3px rgb(62 111 145 / .30)' : (active ? 'var(--eg-sombra)' : 'none'),
+        borderRadius: 4,
         cursor: locked ? 'default' : 'pointer',
         opacity: locked ? 0.5 : 1,
-        transition: 'background .18s, border-color .18s, box-shadow .18s',
+        transition: 'border-color .18s, box-shadow .18s',
       }}
     >
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={active ? '#cfd6e0' : '#8b94a1'}
-           strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ transition: 'stroke .18s' }}>
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--eg-texto-2)"
+           strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
         {icon}
       </svg>
-      <div style={{ marginTop: 18, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+      <div style={{ marginTop: 20, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
         {/* MARCA + PRODUCTO en un solo renglón, jerarquía tipográfica:
             ALEPHIA sereno, el producto con el peso. Sin colores por producto. */}
-        <span style={{ fontSize: 16, letterSpacing: -0.1, color: '#e9ecf1' }}>
-          <span style={{ fontWeight: 400, opacity: 0.78 }}>ALEPHIA </span>
-          <span style={{ fontWeight: 700 }}>{producto}</span>
+        <span style={{ fontSize: 15, color: 'var(--eg-texto)' }}>
+          <span style={{ fontWeight: 400, color: 'var(--eg-texto-3)' }}>ALEPHIA </span>
+          <span style={{ fontWeight: 600 }}>{producto}</span>
         </span>
         {!locked && (
-          <span style={{ fontSize: 15, color: '#cfd6e0', opacity: active ? 1 : 0, transition: 'opacity .18s' }}>→</span>
+          <span style={{ fontSize: 15, color: 'var(--eg-foco)', opacity: active ? 1 : 0, transition: 'opacity .18s' }}>→</span>
         )}
       </div>
       {locked && (
-        <div style={{ marginTop: 8, fontSize: 12, color: '#6b7280' }}>{lockNote || 'Sin acceso'}</div>
+        <div style={{ marginTop: 8, fontSize: 12, color: 'var(--eg-texto-3)' }}>{lockNote || 'Sin acceso'}</div>
       )}
     </div>
   );
@@ -100,20 +94,20 @@ export default function HubPage({ user, onChooseDocs, onLogout, onAbrirRevision 
   };
 
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: INK, color: '#e9ecf1' }}>
+    <div className="entrada-gris" style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
 
-      <header style={{ height: 56, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, padding: '0 24px', flexShrink: 0, borderBottom: '1px solid rgba(21,55,84,0.55)' }}>
+      <header className="eg-cab" style={{ height: 48, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, padding: '0 24px', flexShrink: 0 }}>
         {/* Marca madre: logo horizontal oficial en blanco (01_Master_Vector),
-            nunca redibujado. 28px de alto ⇒ ~126px, sobre el mínimo de 120px;
+            nunca redibujado. 22px de alto ⇒ ~138px, sobre el mínimo de 120px;
             cabe entero incluso en móvil, así que el símbolo suelto queda para
             espacios realmente compactos (favicon, launcher). */}
         <img src="/brand/ALEPHIA_Logo_Horizontal_White.svg" alt="ALEPHIA"
-             style={{ height: 28, width: 'auto', display: 'block' }} />
-        <div style={{ display: 'flex', alignItems: 'center', gap: 18 }}>
-        <button onClick={() => setPanel('cuenta')} style={{ background: 'none', border: 'none', color: '#79818d', fontSize: 13, cursor: 'pointer', padding: 0 }}>
+             style={{ height: 22, width: 'auto', display: 'block' }} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
+        <button className="eg-cab-enlace" onClick={() => setPanel('cuenta')}>
           Mi cuenta
         </button>
-        <button onClick={onLogout} style={{ background: 'none', border: 'none', color: '#79818d', fontSize: 13, cursor: 'pointer', padding: 0 }}>
+        <button className="eg-cab-enlace" onClick={onLogout}>
           Cerrar sesión
         </button>
         </div>
@@ -127,20 +121,9 @@ export default function HubPage({ user, onChooseDocs, onLogout, onAbrirRevision 
 
       <main style={{ position: 'relative', flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '24px 24px 64px', overflow: 'hidden' }}>
 
-        {/* Una sola luz detrás de las fichas. No decora: sitúa el centro de
-            la pantalla y hace que las tarjetas floten sobre algo. La luz es
-            NAVY — la profundidad de la marca — no un azul cualquiera. */}
-        <div aria-hidden style={{
-          position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%, -50%)',
-          width: 'min(1100px, 130vw)', height: 'min(760px, 95vh)', pointerEvents: 'none',
-          background: [
-            'radial-gradient(closest-side, rgba(21,55,84,0.55), rgba(21,55,84,0.28) 45%, rgba(21,55,84,0.10) 68%, transparent 82%)',
-            'radial-gradient(closest-side, rgba(62,111,145,0.10), transparent 58%)',
-          ].join(','),
-          filter: 'blur(26px)',
-        }} />
-
-        <h1 style={{ position: 'relative', margin: '0 0 28px', fontSize: 20, fontWeight: 500, color: '#c3cad3', letterSpacing: -0.2 }}>
+        {/* Sin la luz difusa de antes: el fondo gris y el borde de las fichas
+            bastan para situar el centro (maqueta v4). */}
+        <h1 className="eg-saludo">
           {niceName ? `Hola, ${niceName}` : 'Hola'}
         </h1>
 
@@ -176,7 +159,7 @@ export default function HubPage({ user, onChooseDocs, onLogout, onAbrirRevision 
             por quién debe hacer qué. Sólo lee, y el backend la construye
             partiendo de la membresía, así que no muestra ni una obra de las que
             el usuario no forme parte. */}
-        <div style={{ marginTop: 34, width: '100%', display: 'flex', justifyContent: 'center' }}>
+        <div style={{ marginTop: 24, width: '100%', display: 'flex', justifyContent: 'center' }}>
           <MiTrabajo compacto onAbrir={onAbrirRevision} />
         </div>
       </main>

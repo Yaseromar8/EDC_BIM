@@ -124,8 +124,24 @@ export async function apiFetch(url, options = {}) {
 
   // Handle 401 — session expired or invalid
   if (response.status === 401) {
+    // UN 401 NO SIEMPRE ES «NO TIENES SESIÓN».
+    //
+    // Antes, cualquier 401 de cualquier ruta borraba la sesión entera y echaba al
+    // usuario a la pantalla de acceso, con contraseña y segundo factor de nuevo,
+    // aunque su sesión siguiera viva: bastaba con pedir algo a lo que esa cuenta
+    // no tiene derecho. El backend distingue y lo dice: `NO_TOKEN` e
+    // `INVALID_TOKEN` hablan de la sesión (auth_middleware.py); cualquier otro 401
+    // habla de ESE recurso. Se cierra sesión solo con los primeros, o cuando
+    // responde el propio comprobador de sesión, que es autoridad por definición.
+    // Es el mismo arreglo que el visor tiene desde f24e8f4.
+    let deSesion = false;
+    try {
+      const cuerpo = await response.clone().json();
+      deSesion = !!cuerpo && (cuerpo.code === 'NO_TOKEN' || cuerpo.code === 'INVALID_TOKEN');
+    } catch { /* sin cuerpo JSON: no afirma nada sobre la sesión */ }
+    if (!deSesion && typeof url === 'string' && url.includes('/api/auth/me')) deSesion = true;
     // Don't redirect if this IS the login request failing (wrong password)
-    if (!isPublicAuth) {
+    if (!isPublicAuth && deSesion) {
       console.warn('[apiFetch] 401 Unauthorized — session expired, redirecting to login');
       clearSession();
       if (onUnauthorized) {

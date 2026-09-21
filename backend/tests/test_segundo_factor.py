@@ -114,7 +114,15 @@ def test_los_de_recuperacion_se_guardan_hasheados():
 
 # ── A quien se le exige ────────────────────────────────────────────────────
 
-def test_por_defecto_se_exige_al_administrador():
+def test_por_defecto_no_se_exige_a_nadie(monkeypatch):
+    """Opcional, como en Autodesk: decision del propietario (21-sep-2026)."""
+    monkeypatch.delenv('EXIGIR_2FA', raising=False)
+    assert dfa.exigido_para('admin') is False
+    assert dfa.exigido_para('user') is False
+
+
+def test_la_entidad_puede_exigirlo_al_administrador(monkeypatch):
+    monkeypatch.setenv('EXIGIR_2FA', 'admin')
     assert dfa.exigido_para('admin') is True
     assert dfa.exigido_para('user') is False
 
@@ -122,13 +130,13 @@ def test_por_defecto_se_exige_al_administrador():
 def test_se_puede_endurecer_a_todos(monkeypatch):
     monkeypatch.setenv('EXIGIR_2FA', 'todos')
     assert dfa.exigido_para('user') is True
+    assert dfa.exigido_para('admin') is True
 
 
-def test_no_se_puede_aflojar_por_debajo_de_admin(monkeypatch):
-    """La cuenta que archiva obras es justo la que motivo este hallazgo."""
-    for intento in ('ninguno', 'no', 'false', '', 'off'):
-        monkeypatch.setenv('EXIGIR_2FA', intento)
-        assert dfa.exigido_para('admin') is True, f'"{intento}" no puede eximir al admin'
+def test_solo_admin_y_todos_lo_encienden(monkeypatch):
+    for valor in ('ninguno', 'nadie', 'no', 'false', '', 'off'):
+        monkeypatch.setenv('EXIGIR_2FA', valor)
+        assert dfa.exigido_para('admin') is False, f'"{valor}" no debe exigirlo'
 
 
 # ── Un codigo TOTP no vale dos veces ───────────────────────────────────────

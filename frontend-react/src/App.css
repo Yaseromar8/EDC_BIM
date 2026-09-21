@@ -2040,10 +2040,11 @@ input[type='checkbox']:hover {
 .split-doc .doc-title,
 .filters-shell-title,
 .build-panel-title,
+/* .acc-main-title y .frente-header h1 (y sus subtítulos, abajo) salieron de estas
+   listas el 21-sep-2026: la lista de proyectos y la de frentes llevan su propio
+   estilo en LandingPage.css (gris medio, maqueta v4), sin mayúsculas sostenidas. */
 .progress-dashboard-header h1,
 .mobile-header h1,
-.acc-main-title,
-.frente-header h1,
 .source-title,
 .panel-header h2,
 .app-sidebar>div>h3,
@@ -2062,9 +2063,7 @@ input[type='checkbox']:hover {
 .docpin-list-header h4,
 .panel-subtitle,
 .progress-dashboard-header p,
-.source-count,
-.acc-main-subtitle,
-.frente-header p {
+.source-count {
   font-size: 12px !important;
   font-weight: 400 !important;
   color: #9ca3af !important;

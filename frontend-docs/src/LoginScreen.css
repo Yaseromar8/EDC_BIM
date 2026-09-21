@@ -219,6 +219,31 @@
 
 .cta-ojo:hover { color: var(--cta-text); }
 
+/* Casilla «mantener la sesión». Discreta: es una opción, no una llamada a la
+   acción, y no debe competir con el botón de entrar. */
+.cta-recordar {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    margin: 2px 0 14px;
+    font-size: .88rem;
+    line-height: 1.4;
+    color: var(--cta-muted);
+    cursor: pointer;
+    user-select: none;
+}
+
+.cta-recordar input {
+    width: 16px;
+    height: 16px;
+    margin: 0;
+    flex-shrink: 0;
+    cursor: pointer;
+    accent-color: var(--cta-primary);
+}
+
+.cta-recordar:hover { color: var(--cta-text); }
+
 /* ── Avisos ──────────────────────────────────────────────────────────────── */
 .cta-avisos { min-height: 4px; }
 
