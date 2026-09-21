@@ -3,7 +3,7 @@
 // FACADE PATTERN: Visor PDF profesional basado en Mozilla PDF.js
 // Modo: Single-Page (100% Zoom, Scroll-Zoom, Click-Pan)
 // ═══════════════════════════════════════════════════════════════
-import React, { useRef, useEffect, useState, useCallback } from 'react';
+import React, { useRef, useEffect, useState, useCallback, useMemo } from 'react';
 import { pdfjsLib, abrirPdf } from '../utils/pdfjs';
 import { pedirUrlFirmada } from '../utils/urlFirmada';
 import PdfToolsOverlay, { COLORS } from './PdfToolsOverlay';
@@ -13,6 +13,8 @@ import { apiFetch } from '../utils/apiFetch';
 import { tiraEstaAbierta, recordarTira } from '../utils/tiraDocumentos';
 import { urlsDeMiniaturas, urlDeVistaPrevia } from '../utils/colaMiniaturas';
 import { planDeVecinas } from '../utils/vecinasDelLector';
+import CapaMosaico from './CapaMosaico';
+import { fuenteRemota } from '../utils/mosaicoRemoto';
 import {
   PASO_DE_TECLADO, pasoDeRueda, suavizar, limitesDeZoom, objetivoDelZoom,
   puntoParaElZoom, desfaseDelPunto,
@@ -34,6 +36,12 @@ const MAX_CANVAS_PIXELS = 16_000_000;
 // al 125 % son 3,2 MP), y con la hoja entera al tope (16) y el bufer del
 // detalle (8) el pico se queda en 32 MP, el mismo que ya tenia el doble bufer.
 const PIXELES_DEL_DETALLE = 8_000_000;
+
+// `?mosaico=0` en la direccion apaga las teselas (docs/archivos/15): para
+// comparar con el lector de siempre sin tocar nada mas.
+const MOSAICO_APAGADO = (() => {
+  try { return new URLSearchParams(window.location.search).get('mosaico') === '0'; } catch { return false; }
+})();
 
 // Buscar sin tildes ni mayúsculas: "excavacion" encuentra "EXCAVACIÓN".
 const normalizeText = (s) => (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
@@ -409,7 +417,10 @@ export default function PDFViewer({ url, preparando = false,
                                     versionLabel = null, versionInfo = null, versionId = null, hideTitle = false,
                                     onClose = null, onVersionClick = null,
                                     hermanos = [], onAbrirHermano = null,
-                                    esAdmin = false, obraDelDocumento = '' }) {
+                                    esAdmin = false, obraDelDocumento = '',
+  // MOSAICOS (docs/archivos/15): quien quiera seguir el nivel y las teselas
+  // (el banco lo enseña en pantalla). El mosaico en si sale del documento.
+  alEstadoMosaico = null }) {
   const viewerRef = useRef(null); // Para Fullscreen
   const canvasRef = useRef(null);
   const wrapRef = useRef(null); // Envuelve canvas + overlay de herramientas
@@ -570,7 +581,25 @@ export default function PDFViewer({ url, preparando = false,
   // la misma puerta que al PDF. Si esto fuera por el `gcs_urn` de la cinta, una
   // version fijada enseñaria la vista previa de la version viva.
   const [vistaPrevia, setVistaPrevia] = useState(null);
+  // EL MOSAICO DE LA LAMINA (docs/archivos/15; ver «LA LAMINA SE PUEDE MIRAR
+  // SIN PDF» mas abajo). Es DE ESA VERSION y lo sirve el servidor con la puerta
+  // del PDF (utils/mosaicoRemoto.js). `?mosaico=0` en la direccion lo apaga,
+  // para comparar con el lector de siempre.
+  const fuenteMosaico = useMemo(
+    () => (MOSAICO_APAGADO || (!nodeId && !versionId) ? null : fuenteRemota(nodeId, versionId)),
+    [nodeId, versionId]);
+  // Lo que el mosaico dijo de la hoja (su tamaño), y de que fuente: el efecto
+  // que abre el documento lo mira sin depender de la fuente (ver alli).
+  const fuenteMosaicoRef = useRef(fuenteMosaico);
+  const hojaDelMosaicoRef = useRef(null);
+  useEffect(() => { fuenteMosaicoRef.current = fuenteMosaico; }, [fuenteMosaico]);
+  // De que documento es el mosaico que ya aviso: asi, al cambiar de documento,
+  // `hayMosaico` vuelve a falso solo, sin tocar el estado en un efecto.
+  const [mosaicoDe, setMosaicoDe] = useState(null);
+  const hayMosaico = !!fuenteMosaico && mosaicoDe === fuenteMosaico.clave;
   const [vistaPuesta, setVistaPuesta] = useState(false);
+  const vistaPuestaRef = useRef(false);   // lo mismo, para quien lo mira fuera del render
+  useEffect(() => { vistaPuestaRef.current = vistaPuesta; }, [vistaPuesta]);
   // Si el usuario ya movio la vista mientras miraba la version ligera, el
   // encuadre automatico no puede devolverlo al principio cuando por fin abre
   // el documento: son 30 s mirando la lamina, no un parpadeo.
@@ -771,7 +800,8 @@ export default function PDFViewer({ url, preparando = false,
   // hay en la zona de la hoja ya no es el plano anterior, es ESTE plano en
   // version ligera. Atenuarlo dejaria la pantalla en blanco justo cuando por fin
   // hay algo que mirar.
-  const esperandoDocumento = mostrarEspera && !vistaPuesta;
+  // Y CON MOSAICO TAMPOCO: las teselas son ESTE plano, y nitido.
+  const esperandoDocumento = mostrarEspera && !vistaPuesta && !hayMosaico;
   const ocupadoRef = useRef(false);
   useEffect(() => { ocupadoRef.current = ocupado; }, [ocupado]);
 
@@ -903,6 +933,15 @@ export default function PDFViewer({ url, preparando = false,
     setScale(1.0);
     setRotation(0);
     baseVpRef.current = {}; // el cache de viewports es por documento
+    // ...SALVO LO QUE YA DIJO EL MOSAICO DE ESTE MISMO DOCUMENTO. El manifiesto
+    // suele llegar antes que la URL firmada del PDF; si al llegar la URL se
+    // borraba su tamaño, la rueda dejaba de acercar hasta que pdf.js tuviera la
+    // hoja: en la lamina de 71,9 MB, decenas de segundos. Si el manifiesto llega
+    // despues, lo pone el mismo (ver alMosaico).
+    const hojaDelMosaico = hojaDelMosaicoRef.current;
+    if (hojaDelMosaico && hojaDelMosaico.fuente === fuenteMosaicoRef.current) {
+      baseVpRef.current['1:0'] = { ...hojaDelMosaico.hojaPt };
+    }
     textCacheRef.current = new Map(); // el texto leído se descarta al cambiar de PDF
     setMatches([]); setMatchIdx(0); setSearchQuery(''); setSearchOpen(false);
 
@@ -1729,6 +1768,62 @@ export default function PDFViewer({ url, preparando = false,
     });
   }, [documentoAbierto, docNonce]);
 
+  // LA LAMINA SE PUEDE MIRAR SIN PDF (mosaicos, docs/archivos/15).
+  //
+  // El zoom del lector necesita la «base» --el tamaño de la hoja a escala 1--,
+  // y hasta hoy solo la daba pdf.js: por eso, mientras el PDF bajaba, la rueda
+  // no hacia nada (20-sep-2026, el propietario: «no me deja acercar con el
+  // scroll»). El mosaico sabe cuanto mide la hoja, asi que sirve de base: la
+  // lamina se encuadra, se acerca y se pasea desde el primer segundo, y cuando
+  // el PDF llega toma el relevo sin que se mueva nada.
+  //
+  // (La fuente del mosaico, `fuenteMosaico`, y `hayMosaico` estan arriba: los
+  // necesitan el efecto que abre cada documento y la espera.)
+  const encajadoPorMosaicoRef = useRef(false);
+  const alMosaico = useCallback((e) => {
+    if (e && e.hojaPt && e.hojaPt.width > 0) {
+      hojaDelMosaicoRef.current = { fuente: fuenteMosaico, hojaPt: { width: e.hojaPt.width, height: e.hojaPt.height } };
+      const clave = `${currentPage}:${rotation}`;
+      if (!baseVpRef.current[clave]) baseVpRef.current[clave] = { width: e.hojaPt.width, height: e.hojaPt.height };
+      if (!encajadoPorMosaicoRef.current && !documentoAbierto) {
+        // El manifiesto llega enseguida, a veces antes de que el contenedor
+        // tenga tamaño: encuadrar entonces dejaba la hoja en 40 px (medido con
+        // `?frio=1`). Se espera a que haya sitio de verdad.
+        //
+        // Y SE HACE AQUI, NO CON `encajarConLaVista`: ese respeta «el usuario
+        // ya movio la vista», pero una hoja de 40 px no es una eleccion de
+        // nadie, es un encuadre hecho a destiempo (medido: contenedor de
+        // 1265x657 y hoja de 40x28, sin teselas porque no se veia).
+        const encuadrar = (intentos) => {
+          const cont = containerRef.current, lienzo = canvasRef.current;
+          if (!cont || !lienzo || cont.clientWidth <= 120 || cont.clientHeight <= 120) {
+            if (intentos > 0) setTimeout(() => encuadrar(intentos - 1), 50);
+            return;
+          }
+          encajadoPorMosaicoRef.current = true;
+          // Si la hoja ya tiene un tamaño de ESTE documento (su vista previa),
+          // se respeta. El de la lamina anterior no vale: al cambiar de lamina
+          // la caja sigue siendo la suya hasta que la nueva se encuadra.
+          const actual = parseFloat(lienzo.style.width) || 0;
+          if (actual >= 120 && vistaPuestaRef.current) return;
+          const proporcion = e.hojaPt.width / e.hojaPt.height;
+          const ancho = Math.min(cont.clientWidth - 64, (cont.clientHeight - 64) * proporcion);
+          lienzo.style.width = `${ancho}px`;
+          lienzo.style.height = `${ancho / proporcion}px`;
+          // Centrar en el acto (leer scrollWidth ya recalcula): sin esperar a un
+          // fotograma, que con la ventana detras puede no llegar.
+          centrandoRef.current = performance.now();
+          cont.scrollLeft = (cont.scrollWidth - cont.clientWidth) / 2;
+          cont.scrollTop = (cont.scrollHeight - cont.clientHeight) / 2;
+        };
+        encuadrar(40);
+      }
+      if (fuenteMosaico) setMosaicoDe(fuenteMosaico.clave);
+    }
+    if (alEstadoMosaico) alEstadoMosaico(e);
+  }, [currentPage, rotation, documentoAbierto, alEstadoMosaico, fuenteMosaico]);
+  useEffect(() => { encajadoPorMosaicoRef.current = false; }, [nodeId, versionId]);
+
   // MIENTRAS SOLO HAY VISTA PREVIA, LO QUE HAGA EL USUARIO MANDA. Se apunta si
   // movio la hoja (arrastre, rueda o barras); el centrado propio de arriba no
   // cuenta, por eso la marca de tiempo.
@@ -1921,8 +2016,10 @@ export default function PDFViewer({ url, preparando = false,
   // La pagina se cambia con las flechas, RePag/AvPag y la barra de arriba.
   // `preventDefault` siempre, tambien si el evento no trae zoom: el scroll
   // nativo pelearia con la correccion del punto en cada fotograma.
+  // Con mosaico, la rueda funciona AUNQUE NO HAYA PDF: la base la pone el
+  // mosaico (ver «LA LAMINA SE PUEDE MIRAR SIN PDF»).
   useEffect(() => {
-    if (loading || error) return undefined;
+    if ((loading && !hayMosaico) || error) return undefined;
     const container = containerRef.current;
     if (!container) return undefined;
     const alGirarLaRueda = (e) => {
@@ -1931,7 +2028,7 @@ export default function PDFViewer({ url, preparando = false,
     };
     container.addEventListener('wheel', alGirarLaRueda, { passive: false });
     return () => container.removeEventListener('wheel', alGirarLaRueda);
-  }, [loading, error, zoomHacia]);
+  }, [loading, hayMosaico, error, zoomHacia]);
 
   // AL DESPLAZAR LA VISTA (arrastre, barras), el detalle se rehace para la zona
   // nueva en cuanto la vista se queda quieta. Mientras tanto, lo que asome
@@ -2207,7 +2304,7 @@ export default function PDFViewer({ url, preparando = false,
                 provisional (vista previa o miniatura): entonces la hoja ligera
                 ya ocupa su sitio y es lo unico que se puede enseñar hasta que
                 pdf.js abra el fichero. */}
-            <div className={`pdf-page-pad${numPages || vistaPuesta ? '' : ' sin-documento'}${esperandoDocumento ? ' esperando' : ''}`}>
+            <div className={`pdf-page-pad${numPages || vistaPuesta || hayMosaico ? '' : ' sin-documento'}${esperandoDocumento ? ' esperando' : ''}`}>
               <div ref={wrapRef}
                 // ATENUADO HASTA QUE EL PLANO NUEVO ESTA PINTADO, no hasta
                 // que termina la descarga. Soltarlo antes hacia lo que el
@@ -2243,9 +2340,23 @@ export default function PDFViewer({ url, preparando = false,
                          else setVistaPuesta(false);
                        }} />
                 )}
+                {/* LAS TESELAS (docs/archivos/15). Van encima del lienzo y de la
+                    imagen de espera, en la MISMA caja: cada nivel esta dibujado a
+                    su resolucion, asi que al acercar no se estira nada. Si el
+                    documento no tiene mosaico preparado, no pinta nada. Solo la
+                    primera pagina (es la que tiene mosaico) y sin girar: una
+                    tesela no gira con la hoja. */}
+                {fuenteMosaico && currentPage === 1 && !rotation && (
+                  <CapaMosaico fuente={fuenteMosaico} lienzoRef={canvasRef}
+                               contenedorRef={containerRef} pagina={currentPage}
+                               cedeAlPdf={documentoAbierto && vectorDibujado === docNonce}
+                               alEstado={alMosaico} />
+                )}
+                {/* Los resaltados de la busqueda y las marcas van POR ENCIMA de
+                    las teselas (z-index 9 > 8): sin eso, con mosaico, no se verian. */}
                 {highlights.map(h => (
                   <div key={h.key} style={{
-                    position: 'absolute', pointerEvents: 'none',
+                    position: 'absolute', pointerEvents: 'none', zIndex: 9,
                     left: h.left, top: h.top, width: h.width, height: h.height,
                     background: h.active ? 'rgba(255,145,0,0.55)' : 'rgba(255,235,59,0.38)',
                     outline: h.active ? '1px solid #ff6d00' : 'none', borderRadius: 2,
@@ -2315,7 +2426,7 @@ export default function PDFViewer({ url, preparando = false,
               el centro del CONTENIDO: al alejar la lamina y cambiar de plano
               aparecia lejos, fuera de la vista. Aqui el centro es el de lo que
               se ve, siempre. */}
-          <div className={`pdf-espera-encima${mostrarEspera && !vistaPuesta ? ' se-ve' : ''}`}>
+          <div className={`pdf-espera-encima${esperandoDocumento ? ' se-ve' : ''}`}>
             <MarcaEsperando
                 porcentaje={loading && progress > 0 && progress < 100 ? progress : null} />
           </div>

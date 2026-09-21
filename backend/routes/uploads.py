@@ -351,6 +351,10 @@ def complete_upload():
                 # enseña legible en 1,1 s. Prepararla al subir es lo unico que
                 # hace que la PRIMERA apertura ya la encuentre hecha.
                 gcs_executor.submit(crear_vista_previa, gcs_urn)
+                # Y SU MOSAICO (docs/archivos/15): los niveles de arriba de la
+                # piramide, en la misma cola acotada de las miniaturas.
+                from routes.documents import _encolar_mosaicos
+                _encolar_mosaicos([gcs_urn])
         except Exception as _e:
             print(f"[uploads] no se pudo lanzar la pre-traduccion CAD: {_e}")
 

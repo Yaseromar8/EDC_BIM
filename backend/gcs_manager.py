@@ -369,11 +369,49 @@ def _rasterizar_pdf_de_fichero(ruta, max_px):
 # de ese tamaño la pantalla ya no puede enseñar mas detalle y solo pesa mas.
 #
 # Es el MISMO generador, el mismo bucket y el mismo patron de nombre que la
-# miniatura: `<blob>__thumb2000.jpg` convive con `<blob>__thumb420.jpg` sin
+# miniatura: `<blob>__thumb1500.jpg` convive con `<blob>__thumb420.jpg` sin
 # migracion ni colision, y cada version tiene la suya porque el nombre cuelga
 # del `gcs_urn`, que es unico por subida.
-PX_VISTA_PREVIA = 2000
+#
+# 20-sep-2026, «sigue iniciando opaco y recien cuando nos acercamos se ve»
+# (docs/archivos/14): la imagen de espera SE VEIA PALIDA al lado de lo que
+# acaba dibujando el lector. Medido sobre la lamina real 004120 (71,9 MB) en
+# la columna del cajetin, al tamaño en que se ve en pantalla (972 px):
+#
+#     lo que se dibuja                     tinta   luminancia  gradiente  peso
+#     2000 px tal cual (lo de antes)       0,82 %     225,0       6,43    453 KB
+#     1500 px + mascara de enfoque         1,33 %     221,0       9,92    352 KB
+#     el lector (pdf.js) cuando acaba      3,03 %     218,3       9,27      --
+#
+# DOS CAMBIOS, los dos medidos:
+#  1. 1500 px en vez de 2000: dos reducciones seguidas (2000 -> pantalla)
+#     promedian la linea fina con el blanco y la dejan casi invisible. A 1500
+#     queda mas cerca de lo que se ve, pesa un 22 % menos y se genera 12 veces
+#     mas rapido (80 ms frente a 1014 ms en esa lamina).
+#  2. Mascara de enfoque al terminar: devuelve el borde que la reduccion se
+#     lleva (gradiente 9,92 frente a 6,43; el lector, 9,27).
+#
+# LO QUE SE PROBO Y SE DESCARTO: dibujar sin suavizado (antialias 0) sube la
+# tinta pero ROMPE el texto pequeño --las letras del cuadro de revision salen
+# ilegibles-- y engordar las lineas con un filtro de minimo emborrona el
+# cajetin. Comparacion a la vista en docs/archivos/evidencias/previa/.
+PX_VISTA_PREVIA = 1500
 CALIDAD_VISTA_PREVIA = 85
+# Mascara de enfoque de la vista previa (radio, fuerza %, umbral). El umbral
+# deja en paz las zonas planas --la foto aerea no se ensucia-- y solo actua
+# donde hay borde.
+ENFOQUE_VISTA_PREVIA = (1.0, 160, 2)
+
+
+def _afinar_vista_previa(imagen):
+    """Devuelve la imagen con el borde recuperado (ver ENFOQUE_VISTA_PREVIA)."""
+    try:
+        from PIL import ImageFilter
+        radio, fuerza, umbral = ENFOQUE_VISTA_PREVIA
+        return imagen.filter(ImageFilter.UnsharpMask(radius=radio, percent=fuerza, threshold=umbral))
+    except Exception as e:                      # sin enfoque antes que sin vista previa
+        print(f"[vista previa] sin enfoque: {str(e)[:120]}")
+        return imagen
 
 
 def nombre_de_vista_previa(blob_name):
@@ -451,6 +489,10 @@ def get_or_create_thumbnail(blob_name, max_px=420, calidad=72):
             imagen = _rasterizar_pdf_de_fichero(ruta_temporal, max_px)
             if imagen is None:
                 return None, None
+            # Solo la VISTA PREVIA se enfoca: la miniatura de 420 px es una
+            # silueta para la cuadricula y ahi el enfoque solo añade ruido.
+            if max_px >= PX_VISTA_PREVIA:
+                imagen = _afinar_vista_previa(imagen)
         else:
             imagen = Image.open(ruta_temporal)
             imagen = ImageOps.exif_transpose(imagen)   # orientacion del movil

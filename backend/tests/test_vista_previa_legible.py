@@ -156,7 +156,7 @@ def test_la_lamina_preparada_devuelve_su_vista_previa(banco):
 
     assert codigo == 200
     assert d == {'success': True, 'pendiente': False,
-                 'url': 'https://firmada.test/1787962081_aaaaaaaa_LAMINA.pdf__thumb2000.jpg'}
+                 'url': 'https://firmada.test/1787962081_aaaaaaaa_LAMINA.pdf__thumb1500.jpg'}
     assert estado['trabajos'] == [], 'lo que ya esta hecho no se vuelve a preparar'
 
 
@@ -177,7 +177,7 @@ def test_la_version_fijada_enseña_la_suya_y_no_la_viva(banco):
     codigo, d = pedir({'node_id': NODO, 'version_id': V_ANTERIOR})
 
     assert codigo == 200
-    assert d['url'].endswith('1787962080_99999999_LAMINA.pdf__thumb2000.jpg'), \
+    assert d['url'].endswith('1787962080_99999999_LAMINA.pdf__thumb1500.jpg'), \
         'la vista previa tiene que ser la del objeto de ESA version'
 
 
@@ -311,7 +311,7 @@ def test_un_historico_pendiente_se_prepara_y_la_siguiente_apertura_ya_la_tiene(b
     codigo, segunda = pedir({'node_id': NODO})
     assert codigo == 200
     assert segunda['pendiente'] is False
-    assert segunda['url'].endswith('__thumb2000.jpg')
+    assert segunda['url'].endswith('__thumb1500.jpg')
     assert estado['trabajos'] == [], 'ya no hay nada que preparar'
 
 
@@ -412,6 +412,12 @@ def test_al_subir_un_pdf_se_prepara_la_vista_previa():
 
 
 def test_el_nombre_lleva_el_tamaño_y_cuelga_de_la_version():
-    assert gcs_manager.nombre_de_vista_previa(VIVA) == VIVA + '__thumb2000.jpg'
+    # 20-sep-2026: de 2000 a 1500 px con mascara de enfoque, A PROPOSITO y medido
+    # (docs/archivos/14 §7): la de 2000 se veia palida -- 0,82 % de tinta frente
+    # al 3,03 % del lector -- y la nueva recupera el borde, pesa un 22 % menos y
+    # se genera 12 veces mas rapido. El candado sigue: cambiarlo tiene que ser
+    # igual de deliberado.
+    assert gcs_manager.nombre_de_vista_previa(VIVA) == VIVA + '__thumb1500.jpg'
     assert gcs_manager.nombre_de_vista_previa(ANTERIOR) != gcs_manager.nombre_de_vista_previa(VIVA)
-    assert (gcs_manager.PX_VISTA_PREVIA, gcs_manager.CALIDAD_VISTA_PREVIA) == (2000, 85)
+    assert (gcs_manager.PX_VISTA_PREVIA, gcs_manager.CALIDAD_VISTA_PREVIA) == (1500, 85)
+    assert gcs_manager.ENFOQUE_VISTA_PREVIA == (1.0, 160, 2)

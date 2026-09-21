@@ -146,7 +146,10 @@ def test_el_recorte_es_real(rutas_portal):
     285 el 27-ago-2026: NG-03 anadio la familia `/api/cuaderno` entera (parte
     diario, asientos, instrucciones, ubicacion y clima -- 15 rutas), que es
     producto documental de obra, no visor. El portal ES el CDE: que crezca por
-    ahi es exactamente lo que la fase persigue.
+    ahi es exactamente lo que la fase persigue. De 285 a 286 el 20-sep-2026:
+    UNA ruta, `/api/docs/mosaico`, las teselas del lector de laminas del propio
+    portal (docs/archivos/15); manifiesto y teselas van por la misma a
+    proposito, para no abrir dos.
 
     Lo que este guardia protege NO es el numero: es que el portal no vuelva a
     arrastrar el visor, el 4D o la IA. Eso lo vigila
@@ -154,7 +157,7 @@ def test_el_recorte_es_real(rutas_portal):
     cuenta. Este se queda como alarma gruesa: si un dia salta, la pregunta no es
     «subimos el techo» sino «que se colo».
     """
-    TECHO = 285
+    TECHO = 286
     assert len(rutas_portal) < TECHO, (
         'el perfil portal sirve %d rutas (techo %d): antes de subirlo, mira QUE '
         'se anadio -- si es una familia entera, el recorte dejo de recortar'

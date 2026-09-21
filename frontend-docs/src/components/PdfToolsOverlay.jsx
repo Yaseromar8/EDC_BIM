@@ -306,7 +306,9 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
 
   const interactive = tool !== 'pan';
   return (
-    <div style={{ position: 'absolute', inset: 0, pointerEvents: interactive ? 'auto' : 'none' }}>
+    // zIndex 9: por encima de las teselas del lector (CapaMosaico, 8), que si no
+    // taparian las marcas.
+    <div style={{ position: 'absolute', inset: 0, zIndex: 9, pointerEvents: interactive ? 'auto' : 'none' }}>
       <svg
         ref={svgRef}
         width={vpInfo.w} height={vpInfo.h}

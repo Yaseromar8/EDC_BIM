@@ -1719,6 +1719,9 @@ def confirm_upload():
             if str(filename or '').lower().endswith(('.pdf', '.pdfx')):
                 from gcs_manager import crear_vista_previa
                 threading.Thread(target=crear_vista_previa, args=(gcs_urn,), daemon=True).start()
+                # Y SU MOSAICO (docs/archivos/15): los niveles de arriba, para
+                # que la primera apertura ya no dependa de bajar el PDF entero.
+                _encolar_mosaicos([gcs_urn])
         except Exception as te:
             print(f"[upload-confirm] thumb bg: {te}")
 
@@ -2865,6 +2868,124 @@ def url_de_vista_previa():
     # se prepara aqui mismo: eso seria mudar la espera del navegador al servidor.
     _encolar_vistas_previas([gcs_urn])
     return jsonify({"success": True, "url": None, "pendiente": True}), 200
+
+
+# ── LOS MOSAICOS DE UNA LAMINA (paso B de docs/archivos/15) ─────────────────
+#
+# La lamina como un mapa: teselas por niveles, dibujadas en el servidor, y el
+# navegador baja solo lo que se ve. Medido en el banco (20-sep-2026): la hoja de
+# 71,9 MB en pantalla a los 0,10 s con 233 KB, y acercar x10 con 374 KB en total,
+# SIN esperar al PDF.
+#
+# UNA TESELA ES UN TROZO DEL PLANO: pasa por la MISMA puerta que el PDF y que la
+# vista previa (`_acceso_al_recurso`), ligada a la version, y sin acceso no se
+# dice ni si existe. Los niveles de arriba se preparan al subir (y en la puesta
+# al dia); los profundos, a demanda, la primera vez que alguien acerca esa zona.
+
+def _encolar_mosaicos(urns):
+    """Encola la preparacion de los mosaicos sin repetir (la cola de las miniaturas)."""
+    import mosaicos_almacen
+    nuevas = 0
+    for urn in urns:
+        marca = 'mosaico:' + urn
+        with _CANDADO_MINIATURAS:
+            if marca in _MINIATURAS_ENCOLADAS:
+                continue
+            _MINIATURAS_ENCOLADAS.add(marca)
+        nuevas += 1
+
+        def trabajo(u=urn, m=marca):
+            try:
+                mosaicos_almacen.preparar(u)
+            finally:
+                with _CANDADO_MINIATURAS:
+                    _MINIATURAS_ENCOLADAS.discard(m)
+
+        _COLA_MINIATURAS.submit(trabajo)
+    return nuevas
+
+
+def _documento_con_mosaico(datos):
+    """(gcs_urn, respuesta_de_error) para la ruta del mosaico."""
+    node_id = str(datos.get('node_id') or '').strip()
+    version_id = str(datos.get('version_id') or '').strip()
+    if not node_id and not version_id:
+        return None, (jsonify({"success": False, "error": "Falta el documento"}), 400)
+    try:
+        gcs_urn, node_real = _documento_para_vista_previa(node_id, version_id)
+    except Exception:
+        # FAIL-CLOSED, como la puerta del PDF: si no se puede decidir, no se da.
+        return None, (jsonify({"success": False, "error": "No se pudo verificar el acceso"}), 503)
+    if not gcs_urn:
+        return None, (jsonify({"success": False, "error": "Documento no encontrado"}), 404)
+    denegado = _acceso_al_recurso(gcs_urn=gcs_urn, node_id=node_real or None,
+                                  version_id=version_id or None)
+    if denegado:
+        return None, denegado
+    return gcs_urn, None
+
+
+def _urls_de_teselas(gcs_urn, teselas):
+    """{'z/x_y': URL firmada} de esas teselas. Cada URL se reutiliza mientras le
+    quede vida (gcs_manager), asi que la segunda apertura la baja de la cache
+    del navegador."""
+    import mosaicos_almacen
+    urls = {}
+    for (z, x, y) in teselas:
+        url = generate_signed_url(mosaicos_almacen.nombre_tesela(gcs_urn, z, x, y))
+        if url:
+            urls['%d/%d_%d' % (z, x, y)] = url
+    return urls
+
+
+@documents_bp.route('/api/docs/mosaico', methods=['POST'])
+def mosaico_del_documento():
+    """El mosaico de una version: su manifiesto, o unas teselas de un nivel.
+
+    SIN `z`: el manifiesto y, en la misma respuesta, las URL de los niveles
+    PREPARADOS --ver la hoja entera y el primer acercamiento-- para que el
+    primer gesto no espere otra ida y vuelta (desde Peru, ~0,8 s cada una). Si
+    aun no esta preparado, `pendiente`: se encola UNA vez y el lector sigue
+    como hoy, con la vista previa y el PDF. Nunca se prepara aqui mismo.
+
+    CON `z` y `teselas: [[x, y], ...]` (como mucho 64): las URL de esas
+    teselas. Las de un nivel profundo que todavia no esten se dibujan en este
+    momento, se guardan y se entregan: la primera vez que alguien acerca esa
+    zona.
+
+    UNA SOLA RUTA, A PROPOSITO: las dos preguntas pasan por la misma puerta, y
+    el perfil portal vigila cuantas rutas sirve (tests/test_perfil_portal.py).
+    """
+    datos = request.get_json(silent=True) or {}
+    gcs_urn, error = _documento_con_mosaico(datos)
+    if error:
+        return error
+    if not str(gcs_urn).lower().endswith(('.pdf', '.pdfx')):
+        return jsonify({"success": True, "manifiesto": None, "urls": {}, "pendiente": False}), 200
+    import mosaicos_almacen
+    try:
+        man = mosaicos_almacen.leer_manifiesto(gcs_urn)
+    except Exception as e:
+        logger.error('mosaico: no se pudo leer el manifiesto: %s', e)
+        man = None
+    if not man:
+        _encolar_mosaicos([gcs_urn])
+        return jsonify({"success": True, "manifiesto": None, "urls": {}, "pendiente": True}), 200
+
+    if datos.get('z') is None:
+        return jsonify({"success": True, "manifiesto": man, "pendiente": False,
+                        "urls": _urls_de_teselas(gcs_urn, mosaicos_almacen.teselas_preparadas(man))}), 200
+
+    z, pedidas = mosaicos_almacen.teselas_validas(man, datos.get('z'), datos.get('teselas'))
+    if z is None:
+        return jsonify({"success": False, "error": "Nivel inexistente"}), 400
+    try:
+        listas = mosaicos_almacen.asegurar_teselas(gcs_urn, man, z, pedidas)
+    except Exception as e:
+        logger.error('mosaico: no se pudieron preparar teselas: %s', e)
+        return jsonify({"success": False, "error": "No se pudieron preparar"}), 503
+    return jsonify({"success": True, "pendiente": False,
+                    "urls": _urls_de_teselas(gcs_urn, [(z, x, y) for (x, y) in listas])}), 200
 
 
 @documents_bp.route('/api/docs/shared/<share_id>', methods=['GET'])

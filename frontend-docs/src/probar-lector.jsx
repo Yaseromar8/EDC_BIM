@@ -16,7 +16,7 @@
  * Se abre con el servidor de desarrollo en /probar-lector.html
  * (necesita planos en public/_probar/: plano-A.pdf, plano-B.pdf, plano-C.pdf).
  */
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { createRoot } from 'react-dom/client';
 import PDFViewer from './components/PDFViewer';
 import './index.css';
@@ -48,19 +48,49 @@ const FICHERO_DE_VISTA = {
   '2000webp': '/_probar/vista-p-2000.webp',
 }[VISTA] || null;
 
+// MOSAICOS (paso 2, docs/archivos/15): `?mosaico=1` da mosaico a TODAS las
+// laminas del banco por el camino de produccion (la ruta /api/docs/mosaico,
+// simulada abajo sobre el servidor de mosaicos local, puerto 5190). Sin el
+// parametro, el banco es exactamente el lector de hoy, que es contra lo que hay
+// que compararlo.
+const MOSAICO = new URLSearchParams(window.location.search).get('mosaico') === '1';
+// `?frio=1`: la PRIMERA VEZ de verdad (20-sep-2026, el propietario: «ese link es de un
+// archivo ya cargado»). Cada URL --teselas y PDF-- lleva una marca unica, asi el navegador
+// no puede sacar nada de su cache y lo baja todo como si nunca hubiera visto la lamina.
+const FRIO = new URLSearchParams(window.location.search).get('frio') === '1';
+const MARCA_FRIA = FRIO ? `?frio=${Date.now()}` : '';
+
 // Lo que tarda el backend en devolver la URL firmada. Medido en produccion
 // entre 300 y 800 ms; se usa el punto medio.
-const MS_URL_FIRMADA = 500;
+//
+// `?pdf=<ms>` lo alarga a proposito: en el banco el PDF es local y llega en un
+// suspiro, asi que no se ve lo que de verdad pasa en produccion, donde la
+// lamina de 71,9 MB tarda decenas de segundos (20-sep-2026, el propietario:
+// «¿que pasa si abro recien el archivo?»). Con `?pdf=30000` el lector se queda
+// sin PDF 30 segundos: lo que se vea en ese rato es lo que dan los mosaicos.
+const MS_URL_FIRMADA = Number(new URLSearchParams(window.location.search).get('pdf')) || 500;
 
 // P1 · `?inicial=vacio` arranca SIN lector, como el explorador antes de abrir
 // un documento: asi la primera apertura se mide con el lienzo limpio y no con
 // la lamina anterior todavia puesta (que falsea «primera tinta» y los bordes).
 const EMPIEZA_VACIO = new URLSearchParams(window.location.search).get('inicial') === 'vacio';
 
+// Con `?mosaico=1` el banco arranca YA en la lamina pesada (plano-P): es la
+// unica que tiene mosaico preparado y es la que se quiere mirar.
+const INICIAL = MOSAICO ? PLANOS.findIndex(p => p.id === 'p') : 0;
+
+const PDF_RETRASADO = MS_URL_FIRMADA > 1500;   // apertura en frio simulada
+
 function Banco() {
-  const [i, setI] = useState(0);
+  const [i, setI] = useState(INICIAL);
   const [abierto, setAbierto] = useState(!EMPIEZA_VACIO);
-  const [url, setUrl] = useState(EMPIEZA_VACIO ? null : PLANOS[0].url);
+  const [url, setUrl] = useState(EMPIEZA_VACIO || PDF_RETRASADO ? null : PLANOS[INICIAL].url);
+  // Con `?pdf=<ms>` la URL del PDF se entrega tarde, como en produccion.
+  useEffect(() => {
+    if (!PDF_RETRASADO || EMPIEZA_VACIO) return undefined;
+    const t = setTimeout(() => setUrl(PLANOS[INICIAL].url + MARCA_FRIA), MS_URL_FIRMADA);
+    return () => clearTimeout(t);
+  }, []);
   const [preparando, setPreparando] = useState(false);
   const t0 = useRef(0);
 
@@ -100,6 +130,15 @@ function Banco() {
       projectPrefix="banco"
       onClose={() => {}}
       versionLabel="V1"
+      // Paso B: el mosaico llega por el MISMO camino que en produccion (la ruta
+      // /api/docs/mosaico, simulada abajo sobre el servidor de mosaicos local).
+      alEstadoMosaico={(e) => {
+        window.__mosaico = e;
+        const r = document.getElementById('mosaico');
+        if (r) r.textContent = `mosaico z${e.nivel}/${e.niveles - 1} · ${e.pxPorMm} px/mm reales`
+          + (e.pxPorMm > e.tope ? ` · POR ENCIMA DEL ULTIMO NIVEL (${e.tope})` : '')
+          + ` · ${e.teselas} teselas` + (e.faltan ? ` · ${e.faltan} pedidas` : '');
+      }}
     />
   );
 }
@@ -133,8 +172,90 @@ const MARCAS_DEL_BANCO = [
 ];
 
 const fetchReal = window.fetch.bind(window);
+
+// PASO B · LA RUTA DEL MOSAICO (/api/docs/mosaico), SIMULADA sobre el servidor
+// de mosaicos local (backend/herramientas/servidor_mosaicos_local.py, puerto
+// 5190). El lector va por el MISMO camino que en produccion
+// (utils/mosaicoRemoto.js): pide el manifiesto --con las URL de los niveles
+// preparados-- y las de los profundos al llegar a ellos. Sin `?mosaico=1`
+// contesta «sin mosaico» y el banco es el lector de hoy.
+//
+//   ?api=<ms>     ida y vuelta al servidor (por defecto 300: Lima-Render).
+//   ?dibujo=<ms>  lo que tarda el servidor en dibujar CADA tesela profunda la
+//                 primera vez, de una en una por lamina, como en produccion
+//                 (1 CPU). Por defecto 0: el servidor local dibuja con cuatro
+//                 procesos y mucho mas rapido que Render.
+const SERVIDOR_MOSAICOS = 'http://127.0.0.1:5190/mosaico';
+const MS_API = Number(new URLSearchParams(window.location.search).get('api')) || 300;
+const MS_DIBUJO = Number(new URLSearchParams(window.location.search).get('dibujo')) || 0;
+const manifiestos = {};
+const yaDibujadas = new Set();
+let turnoDeDibujo = Promise.resolve();
+const esperar = (ms) => new Promise(listo => setTimeout(listo, ms));
+const comoJson = (d) => new Response(JSON.stringify(d), { status: 200, headers: { 'Content-Type': 'application/json' } });
+
+async function rutaDelMosaico(opciones) {
+  let cuerpo = {};
+  try { cuerpo = JSON.parse(opciones && opciones.body) || {}; } catch { /* sin cuerpo */ }
+  // Cada llamada, apuntada: asi se cuentan las peticiones que haria el lector.
+  const apunte = { t: Math.round(performance.now()), z: cuerpo.z ?? null, n: (cuerpo.teselas || []).length };
+  (window.__rutaMosaico = window.__rutaMosaico || []).push(apunte);
+  const respuesta = await rutaDelMosaicoSimulada(cuerpo);
+  apunte.ms = Math.round(performance.now()) - apunte.t;
+  return respuesta;
+}
+
+async function rutaDelMosaicoSimulada(cuerpo) {
+  const plano = PLANOS.find(p => 'banco-' + p.id === cuerpo.node_id);
+  const sin = { success: true, manifiesto: null, urls: {}, pendiente: false };
+  if (!MOSAICO || !plano) { await esperar(MS_API); return comoJson(sin); }
+  const carpeta = `${SERVIDOR_MOSAICOS}/${plano.name.replace(/\.pdf$/i, '')}`;
+  const url = (z, x, y) => `${carpeta}/z${z}/${x}_${y}.webp${MARCA_FRIA}`;
+
+  if (cuerpo.z === undefined || cuerpo.z === null) {
+    const [man] = await Promise.all([
+      fetchReal(`${carpeta}/mosaico.json${MARCA_FRIA}`).then(r => (r.ok ? r.json() : null)).catch(() => null),
+      esperar(MS_API),
+    ]);
+    if (!man) return comoJson(sin);
+    manifiestos[plano.id] = man;
+    // Como el servidor (mosaicos_almacen.teselas_preparadas): solo los niveles
+    // preparados que caben ENTEROS en 64 teselas -- z0 y z1; las de z2 se
+    // piden al llegar a el.
+    const urls = {};
+    let cuantas = 0;
+    for (const z of [...(man.preparados || [])].sort((a, b) => a - b)) {
+      const n = man.niveles[z];
+      if (cuantas + n.columnas * n.filas > 64) break;
+      cuantas += n.columnas * n.filas;
+      for (let y = 0; y < n.filas; y += 1) for (let x = 0; x < n.columnas; x += 1) urls[`${z}/${x}_${y}`] = url(z, x, y);
+    }
+    return comoJson({ success: true, manifiesto: man, urls, pendiente: false });
+  }
+
+  // Las teselas de un nivel: como el servidor, contesta cuando ya estan
+  // dibujadas (las profundas, la primera vez, de una en una por lamina).
+  const z = Number(cuerpo.z);
+  const teselas = (cuerpo.teselas || []).slice(0, 64);
+  const man = manifiestos[plano.id];
+  const preparado = man && (man.preparados || []).includes(z);
+  const nuevas = preparado ? [] : teselas.filter(([x, y]) => !yaDibujadas.has(`${plano.id}/${z}/${x}_${y}`));
+  const turno = turnoDeDibujo.then(() => esperar(nuevas.length * MS_DIBUJO));
+  turnoDeDibujo = turno;
+  await Promise.all([
+    turno,
+    ...teselas.map(([x, y]) => fetchReal(url(z, x, y)).then(r => r.blob()).catch(() => null)),
+    esperar(MS_API),
+  ]);
+  nuevas.forEach(([x, y]) => yaDibujadas.add(`${plano.id}/${z}/${x}_${y}`));
+  const urls = {};
+  teselas.forEach(([x, y]) => { urls[`${z}/${x}_${y}`] = url(z, x, y); });
+  return comoJson({ success: true, urls, pendiente: false });
+}
+
 window.fetch = (entrada, opciones) => {
   const dir = typeof entrada === 'string' ? entrada : (entrada && entrada.url) || '';
+  if (dir.includes('/api/docs/mosaico')) return rutaDelMosaico(opciones);
   if (dir.includes('/api/pdf/markups')) {
     return Promise.resolve(new Response(JSON.stringify({ success: true, markups: MARCAS_DEL_BANCO }),
       { status: 200, headers: { 'Content-Type': 'application/json' } }));

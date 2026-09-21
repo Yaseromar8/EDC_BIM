@@ -748,3 +748,20 @@
 }
 
 .pdf-vista.se-ve { opacity: 1; }
+
+/* ── LAS TESELAS DE LA LAMINA (docs/archivos/15) ─────────────────────────
+   Ocupan la caja del lienzo y se colocan en PORCENTAJE, asi que siguen al
+   zoom y al paneo del lector sin tocar su logica. Encima de la imagen de
+   espera (z-index 7) y por debajo de las marcas. Sin raton: el lector sigue
+   recibiendo la rueda y el arrastre. */
+.pdf-mosaico {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 8;
+}
+.pdf-mosaico img {
+  display: block;
+  /* Sin suavizado de mas: la tesela ya viene a la resolucion que toca. */
+  image-rendering: auto;
+}
