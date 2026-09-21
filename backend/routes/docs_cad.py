@@ -441,21 +441,50 @@ def _urn_for(node, bucket, pdf=False):
 
 
 # ── Persistencia: la traduccion se guarda en la VERSION, no en el nodo ──────
-def _load_node(node_id):
+def _load_node(node_id, version_id=None):
+    """El documento y su version ACTUAL, o la version pedida.
+
+    UNA VERSION CONCRETA (21-sep-2026). El visor de planos abria siempre la
+    version actual: al elegir la V1 en el portal, el plano no cambiaba (el
+    dueno: «las versiones existen; solo que al elegir otra no se actualiza»).
+    Ahora se carga la pedida, y tiene que ser de ESTE documento: una version de
+    otro no existe aqui. Cada version tiene su propio objeto en Autodesk
+    (`_object_key_for` usa su id) y su propio estado de traduccion.
+    """
+    if version_id is not None:
+        import uuid as _uuid
+        try:
+            _uuid.UUID(str(version_id))
+        except (ValueError, AttributeError, TypeError):
+            return None
     with get_db_connection() as conn:
         cur = conn.cursor()
-        cur.execute("""
-            SELECT n.id, n.name, n.model_urn, n.gcs_urn, n.current_version_id,
-                   COALESCE(n.size_bytes, 0) AS tam,
-                   -- El metadato puede estar en la version o, en archivos
-                   -- antiguos sin versionar, en el propio nodo. Se fusionan con
-                   -- la version a la derecha, que es la que manda.
-                   COALESCE(n.metadata, '{}'::jsonb) || COALESCE(v.metadata, '{}'::jsonb),
-                   v.id, n.parent_id
-            FROM file_nodes n
-            LEFT JOIN file_versions v ON v.id = n.current_version_id
-            WHERE n.id = %s AND n.is_deleted = FALSE
-        """, (node_id,))
+        if version_id is not None:
+            cur.execute("""
+                SELECT n.id, n.name, n.model_urn, v.gcs_urn, n.current_version_id,
+                       COALESCE(v.size_bytes, 0) AS tam,
+                       -- El metadato del nodo solo vale para la version actual
+                       -- (archivos antiguos sin versionar): igual que abajo.
+                       COALESCE(CASE WHEN v.id = n.current_version_id THEN n.metadata END,
+                                '{}'::jsonb) || COALESCE(v.metadata, '{}'::jsonb),
+                       v.id, n.parent_id
+                FROM file_nodes n
+                JOIN file_versions v ON v.id = %s AND v.file_node_id = n.id
+                WHERE n.id = %s AND n.is_deleted = FALSE
+            """, (str(version_id), node_id))
+        else:
+            cur.execute("""
+                SELECT n.id, n.name, n.model_urn, n.gcs_urn, n.current_version_id,
+                       COALESCE(n.size_bytes, 0) AS tam,
+                       -- El metadato puede estar en la version o, en archivos
+                       -- antiguos sin versionar, en el propio nodo. Se fusionan con
+                       -- la version a la derecha, que es la que manda.
+                       COALESCE(n.metadata, '{}'::jsonb) || COALESCE(v.metadata, '{}'::jsonb),
+                       v.id, n.parent_id
+                FROM file_nodes n
+                LEFT JOIN file_versions v ON v.id = n.current_version_id
+                WHERE n.id = %s AND n.is_deleted = FALSE
+            """, (node_id,))
         row = cur.fetchone()
         if not row:
             return None
@@ -463,6 +492,9 @@ def _load_node(node_id):
             'id': row[0], 'name': row[1], 'model_urn': row[2], 'gcs_urn': row[3],
             'version_id': row[4], 'size': row[5] or 0, 'meta': row[6] or {},
             'v_id': row[7], 'parent_id': row[8], 'refs': [],
+            # La version que se pidio (None = la actual): el trabajo en segundo
+            # plano tiene que traducir ESA, no la actual.
+            'version_pedida': str(version_id) if version_id is not None else None,
         }
 
         # Referencias: los archivos de LA MISMA CARPETA que este dibujo puede
@@ -486,6 +518,11 @@ def _load_node(node_id):
                 if nombre.lower().endswith(REFERENCE_EXTENSIONS):
                     node['refs'].append({'name': nombre, 'gcs_urn': gcs, 'size': tam or 0})
     return node
+
+
+def _cargar(node_id, version_id=None):
+    """`_load_node` con la version solo si se pidio una."""
+    return _load_node(node_id, version_id) if version_id else _load_node(node_id)
 
 
 def _save_cad_meta(node, patch):
@@ -619,7 +656,8 @@ _COLA_TRADUCCION = _ThreadPoolExecutor(max_workers=4,
                                        thread_name_prefix='cad-pretrad')
 
 
-def encolar_pretraduccion(node_id, forzar=False, master=False, vistas_pdf=False):
+def encolar_pretraduccion(node_id, forzar=False, master=False, vistas_pdf=False,
+                          version_id=None):
     """Mete una pre-traduccion en la cola. Nunca lanza hilos sueltos.
 
     `vistas_pdf`: si es un DWG, con sus vistas 2D dibujadas por AutoCAD (ver
@@ -627,14 +665,17 @@ def encolar_pretraduccion(node_id, forzar=False, master=False, vistas_pdf=False)
     """
     try:
         extra = (True,) if vistas_pdf else ()
-        _COLA_TRADUCCION.submit(pretraducir_en_fondo, str(node_id), forzar, master, *extra)
+        con_version = {'version_id': str(version_id)} if version_id else {}
+        _COLA_TRADUCCION.submit(pretraducir_en_fondo, str(node_id), forzar, master, *extra,
+                                **con_version)
         return True
     except Exception as e:
         print('[CAD pre] no se pudo encolar %s: %s' % (node_id, str(e)[:120]))
         return False
 
 
-def pretraducir_en_fondo(node_id, forzar=False, master=False, vistas_pdf=False):
+def pretraducir_en_fondo(node_id, forzar=False, master=False, vistas_pdf=False,
+                         version_id=None):
     """Traduce un CAD sin que nadie espere: el camino de ACC.
 
     Mismo flujo idempotente que el endpoint /translate pero fuera de una
@@ -653,12 +694,14 @@ def pretraducir_en_fondo(node_id, forzar=False, master=False, vistas_pdf=False):
     `cad.vistas_pdf`, y si el dibujo ya estaba en Autodesk se copia alli mismo.
     """
     clave = '%s:pdf' % node_id if vistas_pdf else node_id
+    if version_id:
+        clave = '%s@%s' % (clave, version_id)
     with _CANDADO_PRETRADUCCION:
         if clave in _PRETRADUCCIONES_EN_CURSO:
             return
         _PRETRADUCCIONES_EN_CURSO.add(clave)
     try:
-        node = _load_node(node_id)
+        node = _cargar(node_id, version_id)
         if not node or not is_cad_file(node['name']) or not node['gcs_urn']:
             return
         pdf = bool(vistas_pdf) and _admite_vistas_pdf(node)
@@ -855,7 +898,8 @@ def _traducir_con_vistas_autocad(node, forzar, master, verificar):
                   'traduccion de siempre' % node.get('name'))
             return None
     if not en_curso:
-        encolar_pretraduccion(node['id'], forzar, master, vistas_pdf=True)
+        encolar_pretraduccion(node['id'], forzar, master, vistas_pdf=True,
+                              version_id=node.get('version_pedida'))
         _save_cad_meta_pdf(node, {'urn': urn_pdf, 'status': 'inprogress',
                                   'started_at': time.time()})
 
@@ -909,7 +953,7 @@ def translate_cad():
     if not node_id:
         return jsonify({'success': False, 'error': 'Falta node_id'}), 400
 
-    node = _load_node(node_id)
+    node = _cargar(node_id, data.get('version_id'))
     if not node:
         return jsonify({'success': False, 'error': 'Archivo no encontrado'}), 404
     negativa = _guardia_del_plano(node)
@@ -1022,7 +1066,10 @@ def translate_cad():
     # ahora en un hilo (pretraducir_en_fondo, con su candado anti-duplicados)
     # y esta respuesta vuelve al instante: el frontend ya sondea /status, que
     # trata la fase sin manifiesto como 'inprogress 0%'.
-    encolar_pretraduccion(node['id'], forzar, master)
+    if node.get('version_pedida'):
+        encolar_pretraduccion(node['id'], forzar, master, version_id=node['version_pedida'])
+    else:
+        encolar_pretraduccion(node['id'], forzar, master)
     _save_cad_meta(node, {'urn': urn, 'status': 'inprogress'})
     return jsonify({'success': True, 'status': 'inprogress', 'urn': urn,
                     'progress': 'Subiendo el archivo a Autodesk…'})
@@ -1101,7 +1148,7 @@ def cad_status():
     if not node_id:
         return jsonify({'success': False, 'error': 'Falta node_id'}), 400
 
-    node = _load_node(node_id)
+    node = _cargar(node_id, request.args.get('version_id'))
     if not node:
         return jsonify({'success': False, 'error': 'Archivo no encontrado'}), 404
     negativa = _guardia_del_plano(node)

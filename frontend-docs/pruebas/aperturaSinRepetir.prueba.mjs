@@ -53,10 +53,11 @@ await test('el CAD compartido sigue recibiendo su URL (descarga del original)', 
 
 await test('el visor CAD reusa la traduccion guardada y, si no abre, verifica UNA vez', () => {
     assert.match(cad, /const arrancar = async \(\{ verificar = false \} = \{\}\) => \{/);
-    // Desde el 21-sep-2026 el cuerpo pide ademas las vistas de AutoCAD de los
-    // DWG (`pedirVistas`, ver routes/docs_cad.py); lo que se fija sigue igual:
-    // `verificar: true` SOLO en el reintento.
-    assert.match(cad, /JSON\.stringify\(\{ node_id: file\.id, \.\.\.pedirVistas\(\), \.\.\.\(verificar \? \{ verificar: true \} : \{\}\) \}\)/);
+    // Desde el 21-sep-2026 el cuerpo lleva ademas la version elegida
+    // (`pedirVersion`) y pide las vistas de AutoCAD de los DWG (`pedirVistas`,
+    // ver routes/docs_cad.py); lo que se fija sigue igual: `verificar: true`
+    // SOLO en el reintento.
+    assert.match(cad, /JSON\.stringify\(\{ node_id: file\.id, \.\.\.pedirVersion\(\), \.\.\.pedirVistas\(\), \.\.\.\(verificar \? \{ verificar: true \} : \{\}\) \}\)/);
     assert.match(cad, /d\.origen === 'guardado' && !verificar\s+\? \(\) => arrancar\(\{ verificar: true \}\) : null/);
     assert.match(cad, /if \(siNoAbre\) \{\s+try \{ viewer\.finish\(\); \}/, 'el visor fallido se retira antes de reintentar');
 });

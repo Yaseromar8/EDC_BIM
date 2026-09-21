@@ -2431,6 +2431,74 @@ th {
   to { transform: rotate(360deg); }
 }
 
+/* ─── ABRIR UN PLANO CAD (CadViewer, 21-sep-2026) ───
+   Como ACC: el lienzo gris del visor, tres puntos que laten y, abajo a la
+   izquierda, cuanto lleva cargado. Nada de «enviando a Autodesk» cuando el
+   plano ya esta preparado. */
+.cad-abriendo {
+  position: absolute;
+  inset: 0;
+  background: #ececec;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 4;
+}
+.cad-puntos { display: flex; align-items: center; gap: 16px; }
+.cad-puntos span {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  animation: cad-latido 1.2s ease-in-out infinite;
+}
+.cad-puntos span:nth-child(2) { animation-delay: 0.15s; }
+.cad-puntos span:nth-child(3) { animation-delay: 0.3s; }
+@keyframes cad-latido {
+  0%, 80%, 100% { transform: scale(0.55); opacity: 0.7; }
+  40% { transform: scale(1); opacity: 1; }
+}
+.cad-carga {
+  position: absolute;
+  left: 8px;
+  bottom: 8px;
+  font-size: 12px;
+  color: #1f2733;
+}
+.cad-carga-barra {
+  width: 228px;
+  height: 4px;
+  margin-top: 4px;
+  background: #1f2733;
+  overflow: hidden;
+}
+.cad-carga-barra div { height: 100%; background: #37c871; transition: width 0.3s; }
+.cad-preparando-barra {
+  width: 260px;
+  height: 6px;
+  background: #dfe4ea;
+  border-radius: 3px;
+  overflow: hidden;
+  position: relative;
+}
+.cad-preparando-barra-indeterminada {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 35%;
+  background: var(--accent);
+  border-radius: 3px;
+  animation: cad-avance 1.4s ease-in-out infinite;
+}
+@keyframes cad-avance {
+  0% { left: -35%; }
+  100% { left: 100%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cad-puntos span, .cad-preparando-barra-indeterminada { animation: none; }
+}
+
 /* ============== CUSTOM DRAG OVER ============ */
 .dropzone-active {
   background: rgba(95, 127, 163, 0.05);

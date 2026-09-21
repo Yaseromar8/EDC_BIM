@@ -60,3 +60,30 @@ La traducción la hace Autodesk con las credenciales del servidor de Render: en 
 nuevo, y lo que cuesta es lo mismo que su traducción original. Los nuevos se traducen una sola vez, como hasta hoy.
 Mientras el backend nuevo convive con el portal anterior, un DWG subido en ese rato se traduciría dos veces, una con
 cada opción.
+
+## 4 · La versión elegida y la apertura (21-sep-2026)
+
+**Versiones.** El propietario: «las versiones existen; solo que al elegir otra no se actualiza». El visor de planos
+abría siempre la versión actual, por dos lados:
+- el portal no le pasaba la versión elegida (al lector de PDF sí);
+- las rutas del CAD (`/translate`, `/status`) solo recibían el documento.
+
+Ahora:
+- el portal pasa `versionId` y vuelve a montar el visor al cambiar de versión;
+- el servidor carga esa versión (`_load_node(node_id, version_id)`), que tiene que ser de ese documento;
+- el trabajo de fondo traduce esa versión y no la actual.
+
+Cada versión ya tenía su propio objeto en Autodesk y su propio estado de traducción, así que no hubo que migrar nada.
+Los PDF no tenían el fallo: comprobado en Docs local con un PDF de dos versiones. Al elegir V1 cambian el fichero, la
+vista previa y las teselas.
+
+**Abrir un CAD.** La fase inicial del visor se pintaba como «Enviando el archivo a Autodesk… Todavía no hay
+porcentaje», así que la leía todo el que abría un plano, aunque ya estuviera preparado. Y mientras Autodesk convertía el
+dibujo seguía diciendo «Enviando». Ahora:
+- **Plano preparado:** como ACC, el lienzo gris con tres puntos y abajo «Cargando el plano · N %» (el porcentaje del
+  propio visor, que solo avanza). Medido en su Chrome: puntos al instante, porcentaje al segundo, plano a los 3 s.
+- **Hay que prepararlo:** «Preparando el plano», el paso («Enviando el archivo · paso 1 de 2» / «Convirtiendo el dibujo
+  · paso 2 de 2»), una barra que siempre se mueve y una sola frase sin jerga.
+
+El aviso de la traducción provisional ya no dice «versión anterior», que se confundía con V1/V2: dice «vista
+provisional».

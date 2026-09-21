@@ -110,7 +110,13 @@ def servidor(monkeypatch):
     def _token():
         estado['token_pedido'] += 1
         return 'tok', None
-    monkeypatch.setattr(cad, '_load_node', lambda _id: estado['nodo'])
+    def _cargar_nodo(_id, version_id=None):
+        estado['versiones_pedidas'].append(version_id)
+        nodo = estado['nodo']
+        nodo['version_pedida'] = version_id
+        return nodo
+    estado['versiones_pedidas'] = []
+    monkeypatch.setattr(cad, '_load_node', _cargar_nodo)
     monkeypatch.setattr(cad, '_guardia_del_plano', lambda _n: None)
     monkeypatch.setattr(cad, 'get_internal_token', _token)
     monkeypatch.setattr(cad, '_ensure_bucket', lambda _t: (BUCKET, None))
@@ -118,9 +124,13 @@ def servidor(monkeypatch):
     monkeypatch.setattr(cad, '_manifest', lambda _t, urn: (estado['manifiestos'].get(urn), None))
     monkeypatch.setattr(cad, '_save_cad_meta',
                         lambda n, p: estado['guardado'].append(p) or dict((n['meta'].get('cad') or {}), **p))
-    monkeypatch.setattr(cad, 'encolar_pretraduccion',
-                        lambda node_id, forzar=False, master=False, vistas_pdf=False:
-                        estado['encolados'].append({'forzar': forzar, 'vistas_pdf': vistas_pdf}) or True)
+    def _encolar(node_id, forzar=False, master=False, vistas_pdf=False, version_id=None):
+        apunte = {'forzar': forzar, 'vistas_pdf': vistas_pdf}
+        if version_id:
+            apunte['version_id'] = version_id
+        estado['encolados'].append(apunte)
+        return True
+    monkeypatch.setattr(cad, 'encolar_pretraduccion', _encolar)
     monkeypatch.setattr(cad, '_start_translation', lambda *a, **k: ({'result': 'ok'}, None))
     monkeypatch.setattr(cad, '_esta_entero', lambda *a, **k: True)
 
@@ -355,3 +365,82 @@ def test_la_lista_no_dice_procesando_si_ya_se_abre_con_la_de_siempre(monkeypatch
         r = cad.cad_estados()
     estados = (r[0] if isinstance(r, tuple) else r).get_json()['estados']
     assert estados == {'n-a': 'success', 'n-b': 'inprogress', 'n-c': 'success'}
+
+
+# ── 7 · LA VERSION ELEGIDA (21-sep-2026) ───────────────────────────────────
+#
+# El dueño: «las versiones existen; solo que al elegir otra no se actualiza».
+# El visor de planos abría siempre la versión actual: ni el portal le decía
+# cuál se había elegido, ni el servidor la leía.
+
+V1 = '00000000-0000-4000-8000-0000000000a1'
+
+
+def test_translate_y_status_cargan_la_version_pedida(servidor):
+    estado, traducir, consultar = servidor
+    traducir({'node_id': 'n-1', 'version_id': V1, 'vistas': 'autocad'})
+    assert estado['versiones_pedidas'][-1] == V1
+    assert estado['encolados'][-1]['version_id'] == V1, 'el trabajo de fondo tiene que traducir ESA version'
+    consultar('node_id=n-1&vistas=autocad&version_id=' + V1)
+    assert estado['versiones_pedidas'][-1] == V1
+
+
+def test_sin_version_se_carga_como_siempre(servidor):
+    estado, traducir, _c = servidor
+    traducir({'node_id': 'n-1', 'vistas': 'autocad'})
+    assert estado['versiones_pedidas'][-1] is None
+    assert 'version_id' not in estado['encolados'][-1]
+
+
+def test_el_trabajo_de_fondo_carga_la_version(monkeypatch):
+    pedidas = []
+    monkeypatch.setattr(cad, '_load_node', lambda node_id, version_id=None: pedidas.append(version_id))
+    cad.pretraducir_en_fondo('n-1', vistas_pdf=True, version_id=V1)
+    cad.pretraducir_en_fondo('n-1')
+    assert pedidas == [V1, None]
+
+
+def test_la_cola_pasa_la_version(monkeypatch):
+    llamadas = []
+
+    class _Cola:
+        def submit(self, fn, *args, **kwargs):
+            llamadas.append((args, kwargs))
+    monkeypatch.setattr(cad, '_COLA_TRADUCCION', _Cola())
+    cad.encolar_pretraduccion('n-1', False, False, vistas_pdf=True, version_id=V1)
+    assert llamadas == [(('n-1', False, False, True), {'version_id': V1})]
+
+
+def test_una_version_mal_escrita_no_llega_a_la_base(monkeypatch):
+    monkeypatch.setattr(cad, 'get_db_connection',
+                        lambda: (_ for _ in ()).throw(AssertionError('no se consulta')))
+    assert cad._load_node('n-1', "1' OR '1'='1") is None
+
+
+def test_la_version_tiene_que_ser_de_este_documento(monkeypatch):
+    visto = {}
+
+    class _Cur:
+        def execute(self, sql, params=()):
+            visto.setdefault('sql', ' '.join(sql.split()))
+            visto.setdefault('params', params)
+
+        def fetchone(self):
+            return None
+
+        def fetchall(self):
+            return []
+
+    class _Con:
+        def cursor(self):
+            return _Cur()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+    monkeypatch.setattr(cad, 'get_db_connection', lambda: _Con())
+    assert cad._load_node('n-1', V1) is None
+    assert 'JOIN file_versions v ON v.id = %s AND v.file_node_id = n.id' in visto['sql']
+    assert visto['params'] == (V1, 'n-1')

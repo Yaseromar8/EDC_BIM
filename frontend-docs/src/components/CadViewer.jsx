@@ -301,10 +301,21 @@ function PanelContenido({ vistas, vistaActiva, onElegir }) {
   );
 }
 
-export default function CadViewer({ file, projectPrefix = '', urnDirecto = null }) {
+export default function CadViewer({ file, projectPrefix = '', urnDirecto = null, versionId = null }) {
   const containerRef = useRef(null);
   const viewerRef = useRef(null);
-  const [phase, setPhase] = useState('preparando');   // preparando | traduciendo | listo | error
+  // abriendo | preparando | traduciendo | listo | error
+  //
+  // ABRIENDO (21-sep-2026). Se empezaba en «preparando», y esa fase se pintaba
+  // como «Enviando el archivo a Autodesk… Todavia no hay porcentaje»: lo leia
+  // TODO el que abria un plano, aunque ya estuviera preparado y lo unico que
+  // pasara fuera cargar el visor. El dueno: «que el usuario no sienta que esta
+  // abriendo al raro». Ahora, si el plano esta listo, se ve lo de ACC: el lienzo
+  // gris, tres puntos y abajo «Cargando el plano · N %». Solo si de verdad hay
+  // que prepararlo se dice, y sin jerga.
+  const [phase, setPhase] = useState('abriendo');
+  // Lo que lleva cargado el visor (0-100), o null si todavia no lo dice.
+  const [carga, setCarga] = useState(null);
   const [progress, setProgress] = useState('');
   const [transcurrido, setTranscurrido] = useState(0);
   const [puedeReintentar, setPuedeReintentar] = useState(false);
@@ -344,6 +355,9 @@ export default function CadViewer({ file, projectPrefix = '', urnDirecto = null 
     // como las ve el cadista (ver sinVistasAutocadRef).
     const pedirVistas = () => (sinVistasAutocadRef.current ? {} : { vistas: 'autocad' });
     const consultaVistas = () => (sinVistasAutocadRef.current ? '' : '&vistas=autocad');
+    // LA VERSION ELEGIDA en el portal (null = la actual): el servidor traduce ESA.
+    const pedirVersion = () => (versionId ? { version_id: versionId } : {});
+    const consultaVersion = () => (versionId ? `&version_id=${encodeURIComponent(versionId)}` : '');
 
     const fail = (msg) => {
       if (cancelled) return;
@@ -385,6 +399,14 @@ export default function CadViewer({ file, projectPrefix = '', urnDirecto = null 
                                                         { theme: 'light-theme' });
         viewer.start();
         viewerRef.current = viewer;
+        // CUANTO LLEVA CARGADO, como la barra de ACC abajo a la izquierda.
+        viewer.addEventListener(Autodesk.Viewing.PROGRESS_UPDATE_EVENT, (e) => {
+          if (cancelled || !e || typeof e.percent !== 'number') return;
+          // Solo hacia delante: el visor cuenta cada fase de la carga por su
+          // lado, y el numero bajaba de 1 a 0 a mitad de camino.
+          const nuevo = Math.max(0, Math.min(100, Math.round(e.percent)));
+          setCarga(antes => Math.max(antes || 0, nuevo) || null);
+        });
         // La rueda, corregida en el borde (ver interceptarRueda).
         if (soltarRueda.current) soltarRueda.current();
         // Se le pasa una FORMA DE PREGUNTAR por el visor, no el visor: el
@@ -467,7 +489,7 @@ export default function CadViewer({ file, projectPrefix = '', urnDirecto = null 
     const poll = async () => {
       if (cancelled) return;
       try {
-        const r = await apiFetch(`${API}/api/docs/cad/status?node_id=${encodeURIComponent(file.id)}${consultaVistas()}`);
+        const r = await apiFetch(`${API}/api/docs/cad/status?node_id=${encodeURIComponent(file.id)}${consultaVersion()}${consultaVistas()}`);
         const d = await r.json();
         if (cancelled) return;
         if (!d.success) return reintentarPoll(d.error || 'No se pudo consultar el estado.');
@@ -477,15 +499,15 @@ export default function CadViewer({ file, projectPrefix = '', urnDirecto = null 
           // Autodesk no pudo dibujar este plano con AutoCAD: se muestra con la
           // traduccion de siempre, y se dice.
           sinVistasAutocadRef.current = true;
-          setAviso('Este plano se muestra con la traducción anterior: Autodesk no pudo dibujar sus vistas con AutoCAD.');
-          setPhase('preparando');
+          setAviso('Este plano se muestra con una vista provisional: Autodesk no pudo dibujar sus vistas con AutoCAD.');
+          setPhase('abriendo');
           return arrancar();
         }
         if (d.status === 'retry_plain') {
           // El paquete con la imagen adjunta fracasó; el backend ya se rindió
           // con ella. Se pide de nuevo, ahora del dibujo suelto.
           setAviso(d.aviso || '');
-          setPhase('preparando');
+          setPhase('abriendo');
           return arrancar();
         }
         if (d.status === 'failed' || d.status === 'timeout') {
@@ -509,8 +531,11 @@ export default function CadViewer({ file, projectPrefix = '', urnDirecto = null 
         // QUE FASE ES, segun el backend. Mientras el fichero viaja a Autodesk
         // no hay traduccion que medir, y llamarlo «Traduciendo…» con un 0%
         // clavado durante minutos es justo lo que el dueno llamo «incoherente».
+        // Sin manifiesto el archivo aun viaja (`fase: 'subiendo'`); con el,
+        // Autodesk ya lo esta convirtiendo aunque no mande fase. Antes esta
+        // segunda parte se quedaba en «Enviando…» hasta el final.
         if (d.fase === 'subiendo') setPhase('preparando');
-        else if (d.fase) setPhase('traduciendo');
+        else setPhase('traduciendo');
         setProgress(d.progress || '');
         timer = setTimeout(poll, 4000);
       } catch {
@@ -520,10 +545,10 @@ export default function CadViewer({ file, projectPrefix = '', urnDirecto = null 
 
     const arrancar = async ({ verificar = false } = {}) => {
       try {
-        const d = await pedirTraduccion(file.id + ':' + Date.now(), async () => {
+        const d = await pedirTraduccion(file.id + ':' + (versionId || 'actual') + ':' + Date.now(), async () => {
           const r = await apiFetch(`${API}/api/docs/cad/translate`, {
             method: 'POST',
-            body: JSON.stringify({ node_id: file.id, ...pedirVistas(), ...(verificar ? { verificar: true } : {}) }),
+            body: JSON.stringify({ node_id: file.id, ...pedirVersion(), ...pedirVistas(), ...(verificar ? { verificar: true } : {}) }),
           });
           return r.json();
         });
@@ -537,7 +562,7 @@ export default function CadViewer({ file, projectPrefix = '', urnDirecto = null 
           // siempre: el plano se abre ya, y se dice que la proxima vez saldra
           // como en el CAD.
           if (d.preparando_vistas) {
-            setAviso('Preparando este plano tal como se ve en AutoCAD. Mientras tanto se muestra la versión anterior.');
+            setAviso('Preparando este plano tal como se ve en AutoCAD. Mientras tanto ves una vista provisional.');
           }
           return mount(d.urn, d.origen === 'guardado' && !verificar
             ? () => arrancar({ verificar: true }) : null);
@@ -564,7 +589,7 @@ export default function CadViewer({ file, projectPrefix = '', urnDirecto = null 
       try { viewerRef.current?.finish(); } catch { /* el visor ya podría estar destruido */ }
       viewerRef.current = null;
     };
-  }, [file.id, intento, urnDirecto]);
+  }, [file.id, intento, urnDirecto, versionId]);
 
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%', background: '#f6f7f9' }}>
@@ -615,7 +640,21 @@ export default function CadViewer({ file, projectPrefix = '', urnDirecto = null 
         />
       )}
 
-      {phase !== 'listo' && (
+      {phase === 'abriendo' && (
+        // EL PLANO YA ESTA PREPARADO: solo se carga. Como ACC: lienzo gris, tres
+        // puntos, y abajo cuanto lleva.
+        <div className="cad-abriendo" role="status" aria-label="Abriendo el plano">
+          <div className="cad-puntos"><span /><span /><span /></div>
+          {carga !== null && (
+            <div className="cad-carga">
+              <span>Cargando el plano · {carga} %</span>
+              <div className="cad-carga-barra"><div style={{ width: `${carga}%` }} /></div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {phase !== 'listo' && phase !== 'abriendo' && (
         <div style={{
           position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
           alignItems: 'center', justifyContent: 'center', gap: 12,
@@ -634,7 +673,7 @@ export default function CadViewer({ file, projectPrefix = '', urnDirecto = null 
               )}
               {puedeReintentar && (
                 <button
-                  onClick={() => { setPuedeReintentar(false); setDetalle(''); setError(''); setTranscurrido(0); setPhase('preparando'); setIntento(n => n + 1); }}
+                  onClick={() => { setPuedeReintentar(false); setDetalle(''); setError(''); setTranscurrido(0); setCarga(null); setPhase('abriendo'); setIntento(n => n + 1); }}
                   style={{ marginTop: 6, padding: '7px 18px', fontSize: 13, cursor: 'pointer',
                            background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 5 }}>
                   Volver a intentarlo
@@ -667,27 +706,27 @@ export default function CadViewer({ file, projectPrefix = '', urnDirecto = null 
             </>
           ) : (
             <>
-              {/* Un giro sin numeros no dice si avanza o si se colgo, y es lo que
-                  desespera al que espera. Aqui hay siempre algo que se mueve:
-                  durante el envio, el reloj y el tamano; durante la traduccion,
-                  el porcentaje real que da Autodesk. */}
-              {pct === null ? <div className="adsk-spinner" /> : (
-                <div style={{ width: 260, height: 6, background: '#dfe4ea', borderRadius: 3, overflow: 'hidden' }}>
-                  <div style={{ width: `${pct}%`, height: '100%', background: 'var(--accent)', transition: 'width .4s' }} />
-                </div>
-              )}
-              <div style={{ fontSize: 14 }}>
-                {phase === 'preparando' ? 'Enviando el archivo a Autodesk…' : 'Traduciendo el modelo…'}
-                {pct !== null ? ` ${pct}%` : (progress ? ` ${progress}` : '')}
+              {/* SOLO CUANDO DE VERDAD HAY QUE PREPARARLO (la primera vez que se
+                  abre esta version). Sin jerga: que se esta haciendo, en que paso
+                  va, y algo que se mueve siempre -- la barra real cuando hay
+                  porcentaje, una que avanza cuando todavia no lo hay, y el reloj. */}
+              <div style={{ fontSize: 15, fontWeight: 600 }}>Preparando el plano</div>
+              <div style={{ fontSize: 13, color: '#4a5563' }}>
+                {phase === 'preparando' ? 'Enviando el archivo · paso 1 de 2' : 'Convirtiendo el dibujo · paso 2 de 2'}
+                {pct !== null ? ` · ${pct} %` : ''}
               </div>
-              <div style={{ fontSize: 12, color: '#6b7480', display: 'flex', gap: 14 }}>
-                <span>{formatoReloj(transcurrido)}</span>
-                {file?.size ? <span>{(file.size / 1048576).toFixed(0)} MB</span> : null}
+              <div className="cad-preparando-barra">
+                {pct === null
+                  ? <div className="cad-preparando-barra-indeterminada" />
+                  : <div style={{ width: `${pct}%`, height: '100%', background: 'var(--accent)', transition: 'width .4s' }} />}
+              </div>
+              <div style={{ fontSize: 12, color: '#6b7480' }}>
+                {formatoReloj(transcurrido)}
+                {file?.size ? ` · ${(file.size / 1048576).toFixed(0)} MB` : ''}
               </div>
               <div style={{ fontSize: 12, color: '#6b7480', maxWidth: 430, lineHeight: 1.5 }}>
-                {phase === 'preparando'
-                  ? 'Todavía no hay porcentaje: Autodesk no conoce el archivo hasta que termina el envío. Va por tamaño.'
-                  : 'La primera vez tarda unos minutos según el tamaño. Las siguientes aperturas son inmediatas.'}
+                Es la primera vez que se abre esta versión: tarda unos minutos según el tamaño.
+                Después se abrirá al instante.
               </div>
             </>
           )}

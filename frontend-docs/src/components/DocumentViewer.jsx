@@ -700,7 +700,12 @@ export default function DocumentViewer({
           if (!isShared && CAD_EXTENSIONS.some(ext => lowerName.endsWith(ext))) {
             return (
               <Suspense fallback={<div style={{ padding: 40, textAlign: 'center' }}><div className="adsk-spinner" style={{ margin: '0 auto' }} /></div>}>
-                <CadViewer file={file} projectPrefix={projectPrefix} />
+                {/* LA VERSION ELEGIDA (21-sep-2026). Sin ella el visor de planos
+                    abria siempre la actual: al elegir la V1 no cambiaba nada. La
+                    clave lo vuelve a montar entero al cambiar de version. */}
+                <CadViewer key={`${file.id}:${viewedVersionInfo ? viewedVersionInfo.id : 'actual'}`}
+                           file={file} projectPrefix={projectPrefix}
+                           versionId={viewedVersionInfo ? viewedVersionInfo.id : null} />
               </Suspense>
             );
           }
