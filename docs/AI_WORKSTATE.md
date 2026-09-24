@@ -315,6 +315,17 @@ Saved Views 2.0, de E-0 a E-7:
 
 ## EXPECTED WORKTREE
 
+### Actualización del worktree aislado (24-sep-2026, posterior al checkpoint de ortofoto)
+
+La rama `codex/ortofoto-canal` añadió dos commits funcionales locales para el
+reporte del propietario sobre Frente Canal: `91b0f889969294306585aa154d8843de512ceb72`
+(sentido de rueda al cargar/restaurar modelos) y
+`84509d58a34fea5aaa4bf5097b739deca94e0324` (reimportación de la misma
+versión desde snapshot inmutable y retirada confirmada por servidor). El índice
+y worktree aislados quedaron vacíos tras esos commits. El checkout principal y
+todo su WIP ajeno siguen fuera de ambos commits. Esta nota prevalece sobre la
+descripción histórica de `8c5ce9c` inmediatamente debajo.
+
 ### Worktree aislado `codex/ortofoto-canal` (24-sep-2026)
 
 El trabajo funcional de ortofoto está commiteado sólo en
@@ -1107,6 +1118,16 @@ Observaciones reales, ya conocidas y aceptadas. Ninguna bloquea nada.
    propietario (7-sep-2026). No bloquea B1.
 ## CURRENT TASK
 
+**24-sep-2026 · VISOR CANAL — DOS CORRECCIONES LOCALES COMMITTEADAS;
+VALIDACIÓN EN NAVEGADOR PENDIENTE.** El propietario confirmó que, en todo
+Frente Canal, la rueda hacia adelante aleja, a diferencia de Drenaje Urbano;
+también reportó que quitar y volver a importar una misma versión falla. Los
+commits locales `91b0f88` y `84509d5` son una mitigación acotada y probada por
+bancos/build, no una afirmación de UAT real ni de despliegue. El backend vivo de
+Virginia respondió `1e7bf89544b3`; el visor público seguía sirviendo el bundle
+anterior `index-BjMCaxao.js`, sin el código nuevo de ortofoto. No se hizo push,
+deploy ni escritura productiva. Ver el último `[WIP HANDOFF]` al final.
+
 **24-sep-2026 · ORTOFOTO CANAL — CODE/TEST GREEN LOCAL; COMMIT FUNCIONAL
 `8c5ce9c`; RELEASE PENDIENTE.**
 El propietario preparará semanalmente los dos JPG como en el ensayo y los
@@ -1721,3 +1742,17 @@ FALLO CONOCIDO:       El banco histórico backend/tests/test_capacidades_con_pue
 NEXT EXACT ACTION:    Pedir autorización explícita sólo para hacer push del commit candidato 8c5ce9c (más este handoff documental) desde la rama aislada a origin/main; no iniciar ningún Manual Deploy en ese mismo acto. Antes del push volver a comprobar que origin/main sigue en b03d0fb y que la rama es fast-forward.
 DO NOT TOUCH:         Checkout principal/WIP ajeno, .env*, secretos, credenciales, PostgreSQL/GCS productivos, Oregon por inferencia, ViewerFacade, 4D/5D, Saved Views. No push, deploy, cambio de infraestructura ni subida de JPG sin autorización separada por acto.
 COMMIT/HEAD REF:      8c5ce9cbcdbdf2e7e1b9073577bde377b9c84f70 (HEAD funcional al escribir este handoff; el commit documental posterior no cambia código funcional).
+
+## Unidad VISOR CANAL · sentido de rueda y reimportación (24-sep-2026)
+
+[WIP HANDOFF]
+TAREA:                Corregir sin afectar Drenaje Urbano la rueda invertida reportada en todo Frente Canal y la imposibilidad de quitar/reimportar la misma versión APS.
+IMPLEMENTADO:         Commits funcionales locales `91b0f889969294306585aa154d8843de512ceb72` y `84509d58a34fea5aaa4bf5097b739deca94e0324` en `codex/ortofoto-canal`. El primero reaplica la preferencia de zoom no invertido tras carga de geometría y restauración de estado LMV, con limpieza de listeners. El segundo sólo reutiliza el snapshot visible exacto de `scope_id + source_lineage + source_urn` al reimportar la misma versión desvinculada; valida generación/puntero activo y no modifica el snapshot. Si no existe, sigue el extractor APS habitual. La UI no retira el modelo antes de una respuesta satisfactoria del backend. En la evidencia previa del propietario, la versión 66 ya tenía snapshot inmutable de 2.956 filas y una reextracción distinta de 8.771 chocó con `SNAPSHOT_CONTENT_CONFLICT`; reutilizar no equivale a refrescar esa versión.
+PENDIENTE:            1) UAT en navegador real con backend y frontend del mismo SHA: comprobar sentido de rueda en Canal y Drenaje antes/después de cambiar viewable o restaurar vista; 2) quitar y reimportar la misma versión en un entorno seguro, comprobar vista e Inventory; 3) verificar que una versión nueva continúa la extracción normal. Push y deploy requieren autorización separada por acto. No cambiar snapshots productivos ni prometer 8.771 filas para la versión 66 sin nueva versión APS.
+ARCHIVOS MODIFICADOS: propios, commiteados: frontend-react/src/components/Viewer.jsx; frontend-react/src/utils/forwardWheelZoom.js; frontend-react/src/utils/__tests__/forwardWheelZoom.test.mjs; backend/inventory_identity.py; backend/routes/inventory.py; backend/tests/test_inventory_reimport_snapshot.py; frontend-react/src/App.jsx; frontend-react/src/components/ImportModelModal.jsx; frontend-react/src/utils/removeLinkedModel.js; frontend-react/src/utils/__tests__/removeLinkedModel.test.mjs. Propio pendiente de commit documental: docs/AI_WORKSTATE.md. Ajenos: WIP protegido del checkout principal, intacto y fuera de ambos commits.
+TESTS EJECUTADOS:     backend focal 43/43 PASS (incluye 10 casos nuevos de reimportación); frontend utilidades 5/5 PASS; inventoryIdentity 17/17; filtersCore.runtime 17/17; filtersCore.hotfixPostRelease 19/19; filtersCore.b5Lifecycle 5/5; savedViewV2 111/111; frenteDeVistas 20/20; frontend-react npm run build PASS con avisos preexistentes de LoginScreen/imports/tamaño; ESLint de utilidades nuevas 0; git diff --check PASS.
+TESTS PENDIENTES:     UAT LMV con el modelo real de Canal y Drenaje; flujo de quitar/reimportar con backend/BD de ensayo y navegador; no se repitió la campaña completa ni se usaron credenciales o escrituras productivas. El lint completo de App/Viewer conserva errores históricos y no es puerta de este cambio.
+FALLO CONOCIDO:       El visor web publicado aún sirve un bundle anterior; estos commits no están desplegados. La inversión reportada por el propietario no se reprodujo directamente en navegador por el agente: la corrección de ciclo de vida necesita confirmación visual. El snapshot existente de versión 66 contiene 2.956 filas; una reextracción posterior con otra vista produjo 8.771 y es correctamente rechazada por inmutabilidad.
+NEXT EXACT ACTION:    Preparar o usar un entorno de ensayo con backend/frontend de `84509d5` y sesión manual del propietario, abrir Frente Canal y Drenaje Urbano para validar ambos sentidos de rueda; luego quitar/reimportar la misma versión en Canal y verificar Inventory. Si falla, reproducir y corregir antes de proponer publicación.
+DO NOT TOUCH:         Checkout principal y WIP ajeno, .env*, credenciales, PostgreSQL/GCS productivos, snapshots históricos, ViewerFacade, 4D/5D, Saved Views, push y deploy sin autorización explícita por acto.
+COMMIT/HEAD REF:      84509d58a34fea5aaa4bf5097b739deca94e0324 (HEAD funcional al escribir; el commit documental posterior no cambia código funcional).
