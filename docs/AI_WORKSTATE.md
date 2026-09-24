@@ -315,6 +315,15 @@ Saved Views 2.0, de E-0 a E-7:
 
 ## EXPECTED WORKTREE
 
+### Worktree aislado `codex/ortofoto-canal` (24-sep-2026)
+
+El trabajo funcional de ortofoto está commiteado sólo en
+`C:/Users/ASUS/.codex/worktrees/ortofoto-canal/VISOR_APS_TL`, rama
+`codex/ortofoto-canal`, commit `8c5ce9cbcdbdf2e7e1b9073577bde377b9c84f70`
+basado en `b03d0fb`. Antes del commit documental de este handoff, sólo
+`docs/AI_WORKSTATE.md` permanece modificado en ese worktree.
+No trasladar ni adoptar el WIP ajeno del checkout principal.
+
 El worktree **está sucio a propósito**. Nada de lo que sigue pertenece al
 trabajo cerrado, y **nada de esto se limpia, se añade ni se commitea**.
 
@@ -1098,6 +1107,25 @@ Observaciones reales, ya conocidas y aceptadas. Ninguna bloquea nada.
    propietario (7-sep-2026). No bloquea B1.
 ## CURRENT TASK
 
+**24-sep-2026 · ORTOFOTO CANAL — CODE/TEST GREEN LOCAL; COMMIT FUNCIONAL
+`8c5ce9c`; RELEASE PENDIENTE.**
+El propietario preparará semanalmente los dos JPG como en el ensayo y los
+cargará desde Topografía; la capa activa NO caduca por tiempo, permanece para
+los miembros del frente hasta retirada o reemplazo manual. En el worktree
+aislado hay endpoints Flask con autorización por obra, objetos JPG inmutables
+en GCS y cambio atómico por generación del manifiesto activo; la lectura de
+los mosaicos pasa por API autenticada, sin depender de CORS del bucket. La
+capa compartida se monta fuera del panel sobre el modelo/`dbId` exactos y
+conserva los porcentajes de sombreado elegidos al publicar. El ensayo local
+con el modelo real cubrió 43/43 fragmentos y dos JPG 4000×5961, sin publicar.
+El backend local que sirve la sesión del visor principal sigue en el código
+anterior y responde 404 a la ruta nueva. La API nueva se probó con GCS/DB
+falsos y dos clientes, y la capa React con un banco visual aislado que verificó
+A retenida → B → A tardía descartada, close/reopen, cambio de scope, retirada
+y revisión repetida sin montaje duplicado. El visor real mostró la vista previa
+43/43. Son pruebas locales; el smoke con GCS real queda para el despliegue.
+No push, no deploy, no producción modificada. Ver `[WIP HANDOFF]` más reciente.
+
 **18-sep-2026 · VISOR · COMPARADOR — `28c2f49` DESPLEGADO Y VERIFICADO.** La causa del parpadeo era la sincronía de cámaras
 (pimpón: ~29 redibujados desde cero por segundo en los dos visores, medido con la pestaña visible); el 409 de drenaje, un
 documento vinculado en dos obras. CORRECCIÓN: lo de «tres visores» era falso (App desmonta el principal al comparar).
@@ -1214,6 +1242,13 @@ Este hash es una referencia al checkpoint anterior, no un requisito
 autorreferencial del presente documento. Consultar HEAD real por separado.
 
 ## EXACT NEXT ACTION
+
+**ORTOFOTO CANAL (worktree aislado):** commit funcional `8c5ce9c` preparado.
+No hacer push ni Manual Deploy sin autorización explícita por acto. Solicitar
+primero autorización separada para subir la rama candidata a `origin/main`;
+después verificar SHA y solicitar autorización independiente para cada servicio
+que se vaya a desplegar. La calidad visual se difiere por decisión del
+propietario. Ver el `[WIP HANDOFF]` más reciente al final de este documento.
 
 **VISOR · COMPARADOR (18-sep-2026):** `28c2f49`, `1befc04` y `1bc97ae` desplegados y verificados. Segundo parpadeo (piezas
 semitransparentes, `docs/visor/01_…` §5): arreglo en local, probado; pedir commit + push y que él despliegue el visor.
@@ -1642,3 +1677,47 @@ build que la configuración no ignora. El código fuente da **422**. Backlog nº
 
 `EPERM` sobre `frontend-react/dist/assets`, un build viejo del 29-jul-2026 con
 un handle retenido. Es entorno local, no código. Backlog nº 6.
+
+---
+
+## Unidad ORTOFOTO CANAL · ensayo local (24-sep-2026)
+
+[WIP HANDOFF]
+TAREA:                Ensayar en local la ortofoto ECW 260911 sobre la superficie APS de Canal sin cambiar el modelo ni producción.
+IMPLEMENTADO:         Worktree aislado; dos JPG de 4000×5961 derivados del ECW fuera del repo; proyección GPU EPSG:32717 sobre los 43 fragmentos del mismo dbId seleccionado, sin clonar triángulos ni tocar el modelo. El visor real mostró la imagen, la conservó al cerrar/reabrir Topografía y la quitó correctamente. «Relieve visible» mezcla en vivo la foto con el sombreado original (40 % por defecto). Además, «Sombreado de pendientes» (70 % por defecto) modula la foto con luz direccional fija calculada de la geometría por píxel, sin remonte de geometría/texturas; se compararon 0 y 100 % en el visor local. No son sombras proyectadas. Tras reproducir laderas traseras pintadas por encima, se activó `depthTest` con offset coplanar sólo en el ensayo local. La UI sólo existe en Vite DEV y no aparece en el bundle de producción.
+PENDIENTE:            1) Valoración visual del propietario de ambos controles, nitidez, extremos y costura norte/sur; 2) verificar retirada al cambiar de frente; 3) decidir si hace falta tratar la proyección cenital sobre caras casi verticales, visible en vistas rasantes; 4) ajustar sólo si la prueba visual descubre un defecto; 5) si queda GREEN, decidir commit local. No está aprobada como funcionalidad productiva.
+ARCHIVOS MODIFICADOS: propios en worktree aislado: frontend-react/src/components/GeoControlPanel.jsx, frontend-react/src/components/OrthoCanalTrial.jsx, frontend-react/src/native/orthoCanalTrial.js, frontend-react/src/native/__tests__/orthoCanalTrial.test.mjs, docs/AI_WORKSTATE.md. Ajenos en checkout principal: todos los ya descritos en EXPECTED WORKTREE; ninguno se modificó aquí.
+TESTS EJECUTADOS:     node --test frontend-react/src/native/__tests__/orthoCanalTrial.test.mjs = 12/12 PASS (incluye uniforme de sombreado vivo, normal geométrica, mezcla GPU/CPU y `depthTest:true`/`depthWrite:false`); npx eslint en los tres ficheros nuevos = 0 problemas; npm run build = PASS con avisos preexistentes; bundle de producción sin texto/asset del ensayo; `git diff --check` sin error. Visor local real = 43/43 fragmentos y dos imágenes visibles; cierre del panel mantiene la capa; control de sombreado comparado a 0 y 100 % con relieve a 10 % y a su 40 % por defecto; proyección observada desde arriba, oblicuo y perfil, sin error WebGL nuevo. Lint completo de GeoControlPanel.jsx no es puerta: conserva 1 error y 2 avisos previos fuera de las 3 líneas añadidas.
+TESTS PENDIENTES:     Inspección visual con zoom en ambos extremos y costura norte/sur; cambio de frente con capa activa; aceptación del propietario. No se ejecutó una campaña productiva ni se midió tiempo exacto de GPU.
+FALLO CONOCIDO:       La imagen aérea cenital se estira sobre caras casi verticales al mirar de perfil; un sombreado direccional no corrige esa proyección. El modo antiguo de un solo fragmento deja cobertura parcial; por eso el modo por defecto usa todos los fragmentos del mismo dbId. El «rayos X» al orbitar quedó corregido en el ensayo local por prueba de profundidad; falta aceptación del propietario desde sus ángulos originales. La nitidez cercana sigue sin validarse.
+NEXT EXACT ACTION:    En http://localhost:5181/ la capa sigue aplicada en Frente Canal; abrir Topografía y comparar «Sombreado de pendientes» entre 0 y 100 % con «Relieve visible» cerca de 40 %. Girar alrededor de los taludes de las capturas y registrar si la mejora compensa la proyección cenital en caras muy inclinadas.
+DO NOT TOUCH:         Checkout principal y su WIP ajeno, .env*, credenciales, backend/BD productivos, Viewer.jsx, ViewerFacade, LOB4DExtension.js, Saved Views, despliegues; no push.
+COMMIT/HEAD REF:      b03d0fb2e4be4013c460c746cb4415da9619e0f6 (HEAD del worktree al escribir; ensayo sin commit).
+
+## Unidad ORTOFOTO CANAL · publicación manual persistente (24-sep-2026)
+
+[WIP HANDOFF]
+TAREA:                Convertir el ensayo de dos JPG preparados por el propietario en una capa compartida y persistente para Frente Canal, con reemplazo/retirada manual.
+IMPLEMENTADO:         Backend Flask con lectura autorizada por frente, publicación sólo para admin de obra, validación JPEG 4000×5961, dos objetos GCS inmutables y cambio atómico del manifiesto activo por generación; retirada sin borrar binarios y sin vencimiento semanal. Los JPG se sirven por la API autenticada, no por CORS de GCS. Frontend de producción monta la revisión publicada fuera del panel Topografía, separa vista previa local de publicación, conserva el mismo modelo+dbId y los porcentajes de relieve/sombreado elegidos. La preparación semanal es responsabilidad humana: dos JPG con la misma huella EPSG:32717; el JPG no permite verificar coordenadas por sí mismo, por lo que la UI exige comprobar alineación visual antes de publicar. En el visor local se seleccionaron los dos JPG y la superficie real; vista previa 43/43 fragmentos PASS sin transferencia al servidor.
+PENDIENTE:            1) Probar navegador y backend nuevos juntos con GCS/DB aislados (publicar, lector de otra sesión, reemplazar, retirar, recargar, cambio de frente); 2) verificar perfil de memoria/carga con dos texturas y tiempos de transferencia; 3) self-review final y commit local selectivo sólo si queda GREEN; 4) autorización separada del propietario antes de cualquier push o despliegue. La calidad de imagen se difiere por decisión del propietario.
+ARCHIVOS MODIFICADOS: propios sólo en worktree aislado: backend/routes/orthophoto.py, backend/tests/test_ortofoto_semanal.py, backend/server.py, backend/politica.py, frontend-react/src/App.jsx, frontend-react/src/components/GeoControlPanel.jsx, frontend-react/src/components/OrthoCanalLayer.jsx, frontend-react/src/components/OrthoCanalTrial.jsx, frontend-react/src/native/orthoCanalTrial.js, frontend-react/src/native/__tests__/orthoCanalTrial.test.mjs, docs/AI_WORKSTATE.md. Ajenos: WIP protegido del checkout principal, no tocado ni adoptado.
+TESTS EJECUTADOS:     python -m pytest -q backend/tests/test_ortofoto_semanal.py backend/tests/test_politica.py backend/tests/test_guardias_de_escritura.py = 43 PASS (2 warnings protobuf de Python 3.14); tras la API proxy y parámetros visuales, backend/tests/test_ortofoto_semanal.py = 1 PASS; node --test frontend-react/src/native/__tests__/orthoCanalTrial.test.mjs = 12/12 PASS; npx eslint en cuatro ficheros de ortofoto = 0; npm run build = PASS con avisos preexistentes de LoginScreen/imports/chunk. Visor local: dos JPG elegidos, terreno real seleccionado, vista previa 43/43 fragmentos, capa visible, sin POST de publicación.
+TESTS PENDIENTES:     E2E con backend nuevo y almacenamiento/BD aislados; dos sesiones, replace/retire/persistencia; ninguna prueba contra producción ni publicación online. Build/lint finales del cambio local pasaron.
+FALLO CONOCIDO:       El backend local antiguo de la sesión del visor responde 404 a /api/orthophoto; el botón «Publicar para todos» está correctamente deshabilitado. La vista previa funciona. La proyección cenital estira píxeles en caras casi verticales (límite visual previo, calidad diferida). Un JPG de dimensiones correctas puede tener huella geográfica equivocada; debe inspeccionarse antes de publicar.
+NEXT EXACT ACTION:    Montar un backend de ensayo aislado con fake GCS/DB o staging no productivo y apuntar una sesión Vite a él para probar publicar → segunda sesión → reemplazar → retirar, sin usar producción.
+DO NOT TOUCH:         Checkout principal y todo su WIP protegido, .env*, credenciales, backend/BD/GCS productivos, Viewer.jsx, ViewerFacade, 4D/5D, Saved Views; no push ni deploy sin autorización explícita por acto.
+COMMIT/HEAD REF:      b03d0fb2e4be4013c460c746cb4415da9619e0f6 (HEAD del worktree; implementación sin commit).
+
+## Unidad ORTOFOTO CANAL · checkpoint funcional y preparación de publicación (24-sep-2026)
+
+[WIP HANDOFF]
+TAREA:                Preparar la publicación conjunta solicitada por el propietario: paquete ya presente en main más la ortofoto compartida de Frente Canal. Ningún acto productivo está ejecutado ni autorizado individualmente.
+IMPLEMENTADO:         Commit funcional local 8c5ce9cbcdbdf2e7e1b9073577bde377b9c84f70 en codex/ortofoto-canal, descendiente de b03d0fb2e4be4013c460c746cb4415da9619e0f6. Contiene sólo API de ortofoto, montaje/UI del visor, pruebas, fixture y guía semanal. Dos JPG preparados por el propietario, capa persistente hasta retirada/reemplazo manual, lectura autenticada por scope. El checkout principal y su WIP ajeno permanecen intactos. Precheck HTTP READ ONLY: backend Virginia y Docs /api/health = b03d0fb2e4be; backend Oregon y visor-host /api/health = cdf783754574. El bundle vivo del visor tiene VITE_BACKEND_URL directo a Virginia. Auto-Deploy OFF; no asumir que el rewrite /api del host visor equivale al destino real de la SPA. No se hizo push ni deploy.
+PENDIENTE:            1) Obtener autorización explícita para el acto de push del candidato a origin/main, sin arrastrar WIP del checkout principal; 2) comprobar SHA remoto; 3) obtener autorización independiente por cada Manual Deploy previsto (backend Virginia, portal Docs, visor) y verificar salud/SHA entre actos; 4) smoke autenticado de publicación/lectura/reemplazo/retirada sólo después de autorizarlo, con JPG del propietario. No desplegar ni retirar Oregon por inferencia: su función D9 sigue separada. La calidad de imagen queda diferida por decisión del propietario.
+ARCHIVOS MODIFICADOS: propios commiteados en 8c5ce9c: backend/politica.py, backend/routes/orthophoto.py, backend/server.py, backend/tests/test_ortofoto_semanal.py, docs/visor/05_ORTOFOTO_CANAL.md, frontend-react/probar-ortofoto.html, frontend-react/src/App.jsx, frontend-react/src/components/GeoControlPanel.jsx, frontend-react/src/components/OrthoCanalLayer.jsx, frontend-react/src/components/OrthoCanalTrial.jsx, frontend-react/src/native/__tests__/orthoCanalTrial.test.mjs, frontend-react/src/native/orthoCanalTrial.js, frontend-react/src/probar-ortofoto.jsx. Propio todavía modificado al escribir: docs/AI_WORKSTATE.md. Ajenos: todos los WIP del checkout principal, no tocados.
+TESTS EJECUTADOS:     backend/tests/test_ortofoto_semanal.py = 1/1 PASS (incluye clientes admin/lector y fake GCS/DB); python -m pytest -q --ignore=backend/tests/test_inventory_identity_core.py = 2032 PASS, 1 FAIL histórico conocido de /api/docs/miniaturas/preparar sin puerta UI; python -m pytest -q sin exclusión = error de colección por prototypes.inventory_identity_b1 ausente en worktree aislado (es WIP untracked del checkout principal, no copiar). frontend-docs npm test = 12 bancos PASS; frontend-docs npm run build = PASS; frontend-react npm run build = PASS con avisos preexistentes; node --test frontend-react/src/native/__tests__/orthoCanalTrial.test.mjs = 12/12 PASS; ESLint focal = 0; git diff --check = PASS. Fixture visual aislado en navegador: B reemplaza A retenida, A tardía no monta, close/reopen, scope switch, retirada y revisión repetida sin listeners/montajes duplicados. Visor local real: dos JPG de 4000×5961, 43/43 fragmentos en vista previa, sin POST.
+TESTS PENDIENTES:     No se midió transferencia/carga real con GCS, ni se hizo smoke de producción o publicación compartida con dos sesiones reales. La prueba de navegador usa fake de API/montaje; no equivale a GCS/BD reales. No se repitió toda la suite tras el commit porque el objeto funcional es el mismo delta probado.
+FALLO CONOCIDO:       El banco histórico backend/tests/test_capacidades_con_puerta.py falla por el endpoint de miniaturas sin UI, anterior a este cambio. El test de identidad no se puede colectar desde el worktree aislado porque falta el prototipo untracked protegido. Backend local antiguo devuelve 404 en la nueva ruta; no es fallo del candidato. La proyección cenital puede estirar la ortofoto en caras casi verticales y el JPG no demuestra georreferencia; verificar alineación visual antes de publicar.
+NEXT EXACT ACTION:    Pedir autorización explícita sólo para hacer push del commit candidato 8c5ce9c (más este handoff documental) desde la rama aislada a origin/main; no iniciar ningún Manual Deploy en ese mismo acto. Antes del push volver a comprobar que origin/main sigue en b03d0fb y que la rama es fast-forward.
+DO NOT TOUCH:         Checkout principal/WIP ajeno, .env*, secretos, credenciales, PostgreSQL/GCS productivos, Oregon por inferencia, ViewerFacade, 4D/5D, Saved Views. No push, deploy, cambio de infraestructura ni subida de JPG sin autorización separada por acto.
+COMMIT/HEAD REF:      8c5ce9cbcdbdf2e7e1b9073577bde377b9c84f70 (HEAD funcional al escribir este handoff; el commit documental posterior no cambia código funcional).
