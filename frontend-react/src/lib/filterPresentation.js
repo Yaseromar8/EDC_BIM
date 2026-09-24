@@ -65,15 +65,24 @@ export function filterValueColor(propId, value, custom = {}) {
     return palette[hash % palette.length];
 }
 export function filterFeedback(result, progress, scopeId) {
-    if (!result || result.scopeId !== scopeId || result.status === 'pending')
+    if (!result || result.scopeId !== scopeId)
         return { state: 'pending', text: 'Actualizando filtros…', ready: false };
+    if (result.status === 'pending') {
+        const unresolved = result.diagnostics?.[0]?.code === 'UNRESOLVED_ELEMENTS'
+            ? result.coverage?.unresolvedRows : 0;
+        return { state: 'pending', ready: false, text: unresolved
+            ? `${unresolved} elementos de Inventory no vinculados al modelo; revisar origen o versión`
+            : 'Actualizando filtros…' };
+    }
     if (result.status !== 'ready') return { state: 'error', ready: false,
         text: 'Filtros no aplicados: ' + (result.diagnostics?.[0]?.message || result.diagnostics?.[0]?.code || result.status) };
     const state = !result.hasActivePredicates ? 'no-filters' : result.matches.length ? 'active' : 'zero';
     const text = state === 'no-filters' ? 'Sin filtros activos · sin restricción'
         : state === 'zero' ? '0 coincidencias · filtros activos' : result.matches.length + ' coincidencias · filtros activos';
     const visual = progress?.revision !== result.revision ? 'Aplicación visual pendiente'
-        : progress.phase === 'paused' ? 'Control visual: ' + (progress.owner || 'otra herramienta')
+        : progress.phase === 'paused' ? (progress.visibilityApplied
+            ? 'Aislamiento aplicado · color: ' + (progress.owner || 'otra herramienta')
+            : 'Control visual: ' + (progress.owner || 'otra herramienta'))
         : progress.phase === 'visually-applied' ? 'Aplicado en el visor' : 'Aplicación visual pendiente';
     return { state, text, visual, ready: true, revision: result.revision };
 }

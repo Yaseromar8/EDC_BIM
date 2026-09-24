@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import * as R from '../src/lib/restaurarVistaV2.js';
 import { calculateFilterResult,createFilterController,filterInventoryRows,refineInventorySelection,viewerElementKey } from '../src/lib/filtersCore.js';
 import { createFilterVisualDriver } from '../src/lib/filterVisualDriver.js';
+import { filterFeedback } from '../src/lib/filterPresentation.js';
 import { mountFiltersRuntime } from '../src/lib/filterRuntimeBridge.js';
 import { markInventoryRevision } from '../src/lib/inventoryIdentity.js';
 import { makeRuntimeFixture,microtasks,tick,gate } from './filtersRuntime/fixture.mjs';
@@ -33,7 +34,9 @@ await test('unready, wrong scope and unresolved do not publish false zero',()=>{
     assert.equal(calc(f,{},1,{...f.snapshot(),models:[{modelUrn:'m1',ready:false}]}).status,'pending');
     assert.equal(calc(f,{},1,{...f.snapshot(),scopeId:'other'}).status,'pending');
     f.host.rosettaToDbId={m1:{e0:1}};
-    assert.equal(calc(f).status,'pending');
+    const unresolved=calc(f);
+    assert.equal(unresolved.status,'pending');
+    assert.match(filterFeedback(unresolved,null,'front').text,/2 elementos de Inventory no vinculados/);
 });
 await test('A late after B MUST NOT publish/apply including errors',async()=>{
     const f=makeRuntimeFixture(), A=gate(),B=gate(),published=[],applied=[],progress=[];
@@ -103,7 +106,7 @@ await test('new visual B finishes before A: old colors and acknowledgements cann
     assert.deepEqual(f.events.filter(e=>e.name==='viewer-colors-applied').map(e=>e.detail.revision),[2]);
     driver.dispose();
 });
-await test('external color owner cancels Filters and is not erased by its stale job',async()=>{
+await test('external color owner cancels Filters colors and is not erased by its stale job',async()=>{
     const f=makeRuntimeFixture({count:5001}),pause=gate(),notices=[];
     const driver=createFilterVisualDriver({viewer:f.viewer,models:()=>f.models,window:f.host,
         yieldFrame:()=>pause.promise,onExternal:(...x)=>notices.push(x)});
@@ -113,6 +116,23 @@ await test('external color owner cancels Filters and is not erased by its stale 
     assert.equal(f.models[0].colors.get(1),external);assert.equal(notices.length,1);
     assert.equal((await driver.apply(calc(f),f.state,()=>true)).paused,true);
     assert.equal(f.models[0].colors.get(1),external);
+    driver.dispose();
+});
+await test('external color owner does not block facet isolation or its reset',async()=>{
+    const f=makeRuntimeFixture(),driver=createFilterVisualDriver({viewer:f.viewer,models:()=>f.models,window:f.host});
+    const external={external:true};
+    f.viewer.setThemingColor(1,external,f.models[0]);
+    const selected={...f.state,filterSelections:{'G::Estado':['Ejecutado']}};
+    const applied=await driver.apply(calc(f,selected),selected,()=>true);
+    assert.equal(applied.paused,true,'el color ajeno sigue teniendo prioridad');
+    assert.equal(applied.visibilityApplied,true,'el estado distingue visibilidad aplicada de color cedido');
+    assert.match(filterFeedback(calc(f,selected),{revision:1,phase:'paused',...applied},'front').visual,
+        /Aislamiento aplicado/, 'el panel no debe anunciar una pausa total');
+    assert.deepEqual(f.models[0].isolated,[1,3], 'el valor del facet sí aísla sus elementos');
+    assert.equal(f.models[0].colors.get(1),external,'el filtro no borra el color ajeno');
+    await driver.apply(calc(f),f.state,()=>true);
+    assert.deepEqual(f.models[0].isolated,[],'quitar el filtro restaura la visibilidad');
+    assert.equal(f.models[0].colors.get(1),external,'restaurar no borra el color ajeno');
     driver.dispose();
 });
 await test('real runtime: live event without detail, revision, ready replay, panel-free same result',async()=>{

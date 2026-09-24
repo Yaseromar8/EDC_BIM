@@ -137,7 +137,10 @@ export function createFilterVisualDriver({ viewer, models, window: host,
             const current=()=>!disposed && isCurrent() && job===colorJob;
             if(!current()) return {paused:true,reason:'superseded'};
             bindModels();
-            if(foreignOwner) return {paused:true,owner:foreignOwner,reason:'visual-owned-elsewhere'};
+            // El dueño externo sólo controla el COLOR. Bloquear aquí también la
+            // máscara de visibilidad dejaba el filtro calculado pero sin aislar
+            // nada (p. ej. Drenaje con owner=external-tool). Aplicamos la
+            // visibilidad y, más abajo, cedemos el color sin borrar el ajeno.
             const hidden=new Set((state.hiddenModelUrns||[]).map(_safeUrn));
             const byModel=new Map(result.matchesByModel.map(g=>[_safeUrn(g.modelUrn),g.matches.map(x=>x.dbId)]));
             const validByModel=new Map([...byModel].map(([urn,ids])=>[urn,new Set(ids)]));
@@ -169,7 +172,8 @@ export function createFilterVisualDriver({ viewer, models, window: host,
                 if(current()) viewer.impl.invalidate(true,true,true);
             });
             if(!current()) return {paused:true,reason:'superseded'};
-            if(foreignOwner) return {paused:true,owner:foreignOwner,reason:'color-owned-elsewhere'};
+            if(foreignOwner) return {paused:true,visibilityApplied:true,displayed,
+                owner:foreignOwner,reason:'color-owned-elsewhere'};
             const hadOwnedColors=painted.size>0;
             clearOwned(current);
             const active=Object.keys(state.filterColors||{}).filter(p=>state.filterColors[p]).sort();
