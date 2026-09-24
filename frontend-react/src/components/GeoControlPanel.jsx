@@ -13,6 +13,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ajustarHelmert } from '../native/georefFit';
 import { apiFetch } from '../utils/apiFetch';
+import OrthoCanalTrial from './OrthoCanalTrial';
 
 const S = {
   panel: {
@@ -76,7 +77,7 @@ export function parsearCsvPuntos(texto) {
   return { puntos, errores };
 }
 
-export default function GeoControlPanel({ project, BACKEND_URL, onClose }) {
+export default function GeoControlPanel({ project, BACKEND_URL, canPublishOrtho = false, onClose }) {
   const projectId = project?.id != null ? String(project.id) : null;
   // El URN del modelo: el objeto de proyecto no siempre lo trae (llegó vacío
   // en la primera prueba → 400 "project y urn son obligatorios"). El VISOR
@@ -490,6 +491,9 @@ export default function GeoControlPanel({ project, BACKEND_URL, onClose }) {
         )}
 
         {msj && <div style={S.aviso}>{msj}</div>}
+
+        {projectId === '1_CANAL' && <OrthoCanalTrial scope={projectId}
+          backendUrl={BACKEND_URL} canPublish={canPublishOrtho} />}
 
         {/* 2 · AMARRE */}
         <div style={{ marginTop: 14, borderTop: '1px solid #33363f', paddingTop: 10 }}>

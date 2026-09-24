@@ -988,6 +988,8 @@ if PERFIL_DESPLIEGUE != 'portal':
     app.register_blueprint(lob4d_linear_bp)
     from routes.geo_control import geo_control_bp
     app.register_blueprint(geo_control_bp)
+    from routes.orthophoto import orthophoto_bp
+    app.register_blueprint(orthophoto_bp)
 
 @app.route('/maps/uploads/<path:filename>')
 def serve_map_file(filename):

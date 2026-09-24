@@ -205,7 +205,7 @@ POLITICAS_POR_BLUEPRINT = {
     # El directorio de obra y «Mi Trabajo»: exigen sesion, y cada ruta
     # comprueba obra o pertenencia por dentro.
     'directorio': _SESION,
-    'redlines_bp': _SESION, 'geo_control': _SESION, 'pdf_tools': _SESION,
+    'redlines_bp': _SESION, 'geo_control': _SESION, 'orthophoto': _SESION, 'pdf_tools': _SESION,
     'auth': _SESION, 'projects': _SESION,
     # Administración por obra: exige sesión aquí; QUIÉN administra QUÉ lo
     # deciden por dentro `guardia_de_obra` + `guardia_administrativa` (es la

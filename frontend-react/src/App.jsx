@@ -24,6 +24,7 @@ import FilterConfiguratorModal from './components/FilterConfiguratorModal';
 import { selectedPropertyItems, retainPropertyConfig } from './lib/filterPresentation';
 import NativeARView from './components/NativeARView';
 import GeoControlPanel from './components/GeoControlPanel';
+import OrthoCanalLayer from './components/OrthoCanalLayer';
 import { isNativeAR } from './native/arcore';
 import PhotoAlbumModal from './components/PhotoAlbumModal';
 import SheetViewerPanel from './components/SheetViewerPanel';
@@ -4418,8 +4419,12 @@ function App() {
           <GeoControlPanel
             project={selectedProject}
             BACKEND_URL={BACKEND_URL}
+            canPublishOrtho={isAdminUser}
             onClose={() => setGeoPanelOpen(false)}
           />
+        )}
+        {!isSharedMode && selectedProject?.id === '1_CANAL' && (
+          <OrthoCanalLayer scope="1_CANAL" backendUrl={BACKEND_URL} />
         )}
 
 
