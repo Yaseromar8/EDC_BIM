@@ -1,5 +1,6 @@
 import { apiFetch } from '../utils/apiFetch';
 import { installPivotUnderPointer } from '../utils/pivotUnderPointer';
+import { installForwardWheelZoom } from '../utils/forwardWheelZoom';
 import { mountFiltersRuntime } from '../lib/filterRuntimeBridge.js';
 import { viewerElementKey } from '../lib/filtersCore.js';
 import React, { useEffect, useRef, useState, useCallback } from 'react';
@@ -2455,10 +2456,12 @@ const Viewer = ({
     useEffect(() => {
         const viewer = viewerRef.current;
         if (!viewer || !viewerReady) return;
-        const navigation = viewer.getNavigation?.();
-        if (!navigation) return;
-        navigation.setReverseZoomDirection(false);
-    }, [viewerReady, models]);
+        return installForwardWheelZoom(
+            viewer,
+            window.Autodesk?.Viewing?.GEOMETRY_LOADED_EVENT,
+            window.Autodesk?.Viewing?.VIEWER_STATE_RESTORED_EVENT
+        );
+    }, [viewerReady]);
 
     // (Custom pivot behavior reverted by user request)
 
