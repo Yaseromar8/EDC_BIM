@@ -124,6 +124,7 @@ const getDocTexture = () => {
 
 const Viewer = ({
     models,
+    scopeId,
     filterState,
     hiddenModelUrns = [],
     sprites,
@@ -2459,9 +2460,10 @@ const Viewer = ({
         return installForwardWheelZoom(
             viewer,
             window.Autodesk?.Viewing?.GEOMETRY_LOADED_EVENT,
-            window.Autodesk?.Viewing?.VIEWER_STATE_RESTORED_EVENT
+            window.Autodesk?.Viewing?.VIEWER_STATE_RESTORED_EVENT,
+            scopeId === '1_CANAL'
         );
-    }, [viewerReady]);
+    }, [viewerReady, scopeId]);
 
     // (Custom pivot behavior reverted by user request)
 

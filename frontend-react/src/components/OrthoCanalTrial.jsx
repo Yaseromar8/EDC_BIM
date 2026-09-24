@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { apiFetch } from '../utils/apiFetch';
+import { publishAfterPreview } from '../utils/publishAfterPreview';
 import {
   CANAL_ORTHO_TILE_NAMES, DEFAULT_HILLSHADE_STRENGTH, DEFAULT_RELIEF_BLEND,
   mountCanalOrthoTrial, selectedSurface,
@@ -63,7 +64,12 @@ async function apply() {
   if (!north || !south) {
     trial.message = 'Elige los dos JPG, uno para Norte y otro para Sur.';
     publish();
-    return;
+    return false;
+  }
+  if (/-south-4000\.jpe?g$/i.test(north.name) || /-north-4000\.jpe?g$/i.test(south.name)) {
+    trial.message = 'Los mosaicos están cruzados: coloca north-4000 en Norte y south-4000 en Sur.';
+    publish();
+    return false;
   }
   const viewer = window.__mainViewer || window.NOP_VIEWER;
   let surface;
@@ -73,7 +79,7 @@ async function apply() {
   } catch (error) {
     trial.message = error.message;
     publish();
-    return;
+    return false;
   }
   const files = [
     new File([north], CANAL_ORTHO_TILE_NAMES.north, { type: 'image/jpeg' }),
@@ -95,7 +101,7 @@ async function apply() {
       });
     if (controller.signal.aborted || trial.revision !== revision) {
       result.dispose();
-      return;
+      return false;
     }
     result.setReliefBlend(trial.reliefPercent / 100);
     result.setHillshadeStrength(trial.shadePercent / 100);
@@ -109,11 +115,13 @@ async function apply() {
       + `${result.coveredFragments}/${result.fragments} fragmentos ${result.mode === 'projection'
         ? 'con huella intersectada' : 'cubiertos'}; `
       + `${result.tiles} imagen(es) de ${result.width}×${result.height}. `
-      + 'Vista previa local: aún no se publicó para los demás.';
+      + 'Comprobación local correcta; publicando para todos…';
+    return true;
   } catch (error) {
     if (!controller.signal.aborted && trial.revision === revision) {
       trial.message = error?.message || 'No se pudo aplicar la ortofoto.';
     }
+    return false;
   } finally {
     if (trial.pending === controller) trial.pending = null;
     if (trial.revision === revision) { trial.busy = false; publish(); }
@@ -178,7 +186,7 @@ export default function OrthoCanalTrial({ scope, backendUrl, canPublish = false 
   };
 
   const publishForAll = async () => {
-    if (!trial.surface || !trial.uploadFiles.north || !trial.uploadFiles.south) return;
+    if (!trial.active || !trial.surface || !trial.uploadFiles.north || !trial.uploadFiles.south) return;
     trial.busy = true; publish();
     try {
       const form = new FormData();
@@ -197,10 +205,17 @@ export default function OrthoCanalTrial({ scope, backendUrl, canPublish = false 
       setRemoteError('');
       removeOverlay('Publicada para los usuarios del frente. La vista previa local se retiró.');
       window.dispatchEvent(new CustomEvent('orthophoto-changed', { detail: { scope } }));
+      return true;
     } catch (error) {
       trial.message = `No se publicó: ${error.message}. La capa anterior sigue activa.`;
       trial.busy = false; publish();
+      return false;
     }
+  };
+
+  const prepareAndPublish = async () => {
+    if (!published || remoteError || trial.busy) return;
+    await publishAfterPreview(apply, publishForAll);
   };
 
   const removeForAll = async () => {
@@ -235,12 +250,15 @@ export default function OrthoCanalTrial({ scope, backendUrl, canPublish = false 
       <p style={{ margin: '6px 0', lineHeight: 1.45 }}>
         Para actualizarla, prepara los dos JPG con la misma huella de esta superficie
         (4000×5961 cada uno). Selecciona el terreno de PASTEADO_GENERAL.shared.dwg,
-        elige Norte y Sur, comprueba la alineación y luego publica. El JPG no guarda
+        elige Norte y Sur y pulsa «Cargar y publicar para todos». La capa se guarda
+        para todos sólo si la comprobación local y el servidor terminan bien. El JPG no guarda
         coordenadas; el ECW no se sube.
       </p>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
-        <button type="button" onClick={() => northRef.current?.click()}>Norte: {fileNames.north || 'elegir JPG'}</button>
-        <button type="button" onClick={() => southRef.current?.click()}>Sur: {fileNames.south || 'elegir JPG'}</button>
+        <button type="button" disabled={snapshot.busy} onClick={() => northRef.current?.click()}>
+          Norte: {fileNames.north || 'elegir JPG'}</button>
+        <button type="button" disabled={snapshot.busy} onClick={() => southRef.current?.click()}>
+          Sur: {fileNames.south || 'elegir JPG'}</button>
       </div>
       <input ref={northRef} type="file" accept="image/jpeg,.jpg,.jpeg" style={{ display: 'none' }}
         onChange={(event) => pick('north', event)} />
@@ -250,6 +268,7 @@ export default function OrthoCanalTrial({ scope, backendUrl, canPublish = false 
         Relieve visible: {snapshot.reliefPercent}%
         <input type="range" min="0" max="75" step="5" value={snapshot.reliefPercent}
           aria-label="Relieve visible bajo la ortofoto"
+          disabled={snapshot.busy}
           style={{ display: 'block', width: '100%' }}
           onChange={(event) => {
             trial.reliefPercent = Number(event.target.value);
@@ -264,7 +283,7 @@ export default function OrthoCanalTrial({ scope, backendUrl, canPublish = false 
         Sombreado de pendientes: {snapshot.shadePercent}%
         <input type="range" min="0" max="100" step="5" value={snapshot.shadePercent}
           aria-label="Sombreado direccional de pendientes"
-          disabled={snapshot.mode === 'cpu'}
+          disabled={snapshot.busy || snapshot.mode === 'cpu'}
           style={{ display: 'block', width: '100%' }}
           onChange={(event) => {
             trial.shadePercent = Number(event.target.value);
@@ -276,15 +295,13 @@ export default function OrthoCanalTrial({ scope, backendUrl, canPublish = false 
         Acentúa las pendientes de la ortofoto según la malla; no simula sombras proyectadas.
       </p>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-        <button type="button" disabled={snapshot.busy}
+        <button type="button" disabled={snapshot.busy || !published || !!remoteError}
           style={{ background: '#2872c7', color: '#fff', border: 0, borderRadius: 5, padding: '8px 10px' }}
-          onClick={() => apply()}>
-          {snapshot.busy ? 'Preparando…' : 'Previsualizar en este navegador'}
+          onClick={prepareAndPublish}>
+          {snapshot.busy ? 'Preparando/publicando…' : 'Cargar y publicar para todos'}
         </button>
-        <button type="button" disabled={!snapshot.active && !snapshot.busy}
+        <button type="button" disabled={!snapshot.active || snapshot.busy}
           onClick={() => removeOverlay()}>Quitar vista previa</button>
-        <button type="button" disabled={!snapshot.active || snapshot.busy || !!remoteError}
-          onClick={publishForAll}>Publicar para todos</button>
         <button type="button" disabled={!published?.active || snapshot.busy}
           onClick={removeForAll}>Retirar capa publicada</button>
       </div>

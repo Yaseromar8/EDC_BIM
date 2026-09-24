@@ -35,6 +35,22 @@ test('la rueda conserva el sentido de Drenaje despues de cada carga y restauraci
   assert.equal(handlers.size, 0);
 });
 
+test('Canal usa el sentido AEC y no cambia el sentido de Drenaje', () => {
+  const handlers = new Map();
+  const applied = [];
+  const viewer = {
+    getNavigation: () => ({ setReverseZoomDirection: (value) => applied.push(['nav', value]) }),
+    addEventListener: (name, handler) => handlers.set(name, handler),
+    removeEventListener: (name) => handlers.delete(name),
+  };
+  const dispose = installForwardWheelZoom(viewer, 'geometryLoaded', 'stateRestored', true);
+  handlers.get('geometryLoaded')();
+  handlers.get('stateRestored')();
+  assert.deepEqual(applied, Array(3).fill(['nav', true]));
+  dispose();
+  assert.equal(handlers.size, 0);
+});
+
 test('sin API de navegacion no inventa otro mecanismo de zoom', () => {
   const viewer = { addEventListener() {}, removeEventListener() {} };
   assert.doesNotThrow(() => installForwardWheelZoom(viewer, 'geometryLoaded')());

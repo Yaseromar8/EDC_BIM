@@ -4631,6 +4631,7 @@ function App() {
                   <Viewer
                     key={selectedProject?.id || 'viewer-default'}
                     models={models}
+                    scopeId={selectedProject?.id}
                     filterState={filterState}
                     hiddenModelUrns={hiddenModelUrns}
                     sprites={sprites}
