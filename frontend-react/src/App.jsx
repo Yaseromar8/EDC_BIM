@@ -49,6 +49,7 @@ import ViewerLabelsBar from './components/ViewerLabelsBar';
 import { uploadFile } from './services/uploadService';
 import { processPendingUploads, getPendingThumbnails } from './services/uploadQueue';
 import { apiFetch } from './utils/apiFetch';
+import { removeLinkedModel } from './utils/removeLinkedModel';
 import { getCachedInventory, setCachedInventory } from './utils/inventoryCache';
 
 import { App as CapacitorApp } from '@capacitor/app';
@@ -3322,16 +3323,13 @@ function App() {
   }, [selectedProject]);
 
   const removeModel = useCallback(async (urn) => {
-    // 1. Optimistic local removal — avoids cross-project contamination from backend response
-    setModels(prev => prev.filter(m => m.urn !== urn));
-    setHiddenModelUrns(prev => prev.filter(u => u !== urn));
-
     try {
-      await apiFetch(`${BACKEND_URL}/api/config/project/remove`, {
-        method: 'POST',
-        body: JSON.stringify({ urn, project: selectedProject.id })
-      });
-      // Don't use the response to update state — local optimistic update already handled it
+      await removeLinkedModel(apiFetch, BACKEND_URL, selectedProject.id, urn);
+      // Solo ocultar el modelo cuando la desvinculacion y la desactivacion del
+      // Source se confirmaron en servidor. Un 503 antes parecia un borrado real
+      // y el siguiente Import chocaba con el vinculo todavia existente.
+      setModels(prev => prev.filter(m => m.urn !== urn));
+      setHiddenModelUrns(prev => prev.filter(u => u !== urn));
 
       // COHERENCIA INVENTORY/FILTER: el backend ya purgó inventory_assets del
       // modelo eliminado. Sin este refresh, sus elementos seguían apareciendo
@@ -3341,12 +3339,7 @@ function App() {
       window.dispatchEvent(new CustomEvent('inventory-needs-refresh'));
     } catch (e) {
       console.error("Error removing model:", e);
-      // On error, reload from server to restore correct state
-      apiFetch(`${BACKEND_URL}/api/config/project?project=${selectedProject}`)
-        .then(res => res.json())
-        .then(data => {
-          if (data.models) setModels(data.models.map(m => ({ ...m, label: m.name })));
-        });
+      alert(e.message || 'No se pudo desvincular el modelo. Sigue vinculado.');
     }
   }, [selectedProject]);
 

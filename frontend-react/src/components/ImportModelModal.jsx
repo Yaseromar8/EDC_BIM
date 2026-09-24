@@ -267,9 +267,17 @@ const ImportModelModal = ({ open, onClose, onLinkDocs, onUploadLocal, onExtractC
       const res = await apiFetch(`${BACKEND_URL}/api/inventory/extract`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ urn, target_urn: selectedProject ? selectedProject.id : urn })
+        body: JSON.stringify({
+          urn, target_urn: selectedProject ? selectedProject.id : urn,
+          // Importar de nuevo la MISMA version reutiliza su snapshot inmutable.
+          // Una version nueva sigue el camino normal de extraccion APS.
+          reuse_existing_snapshot: true
+        })
       });
-      if (!res.ok) throw new Error("Error initiating extraction");
+      if (!res.ok) {
+        const error = await res.json().catch(() => ({}));
+        throw new Error(error.error || error.code || 'No se pudo iniciar la extraccion');
+      }
       const { job_id } = await res.json();
 
       pollRef.current = setInterval(async () => {
@@ -285,7 +293,9 @@ const ImportModelModal = ({ open, onClose, onLinkDocs, onUploadLocal, onExtractC
               setProgress(100);
               setExtracting(false);
               setExtractionDone(true);
-              setProgressMsg('Metadata extraida. Selecciona la vista para importar.');
+              setProgressMsg(stData.reused_snapshot
+                ? 'Inventario guardado de esta version reactivado. Selecciona la vista para importar.'
+                : 'Metadata extraida. Selecciona la vista para importar.');
               // Recarga reactiva de inventario y filtros
               window.__inventoryCache = null;
               window.dispatchEvent(new CustomEvent('inventory-needs-refresh'));
@@ -295,6 +305,7 @@ const ImportModelModal = ({ open, onClose, onLinkDocs, onUploadLocal, onExtractC
               clearInterval(pollRef.current); pollRef.current = null;
               setExtracting(false);
               setProgressMsg('Error: ' + stData.message);
+              setErrorMsg(stData.message || 'No se pudo extraer el inventario.');
             }
           }
         } catch (pollErr) {

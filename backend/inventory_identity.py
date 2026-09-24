@@ -205,6 +205,55 @@ class InventoryIdentityRepository:
                     (scope_id, lineage))
         return {"deactivated": len(lineages), "source_lineages": lineages}
 
+    def reactivate_existing_snapshot(self, scope_id, source_urn, *, expected_active_urn,
+                                     expected_generation, allowed_scopes):
+        """Reuse an immutable, visible version after unlink/re-import, without APS extraction.
+
+        None means this exact version has no snapshot yet. A hidden snapshot is
+        not silently resurrected. The generation and active pointer are checked
+        under the Source lock so an older import job cannot undo a concurrent
+        remove or version change.
+        """
+        scope_id = _text(scope_id, "scope_id")
+        _authorize(scope_id, _allowlist(allowed_scopes))
+        source_urn, lineage = source_identity(source_urn)
+        if type(expected_generation) is not int or expected_generation < 0:
+            raise IdentityError("INVALID_GENERATION")
+        if expected_active_urn is not None:
+            expected_active_urn, expected_lineage = source_identity(expected_active_urn)
+            if expected_lineage != lineage:
+                raise IdentityError("EXPECTED_SOURCE_CONFLICT")
+        with self._atomic() as cursor:
+            self._lock_scopes(cursor, [scope_id])
+            cursor.execute("""SELECT active_urn,generation FROM inventory_identity_b1.sources
+                WHERE scope_id=%s AND source_lineage=%s FOR UPDATE""", (scope_id, lineage))
+            current = cursor.fetchone()
+            if not current:
+                return None
+            active_urn, generation = current
+            if generation != expected_generation:
+                raise IdentityError("STALE_GENERATION", expected=expected_generation, actual=generation)
+            if active_urn != expected_active_urn:
+                raise IdentityError("STALE_ACTIVE_URN", expected=expected_active_urn, actual=active_urn)
+            cursor.execute("""SELECT row_count,read_visible FROM inventory_identity_b1.snapshots
+                WHERE scope_id=%s AND source_lineage=%s AND source_urn=%s""",
+                (scope_id, lineage, source_urn))
+            snapshot = cursor.fetchone()
+            if not snapshot:
+                return None
+            if not snapshot[1]:
+                raise IdentityError("SNAPSHOT_NOT_VISIBLE")
+            row_count = snapshot[0]
+            activated = active_urn != source_urn
+            if activated:
+                cursor.execute("""UPDATE inventory_identity_b1.sources SET active_urn=%s,
+                    generation=generation+1,updated_at=now()
+                    WHERE scope_id=%s AND source_lineage=%s""", (source_urn, scope_id, lineage))
+                generation += 1
+        return {"reused": True, "activated": activated, "row_count": row_count,
+                "scope_id": scope_id, "source_lineage": lineage, "source_urn": source_urn,
+                "active_urn": source_urn, "generation": generation}
+
     def clear_temporary_snapshots(self, scope_id="__cmp__"):
         """Hide only temporary comparison snapshots; retain identity and provenance.
 

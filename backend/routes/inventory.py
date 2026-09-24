@@ -287,7 +287,8 @@ def _extraction_source_context(conn, urn, target_urn, scope_hint=None):
     return {'source_urn': normalized, 'source_lineage': source_lineage,
             'item_id': item_id, 'project_id': project_id,
             'authorization_scopes': authorization_scopes,
-            'registered_source': bool(related)}
+            'registered_source': bool(related),
+            'linked_in_scope': any(entry[0] == target_urn for entry in related)}
 
 
 def _aps_collection(response):
@@ -304,7 +305,8 @@ def _aps_collection(response):
     return collection
 
 
-def extract_metadata_task(urn, target_urn, job_id, purge_source_urns=None, scope_hint=None):
+def extract_metadata_task(urn, target_urn, job_id, purge_source_urns=None, scope_hint=None,
+                          reuse_existing_snapshot=False):
     """ Tarea en segundo plano para extraer metadata de Autodesk.
 
     purge_source_urns: Sources de OTRO linaje que se retiran (sin borrar historia)
@@ -337,11 +339,24 @@ def extract_metadata_task(urn, target_urn, job_id, purge_source_urns=None, scope
         with get_db_connection() as conn:
             source_context = _extraction_source_context(conn, urn, target_urn, scope_hint=scope_hint)
             urn = source_context['source_urn']
-            expected = InventoryIdentityRepository(conn).active_snapshot(
+            if reuse_existing_snapshot and source_context['linked_in_scope']:
+                raise IdentityError('MODEL_ALREADY_LINKED')
+            repository = InventoryIdentityRepository(conn)
+            expected = repository.active_snapshot(
                 target_urn, urn, allowed_scopes=[target_urn])
+            reused = None
+            if reuse_existing_snapshot:
+                reused = repository.reactivate_existing_snapshot(
+                    target_urn, urn, expected_active_urn=expected['active_urn'],
+                    expected_generation=expected['generation'], allowed_scopes=[target_urn])
             # active_snapshot registra Source/generation: retirar mientras APS
             # trabaja invalida tambien una primera publicacion en vuelo (ABA).
             conn.commit()
+        if reused:
+            set_job(job_id, {'status': 'success', 'progress': 100,
+                             'model_urn': target_urn, 'reused_snapshot': True,
+                             'message': f"Inventario guardado de esta version reactivado: {reused['row_count']} elementos."})
+            return
         retire = []
         for old_source in purge_source_urns or []:
             old_normalized, old_lineage = source_identity(old_source)
@@ -882,6 +897,7 @@ def start_extraction():
     # El frente desde el que se compara. Solo lo lee la extraccion temporal
     # del comparador; en las demas el destino ES el frente.
     scope_hint = data.get('scope') if target_urn == '__cmp__' else None
+    reuse_existing_snapshot = data.get('reuse_existing_snapshot') is True and target_urn != '__cmp__'
     if scope_hint is not None and not isinstance(scope_hint, str):
         scope_hint = None
 
@@ -898,6 +914,9 @@ def start_extraction():
             if target_urn != '__cmp__':
                 authorize_scope(conn, target_urn)
             context = _extraction_source_context(conn, urn, target_urn, scope_hint=scope_hint)
+            if reuse_existing_snapshot and context['linked_in_scope']:
+                return jsonify({'error': 'El modelo ya esta vinculado al frente.',
+                                'code': 'MODEL_ALREADY_LINKED'}), 409
             if target_urn == '__cmp__':
                 for authorized_scope in context['authorization_scopes']:
                     authorize_scope(conn, authorized_scope)
@@ -921,8 +940,11 @@ def start_extraction():
                      'message': 'En cola', 'model_urn': context['project_id'] if target_urn == '__cmp__' else target_urn})
 
     # Iniciar hilo secundario
+    task_kwargs = {'scope_hint': scope_hint}
+    if reuse_existing_snapshot:
+        task_kwargs['reuse_existing_snapshot'] = True
     thread = threading.Thread(target=extract_metadata_task, args=(urn, target_urn, job_id),
-                              kwargs={'scope_hint': scope_hint})
+                              kwargs=task_kwargs)
     thread.daemon = True
     thread.start()
 
@@ -938,7 +960,8 @@ def get_extraction_status(job_id):
     return jsonify({
         'status': job['status'],
         'progress': job['progress'],
-        'message': job['message']
+        'message': job['message'],
+        'reused_snapshot': bool(job.get('reused_snapshot'))
     })
 
 
