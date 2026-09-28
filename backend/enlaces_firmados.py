@@ -26,6 +26,7 @@ PROPOSITO_VERIFICACION = 'verificacion-de-correo'
 PROPOSITO_RECURSO = 'lectura-de-un-recurso'
 PROPOSITO_OAUTH_APS = 'estado-oauth-autodesk'
 PROPOSITO_2FA = 'desafio-segundo-factor'
+PROPOSITO_ACC_UPLOAD = 'subida-temporal-acc'
 
 # Caducidades por proposito, en segundos.
 CADUCIDAD = {
@@ -47,6 +48,9 @@ CADUCIDAD = {
     # proposito, porque entre pulsar "conectar" y volver de Autodesk pasan
     # segundos, no horas.
     PROPOSITO_OAUTH_APS: 600,
+    # La URL S3 de ACC caduca en una hora. El ticket sólo permite confirmar
+    # esa subida para la misma sesión de ALEPHIA; no contiene un token APS.
+    PROPOSITO_ACC_UPLOAD: 3600,
 }
 
 

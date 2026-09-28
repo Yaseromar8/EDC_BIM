@@ -11,6 +11,7 @@
 import { useState, useCallback, useRef } from 'react';
 import { apiFetch } from '../utils/apiFetch';
 import { rememberRecentPdf } from '../utils/recentPdfCache';
+import { uploadAccParts } from '../utils/accParallelUpload';
 
 const MAX_CONCURRENT = 3;
 const MAX_RETRIES = 3;
@@ -62,6 +63,7 @@ export function useChunkedUpload(api, projectPrefix, user, options = {}) {
   const optionsRef = useRef(options);
   optionsRef.current = options;
   const abortControllersRef = useRef(new Map()); // uploadId → AbortController
+  const accControllersRef = useRef(new Map()); // itemId → AbortController ACC
 
   // ── Update a single upload item by its id ──
   const updateUpload = useCallback((id, patch) => {
@@ -98,6 +100,7 @@ export function useChunkedUpload(api, projectPrefix, user, options = {}) {
   // ── CORE: Execute a single file upload ──
   const executeUpload = useCallback(async (item) => {
     const { id, file, folderPath } = item;
+    let accController = null;
 
     try {
       // ── STEP 1: INIT — Request resumable session ──
@@ -127,7 +130,7 @@ export function useChunkedUpload(api, projectPrefix, user, options = {}) {
         return;
       }
 
-      const { uploadId, sessionUri, chunkSize, filename } = initData;
+      const { uploadId, sessionUri, chunkSize, filename, accUpload } = initData;
       updateUpload(id, {
         uploadId,
         sessionUri,
@@ -137,8 +140,23 @@ export function useChunkedUpload(api, projectPrefix, user, options = {}) {
         statusText: 'Subiendo...'
       });
 
-      // ── STEP 2: CHUNK LOOP — Send chunks to GCS ──
+      // ── STEP 2: GCS y ACC avanzan a la vez, sólo en carpetas opt-in ──
+      // La promesa ACC absorbe su rechazo inmediatamente: un fallo CORS no
+      // cancela el original ALEPHIA ni produce un rechazo sin observador.
+      if (accUpload) {
+        accController = new AbortController();
+        accControllersRef.current.set(id, accController);
+      }
+      const accResult = accUpload
+        ? uploadAccParts(file, accUpload, accController.signal).then(() => true, () => false)
+        : Promise.resolve(false);
       await sendChunksRef.current(id, file, sessionUri, chunkSize, uploadId, 0);
+      if (cancelledIdsRef.current.has(id)) throw new DOMException('Carga cancelada', 'AbortError');
+
+      if (accUpload) updateUpload(id, {
+        statusText: 'Original guardado · terminando envío a ACC…',
+      });
+      const accUploaded = await accResult;
       if (cancelledIdsRef.current.has(id)) throw new DOMException('Carga cancelada', 'AbortError');
 
       // ── STEP 3: CONFIRM — Register in DB ──
@@ -147,7 +165,7 @@ export function useChunkedUpload(api, projectPrefix, user, options = {}) {
       const confirmRes = await apiFetch(`${api}/api/uploads/complete`, {
         method: 'POST',
         headers: getHeaders(),
-        body: JSON.stringify({ uploadId })
+        body: JSON.stringify({ uploadId, accUploadTicket: accUploaded ? accUpload?.ticket : null })
       });
 
       const confirmData = await confirmRes.json();
@@ -160,7 +178,9 @@ export function useChunkedUpload(api, projectPrefix, user, options = {}) {
       updateUpload(id, {
         status: 'completed',
         progress: 100,
-        statusText: `Archivo listo · ${now.toLocaleDateString()} ${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`,
+        statusText: confirmData.acc_bridge
+          ? 'Archivo guardado · procesando vista…'
+          : `Archivo listo · ${now.toLocaleDateString()} ${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`,
         nodeId: confirmData.node_id,
         version: confirmData.version,
         gcsUrn: confirmData.gcsUrn,
@@ -186,6 +206,7 @@ export function useChunkedUpload(api, projectPrefix, user, options = {}) {
       }
 
     } catch (err) {
+      if (accController) accController.abort();
       if (err.name === 'AbortError') {
         updateUpload(id, { status: 'cancelled', statusText: 'Cancelado' });
       } else {
@@ -195,6 +216,8 @@ export function useChunkedUpload(api, projectPrefix, user, options = {}) {
           statusText: err.message || 'Error desconocido'
         });
       }
+    } finally {
+      accControllersRef.current.delete(id);
     }
   }, [api, projectPrefix, user, getHeaders, updateUpload]);
 
@@ -361,6 +384,7 @@ export function useChunkedUpload(api, projectPrefix, user, options = {}) {
     // Abort the in-flight fetch
     const controller = abortControllersRef.current.get(itemId);
     if (controller) controller.abort();
+    accControllersRef.current.get(itemId)?.abort();
 
     // Remove from queue if not started
     queueRef.current = queueRef.current.filter(i => i.id !== itemId);

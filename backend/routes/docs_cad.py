@@ -26,6 +26,7 @@ import os
 import tempfile
 import time
 import zipfile
+from urllib.parse import quote, urljoin, urlparse
 
 import requests
 from concurrent.futures import ThreadPoolExecutor as _ThreadPoolExecutor
@@ -849,6 +850,242 @@ def _guardia_del_plano(node):
         return jsonify({'success': False, 'error': 'No se pudo verificar el acceso'}), 503
 
 
+# ── Vinculo explicito con una version ya preparada en Autodesk Docs ────────
+
+def _acc_link_vigente(node):
+    """El vinculo pertenece a los bytes de ESTA version de ALEPHIA Docs."""
+    link = (node.get('meta') or {}).get('acc_link') or {}
+    return link if link.get('gcs_urn') == node.get('gcs_urn') else None
+
+
+def _acc_admin_guard(node):
+    """El token APS explora todos los hubs: solo el custodio global lo usa."""
+    from administracion_de_obra import es_entity_admin
+    if es_entity_admin(getattr(g, 'current_user', None)):
+        return None
+    return jsonify({'success': False, 'error': 'Solo el administrador de la instancia puede vincular ACC'}), 403
+
+
+def _acc_get(path):
+    token, error = get_internal_token()
+    if error or not token:
+        return None, 'No se pudo conectar con Autodesk'
+    try:
+        response = requests.get('%s/%s' % (APS_BASE, path),
+                                headers=_headers(token), timeout=30)
+        if response.status_code != 200:
+            return None, 'Autodesk no permitio consultar este recurso (%s)' % response.status_code
+        return response.json(), None
+    except (requests.RequestException, ValueError):
+        return None, 'No se pudo consultar Autodesk Docs'
+
+
+def _acc_segment(value):
+    """Un identificador APS es un segmento, nunca una URL arbitraria."""
+    value = str(value or '')
+    if not value or len(value) > 512 or any(ord(c) < 32 for c in value):
+        return None
+    return quote(value, safe='')
+
+
+def _guardar_acc_link(node, link):
+    tabla = 'file_versions' if node['v_id'] else 'file_nodes'
+    clave = node['v_id'] or node['id']
+    with get_db_connection() as conn:
+        cur = conn.cursor()
+        if link is None:
+            cur.execute('UPDATE %s SET metadata = COALESCE(metadata, \'{}\'::jsonb) - \'acc_link\' '
+                        'WHERE id = %%s' % tabla, (clave,))
+        else:
+            cur.execute('UPDATE %s SET metadata = jsonb_set(COALESCE(metadata, \'{}\'::jsonb), '
+                        "'{acc_link}', %%s::jsonb, true) WHERE id = %%s" % tabla,
+                        (json.dumps(link), clave))
+        conn.commit()
+
+
+@docs_cad_bp.route('/api/docs/cad/acc-link', methods=['GET', 'POST', 'DELETE'])
+def cad_acc_link():
+    """Liga una version Docs con una version ACC; nunca copia ni traduce bytes."""
+    data = request.args if request.method == 'GET' else (request.get_json(silent=True) or {})
+    node = _cargar(data.get('node_id'), data.get('version_id'))
+    if not node or not is_cad_file(node['name']):
+        return jsonify({'success': False, 'error': 'Plano no encontrado'}), 404
+    negativa = _guardia_del_plano(node)
+    if negativa:
+        return negativa
+    if request.method == 'GET':
+        link = _acc_link_vigente(node)
+        bridge_state = None
+        if not link:
+            from acc_emergency_bridge import status_and_link
+            bridge_state, link = status_and_link(node)
+        return jsonify({'success': True, 'link': link,
+                        'bridge': ({'status': bridge_state.get('status'),
+                                    'error': bridge_state.get('error'),
+                                    'paused': bridge_state.get('paused', False)}
+                                   if bridge_state else None)})
+    negativa = _acc_admin_guard(node)
+    if negativa:
+        return negativa
+    if request.method == 'DELETE':
+        _guardar_acc_link(node, None)
+        return jsonify({'success': True, 'link': None})
+
+    project_id = str(data.get('project_id') or '')
+    item_id = str(data.get('item_id') or '')
+    acc_version_id = str(data.get('acc_version_id') or '')
+    segmentos = [_acc_segment(v) for v in (project_id, item_id, acc_version_id)]
+    if any(v is None for v in segmentos):
+        return jsonify({'success': False, 'error': 'Falta proyecto, archivo o version ACC'}), 400
+
+    # No basta con recibir un URN del navegador: se comprueba que la version
+    # pertenece al item dentro del proyecto y que el nombre coincide con el
+    # documento al que se asociara. Nunca se acepta un URN externo arbitrario.
+    versions, error = _acc_get('data/v1/projects/%s/items/%s/versions' % tuple(segmentos[:2]))
+    if error:
+        return jsonify({'success': False, 'error': error}), 502
+    chosen = next((v for v in versions.get('data') or [] if v.get('id') == acc_version_id), None)
+    if not chosen:
+        return jsonify({'success': False, 'error': 'La version no pertenece a ese archivo ACC'}), 400
+    attributes = chosen.get('attributes') or {}
+    acc_name = attributes.get('name') or attributes.get('displayName') or ''
+    if acc_name.casefold() != node['name'].casefold():
+        return jsonify({'success': False, 'error': 'Los nombres de ambos archivos no coinciden'}), 400
+    link = {
+        'project_id': project_id, 'item_id': item_id,
+        'version_id': acc_version_id, 'version_number': attributes.get('versionNumber'),
+        'name': acc_name,
+        'viewer_urn': base64.urlsafe_b64encode(acc_version_id.encode('utf-8')).decode('ascii').rstrip('='),
+        'gcs_urn': node['gcs_urn'],
+        'linked_at': int(time.time()),
+        'linked_by': (getattr(g, 'current_user', None) or {}).get('id'),
+    }
+    _guardar_acc_link(node, link)
+    return jsonify({'success': True, 'link': link})
+
+
+@docs_cad_bp.route('/api/docs/cad/acc-browse', methods=['GET'])
+def cad_acc_browse():
+    """Explorador ACC solo para el administrador de la instancia."""
+    node = _cargar(request.args.get('node_id'), request.args.get('version_id'))
+    if not node or not is_cad_file(node['name']):
+        return jsonify({'success': False, 'error': 'Plano no encontrado'}), 404
+    negativa = _guardia_del_plano(node)
+    if negativa:
+        return negativa
+    negativa = _acc_admin_guard(node)
+    if negativa:
+        return negativa
+    level = request.args.get('level')
+    hub = _acc_segment(request.args.get('hub_id'))
+    project = _acc_segment(request.args.get('project_id'))
+    folder = _acc_segment(request.args.get('folder_id'))
+    item = _acc_segment(request.args.get('item_id'))
+    if level == 'hubs':
+        path = 'project/v1/hubs'
+    elif level == 'projects' and hub:
+        path = 'project/v1/hubs/%s/projects' % hub
+    elif level == 'topFolders' and hub and project:
+        path = 'project/v1/hubs/%s/projects/%s/topFolders' % (hub, project)
+    elif level == 'contents' and project and folder:
+        path = 'data/v1/projects/%s/folders/%s/contents' % (project, folder)
+    elif level == 'versions' and project and item:
+        path = 'data/v1/projects/%s/items/%s/versions' % (project, item)
+    else:
+        return jsonify({'success': False, 'error': 'Ruta ACC invalida'}), 400
+    cursor = request.args.get('cursor')
+    if cursor:
+        parsed = urlparse(urljoin(APS_BASE + '/', cursor))
+        if (len(cursor) > 2048 or parsed.scheme != 'https'
+                or parsed.netloc != 'developer.api.autodesk.com'
+                or parsed.path != '/' + path or not parsed.query or parsed.fragment):
+            return jsonify({'success': False, 'error': 'Pagina ACC invalida'}), 400
+        path = path + '?' + parsed.query
+    result, error = _acc_get(path)
+    if error:
+        return jsonify({'success': False, 'error': error}), 502
+    siguiente = (result.get('links') or {}).get('next')
+    if isinstance(siguiente, dict):
+        siguiente = siguiente.get('href')
+    return jsonify({'success': True, 'data': result.get('data') or [],
+                    'next': siguiente if isinstance(siguiente, str) else None})
+
+
+@docs_cad_bp.route('/api/docs/cad/acc-bridge/folder', methods=['GET', 'PUT'])
+def cad_acc_bridge_folder():
+    """Interruptor temporal para UNA carpeta Docs; no importa archivos previos."""
+    negative = _acc_admin_guard(None)
+    if negative:
+        return negative
+    data = request.args if request.method == 'GET' else (request.get_json(silent=True) or {})
+    import uuid as _uuid
+    try:
+        local_id = str(_uuid.UUID(str(data.get('local_folder_id'))))
+    except (ValueError, TypeError, AttributeError):
+        return jsonify({'success': False, 'error': 'Carpeta ALEPHIA invalida'}), 400
+    model_urn = str(data.get('model_urn') or '')
+    if not model_urn:
+        return jsonify({'success': False, 'error': 'Falta proyecto ALEPHIA'}), 400
+    with get_db_connection() as conn:
+        cur = conn.cursor()
+        cur.execute("""SELECT name FROM file_nodes WHERE id = %s AND model_urn = %s
+                       AND node_type = 'FOLDER' AND is_deleted = FALSE""",
+                    (local_id, model_urn))
+        local = cur.fetchone()
+    if not local:
+        return jsonify({'success': False, 'error': 'Carpeta ALEPHIA no encontrada'}), 404
+    from acc_emergency_bridge import (bridge_service_enabled, folder_bridge_config,
+                                      set_folder_bridge)
+    current = folder_bridge_config(local_id, model_urn)
+    if request.method == 'GET':
+        return jsonify({'success': True, 'folder': local[0], 'bridge': current,
+                        'service_enabled': bridge_service_enabled()})
+    if data.get('enabled') is False:
+        if not current:
+            return jsonify({'success': False, 'error': 'Esta carpeta no tiene puente'}), 400
+        bridge = {**current, 'enabled': False, 'updated_at': int(time.time())}
+    elif data.get('enabled') is True:
+        project_id = str(data.get('project_id') or '')
+        folder_id = str(data.get('folder_id') or '')
+        if not _acc_segment(project_id) or not _acc_segment(folder_id):
+            return jsonify({'success': False, 'error': 'Proyecto o carpeta ACC invalido'}), 400
+        remote, error = _acc_get('data/v1/projects/%s/folders/%s' %
+                                 (_acc_segment(project_id), _acc_segment(folder_id)))
+        if error:
+            return jsonify({'success': False, 'error': error}), 502
+        target = (remote or {}).get('data') or {}
+        if target.get('type') != 'folders' or target.get('id') != folder_id:
+            return jsonify({'success': False, 'error': 'ACC no confirmo la carpeta destino'}), 400
+        bridge = {'enabled': True, 'project_id': project_id, 'folder_id': folder_id,
+                  'project_name': str(data.get('project_name') or '')[:160],
+                  'folder_name': (target.get('attributes') or {}).get('displayName') or
+                                 (target.get('attributes') or {}).get('name') or '',
+                  'updated_at': int(time.time()),
+                  'updated_by': (getattr(g, 'current_user', None) or {}).get('id')}
+    else:
+        return jsonify({'success': False, 'error': 'Falta enabled true/false'}), 400
+    if not set_folder_bridge(local_id, model_urn, bridge):
+        return jsonify({'success': False, 'error': 'No se pudo guardar el puente'}), 409
+    return jsonify({'success': True, 'bridge': bridge,
+                    'service_enabled': bridge_service_enabled()})
+
+
+@docs_cad_bp.route('/api/docs/cad/acc-bridge/retry', methods=['POST'])
+def cad_acc_bridge_retry():
+    data = request.get_json(silent=True) or {}
+    node = _cargar(data.get('node_id'), data.get('version_id'))
+    if not node:
+        return jsonify({'success': False, 'error': 'Plano no encontrado'}), 404
+    negative = _guardia_del_plano(node) or _acc_admin_guard(node)
+    if negative:
+        return negative
+    from acc_emergency_bridge import retry_failed
+    if not retry_failed(node):
+        return jsonify({'success': False, 'error':
+                        'La copia en ACC puede haberse creado; requiere conciliacion antes de reintentar'}), 409
+    return jsonify({'success': True, 'status': 'queued'})
+
+
 def _traducir_con_vistas_autocad(node, forzar, master, verificar):
     """El camino del lector nuevo para un DWG: sus vistas dibujadas por AutoCAD.
 
@@ -963,6 +1200,13 @@ def translate_cad():
         return jsonify({'success': False, 'error': 'Este archivo no es CAD'}), 400
     if not node['gcs_urn']:
         return jsonify({'success': False, 'error': 'El archivo no tiene contenido'}), 400
+
+    # Un cliente antiguo podria llamar /translate aunque Docs ya este usando
+    # el puente temporal. No gastar creditos de Model Derivative a espaldas de
+    # esa decision; los documentos sin esta marca siguen el camino intacto.
+    if (node.get('meta') or {}).get('acc_emergency_bridge'):
+        return jsonify({'success': False, 'error':
+                        'Esta version usa el puente temporal ACC; consulta su estado en Docs'}), 409
 
     # Forzar rehace la traduccion y la vuelve a cobrar aunque ya estuviera hecha.
     # Venia del cliente sin mirar nada: bastaba mandar force=true en un bucle para
@@ -1222,9 +1466,9 @@ def cad_estados():
     arrancaba hasta que alguien abria el archivo. Medido el 15/16-sep-2026: si
     arranca al subir; lo que faltaba era CONTARLO.
 
-    Se contesta con lo YA GUARDADO en la version. No se pregunta a Autodesk:
-    esto lo pide una carpeta entera de una vez, y una llamada por archivo a APS
-    seria justo el trabajo que el lote P1 quito de las aperturas.
+    La traduccion habitual usa exclusivamente lo guardado en la version.
+    Solo el puente temporal concilia hasta cinco vistas pendientes por consulta
+    para que su fila termine de mostrar «Procesando» sin abrir el archivo.
 
     Estados: 'subiendo' (viajando a Autodesk), 'inprogress' (traduciendo),
     'success', 'failed', 'atascado' (empezo y no termino en una hora) y
@@ -1256,12 +1500,30 @@ def cad_estados():
     ahora = time.time()
     permitido = {}
     estados = {}
+    bridge_pending = []
+    bridge_running = None
+    bridge_active = False
     for node_id, nombre, model_urn, meta in filas:
         if not is_cad_file(nombre or ''):
             continue
         if model_urn not in permitido:
             permitido[model_urn] = bool(verify_project_access(usuario, model_urn))
         if not permitido[model_urn]:
+            continue
+        bridge = ((meta or {}).get('acc_emergency_bridge') or {})
+        if bridge:
+            if bridge_running is None:
+                from acc_emergency_bridge import bridge_service_enabled
+                bridge_running = bridge_service_enabled()
+            status = bridge.get('status')
+            if bridge_running and status in ('queued', 'uploading', 'preparing'):
+                bridge_active = True
+            estados[node_id] = ('pausado' if not bridge_running and status in ('queued', 'uploading', 'preparing')
+                                else 'procesando' if status in ('queued', 'uploading', 'preparing')
+                                else 'failed' if status == 'error'
+                                else 'success' if status == 'ready' else 'sin_preparar')
+            if bridge_running and status == 'preparing':
+                bridge_pending.append((node_id, meta))
             continue
         cad = ((meta or {}).get('cad') or {})
         estado = cad.get('status') or 'sin_preparar'
@@ -1278,4 +1540,29 @@ def cad_estados():
             except (TypeError, ValueError):
                 pass
         estados[node_id] = estado
-    return jsonify({'success': True, 'estados': estados})
+    # Sólo los trabajos del puente pendientes: conciliar un lote acotado por
+    # consulta, nunca lanzar una petición APS por cada fila de la carpeta.
+    # La rotación evita que un archivo lento impida consultar los siguientes.
+    if bridge_pending:
+        from acc_emergency_bridge import schedule_status_check
+        limit = 5
+        offset = (int(ahora // 15) * limit) % len(bridge_pending)
+        selected = (bridge_pending + bridge_pending)[offset:offset + min(limit, len(bridge_pending))]
+        selected_meta = {node_id: meta for node_id, meta in selected}
+        try:
+            with get_db_connection() as conn:
+                cur = conn.cursor()
+                cur.execute("""SELECT n.id::text, v.id, v.gcs_urn
+                               FROM file_nodes n JOIN file_versions v
+                                 ON v.id = n.current_version_id
+                              WHERE n.id = ANY(%s::uuid[]) AND n.is_deleted = FALSE""",
+                            (list(selected_meta),))
+                versions = cur.fetchall()
+            for node_id, version_id, gcs_urn in versions:
+                schedule_status_check({'id': node_id, 'v_id': version_id,
+                                       'gcs_urn': gcs_urn, 'meta': selected_meta[node_id]})
+        except Exception:
+            # El listado sigue disponible aunque la conciliación falle.
+            pass
+    return jsonify({'success': True, 'estados': estados,
+                    'bridge_pending': bridge_active})

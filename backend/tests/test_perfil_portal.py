@@ -157,11 +157,24 @@ def test_el_recorte_es_real(rutas_portal):
     cuenta. Este se queda como alarma gruesa: si un dia salta, la pregunta no es
     «subimos el techo» sino «que se colo».
     """
+    # El puente temporal Docs→ACC añade exactamente estas cuatro capacidades
+    # documentales. No se eleva el presupuesto histórico de las demás rutas:
+    # si entra una quinta ruta ACC o crece cualquier otra familia, esta alarma
+    # vuelve a fallar y exige revisar el perímetro explícitamente.
+    puente_acc = {
+        '/api/docs/cad/acc-link',
+        '/api/docs/cad/acc-browse',
+        '/api/docs/cad/acc-bridge/folder',
+        '/api/docs/cad/acc-bridge/retry',
+    }
+    rutas_acc = {r for r in rutas_portal if r.startswith('/api/docs/cad/acc-')}
+    assert rutas_acc == puente_acc, (
+        'el perímetro ACC cambió sin revisión: %s' % sorted(rutas_acc ^ puente_acc))
     TECHO = 286
-    assert len(rutas_portal) < TECHO, (
-        'el perfil portal sirve %d rutas (techo %d): antes de subirlo, mira QUE '
-        'se anadio -- si es una familia entera, el recorte dejo de recortar'
-        % (len(rutas_portal), TECHO))
+    sin_puente = [r for r in rutas_portal if r not in puente_acc]
+    assert len(sin_puente) < TECHO, (
+        'el perfil portal sirve %d rutas ajenas al puente (techo %d): antes de '
+        'ampliarlo, mira QUE se añadió' % (len(sin_puente), TECHO))
 
 
 def test_el_guardia_POR_FAMILIA_dispara_aunque_el_total_este_bajo_el_techo():

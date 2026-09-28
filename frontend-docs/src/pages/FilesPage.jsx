@@ -16,7 +16,7 @@ import { useVersionHistory } from '../hooks/useVersionHistory';
 import { useColumnResize, useSidebarResize, useVersionPanelResize } from '../hooks/useColumnResize';
 import { API, getInitials, getAuthHeaders, formatSize, formatDate, DOCS_VISOR_SHORTCUT } from '../utils/helpers';
 import { renderFileIconSop } from '../utils/fileIcons';
-import { apiFetch } from '../utils/apiFetch';
+import { apiFetch, apiJson } from '../utils/apiFetch';
 import { programarBusqueda } from '../utils/busquedaDiferida';
 import { reiniciarTira } from '../utils/tiraDocumentos';
 import * as campo from '../offline/captura';
@@ -63,6 +63,7 @@ import ContextMenu from '../components/ContextMenu';
 import FolderNode from '../components/FolderNode';
 import MatrixTable from '../MatrixTable';
 import FolderPermissionsPanel from '../components/FolderPermissionsPanel';
+import AccFolderBridge from '../components/AccFolderBridge';
 // ESTÁTICO A PROPÓSITO: abrir un PDF es la acción más frecuente del día. Si se
 // carga diferido, al hacer clic hay que bajar PRIMERO los chunks del visor y
 // recién ahí el archivo → se siente lento. Va precargado con la app.
@@ -253,6 +254,10 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
   //                   entidad y archivar la obra. NO son actos de proyecto, y
   //                   el servidor tampoco los trata como tales.
   const { isAdmin, esEntityAdmin, projectPrefix } = fe;
+  // La ruta del puente exige role=admin global en el backend. Esa identidad
+  // también viene en la sesión: permite mostrar el botón aunque la consulta
+  // auxiliar de administración de una obra de ensayo no resuelva su alias.
+  const puedeVincularAcc = esEntityAdmin || user?.role === 'admin';
 
   // QUÉ SE PUEDE HACER con lo que hay seleccionado. Una sola respuesta para
   // la barra, el menú contextual y la cuadrícula: ninguna superficie decide
@@ -477,6 +482,20 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
 
   // ── Atributos personalizados ──
   const [attributesItem, setAttributesItem] = React.useState(null); // archivo en edición
+  const [accBridgeFolder, setAccBridgeFolder] = React.useState(null);
+  const [accBridgeInfo, setAccBridgeInfo] = React.useState(null);
+  React.useEffect(() => {
+    const folderId = fe.currentNodeId;
+    if (!puedeVincularAcc || fe.isTrashMode || !folderId) return;
+    let vigente = true;
+    const params = new URLSearchParams({ local_folder_id: folderId, model_urn: projectPrefix });
+    apiJson(`${API}/api/docs/cad/acc-bridge/folder?${params}`, { retries: 0 })
+      .then(data => {
+        if (vigente) setAccBridgeInfo({ folderId, bridge: data?.bridge || null, serviceEnabled: data?.service_enabled === true });
+      })
+      .catch(() => { if (vigente) setAccBridgeInfo({ folderId, bridge: null, serviceEnabled: false }); });
+    return () => { vigente = false; };
+  }, [fe.currentNodeId, fe.isTrashMode, puedeVincularAcc, projectPrefix]);
   // VISTA DE LA CARPETA: lista (por defecto) o cuadricula, como ACC. La
   // eleccion se RECUERDA: quien revisa planos vive en cuadricula y quien
   // revisa metadatos vive en lista; preguntarselo en cada carpeta seria
@@ -1009,6 +1028,27 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
                     Nueva carpeta
                   </button>
                 )}
+                {!fe.isTrashMode && puedeVincularAcc && fe.currentNodeId && fe.selected.size === 0 && (
+                  <>
+                  <button type="button"
+                    onClick={() => setAccBridgeFolder({
+                      id: fe.currentNodeId,
+                      name: fe.currentPath.replace(/\/+$/, '').split('/').at(-1),
+                    })}
+                    title="Vincular, cambiar o desactivar el destino ACC de esta carpeta"
+                    aria-label="Configurar vínculo ACC de la carpeta actual"
+                    style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', background: '#fff', color: 'var(--accent)', border: '1px solid var(--accent)', borderRadius: 4, fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>
+                    <span aria-hidden="true">↔</span> Vincular ACC
+                  </button>
+                  {accBridgeInfo?.folderId === fe.currentNodeId && accBridgeInfo.bridge?.enabled && (
+                    <span title={`${accBridgeInfo.bridge.project_name || accBridgeInfo.bridge.project_id} / ${accBridgeInfo.bridge.folder_name || accBridgeInfo.bridge.folder_id}`}
+                      style={{ color: '#25638d', fontSize: 12, whiteSpace: 'nowrap', maxWidth: 360, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      ACC: {accBridgeInfo.bridge.project_name || accBridgeInfo.bridge.project_id} / {accBridgeInfo.bridge.folder_name || accBridgeInfo.bridge.folder_id}
+                      {!accBridgeInfo.serviceEnabled && ' (pausado)'}
+                    </span>
+                  )}
+                  </>
+                )}
 
                 {!fe.isTrashMode && fe.selected.size > 0 && (() => {
                   const selFiles = fe.files.filter(f => fe.selected.has(f.id));
@@ -1354,12 +1394,13 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
         versionRowMenu={vh.versionRowMenu} setVersionRowMenu={vh.setVersionRowMenu}
         projectPrefix={projectPrefix} isAdmin={isAdmin} onClose={() => vh.setTableShowVersions(false)} onPromote={vh.handlePromote} />
 
-      <ContextMenu activeRowMenu={fe.activeRowMenu} menuRef={fe.menuRef} isAdmin={isAdmin} projectPrefix={projectPrefix}
+      <ContextMenu activeRowMenu={fe.activeRowMenu} menuRef={fe.menuRef} isAdmin={isAdmin} esEntityAdmin={puedeVincularAcc} projectPrefix={projectPrefix}
         capacidades={capsMenu} objetivo={objetivoMenu}
         user={user} onRefresh={() => fe.triggerRefresh(fe.currentPath)}
         onClose={() => { fe.setActiveRowMenu(null); fe.setRightClickedId(null); }}
         onCreateChild={(id) => fe.setCreatingChildParentId(id)}
         onOpenPermissions={(item) => fe.setPermissionsFolder(item)}
+        onOpenAccBridge={(item) => setAccBridgeFolder(item)}
         onRename={(data) => fe.setEditingNodeId(data)}
         onShare={(item) => { fe.setShareTarget(item); fe.setShowShareModal(true); }}
         onMove={() => fe.setMoveState({ step: 1, items: objetivoMenu.map(i => i.name), itemIds: objetivoMenu.map(i => i.id), destPath: '', destId: null })}
@@ -1388,10 +1429,16 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
 
       {fe.permissionsFolder && (<FolderPermissionsPanel folder={fe.permissionsFolder} modelUrn={projectPrefix} apiBaseUrl={API} onClose={() => fe.setPermissionsFolder(null)} />)}
 
+      {accBridgeFolder && puedeVincularAcc && (
+        <AccFolderBridge API={API} folder={accBridgeFolder} modelUrn={projectPrefix}
+          onSaved={(bridge, serviceEnabled) => setAccBridgeInfo({ folderId: accBridgeFolder.id, bridge, serviceEnabled })}
+          onClose={() => setAccBridgeFolder(null)} />
+      )}
+
       {fe.activeFile && fe.activeFile.type !== 'folder' && (
         <DocumentViewer file={fe.activeFile} projectPrefix={projectPrefix} versionHistory={vh.versionHistory}
           viewedVersionInfo={fe.viewedVersionInfo} setViewedVersionInfo={fe.verVersion}
-          showVersions={fe.showVersions} setShowVersions={fe.setShowVersions} isAdmin={isAdmin}
+          showVersions={fe.showVersions} setShowVersions={fe.setShowVersions} isAdmin={isAdmin} esEntityAdmin={esEntityAdmin}
           onPromote={vh.handlePromote} API={API}
           hermanos={(fe.files || []).filter(f => /\.pdfx?$/i.test(f.name || ''))}
           onAbrirHermano={(doc) => { fe.setViewedVersionInfo(null); fe.setShowVersions(false); fe.setActiveFile(doc); fe.anotarDocumento(doc, { reemplazar: true }); }}

@@ -166,6 +166,11 @@ export async function apiFetch(url, options = {}) {
 export async function apiJson(url, options = {}) {
   const res = await apiFetch(url, options);
   const text = await res.text().catch(() => '');
+  if (/^\s*<(?:!doctype|html)\b/i.test(text)) {
+    const err = new Error(`HTTP ${res.status}: el servidor devolvió HTML en vez de JSON; comprueba la ruta API y el backend conectado.`);
+    err.status = res.status;
+    throw err;
+  }
   if (!res.ok) {
     let msg = text.slice(0, 200);
     try { msg = JSON.parse(text).error || msg; } catch { /* cuerpo no-JSON */ }

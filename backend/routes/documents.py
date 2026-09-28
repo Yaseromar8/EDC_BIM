@@ -1214,6 +1214,10 @@ def upload_document():
 
         # ── 2. Resolver path logico en BD ─────────────────────────────────────
         parent_id = resolve_path_to_node_id(folder_path, model_urn, created_by=performed_by)
+        bridge = None
+        bridge_version_id = None
+        from acc_emergency_bridge import bridge_for_upload
+        bridge = bridge_for_upload(parent_id, model_urn, filename)
 
         # ── 3. Generar nombre ofuscado en GCS (nunca el nombre real del archivo) ─
         # Formato: multi-tenant/{project_id}/{timestamp}_{uuid8}_{filename}
@@ -1238,12 +1242,21 @@ def upload_document():
         # ── 5. Registrar en PostgreSQL con metadatos completos ────────────────
         # ROLLBACK: Si la BD falla, borramos el blob de GCS para evitar huérfanos
         try:
+            if bridge:
+                from acc_emergency_bridge import initial_job, record_job_in_version
+                bridge_job = initial_job(bridge, gcs_uuid, filename)
+
+                def _registrar_puente(cur, _file_id, v_id):
+                    nonlocal bridge_version_id
+                    record_job_in_version(cur, v_id, bridge_job)
+                    bridge_version_id = v_id
             nodo_creado, _version_creada = create_file_record(
                 model_urn, parent_id, filename,
                 file_info['size_bytes'], gcs_uuid,
                 mime_type=file_info.get('mime_type'),
                 created_by=performed_by,
-                sha256=sha
+                sha256=sha,
+                on_version_created=_registrar_puente if bridge else None
             )
         except Exception as db_error:
             print(f"[Upload] DB FAILED after GCS success. Rolling back blob: {gcs_uuid}")
@@ -1269,6 +1282,13 @@ def upload_document():
             }
         )
 
+        if bridge:
+            try:
+                from acc_emergency_bridge import schedule
+                schedule(bridge_version_id)
+            except Exception as bridge_error:
+                print(f'[ACC bridge] trabajo en cola, no se pudo despertar: {type(bridge_error).__name__}')
+
         permalink_url = f"/api/docs/proxy?urn={gcs_uuid}"
 
         return jsonify({
@@ -1278,7 +1298,8 @@ def upload_document():
             "size_mb": file_info['size_mb'],
             "mime_type": file_info['mime_type'],
             "url": permalink_url,
-            "gcs_urn": gcs_uuid
+            "gcs_urn": gcs_uuid,
+            "acc_bridge": "queued" if bridge else None
         }), 200
 
     except Exception as e:
@@ -1683,7 +1704,29 @@ def confirm_upload():
         from db import get_db_connection, log_activity
 
         parent_id = resolve_path_to_node_id(folder_path, model_urn, created_by=performed_by) if folder_path else None
-        file_id, version = create_file_record(model_urn, parent_id, filename, size_bytes, gcs_urn, mime_type=mime_type, created_by=performed_by)
+        # El puente temporal es estrictamente opt-in por carpeta exacta y CAD.
+        # Esta lectura ocurre ANTES de crear la version: si no se puede decidir,
+        # no confirmamos un archivo que podria iniciar la traduccion equivocada.
+        bridge = None
+        bridge_version_id = None
+        from acc_emergency_bridge import bridge_for_upload
+        bridge = bridge_for_upload(parent_id, model_urn, filename)
+        if bridge:
+            from acc_emergency_bridge import initial_job, record_job_in_version
+            bridge_job = initial_job(bridge, gcs_urn, filename)
+
+            def _registrar_puente(cur, _file_id, v_id):
+                nonlocal bridge_version_id
+                record_job_in_version(cur, v_id, bridge_job)
+                bridge_version_id = v_id
+
+            file_id, version = create_file_record(
+                model_urn, parent_id, filename, size_bytes, gcs_urn,
+                mime_type=mime_type, created_by=performed_by,
+                on_version_created=_registrar_puente)
+        else:
+            file_id, version = create_file_record(model_urn, parent_id, filename, size_bytes,
+                                                  gcs_urn, mime_type=mime_type, created_by=performed_by)
 
         if custom_attributes or description is not None:
             with get_db_connection() as conn:
@@ -1731,10 +1774,15 @@ def confirm_upload():
         # coste del dueno (28-ago-2026): todo CAD subido consume creditos de
         # Model Derivative aunque nadie lo abra jamas.
         try:
-            from routes.docs_cad import is_cad_file, encolar_pretraduccion
+            from routes.docs_cad import is_cad_file
             if is_cad_file(filename):
-                # Un DWG, con sus vistas 2D dibujadas por AutoCAD (docs_cad).
-                encolar_pretraduccion(file_id, vistas_pdf=filename.lower().endswith('.dwg'))
+                if bridge:
+                    from acc_emergency_bridge import schedule
+                    schedule(bridge_version_id)
+                else:
+                    # Conservar literalmente el camino normal de traduccion.
+                    from routes.docs_cad import encolar_pretraduccion
+                    encolar_pretraduccion(file_id, vistas_pdf=filename.lower().endswith('.dwg'))
         except Exception as te:
             print(f"[upload-confirm] cad bg: {te}")
 
@@ -1749,7 +1797,8 @@ def confirm_upload():
                 "description": description,
                 "metadata": custom_attributes,
                 "custom_attributes": custom_attributes,
-                "mime_type": mime_type
+                "mime_type": mime_type,
+                "acc_bridge": "queued" if bridge else None
             }
         }), 201
     except Exception as e:

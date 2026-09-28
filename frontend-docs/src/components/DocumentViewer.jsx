@@ -1,8 +1,10 @@
 // frontend-docs/src/components/DocumentViewer.jsx
-import React, { useState, useEffect, lazy, Suspense } from 'react';
+import React, { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import PDFViewer from './PDFViewer';
 import SelloEscritorio from './SelloEscritorio';
-import { apiFetch } from '../utils/apiFetch';
+import AccLinkPicker from './AccLinkPicker';
+import { apiFetch, apiJson } from '../utils/apiFetch';
+import { accPreviewEnabled, accPreviewKey, readAccPreview } from '../utils/accPreviewLocal';
 import { getRecentPdfUrl } from '../utils/recentPdfCache';
 import { urlFirmadaEnMano, pedirUrlFirmada } from '../utils/urlFirmada';
 import toast from 'react-hot-toast';
@@ -38,6 +40,7 @@ export default function DocumentViewer({
   setShowVersions = null,
   
   isAdmin = false,
+  esEntityAdmin = false,
   onPromote = null,
   
   API,
@@ -60,6 +63,72 @@ export default function DocumentViewer({
   // obra ya lo tradujo, el invitado lo VE; si no, se le ofrece descargarlo.
   // Un invitado nunca dispara una traduccion -- el coste manda.
   const [cadCompartido, setCadCompartido] = useState(null);
+  const [accLink, setAccLink] = useState(null);
+  const [accBridge, setAccBridge] = useState(null);
+  const [accBridgeActionError, setAccBridgeActionError] = useState('');
+  const [accLinkFor, setAccLinkFor] = useState('');
+  const [accLinkError, setAccLinkError] = useState('');
+  const [accLinkRetry, setAccLinkRetry] = useState(0);
+  const lastAccFocusCheck = useRef(0);
+  const [showAccPicker, setShowAccPicker] = useState(false);
+  const accFileId = file?.id;
+  const accFileName = file?.name;
+  const accVersionId = viewedVersionInfo?.id;
+  const accKey = `${accFileId || ''}:${accVersionId || 'actual'}`;
+  const accGcsUrn = viewedVersionInfo?.gcs_urn || file?.gcs_urn;
+  const previewOnly = accPreviewEnabled();
+  // La pareja de carpetas administra estas vistas: no ofrecer otro vinculo
+  // manual por archivo ni mostrar detalles internos del puente en el lector.
+  const esVistaPuente = !previewOnly && (accLink?.source === 'emergency_folder_bridge' || !!accBridge);
+  useEffect(() => {
+    if (!accFileId || isShared || !CAD_EXTENSIONS.some(e => (accFileName || '').toLowerCase().endsWith(e))) return;
+    if (previewOnly) {
+      let vigente = true;
+      queueMicrotask(() => {
+        if (!vigente) return;
+        setAccLink(readAccPreview(accPreviewKey(accFileId, accVersionId, accGcsUrn)));
+        setAccBridge(null);
+        setAccLinkError('');
+        setAccLinkFor(accKey);
+      });
+      return () => { vigente = false; };
+    }
+    let vigente = true;
+    const params = new URLSearchParams({ node_id: accFileId, ...(accVersionId ? { version_id: accVersionId } : {}) });
+    apiJson(`${API}/api/docs/cad/acc-link?${params}`, { retries: 0 })
+      .then(data => {
+        if (!data?.success) throw new Error(data?.error || 'No se pudo consultar la vista ACC');
+        if (vigente) { setAccLink(data.link || null); setAccBridge(data.bridge || null); setAccLinkError(''); setAccLinkFor(accKey); }
+      })
+      .catch(cause => { if (vigente) { setAccLink(null); setAccBridge(null); setAccLinkError(cause.message); setAccLinkFor(accKey); } });
+    return () => { vigente = false; };
+  }, [accFileId, accFileName, accVersionId, accGcsUrn, isShared, API, accKey, accLinkRetry, previewOnly]);
+  useEffect(() => {
+    if (previewOnly || accLinkFor !== accKey || accLink || accBridge?.paused ||
+        !['queued', 'uploading', 'preparing'].includes(accBridge?.status)) return;
+    const timer = setTimeout(() => setAccLinkRetry(value => value + 1), 10000);
+    return () => clearTimeout(timer);
+  }, [previewOnly, accLinkFor, accKey, accLink, accBridge?.status, accBridge?.paused, accLinkRetry]);
+  // Al volver de la pestaña ACC, consultar una vez de inmediato: el sondeo de
+  // 10 s sigue siendo el respaldo, pero no obliga a esperar otro ciclo completo.
+  // Los dos eventos pueden llegar juntos; coalescerlos evita consultas dobles.
+  useEffect(() => {
+    if (previewOnly || accLinkFor !== accKey || accLink || accBridge?.paused ||
+        !['queued', 'uploading', 'preparing'].includes(accBridge?.status)) return;
+    const alVolver = () => {
+      if (document.visibilityState !== 'visible') return;
+      const ahora = Date.now();
+      if (ahora - lastAccFocusCheck.current < 2000) return;
+      lastAccFocusCheck.current = ahora;
+      setAccLinkRetry(value => value + 1);
+    };
+    window.addEventListener('focus', alVolver);
+    document.addEventListener('visibilitychange', alVolver);
+    return () => {
+      window.removeEventListener('focus', alVolver);
+      document.removeEventListener('visibilitychange', alVolver);
+    };
+  }, [previewOnly, accLinkFor, accKey, accLink, accBridge?.status, accBridge?.paused]);
   useEffect(() => {
     if (!isShared || !file?.shareId) return;
     const abrible = CAD_EXTENSIONS.some(e => (file.name || '').toLowerCase().endsWith(e))
@@ -231,6 +300,12 @@ export default function DocumentViewer({
     return () => { cancelled = true; };
   }, [file, viewedVersionInfo, projectPrefix, isShared, API, previewRetry]);
 
+  // El lector puede montarse sin archivo: los hooks deben conservar el mismo
+  // orden cuando luego se elige un plano.
+  const [conectorListo, setConectorListo] = useState(() => {
+    try { return localStorage.getItem('alephia_conector') === 'si'; } catch { return false; }
+  });
+
   if (!file) return null;
 
   // UNA SOLA BARRA PARA LOS PLANOS (como ACC).
@@ -280,9 +355,6 @@ export default function DocumentViewer({
   // y con un clic en «Sí, se abrió» —o con la pérdida de foco del diálogo de
   // permiso de Chrome, que sigue siendo buena señal— queda recordado y nunca
   // se vuelve a preguntar: clic → aviso «enviado al Conector» y nada más.
-  const [conectorListo, setConectorListo] = useState(() => {
-    try { return localStorage.getItem('alephia_conector') === 'si'; } catch { return false; }
-  });
   const recordarConector = () => {
     try { localStorage.setItem('alephia_conector', 'si'); } catch { /* noop */ }
     setConectorListo(true);
@@ -426,6 +498,18 @@ export default function DocumentViewer({
         </div>
 
         <div className="file-viewer-actions">
+           {esCad && !isShared && !esVistaPuente && accLinkFor === accKey && accLink && (
+             <span title="Se usa la vista ya preparada de Autodesk; el original sigue en Docs"
+               style={{ marginRight: 12, color: '#25638d', fontSize: 12 }}>
+               {previewOnly ? 'Prueba local' : 'Vista ACC'} · V{accLink.version_number || '?'}
+             </span>
+           )}
+           {esCad && !isShared && esEntityAdmin && !esVistaPuente && (
+             <button type="button" onClick={() => setShowAccPicker(true)}
+               style={{ marginRight: 12, padding: '5px 10px', cursor: 'pointer' }}>
+               {previewOnly ? 'Probar vista ACC' : accLinkFor === accKey && accLink ? 'Cambiar vista ACC' : 'Vincular vista ACC'}
+             </button>
+           )}
            {abribleEnEscritorio && !isShared && (
              <button onClick={abrirEnEscritorio}
                title="Descarga el original con su nombre real; al abrirlo, Windows usa la aplicacion asociada"
@@ -445,6 +529,14 @@ export default function DocumentViewer({
            <button className="file-viewer-close" onClick={onClose || (() => window.close())}>✕</button>
         </div>
       </div>
+      )}
+
+      {showAccPicker && esCad && !isShared && esEntityAdmin && (
+        <AccLinkPicker API={API} file={file} docsVersionId={viewedVersionInfo?.id || null}
+          docsGcsUrn={accGcsUrn} previewOnly={previewOnly}
+          currentLink={accLinkFor === accKey ? accLink : null}
+          onLinked={link => { setAccLink(link); setAccLinkError(''); setAccLinkFor(accKey); }}
+          onClose={() => setShowAccPicker(false)} />
       )}
 
       {conectorAviso && (
@@ -698,13 +790,49 @@ export default function DocumentViewer({
           }
 
           if (!isShared && CAD_EXTENSIONS.some(ext => lowerName.endsWith(ext))) {
+            if (accLinkFor !== accKey) return <div style={{ padding: 40, textAlign: 'center' }}>Consultando vista del plano…</div>;
+            if (previewOnly && !accLink) return (
+              <div style={{ padding: 40, textAlign: 'center' }}>
+                <p>Prueba local: elige una versión ya preparada en ACC con «Probar vista ACC».</p>
+                <p>Esta prueba no envía el plano a traducir ni cambia los datos de ALEPHIA Docs.</p>
+              </div>
+            );
+            if (accLinkError) return (
+              <div style={{ padding: 40, textAlign: 'center' }}>
+                <p>No se pudo comprobar si este plano tiene una vista vinculada: {accLinkError}</p>
+                <button type="button" onClick={() => { setAccLinkFor(''); setAccLinkRetry(v => v + 1); }}>Reintentar</button>
+                <p>El original sigue disponible mediante «Abrir en {appEscritorio.nombre}».</p>
+              </div>
+            );
+            if (accBridge && !accLink) return (
+              <div style={{ padding: 40, textAlign: 'center' }}>
+                <p>{accBridge.paused ? 'El puente temporal está pausado en el servidor.'
+                  : ['queued', 'uploading', 'preparing'].includes(accBridge.status) ? 'Procesando…'
+                  : 'No se pudo completar el puente temporal a ACC.'}</p>
+                {accBridge.error && <p role="alert">{accBridge.error}</p>}
+                {accBridgeActionError && <p role="alert">{accBridgeActionError}</p>}
+                {accBridge.status === 'error' && esEntityAdmin && (
+                  <button type="button" onClick={async () => {
+                    try {
+                      await apiJson(`${API}/api/docs/cad/acc-bridge/retry`, {
+                        method: 'POST', retries: 0,
+                        body: JSON.stringify({ node_id: accFileId, version_id: accVersionId }),
+                      });
+                      setAccBridgeActionError(''); setAccLinkRetry(value => value + 1);
+                    } catch (cause) { setAccBridgeActionError(cause.message); }
+                  }}>Reintentar si no se creó una versión ACC</button>
+                )}
+                <p>El original permanece disponible para descarga.</p>
+              </div>
+            );
             return (
               <Suspense fallback={<div style={{ padding: 40, textAlign: 'center' }}><div className="adsk-spinner" style={{ margin: '0 auto' }} /></div>}>
                 {/* LA VERSION ELEGIDA (21-sep-2026). Sin ella el visor de planos
                     abria siempre la actual: al elegir la V1 no cambiaba nada. La
                     clave lo vuelve a montar entero al cambiar de version. */}
-                <CadViewer key={`${file.id}:${viewedVersionInfo ? viewedVersionInfo.id : 'actual'}`}
+                <CadViewer key={`${accKey}:${accLink?.version_id || 'sin-acc'}`}
                            file={file} projectPrefix={projectPrefix}
+                           urnDirecto={accLink?.viewer_urn || null}
                            versionId={viewedVersionInfo ? viewedVersionInfo.id : null} />
               </Suspense>
             );

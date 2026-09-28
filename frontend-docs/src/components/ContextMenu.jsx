@@ -14,6 +14,7 @@ export default function ContextMenu({
   activeRowMenu,
   menuRef,
   isAdmin,
+  esEntityAdmin = false,
   capacidades = {},
   objetivo = [],
   projectPrefix,
@@ -23,6 +24,7 @@ export default function ContextMenu({
   onClose,
   onCreateChild,
   onOpenPermissions,
+  onOpenAccBridge,
   onRename,
   onShare,
   onMove,
@@ -56,7 +58,7 @@ export default function ContextMenu({
   // Alto estimado: se CUENTAN las acciones visibles en vez de suponerlas. Con
   // el número fijo, un menú corto se pegaba al borde inferior sin necesidad.
   const acciones =
-    (item.type === 'folder' ? (isAdmin ? 1 : 0) + (visible('subcarpeta') ? 1 : 0) : 0) +
+    (item.type === 'folder' ? (isAdmin ? 1 : 0) + (esEntityAdmin && onOpenAccBridge ? 1 : 0) + (visible('subcarpeta') ? 1 : 0) : 0) +
     (item.type !== 'folder' && puedeEditar ? 1 : 0) +
     (item.type !== 'folder' && onNuevaVersion && visible('nueva_version') ? 1 : 0) +
     (isAdmin ? 2 : 0) +
@@ -89,6 +91,12 @@ export default function ContextMenu({
         <button onClick={() => { onClose(); onOpenPermissions(item); }}>
           <div className="menu-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg></div>
           Configuración de permisos
+        </button>
+      )}
+      {item.type === 'folder' && esEntityAdmin && onOpenAccBridge && !varios && (
+        <button onClick={() => { onClose(); onOpenAccBridge(item); }}>
+          <div className="menu-icon">↔</div>
+          Puente temporal ACC
         </button>
       )}
       {/* RESERVAR: solo DOCUMENTOS y solo a quien puede editarlos.

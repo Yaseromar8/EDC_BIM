@@ -34,8 +34,12 @@ const STATUS_CONFIG = Object.fromEntries(
 // traducia al subir: lo que faltaba era contarlo. Y cuando la traduccion
 // fallaba, el fallo solo aparecia al abrir el documento, dias despues.
 const ES_CAD = /\.(dwg|dxf|dwf|dwfx|rvt|rfa|ifc|nwd|nwc|dgn|3dm|sat|ste?p|ig[es]s?|obj|fbx|stl)$/i;
-const PREPARANDO = new Set(['subiendo', 'inprogress']);
+const PREPARANDO = new Set(['subiendo', 'inprogress', 'procesando']);
 const AVISO_CAD = {
+  procesando: { texto: 'Procesando', color: '#456f8d',
+                titulo: 'El archivo ya está en ALEPHIA. La vista estará disponible cuando termine su preparación.' },
+  pausado:   { texto: 'En pausa', color: '#b26a00',
+                titulo: 'La preparación temporal está pausada. El original sigue disponible.' },
   subiendo:   { texto: 'Preparando…', color: '#6b7480',
                 titulo: 'Se está enviando a Autodesk para poder verlo en el navegador.' },
   inprogress: { texto: 'Preparando…', color: '#6b7480',
@@ -244,7 +248,7 @@ const TiradorColumna = ({ columna, etiqueta, ancho, iniciar, ajustar }) => (
  * TableRow Component - Renders an individual row in the virtualized list.
  */
 const TableRow = ({ index, style, data }) => {
-  const { items, selected, toggle, navigate, setActiveFile, onUpdateDescription, onRename, formatSize, formatDate, getInitials, user, isAdmin, onRowMenu, isTrashMode, onShowVersions, columnWidths, renderFileIconSop, editingNodeId, setEditingNodeId, rightClickedId, processingIds, onStatusChange, estadosCad = {} } = data;
+  const { items, selected, toggle, navigate, setActiveFile, onUpdateDescription, onRename, formatSize, formatDate, getInitials, isAdmin, onRowMenu, isTrashMode, onShowVersions, columnWidths, renderFileIconSop, editingNodeId, setEditingNodeId, rightClickedId, processingIds, onStatusChange, estadosCad = {} } = data;
   
   const item = items && items[index] ? items[index] : {};
 
@@ -676,13 +680,23 @@ const MatrixTable = ({
   // (ver AVISO_CAD arriba). Se contesta con lo guardado en la version: la lista
   // no hace que el servidor pregunte a Autodesk fila por fila.
   const [estadosCad, setEstadosCad] = useState({});
-  const claveCad = files.filter(f => ES_CAD.test(f?.name || '')).map(f => f.id).join(',');
+  // El ID del documento no cambia entre V1 y V2. Incluir la versión y el
+  // original hace que la consulta se reinicie al subir otra versión del mismo
+  // archivo, sin sondear indefinidamente los documentos ya preparados.
+  const claveCad = JSON.stringify(files.filter(f => ES_CAD.test(f?.name || ''))
+    .map(f => [f.id, f.version, f.gcs_urn]));
   useEffect(() => {
-    const ids = claveCad ? claveCad.split(',') : [];
+    const ids = JSON.parse(claveCad).map(([id]) => id);
     if (!ids.length) return undefined;
     let vivo = true;
     let reloj = null;
+    let enVuelo = false;
+    let enEspera = false;
+    let ultimoRetorno = 0;
     const preguntar = async () => {
+      if (enVuelo) return;
+      enVuelo = true;
+      if (reloj) { clearTimeout(reloj); reloj = null; }
       try {
         const r = await apiFetch(`${API}/api/docs/cad/estados`, {
           method: 'POST', body: JSON.stringify({ node_ids: ids }),
@@ -691,11 +705,32 @@ const MatrixTable = ({
         if (!vivo) return;
         const estados = (d && d.estados) || {};
         setEstadosCad(estados);
-        if (Object.values(estados).some(e => PREPARANDO.has(e))) reloj = setTimeout(preguntar, 15000);
+        enEspera = Object.values(estados).some(e => PREPARANDO.has(e));
+        // El puente tiene conciliación propia en el backend. Consultar sólo
+        // nuestra BD más seguido evita otro ciclo de 15 s después de ACC.
+        if (enEspera) reloj = setTimeout(preguntar, d.bridge_pending ? 5000 : 15000);
       } catch { /* sin estados, la lista se pinta como siempre */ }
+      finally { enVuelo = false; }
     };
+    // Chrome ralentiza los temporizadores de una pestaña en segundo plano.
+    // Al regresar de ACC, consultar una vez si había planos pendientes; no
+    // aumentar el sondeo periódico ni consultar cuando todos están listos.
+    const alVolver = () => {
+      if (!vivo || !enEspera || document.visibilityState !== 'visible') return;
+      const ahora = Date.now();
+      if (ahora - ultimoRetorno < 2000) return;
+      ultimoRetorno = ahora;
+      preguntar();
+    };
+    window.addEventListener('focus', alVolver);
+    document.addEventListener('visibilitychange', alVolver);
     preguntar();
-    return () => { vivo = false; if (reloj) clearTimeout(reloj); };
+    return () => {
+      vivo = false;
+      if (reloj) clearTimeout(reloj);
+      window.removeEventListener('focus', alVolver);
+      document.removeEventListener('visibilitychange', alVolver);
+    };
   }, [claveCad]);
   // Sin planos en la carpeta no hay nada que contar, y asi el efecto no toca
   // el estado por su cuenta (regla `set-state-in-effect`).

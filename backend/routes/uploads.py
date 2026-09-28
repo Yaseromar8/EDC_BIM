@@ -14,6 +14,7 @@ Endpoints:
 import os
 import uuid
 import time
+from threading import BoundedSemaphore
 from flask import Blueprint, request, jsonify, g
 from perimetro_de_obra import guardia_de_recurso
 from werkzeug.utils import secure_filename
@@ -22,6 +23,12 @@ uploads_bp = Blueprint('uploads', __name__)
 
 # ── Constants ──
 CHUNK_SIZE = 8 * 1024 * 1024  # 8 MB (Google recommended)
+
+# Gunicorn atiende 8 peticiones en paralelo con un pool SQL de 15 conexiones.
+# /complete mantiene una conexión para el lock de sesión y toma otra durante
+# la confirmación; dejar como máximo cinco en esa fase reserva conexiones para
+# el resto del portal y evita el 8 × 2 > 15 observado en el ensayo simulado.
+_COMPLETE_SLOTS = BoundedSemaphore(5)
 
 
 def _get_user():
@@ -175,13 +182,25 @@ def init_upload():
 
         print(f"[Uploads] Session created: {upload_id} for {safe_name} ({size_bytes} bytes)")
 
+        # El plan ACC es opcional y sólo para una carpeta opt-in. Si APS no
+        # entrega URLs, la sesión GCS sigue y /complete usa el puente probado.
+        acc_upload = None
+        try:
+            from acc_emergency_bridge import bridge_for_upload, prepare_parallel_upload
+            bridge = bridge_for_upload(parent_node_id, model_urn, safe_name)
+            if bridge:
+                acc_upload = prepare_parallel_upload(upload_id, bridge, safe_name, size_bytes)
+        except Exception:
+            print('[Uploads] ACC directo no disponible; se conserva copia GCS→ACC')
+
         return jsonify({
             "success": True,
             "uploadId": upload_id,
             "sessionUri": session_uri,
             "gcsUrn": gcs_urn,
             "chunkSize": CHUNK_SIZE,
-            "filename": safe_name
+            "filename": safe_name,
+            "accUpload": acc_upload,
         }), 200
 
     except Exception as e:
@@ -244,15 +263,38 @@ def get_upload_status(upload_id):
 # ═══════════════════════════════════════════════════════════════
 @uploads_bp.route('/api/uploads/complete', methods=['POST'])
 def complete_upload():
-    """
-    Called after all chunks are uploaded to GCS.
-    Creates the file_node record in PostgreSQL and closes the session.
-    """
-    data = request.get_json()
+    """Serializa confirmaciones repetidas de una misma sesión entre workers."""
+    data = request.get_json(silent=True) or {}
     upload_id = data.get('uploadId')
     if not upload_id:
         return jsonify({"success": False, "error": "uploadId is required"}), 400
 
+    # El id llega en el cuerpo: el middleware no puede deducir la obra.
+    # Autorizar la sesión antes de tomar el lock y conservar la comprobación
+    # de la obra en _complete_upload_locked como segunda barrera.
+    negativa = guardia_de_recurso('upload_sessions', upload_id)
+    if negativa:
+        return negativa
+
+    from db import get_db_connection
+    try:
+        with _COMPLETE_SLOTS:
+            with get_db_connection() as lock_conn:
+                cursor = lock_conn.cursor()
+                # El lock transaccional no bloquea el UPDATE de upload_sessions,
+                # que esta ruta hace con otra conexión. Se libera al salir del with.
+                cursor.execute("SELECT pg_advisory_xact_lock(841622, hashtext(%s))",
+                               (str(upload_id),))
+                return _complete_upload_locked(data, upload_id)
+    except Exception:
+        return jsonify({"success": False, "error": "No se pudo confirmar la subida"}), 500
+
+
+def _complete_upload_locked(data, upload_id):
+    """
+    Called after all chunks are uploaded to GCS.
+    Creates the file_node record in PostgreSQL and closes the session.
+    """
     from db import get_db_connection, log_activity
     from file_system_db import resolve_path_to_node_id, create_file_record
 
@@ -296,13 +338,85 @@ def complete_upload():
         else:
             parent_id = parent_node_id
 
+        # Si el proceso anterior cayó entre confirmar file_versions y marcar
+        # upload_sessions como completed, la misma sesión conserva su GCS URN
+        # único. Recuperar el resultado sin crear una V adicional en Docs/ACC.
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""SELECT n.id, v.id, v.version_number,
+                                  v.metadata->'acc_emergency_bridge' IS NOT NULL
+                           FROM file_versions v
+                           JOIN file_nodes n ON n.id = v.file_node_id
+                           WHERE v.gcs_urn = %s AND n.model_urn = %s
+                             AND n.parent_id IS NOT DISTINCT FROM %s
+                             AND n.name = %s
+                           ORDER BY v.version_number DESC LIMIT 1""",
+                           (gcs_urn, model_urn, parent_id, filename))
+            previous_result = cursor.fetchone()
+            if previous_result:
+                cursor.execute("""UPDATE upload_sessions
+                                  SET status = 'completed', bytes_uploaded = size_bytes
+                                  WHERE id = %s""", (upload_id,))
+                conn.commit()
+        if previous_result:
+            node_id, v_id, version_num, had_bridge = previous_result
+            if had_bridge:
+                from acc_emergency_bridge import schedule
+                schedule(v_id)
+            return jsonify({"success": True, "message": "Already completed",
+                            "node_id": str(node_id), "version": version_num,
+                            "acc_bridge": "queued" if had_bridge else None}), 200
+
+        # El modal habitual de ALEPHIA Docs pasa por ESTA ruta. La decision
+        # opt-in se toma antes de confirmar la version; si falla la lectura de
+        # la carpeta no se inicia por accidente una traduccion de pago.
+        from acc_emergency_bridge import bridge_for_upload
+        bridge = bridge_for_upload(parent_id, model_urn, filename)
+        bridge_version_id = None
+        on_version_created = None
+        if bridge:
+            from acc_emergency_bridge import (
+                finish_parallel_upload, initial_job, record_job_in_version,
+            )
+            if data.get('accUploadTicket'):
+                # El ticket acredita una sesión ACC, no el original ALEPHIA.
+                # Antes de omitir la copia desde GCS, comprobar ambos hechos.
+                actual_user = _get_user() or {}
+                if created_by != (actual_user.get('email') or actual_user.get('name')):
+                    return jsonify({'success': False, 'error': 'La sesión no pertenece al usuario'}), 403
+                from gcs_manager import get_storage_client
+                bucket_name = os.environ.get('GCS_BUCKET_NAME')
+                blob = get_storage_client().bucket(bucket_name).get_blob(gcs_urn) if bucket_name else None
+                if not blob or blob.size != size_bytes:
+                    return jsonify({'success': False, 'error': 'El original aún no está completo'}), 409
+            direct_storage_id = finish_parallel_upload(
+                data.get('accUploadTicket'), upload_id, bridge, filename, size_bytes)
+            bridge_job = initial_job(bridge, gcs_urn, filename, direct_storage_id)
+
+            def on_version_created(cur, _node_id, v_id):
+                nonlocal bridge_version_id
+                record_job_in_version(cur, v_id, bridge_job)
+                bridge_version_id = v_id
+
         # Create file record in DB
         node_id, version_num = create_file_record(
             model_urn, parent_id, filename,
             size_bytes, gcs_urn,
             mime_type=mime_type,
-            created_by=created_by
+            created_by=created_by,
+            on_version_created=on_version_created
         )
+
+        # Marcar la sesión antes de las tareas secundarias y del log. Si una de
+        # ellas falla, un reintento del cliente no debe crear otra versión.
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                UPDATE upload_sessions
+                SET status = 'completed', bytes_uploaded = size_bytes
+                WHERE id = %s
+            """, (upload_id,))
+            conn.commit()
 
         # ── Huella del contenido, en segundo plano ────────────────────────────
         # En esta ruta el cliente envia los trozos DIRECTO a Cloud Storage: el
@@ -335,10 +449,15 @@ def complete_upload():
         # todo CAD subido consume creditos de Model Derivative aunque nadie lo
         # abra jamas.
         try:
-            from routes.docs_cad import is_cad_file, encolar_pretraduccion
+            from routes.docs_cad import is_cad_file
             if is_cad_file(filename):
-                # Un DWG, con sus vistas 2D dibujadas por AutoCAD (docs_cad).
-                encolar_pretraduccion(node_id, vistas_pdf=filename.lower().endswith('.dwg'))
+                if bridge:
+                    from acc_emergency_bridge import schedule
+                    schedule(bridge_version_id)
+                else:
+                    # Conservar literalmente el camino normal de traduccion.
+                    from routes.docs_cad import encolar_pretraduccion
+                    encolar_pretraduccion(node_id, vistas_pdf=filename.lower().endswith('.dwg'))
             # El PDF deja lista su miniatura (primera pagina) para la tira de
             # documentos del lector: generarla al abrirla, 45 a la vez, era
             # justo lo que las dejaba en blanco. Va por el mismo ejecutor
@@ -358,16 +477,6 @@ def complete_upload():
                 _encolar_mosaicos([gcs_urn])
         except Exception as _e:
             print(f"[uploads] no se pudo lanzar la pre-traduccion CAD: {_e}")
-
-        # Mark session as completed
-        with get_db_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute("""
-                UPDATE upload_sessions 
-                SET status = 'completed', bytes_uploaded = size_bytes
-                WHERE id = %s
-            """, (upload_id,))
-            conn.commit()
 
         # Audit log
         node_path = (folder_path + filename) if folder_path else filename
@@ -395,7 +504,8 @@ def complete_upload():
             "filename": filename,
             "gcsUrn": gcs_urn,
             "node_id": node_id,
-            "version": version_num
+            "version": version_num,
+            "acc_bridge": "queued" if bridge else None
         }), 201
 
     except Exception as e:

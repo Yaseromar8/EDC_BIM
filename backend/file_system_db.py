@@ -380,7 +380,7 @@ def _registrar_vuelta_a_borrador(cursor, model_urn, node_id, nombre, anterior, v
 
 
 def create_file_record(model_urn, parent_id, filename, size_bytes, gcs_uuid, mime_type=None,
-                       created_by=None, sha256=None):
+                       created_by=None, sha256=None, on_version_created=None):
     """Inserta/Actualiza el Ítem y crea una nueva Versión histórica con Holding Area (Estilo APS)"""
     import re
     
@@ -476,6 +476,12 @@ def create_file_record(model_urn, parent_id, filename, size_bytes, gcs_uuid, mim
             RETURNING id
         """, (f_id, new_v, gcs_uuid, size_bytes, mime_type, created_by, sha256, sha256))
         v_id = cursor.fetchone()[0]
+
+        # Extension opt-in: el trabajo de copia a ACC nace en la MISMA
+        # transaccion que la version. Si falla, no deja una version Docs sin
+        # trabajo registrado ni una confirmacion ambigua.
+        if on_version_created is not None:
+            on_version_created(cursor, f_id, v_id)
         
         # 3. Vincular el Ítem principal a su registro de versión actual
         cursor.execute("UPDATE file_nodes SET current_version_id = %s WHERE id = %s", (v_id, f_id))
