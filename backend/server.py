@@ -882,6 +882,7 @@ from routes.uploads import uploads_bp
 from routes.audit import audit_bp
 from routes.partidas import partidas_bp
 from routes.docs_cad import docs_cad_bp
+from routes.cad_review import cad_review_bp
 
 app.register_blueprint(documents_bp)
 app.register_blueprint(auth_bp)
@@ -894,6 +895,7 @@ app.register_blueprint(administracion_bp)   # quien administra cada obra
 app.register_blueprint(audit_bp)      # la auditoria es DEL expediente, no del visor
 app.register_blueprint(partidas_bp, url_prefix='/api/partidas')
 app.register_blueprint(docs_cad_bp)   # ver DWG/Civil/IFC dentro de Documentos
+app.register_blueprint(cad_review_bp)  # revisiones privadas/publicadas en vistas CAD
 
 from routes.pdf_tools import pdf_tools_bp, ensure_pdf_tools_tables
 app.register_blueprint(pdf_tools_bp)

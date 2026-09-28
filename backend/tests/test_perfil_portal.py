@@ -170,8 +170,24 @@ def test_el_recorte_es_real(rutas_portal):
     rutas_acc = {r for r in rutas_portal if r.startswith('/api/docs/cad/acc-')}
     assert rutas_acc == puente_acc, (
         'el perímetro ACC cambió sin revisión: %s' % sorted(rutas_acc ^ puente_acc))
+    # Revisión CAD de Docs, separada del puente ACC. Son 9 endpoints (GET/POST
+    # y PATCH/DELETE comparten dos paths), todos acotados al plano y su obra.
+    revision_cad = {
+        '/api/docs/cad/reviews',
+        '/api/docs/cad/reviews/<mark_id>',
+        '/api/docs/cad/reviews/<mark_id>/publish',
+        '/api/docs/cad/reviews/<mark_id>/attachments',
+        '/api/docs/cad/reviews/<mark_id>/attachments/<attachment_id>',
+        '/api/docs/cad/reviews/<mark_id>/photos',
+        '/api/docs/cad/reviews/<mark_id>/photos/<attachment_id>',
+    }
+    rutas_revision = {r for r in rutas_portal if r.startswith('/api/docs/cad/reviews')}
+    assert rutas_revision == revision_cad, (
+        'el perímetro de revisión CAD cambió sin revisión: %s' %
+        sorted(rutas_revision ^ revision_cad))
     TECHO = 286
-    sin_puente = [r for r in rutas_portal if r not in puente_acc]
+    sin_puente = [r for r in rutas_portal
+                  if r not in puente_acc and r not in revision_cad]
     assert len(sin_puente) < TECHO, (
         'el perfil portal sirve %d rutas ajenas al puente (techo %d): antes de '
         'ampliarlo, mira QUE se añadió' % (len(sin_puente), TECHO))

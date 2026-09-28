@@ -13,6 +13,7 @@ import { API } from '../utils/helpers';
 import { apiFetch } from '../utils/apiFetch';
 import toast from 'react-hot-toast';
 import { visiblesDelDwg, capasQueApagar } from '../utils/capasDelDwg';
+import CadReviewOverlay from './CadReviewOverlay';
 
 const VIEWER_JS = 'https://developer.api.autodesk.com/modelderivative/v2/viewers/7.*/viewer3D.min.js';
 const VIEWER_CSS = 'https://developer.api.autodesk.com/modelderivative/v2/viewers/7.*/style.min.css';
@@ -632,13 +633,30 @@ export default function CadViewer({ file, projectPrefix = '', urnDirecto = null,
             const node = (doc.getRoot().search({ type: 'geometry' }) || [])
               .find(n => n.data.guid === guid);
             if (!node) return;
-            setVistaActiva(guid);
+            setPhase('abriendo');
             // Una presentacion no trae el estado de capas del DWG: se le aplica
             // el del espacio modelo, que ya se leyo al abrir.
-            viewer.loadDocumentNode(doc, node).then(() => aplicarCapasDelDwg(viewer, visiblesDelDwgRef));
+            viewer.loadDocumentNode(doc, node).then(() => {
+              aplicarCapasDelDwg(viewer, visiblesDelDwgRef);
+              setVistaActiva(guid);
+              setPhase('listo');
+            }).catch(() => {
+              setPhase('listo');
+              toast.error('No se pudo abrir esta vista del plano.');
+            });
           }}
         />
       )}
+
+      {/* La revisión de planos pertenece a ALEPHIA, no al puente ACC. Sólo en
+          vistas Autodesk 2D autenticadas; una vista compartida por enlace no
+          recibe herramientas ni acceso implícito a comentarios privados. */}
+      {phase === 'listo' && projectPrefix && viewerRef.current &&
+        vistas.some(v => v.guid === vistaActiva && v.es2D) && (
+          <CadReviewOverlay key={`${file.id}:${versionId || 'actual'}:${vistaActiva}`}
+            viewer={viewerRef.current} nodeId={file.id} versionId={versionId}
+            viewGuid={vistaActiva} projectPrefix={projectPrefix} />
+        )}
 
       {phase === 'abriendo' && (
         // EL PLANO YA ESTA PREPARADO: solo se carga. Como ACC: lienzo gris, tres

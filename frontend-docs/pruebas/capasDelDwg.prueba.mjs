@@ -53,7 +53,9 @@ await test('sin lista del DWG no se apaga nada: mejor verlo todo que no ver nada
 await test('el visor lo aplica al abrir y al cambiar de vista, y lo olvida al cambiar de documento', () => {
     const src = fuente('components/CadViewer.jsx');
     assert.match(src, /aplicarCapasDelDwg\(viewer, visiblesDelDwgRef\);\s+setPhase\('listo'\);/);
-    assert.match(src, /viewer\.loadDocumentNode\(doc, node\)\.then\(\(\) => aplicarCapasDelDwg\(viewer, visiblesDelDwgRef\)\);/);
+    // Al cambiar de vista, no se vuelve a habilitar la revisión ni se fija su
+    // GUID antes de cargar el nodo y aplicar las capas de esa vista.
+    assert.match(src, /viewer\.loadDocumentNode\(doc, node\)\.then\(\(\) => \{\s+aplicarCapasDelDwg\(viewer, visiblesDelDwgRef\);\s+setVistaActiva\(guid\);\s+setPhase\('listo'\);/);
     assert.match(src, /documentoRef\.current = doc;\s+visiblesDelDwgRef\.current = null;/);
 });
 

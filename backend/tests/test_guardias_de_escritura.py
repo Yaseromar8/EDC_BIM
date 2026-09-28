@@ -34,7 +34,10 @@ GUARDIAS = ('verify_project_access', 'check_folder_permission', '_hay_acceso', '
             # La guardia del DOCUMENTO: resuelve la obra desde el nodo o desde
             # la ruta del objeto. Es la que necesitan los manejadores que
             # reciben un fichero y no una obra, como los de la IA.
-            'guardia_del_documento')
+            'guardia_del_documento',
+            # CAD review resuelve file_node_id desde la marca y aplica AMBAS
+            # guardias dentro de _node/_mark; no acepta model_urn del cliente.
+            '_node(', '_mark(')
 
 CLAVES = ('model_urn', 'project_id', 'projectId', 'scope_urn', 'base_project_id',
           'project', 'urn')

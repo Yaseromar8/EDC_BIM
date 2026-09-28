@@ -66,6 +66,7 @@ def _rutinas():
     from esquema_base import ensure_esquema_base, ensure_columnas_pendientes
     from routes.presupuesto import ensure_presupuesto_schema
     from routes.pdf_tools import ensure_pdf_tools_tables
+    from routes.cad_review import ensure_cad_review_tables
     from routes.reviews import ensure_reviews_table
     from routes.transmittals import ensure_transmittals_table
     from routes.attributes import ensure_attributes_tables
@@ -107,6 +108,7 @@ def _rutinas():
         ('presupuesto', ensure_presupuesto_schema),
         ('asset_user_data', ensure_asset_user_data_table),
         ('pdf_tools', ensure_pdf_tools_tables),
+        ('cad_review', ensure_cad_review_tables),
         ('reviews', ensure_reviews_table),
         ('transmittals', ensure_transmittals_table),
         ('attributes', ensure_attributes_tables),

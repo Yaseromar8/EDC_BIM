@@ -48,6 +48,9 @@ GUARDIAS = ('verify_project_access', 'check_folder_permission', '_hay_acceso', '
             # La guardia del DOCUMENTO, para los manejadores que reciben un
             # fichero (id de nodo o ruta del objeto) en vez de una obra.
             'guardia_del_documento',
+            # CAD review: _node y _mark comprueban perímetro y permisos de
+            # carpeta contra el file_node_id persistido, no contra la URL.
+            '_node(', '_mark(',
             # GAP 07 · `/api/sync` no puede tener UNA guardia de obra a nivel de
             # ruta: un envio trae actos de VARIAS obras, cada uno con la suya
             # dentro del cuerpo. La resuelve y la comprueba POR OPERACION --y
