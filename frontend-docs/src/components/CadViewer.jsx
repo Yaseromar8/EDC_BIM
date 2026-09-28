@@ -302,7 +302,7 @@ function PanelContenido({ vistas, vistaActiva, onElegir }) {
   );
 }
 
-export default function CadViewer({ file, projectPrefix = '', urnDirecto = null, versionId = null }) {
+export default function CadViewer({ file, projectPrefix = '', urnDirecto = null, versionId = null, reviewEnabled = true }) {
   const containerRef = useRef(null);
   const viewerRef = useRef(null);
   // abriendo | preparando | traduciendo | listo | error
@@ -651,7 +651,7 @@ export default function CadViewer({ file, projectPrefix = '', urnDirecto = null,
       {/* La revisión de planos pertenece a ALEPHIA, no al puente ACC. Sólo en
           vistas Autodesk 2D autenticadas; una vista compartida por enlace no
           recibe herramientas ni acceso implícito a comentarios privados. */}
-      {phase === 'listo' && projectPrefix && viewerRef.current &&
+      {reviewEnabled && phase === 'listo' && projectPrefix && viewerRef.current &&
         vistas.some(v => v.guid === vistaActiva && v.es2D) && (
           <CadReviewOverlay key={`${file.id}:${versionId || 'actual'}:${vistaActiva}`}
             viewer={viewerRef.current} nodeId={file.id} versionId={versionId}

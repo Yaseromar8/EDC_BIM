@@ -18,8 +18,19 @@ await test('la nube recorre los cuatro lados del rectángulo', () => {
   assert.ok(body, 'existe el trazado de la nube');
   assert.match(body, /for \(let i = 0; i < nx; i\+\+\)/);
   assert.match(body, /for \(let i = 0; i < ny; i\+\+\)/);
-  assert.match(body, /\$\{x \+ w \+ 9\}/);
-  assert.match(body, /\$\{x - 9\}/);
-  assert.match(body, /\$\{y - 9\}/);
-  assert.match(body, /\$\{y \+ h \+ 9\}/);
+  assert.match(body, /\$\{x \+ w \+ 14\}/);
+  assert.match(body, /\$\{x - 14\}/);
+  assert.match(body, /\$\{y - 14\}/);
+  assert.match(body, /\$\{y \+ h \+ 14\}/);
+});
+
+await test('las referencias y fotos se abren en un visor flotante sin ventana externa', () => {
+  assert.match(source, /function FloatingPreview\(/);
+  assert.match(source, /createPortal\(/);
+  assert.match(source, /<PhotoPreview markId=/);
+  assert.match(source, /api\/docs\/signed-url/);
+  assert.match(source, /api\/docs\/proxy/);
+  assert.match(source, /reviewEnabled=\{false\}/);
+  assert.doesNotMatch(source, /window\.open\(/);
+  assert.doesNotMatch(source, /📷/);
 });

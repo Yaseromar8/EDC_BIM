@@ -259,6 +259,9 @@ def create_mark():
 
 @cad_review_bp.route('/api/docs/cad/reviews/<mark_id>', methods=['PATCH'])
 def edit_mark(mark_id):
+    denied = guardia_de_recurso('cad_review_marks', mark_id)
+    if denied:
+        return denied
     mark, denied = _mark(mark_id, 'view_markup', owner=True)
     if denied:
         return denied
@@ -299,6 +302,9 @@ def publish_mark(mark_id):
 
 @cad_review_bp.route('/api/docs/cad/reviews/<mark_id>', methods=['DELETE'])
 def delete_mark(mark_id):
+    denied = guardia_de_recurso('cad_review_marks', mark_id)
+    if denied:
+        return denied
     mark, denied = _mark(mark_id, 'view_markup', owner=True)
     if denied:
         return denied

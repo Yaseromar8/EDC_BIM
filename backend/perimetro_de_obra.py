@@ -69,6 +69,9 @@ RECURSOS = {
     # El documento en si. Comprobar contra el NODO es mas fuerte que fiarse del
     # model_urn que manda el cliente: el nodo dice de que obra es de verdad.
     'file_nodes':        ('id', 'model_urn'),
+    # Las marcas CAD guardan el nodo del plano, no una obra declarada por el
+    # cliente. Su obra se obtiene con JOIN a file_nodes en obra_del_recurso.
+    'cad_review_marks':  ('id', 'file_node_id'),
     # La sesion de subida troceada. Sin esto, conocer un id de sesion bastaba
     # para cancelar la subida de otra obra a media carga, o para falsear su
     # progreso.
@@ -130,6 +133,15 @@ RUTAS_POR_RECURSO = {
     'get_extraction_status': ('extraction_jobs', 'job_id'),
     # La ficha de un documento por su id de base de datos.
     'get_document_by_id': ('file_nodes', 'node_id'),
+    # Las acciones sobre una marca sólo reciben mark_id. El handler comprueba
+    # además autor, publicación y permiso de carpeta; aquí se resuelve la obra.
+    'edit_mark': ('cad_review_marks', 'mark_id'),
+    'publish_mark': ('cad_review_marks', 'mark_id'),
+    'delete_mark': ('cad_review_marks', 'mark_id'),
+    'add_document_attachment': ('cad_review_marks', 'mark_id'),
+    'upload_photo': ('cad_review_marks', 'mark_id'),
+    'delete_attachment': ('cad_review_marks', 'mark_id'),
+    'read_photo': ('cad_review_marks', 'mark_id'),
 }
 
 
@@ -154,6 +166,8 @@ RUTAS_POR_QUERY = {
     # peticion" (13-sep-2026, reproducido). La guardia del documento esta
     # dentro, en routes/docs_cad.py.
     'cad_status': ('file_nodes', 'node_id'),                  # ?node_id=
+    'cad_acc_link': ('file_nodes', 'node_id'),               # ?node_id= (lector ACC)
+    'list_marks': ('file_nodes', 'node_id'),                 # ?node_id= (revisión)
 }
 
 
@@ -162,6 +176,7 @@ RUTAS_POR_QUERY = {
 RUTAS_POR_CUERPO = {
     # Traducir un plano CAD para verlo: el visor manda solo `node_id`.
     'translate_cad': ('file_nodes', 'node_id'),
+    'create_mark': ('file_nodes', 'node_id'),
 }
 
 
@@ -236,8 +251,14 @@ def obra_del_recurso(cursor, tabla, valor_id):
         raise ValueError(f'tabla no declarada en RECURSOS: {tabla}')
     col_id, col_obra = RECURSOS[tabla]
     try:
-        cursor.execute(f'SELECT {col_obra} FROM {tabla} WHERE {col_id}::text = %s',
-                       (str(valor_id),))
+        if tabla == 'cad_review_marks':
+            cursor.execute('''SELECT n.model_urn FROM cad_review_marks m
+                              JOIN file_nodes n ON n.id = m.file_node_id
+                             WHERE m.id::text = %s AND m.deleted_at IS NULL
+                               AND NOT n.is_deleted''', (str(valor_id),))
+        else:
+            cursor.execute(f'SELECT {col_obra} FROM {tabla} WHERE {col_id}::text = %s',
+                           (str(valor_id),))
         fila = cursor.fetchone()
     except Exception as e:
         logger.warning(f'no se pudo leer la obra de {tabla}:{valor_id}: {e}')

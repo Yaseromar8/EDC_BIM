@@ -1,10 +1,16 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { Suspense, useCallback, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { API } from '../utils/helpers';
 import { apiFetch, apiJson } from '../utils/apiFetch';
 import { enlaceDeArchivos } from '../utils/enlacesDeArchivos';
 import './CadReviewOverlay.css';
 
 const BASE = `${API}/api/docs/cad/reviews`;
+const FloatingCadViewer = React.lazy(() => import('./CadViewer'));
+const CAD_FILES = /\.(dwg|dxf|dwf|dwfx|rvt|rfa|ifc|nwd|nwc|dgn|3dm|sat|step|stp|iges|igs|obj|fbx|stl)$/i;
+const INLINE_FILES = /\.(pdfx?|png|jpe?g|webp|gif)$/i;
+const IMAGE_FILES = /\.(png|jpe?g|webp|gif)$/i;
+const TEXT_FILES = /\.(txt|csv|log|json)$/i;
 
 function ReviewIcon({ kind }) {
   const paths = {
@@ -12,6 +18,9 @@ function ReviewIcon({ kind }) {
     cloud: <path d="M5.5 5.2c.2-2.3 2.8-3.1 4.3-1.4 1.6-1.8 4.2-1.1 4.8.7 2.3-.7 4.2 1.3 3.5 3.5 2.1 1.2 2.2 4.1.1 5.3.8 2.3-1 4.4-3.2 4.5-.8 2.2-3.7 3-5.4 1.1-1.8 1.7-4.3.8-4.8-1.3-2.3.4-4.1-1.6-3.2-3.8-1.8-1.2-1.8-3.8 0-5.2Z" />,
     text: <><path d="M4 5h16M12 5v14M8 19h8" /></>,
     photo: <><path d="M3.5 7.5h4l1.4-2h6.2l1.4 2h4v11h-17v-11Z" /><circle cx="12" cy="13" r="3.2" /></>,
+    file: <><path d="M6 3h8l4 4v14H6zM14 3v5h4M9 12h6M9 16h6" /></>,
+    plan: <><path d="M4 5h16v14H4zM8 5v14M12 9h5M12 13h5" /></>,
+    folder: <path d="M3 6h7l2 2h9v11H3z" />,
     info: <><circle cx="12" cy="12" r="9" /><path d="M12 11v5M12 8h.01" /></>,
   };
   return <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -38,23 +47,36 @@ function worldPoint(viewer, x, y) {
 
 function cloudPath(x, y, w, h) {
   const perimeter = 2 * (w + h);
-  const count = Math.max(4, Math.round(perimeter / 24));
+  const count = Math.max(4, Math.round(perimeter / 52));
   const nx = Math.max(2, Math.round(count * w / perimeter * 2));
   const ny = Math.max(2, Math.round(count * h / perimeter * 2));
   let path = `M ${x} ${y}`;
   for (let i = 0; i < nx; i++) {
-    path += ` Q ${x + w * (i + .5) / nx} ${y - 9} ${x + w * (i + 1) / nx} ${y}`;
+    path += ` Q ${x + w * (i + .5) / nx} ${y - 14} ${x + w * (i + 1) / nx} ${y}`;
   }
   for (let i = 0; i < ny; i++) {
-    path += ` Q ${x + w + 9} ${y + h * (i + .5) / ny} ${x + w} ${y + h * (i + 1) / ny}`;
+    path += ` Q ${x + w + 14} ${y + h * (i + .5) / ny} ${x + w} ${y + h * (i + 1) / ny}`;
   }
   for (let i = 0; i < nx; i++) {
-    path += ` Q ${x + w * (1 - (i + .5) / nx)} ${y + h + 9} ${x + w * (1 - (i + 1) / nx)} ${y + h}`;
+    path += ` Q ${x + w * (1 - (i + .5) / nx)} ${y + h + 14} ${x + w * (1 - (i + 1) / nx)} ${y + h}`;
   }
   for (let i = 0; i < ny; i++) {
-    path += ` Q ${x - 9} ${y + h * (1 - (i + .5) / ny)} ${x} ${y + h * (1 - (i + 1) / ny)}`;
+    path += ` Q ${x - 14} ${y + h * (1 - (i + .5) / ny)} ${x} ${y + h * (1 - (i + 1) / ny)}`;
   }
   return `${path} Z`;
+}
+
+function visibleTextLines(value) {
+  const words = String(value || '').trim().split(/\s+/).filter(Boolean);
+  const lines = [];
+  for (const word of words) {
+    const previous = lines[lines.length - 1];
+    if (previous && `${previous} ${word}`.length <= 19) lines[lines.length - 1] += ` ${word}`;
+    else lines.push(word.length > 19 ? `${word.slice(0, 18)}…` : word);
+    if (lines.length > 3) break;
+  }
+  if (lines.length > 3) return [...lines.slice(0, 2), `${lines[2].slice(0, 17)}…`];
+  return lines.length ? lines : ['Texto'];
 }
 
 function FilePicker({ projectPrefix, kind, onChoose, onClose }) {
@@ -92,7 +114,7 @@ function FilePicker({ projectPrefix, kind, onChoose, onClose }) {
         {loading ? <p>Cargando carpetas…</p> : error ? <p role="alert">{error}</p> : matches.length ? matches.map(item =>
           <button key={item.id} onClick={() => item.folder ? setStack([...stack, { id: item.id, name: item.name }]) : onChoose(item)}
             disabled={!item.folder && ((kind === 'photo' && !isImage(item)) || (kind === 'plan' && !isPlan(item)))}>
-            <span>{item.folder ? '📁' : '📄'}</span> {item.name}
+            <span className="cad-review-picker-icon" aria-hidden="true"><ReviewIcon kind={item.folder ? 'folder' : isPlan(item) ? 'plan' : 'file'} /></span> {item.name}
           </button>) : <p>Sin documentos en esta carpeta.</p>}
       </div>
       <footer><button onClick={onClose}>Cancelar</button></footer>
@@ -102,6 +124,7 @@ function FilePicker({ projectPrefix, kind, onChoose, onClose }) {
 
 function PhotoPreview({ markId, attachmentId }) {
   const [src, setSrc] = useState('');
+  const [failed, setFailed] = useState(false);
   useEffect(() => {
     let active = true;
     let url;
@@ -109,10 +132,90 @@ function PhotoPreview({ markId, attachmentId }) {
       if (!response.ok) throw new Error('No se pudo abrir la foto.');
       return response.blob();
     }).then(blob => { if (active) { url = URL.createObjectURL(blob); setSrc(url); } })
-      .catch(() => active && setSrc(''));
+      .catch(() => active && setFailed(true));
     return () => { active = false; if (url) URL.revokeObjectURL(url); };
   }, [markId, attachmentId]);
-  return src ? <img className="cad-review-photo-preview" src={src} alt="Foto de revisión" /> : <p>Foto no disponible.</p>;
+  return src ? <img className="cad-review-photo-preview" src={src} alt="Foto de revisión" />
+    : <p>{failed ? 'Foto no disponible.' : 'Cargando foto…'}</p>;
+}
+
+function FloatingPreview({ markId, reference, projectPrefix, onClose }) {
+  const [url, setUrl] = useState('');
+  const [textContent, setTextContent] = useState('');
+  const [textLoaded, setTextLoaded] = useState(false);
+  const [error, setError] = useState('');
+  const isPhoto = reference.kind === 'photo';
+  const isCad = !isPhoto && CAD_FILES.test(reference.name || '');
+  const inline = !isPhoto && !isCad && INLINE_FILES.test(reference.name || '');
+  const isText = !isPhoto && !isCad && TEXT_FILES.test(reference.name || '');
+  const documentUrl = reference.file_node_id
+    ? enlaceDeArchivos(window.location.origin, { obra: projectPrefix, documento: reference.file_node_id })
+    : null;
+
+  useEffect(() => {
+    const onKey = event => { if (event.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+  useEffect(() => {
+    if (!inline || !reference.file_node_id) return undefined;
+    let active = true;
+    const query = new URLSearchParams({ id: reference.file_node_id, model_urn: projectPrefix });
+    apiJson(`${API}/api/docs/signed-url?${query}`, { retries: 0 })
+      .then(data => { if (active) setUrl(data.url || ''); })
+      .catch(cause => { if (active) setError(cause.message || 'No se pudo preparar la vista.'); });
+    return () => { active = false; };
+  }, [inline, reference.file_node_id, projectPrefix]);
+  useEffect(() => {
+    if (!isText || !reference.file_node_id) return undefined;
+    const controller = new AbortController();
+    const query = new URLSearchParams({ id: reference.file_node_id, model_urn: projectPrefix });
+    (async () => {
+      const response = await apiFetch(`${API}/api/docs/proxy?${query}`, { signal: controller.signal, retries: 0 });
+      if (!response.ok) throw new Error('No se pudo abrir el texto vinculado.');
+      const reader = response.body?.getReader();
+      if (!reader) throw new Error('El navegador no pudo leer este archivo.');
+      const decoder = new TextDecoder();
+      let size = 0;
+      let content = '';
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        size += value.byteLength;
+        if (size > 1024 * 1024) {
+          await reader.cancel();
+          throw new Error('El texto supera 1 MB; ábrelo en ALEPHIA.');
+        }
+        content += decoder.decode(value, { stream: true });
+      }
+      if (!controller.signal.aborted) { setTextContent(content + decoder.decode()); setTextLoaded(true); }
+    })().catch(cause => { if (!controller.signal.aborted) setError(cause.message); });
+    return () => controller.abort();
+  }, [isText, reference.file_node_id, projectPrefix]);
+
+  return createPortal(<div className="cad-review-preview-backdrop" onMouseDown={event => {
+    if (event.target === event.currentTarget) onClose();
+  }}>
+    <section className="cad-review-preview" role="dialog" aria-modal="true" aria-label={`Vista de ${reference.name}`}>
+      <header className="cad-review-preview-header">
+        <div><ReviewIcon kind={isPhoto ? 'photo' : reference.kind === 'plan' ? 'plan' : 'file'} /><strong title={reference.name}>{reference.name}</strong></div>
+        <div>{documentUrl && <a href={documentUrl} target="_blank" rel="noopener noreferrer">Abrir en ALEPHIA</a>}
+          <button type="button" onClick={onClose} aria-label="Cerrar vista">×</button></div>
+      </header>
+      <div className="cad-review-preview-content">
+        {isPhoto ? <PhotoPreview markId={markId} attachmentId={reference.id} />
+          : isCad ? <Suspense fallback={<p>Cargando plano…</p>}><FloatingCadViewer
+              file={{ id: reference.file_node_id, name: reference.name }}
+              projectPrefix={projectPrefix} reviewEnabled={false} /></Suspense>
+          : error ? <p role="alert">{error}</p>
+          : isText ? <pre className="cad-review-preview-text">{textLoaded ? textContent : 'Cargando texto…'}</pre>
+          : inline && !url ? <p>Cargando documento…</p>
+          : inline && IMAGE_FILES.test(reference.name || '') ? <img src={url} alt={reference.name} />
+          : inline ? <iframe title={reference.name} src={url} sandbox="allow-same-origin" />
+          : <p>Este formato no tiene vista previa integrada. Puedes abrirlo en ALEPHIA.</p>}
+      </div>
+    </section>
+  </div>, document.body);
 }
 
 export default function CadReviewOverlay({ viewer, nodeId, versionId, viewGuid, projectPrefix }) {
@@ -132,6 +235,7 @@ export default function CadReviewOverlay({ viewer, nodeId, versionId, viewGuid, 
   const [textPlacement, setTextPlacement] = useState(null);
   const [textDraft, setTextDraft] = useState('');
   const [editingText, setEditingText] = useState(false);
+  const [preview, setPreview] = useState(null);
   const selected = marks.find(mark => mark.id === selectedId);
 
   const reload = useCallback(async () => {
@@ -162,7 +266,7 @@ export default function CadReviewOverlay({ viewer, nodeId, versionId, viewGuid, 
     window.addEventListener('focus', refresh);
     return () => { active = false; window.clearInterval(interval); window.removeEventListener('focus', refresh); };
   }, [reload, revision]);
-  useEffect(() => { setSelectedId(null); setTool(null); setTextPlacement(null); setMarks([]); }, [nodeId, versionId, viewGuid]);
+  useEffect(() => { setSelectedId(null); setTool(null); setTextPlacement(null); setPreview(null); setMarks([]); }, [nodeId, versionId, viewGuid]);
   useEffect(() => {
     const Autodesk = window.Autodesk;
     const event = Autodesk?.Viewing?.CAMERA_CHANGE_EVENT;
@@ -226,7 +330,7 @@ export default function CadReviewOverlay({ viewer, nodeId, versionId, viewGuid, 
       method: 'POST', body: JSON.stringify({ kind, file_node_id: item.id }),
     }));
   };
-  const openDoc = ref => window.open(enlaceDeArchivos(window.location.origin, { obra: projectPrefix, documento: ref.file_node_id }), '_blank', 'noopener');
+  const openReference = (mark, ref) => setPreview({ markId: mark.id, reference: ref });
   return <div className="cad-review-root" ref={layerRef}>
     <svg className="cad-review-svg" onPointerDown={onPointerDown} onPointerMove={e => { if (drag) setDrag(d => ({ ...d, end: local(e) })); }} onPointerUp={onPointerUp} style={{ pointerEvents: tool && availability === 'ready' ? 'auto' : 'none', cursor: tool ? 'crosshair' : 'default' }}>
       {projected.map(({ mark, a, b }) => {
@@ -236,12 +340,31 @@ export default function CadReviewOverlay({ viewer, nodeId, versionId, viewGuid, 
           const x = Math.min(a.x, b.x), y = Math.min(a.y, b.y), w = Math.abs(b.x - a.x), h = Math.abs(b.y - a.y);
           return <g key={mark.id} onClick={e => { e.stopPropagation(); setSelectedId(mark.id); setTool(null); setEditingText(false); }} style={{ pointerEvents: 'auto', cursor: 'pointer' }}>
             <path d={cloudPath(x, y, w, h)} fill="rgba(255,255,255,.01)" stroke={color} strokeWidth="3" strokeDasharray={mark.published ? undefined : '8 4'} />
-            {mark.attachments?.length > 0 && <><circle cx={x + w} cy={y} r="13" fill="#137fbd" /><text x={x + w} y={y + 5} textAnchor="middle" fill="white" fontSize="14">↗</text></>}
+            {mark.attachments?.length > 0 && (() => {
+              const ref = mark.attachments[0];
+              const width = 184;
+              const left = Math.max(8, Math.min(x + w - 8, (layerRef.current?.clientWidth || 1000) - width - 8));
+              const top = Math.max(8, y - 38);
+              const label = `${ref.name.slice(0, 20)}${ref.name.length > 20 ? '…' : ''}${mark.attachments.length > 1 ? ` +${mark.attachments.length - 1}` : ''}`;
+              return <g onClick={e => { e.stopPropagation(); openReference(mark, ref); }} style={{ cursor: 'pointer', pointerEvents: 'auto' }}>
+                <rect x={left} y={top} width={width} height="29" rx="14" fill="white" stroke="#1682bd" strokeWidth="1.5" />
+                <path d={`M ${left + 11} ${top + 7} h 9 l 4 4 v 11 h -13 z M ${left + 20} ${top + 7} v 4 h 4 M ${left + 15} ${top + 15} h 6 M ${left + 15} ${top + 18} h 6`}
+                  fill="none" stroke="#1682bd" strokeWidth="1.3" strokeLinejoin="round" />
+                <text x={left + 31} y={top + 19} fill="#17384e" fontSize="11.5">{label}</text>
+              </g>;
+            })()}
           </g>;
         }
         return <g key={mark.id} onClick={e => { e.stopPropagation(); setSelectedId(mark.id); setTool(null); setEditingText(false); }} style={{ pointerEvents: 'auto', cursor: 'pointer' }}>
-          {mark.kind === 'photo' ? <><circle cx={a.x} cy={a.y} r="17" fill="white" stroke={color} strokeWidth="3" /><text x={a.x} y={a.y + 6} textAnchor="middle" fontSize="20">📷</text></>
-            : <><rect x={a.x - 3} y={a.y - 19} width={Math.max(82, Math.min(260, (mark.text || '').length * 7 + 16))} height="28" rx="4" fill="white" stroke={color} strokeWidth="2" /><text x={a.x + 4} y={a.y} fontSize="14" fill="#1c2935">{(mark.text || '').slice(0, 34)}</text></>}
+          {mark.kind === 'photo' ? <><circle cx={a.x} cy={a.y} r="17" fill="white" stroke={color} strokeWidth="2.5" /><path d={`M ${a.x - 10} ${a.y - 5} h 4 l 2 -3 h 8 l 2 3 h 4 v 12 h -20 z M ${a.x + 4} ${a.y + 1} a 4 4 0 1 1 -8 0 a 4 4 0 1 1 8 0`}
+              fill="none" stroke={color} strokeWidth="1.6" strokeLinejoin="round" /></>
+            : (() => {
+              const lines = visibleTextLines(mark.text);
+              return <><rect x={a.x - 3} y={a.y - 28} width="236" height={Math.max(46, lines.length * 28 + 16)} rx="2" fill="white" stroke={color} strokeWidth="3" />
+                <text x={a.x + 10} y={a.y + 2} fontSize="22" fill={color} fontFamily="Arial, sans-serif">
+                  {lines.map((line, index) => <tspan key={index} x={a.x + 10} dy={index ? 28 : 0}>{line}</tspan>)}
+                </text></>;
+            })()}
           {!mark.published && mine && <circle cx={a.x - 12} cy={a.y - 18} r="4" fill="#cf8b24" />}
         </g>;
       })}
@@ -270,7 +393,10 @@ export default function CadReviewOverlay({ viewer, nodeId, versionId, viewGuid, 
       {selected.kind === 'cloud' && selected.mine && <div className="cad-review-actions"><button onClick={() => setPicker('plan')}>+ Referencia a plano</button><button onClick={() => setPicker('file')}>+ Referencia a archivo</button></div>}
       {selected.kind === 'photo' && selected.mine && <div className="cad-review-actions"><button onClick={() => setPicker('photo')}>+ Foto de ALEPHIA</button><button onClick={() => fileInputRef.current?.click()}>+ Subir foto</button><input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp" hidden onChange={event => { const chosen = event.target.files?.[0]; event.target.value = ''; if (!chosen) return; const form = new FormData(); form.append('file', chosen); run(() => apiJson(`${BASE}/${selected.id}/photos`, { method: 'POST', body: form, isUpload: true })); }} /></div>}
       {selected.attachments?.map(ref => <div className="cad-review-ref" key={ref.id}>
-        {ref.kind === 'photo' ? <PhotoPreview markId={selected.id} attachmentId={ref.id} /> : <button onClick={() => openDoc(ref)} title="Abrir documento de ALEPHIA">↗ {ref.name}</button>}
+        <button className="cad-review-ref-open" onClick={() => openReference(selected, ref)} title="Ver en ventana flotante">
+          <ReviewIcon kind={ref.kind === 'photo' ? 'photo' : ref.kind === 'plan' ? 'plan' : 'file'} />
+          <span>{ref.name}</span>
+        </button>
         {selected.mine && <button className="cad-review-remove" title="Quitar referencia" onClick={() => run(() => apiJson(`${BASE}/${selected.id}/attachments/${ref.id}`, { method: 'DELETE' }))}>×</button>}
       </div>)}
       {selected.mine && <div className="cad-review-actions bottom">
@@ -287,5 +413,7 @@ export default function CadReviewOverlay({ viewer, nodeId, versionId, viewGuid, 
       <footer><button onClick={() => setTextPlacement(null)}>Cancelar</button><button className="primary" disabled={!textDraft.trim() || busy} onClick={() => run(async () => { await create('text', textPlacement, textDraft.trim()); setTextPlacement(null); })}>Guardar borrador</button></footer>
     </div></div>}
     {picker && selected && <FilePicker projectPrefix={projectPrefix} kind={picker} onChoose={attachDoc} onClose={() => setPicker(null)} />}
+    {preview && <FloatingPreview key={`${preview.markId}:${preview.reference.id}`} markId={preview.markId}
+      reference={preview.reference} projectPrefix={projectPrefix} onClose={() => setPreview(null)} />}
   </div>;
 }
