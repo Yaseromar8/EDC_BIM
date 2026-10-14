@@ -188,3 +188,13 @@ def test_las_dos_rutas_de_planos_estan_declaradas():
     import perimetro_de_obra as po
     assert po.RUTAS_POR_QUERY.get('cad_status') == ('file_nodes', 'node_id')
     assert po.RUTAS_POR_CUERPO.get('translate_cad') == ('file_nodes', 'node_id')
+
+
+def test_el_lector_de_laminas_resuelve_la_obra_por_el_documento(entorno):
+    """Vista previa y mosaico mandan `node_id` en el cuerpo. Sin resolverse,
+    bajo ENFORCE solo el administrador de la entidad las recibia (registro de
+    produccion, 14-oct-2026: `[authz BLOQUEADO-HUECO] ... /api/docs/mosaico`)."""
+    _c, _e, po = entorno
+    for vista in ('documents.url_de_vista_previa', 'documents.mosaico_del_documento'):
+        assert po.obra_por_cuerpo(vista, {'node_id': NODO, 'version_id': None}) == OBRA, vista
+        assert po.obra_por_cuerpo(vista, {'node_id': ''}) is None, vista

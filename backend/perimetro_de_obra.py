@@ -177,6 +177,13 @@ RUTAS_POR_CUERPO = {
     # Traducir un plano CAD para verlo: el visor manda solo `node_id`.
     'translate_cad': ('file_nodes', 'node_id'),
     'create_mark': ('file_nodes', 'node_id'),
+    # El lector de laminas: vista previa y mosaico mandan `node_id` (y la
+    # version). Sin estas dos lineas, bajo ENFORCE solo el administrador de la
+    # entidad las recibia; los demas caian a bajar y dibujar el PDF entero
+    # (registro de produccion del 14-oct-2026: `[authz BLOQUEADO-HUECO]`). La
+    # guardia del documento esta dentro (`_acceso_al_recurso`).
+    'url_de_vista_previa': ('file_nodes', 'node_id'),
+    'mosaico_del_documento': ('file_nodes', 'node_id'),
 }
 
 
