@@ -162,13 +162,13 @@ def liberar(cursor, model_urn, node_id, usuario, forzar=False):
 
 
 def _auditar(cursor, model_urn, node_id, nombre, accion, quien, detalle):
-    import json as _json
+    # Por `registrar_actividad`, y no con un INSERT a mano: asi el evento entra
+    # SELLADO en la cadena. El INSERT a mano lo dejaba fuera, y una reserva
+    # forzada por otro -- justo lo que se audita -- se podia alterar sin que la
+    # verificacion lo notara (docs/ux/PROPUESTA_CONSULTA_Y_TRAZABILIDAD.md §5-A).
     try:
-        cursor.execute(
-            "INSERT INTO activity_log "
-            "(model_urn, action, entity_type, entity_id, entity_name, performed_by, details) "
-            "VALUES (%s, %s, %s, %s, %s, %s, %s)",
-            (model_urn, accion, 'file', str(node_id), nombre, quien,
-             _json.dumps(detalle)))
+        from db import registrar_actividad
+        registrar_actividad(cursor, model_urn, accion, 'file', str(node_id),
+                            nombre, quien, detalle)
     except Exception as e:  # pragma: no cover - defensivo
         logger.warning(f"no se pudo registrar la reserva de {nombre}: {e}")

@@ -972,6 +972,39 @@ def list_documents():
                 print(f"[LIST] permiso de la carpeta sin resolver: {_e}")
                 nivel_actual = 'none'   # FAIL-CLOSED: no se ofrece lo que no se sabe
 
+        # LA ENTREGA DE CADA DOCUMENTO (B1, 14-oct-2026): si un documento está
+        # vinculado a un compromiso del plan de entregas (MIDP/TIDP), Archivos lo
+        # dice -- etapa, fecha comprometida y estado --, con el mismo cálculo que
+        # la pantalla del plan. Una consulta para toda la carpeta; si el plan no
+        # existe en esta base o algo falla, la lista sale igual, sin la columna.
+        try:
+            ids = [str(f['id']) for f in contents.get('files', []) if f.get('id')]
+            if ids:
+                import plan_de_entrega as _plan
+                from db import get_db_connection as _gc
+                with _gc() as _c:
+                    _cur = _c.cursor()
+                    _cur.execute("SELECT to_regclass('public.plan_entregas')")
+                    _hay = _cur.fetchone()
+                    if _hay and _hay[0]:
+                        _cur.execute("""SELECT file_node_id, tipo, hito, fecha_comprometida
+                                          FROM plan_entregas
+                                         WHERE model_urn = %s AND file_node_id = ANY(%s::uuid[])
+                                         ORDER BY fecha_comprometida NULLS LAST""", (model_urn, ids))
+                        entregas = {}
+                        for _nid, _tipo, _hito, _fecha in _cur.fetchall():
+                            entregas.setdefault(str(_nid), (_tipo, _hito, _fecha))
+                        for f in contents['files']:
+                            e = entregas.get(str(f.get('id')))
+                            if e:
+                                _estado = _plan._estado_de(e[2], f.get('id'), f.get('status'))
+                                f['entrega'] = {'plan': e[0], 'hito': e[1],
+                                                'fecha': e[2].isoformat() if e[2] else None,
+                                                'estado': _estado,
+                                                'etiqueta': _plan.ETIQUETAS.get(_estado, _estado)}
+        except Exception as _e:
+            print(f"[LIST] entrega del plan sin resolver: {_e}")
+
         return jsonify({"success": True, "data": {**contents,
                                                   "current_node_id": str(parent_id) if parent_id else None,
                                                   "current_permission_level": nivel_actual}}), 200
@@ -2091,10 +2124,34 @@ def search_documents():
     user = getattr(g, 'current_user', None)
     if not verify_project_access(user, model_urn):
         return jsonify({"success": False, "error": "No tienes acceso a este proyecto."}), 403
-    
+
+    # VISTAS DE OBRA (A2-2, 14-oct-2026): «Me toca revisar», «Plazo del plan
+    # vencido»… sobre toda la obra. Van por esta misma ruta y no por una nueva:
+    # el portal está en su techo (test_perfil_portal). Ver vistas_de_obra.py.
+    vista = (request.args.get('vista') or '').strip()
+    if vista:
+        import vistas_de_obra as _vistas
+        if vista not in ('recuentos', _vistas.TODOS) and vista not in _vistas.CLAVES:
+            return jsonify({"success": False, "error": "Vista desconocida."}), 400
+        filtros = {k: (request.args.get(k) or '').strip() or None for k in _vistas.FILTROS}
+        try:
+            from db import get_db_connection
+            with get_db_connection() as conn:
+                cursor = conn.cursor()
+                if vista == 'recuentos':
+                    return jsonify({"success": True,
+                                    **_vistas.recuentos(cursor, user, model_urn)}), 200
+                filas, total, extra = _vistas.documentos(cursor, user, model_urn, vista,
+                                                         filtros=filtros)
+            return jsonify({"success": True, "data": filas, "total": total,
+                            "limite": _vistas.LIMITE, **extra}), 200
+        except Exception as e:
+            print(f"[Search] vista {vista}: {e}")
+            return jsonify({"success": False, "error": "No se pudo calcular la vista."}), 500
+
     if not query or len(query) < 2:
         return jsonify({"success": True, "data": []}), 200
-        
+
     try:
         from db import get_db_connection
         with get_db_connection() as conn:
@@ -2116,7 +2173,8 @@ def search_documents():
                     INNER JOIN path_builder pb ON fn.parent_id = pb.id
                     WHERE fn.model_urn = %s
                 )
-                SELECT fn.id, fn.node_type, fn.name, pb.full_path, fn.size_bytes, fn.updated_at, fn.version_number
+                SELECT fn.id, fn.node_type, fn.name, pb.full_path, fn.size_bytes, fn.updated_at, fn.version_number,
+                       fn.parent_id, fn.status
                 FROM file_nodes fn
                 JOIN path_builder pb ON fn.id = pb.id
                 WHERE fn.model_urn = %s 
@@ -2130,9 +2188,21 @@ def search_documents():
             results = [{
                 "id": r[0], "type": r[1], "name": r[2], "path": r[3],
                 "size_bytes": r[4], "updated_at": r[5].isoformat() if r[5] else None,
-                "version": r[6]
+                "version": r[6], "parent_id": str(r[7]) if r[7] else None, "status": r[8]
             } for r in rows]
-            
+
+            # EL PERMISO DE CARPETA TAMBIÉN AL BUSCAR (14-oct-2026). Esta ruta solo
+            # miraba que la persona fuera de la obra: quien no podía abrir una
+            # carpeta veía, buscando, los nombres de lo que había dentro, que el
+            # listado sí le escondía. Ahora un resultado sale si la persona puede
+            # ver la carpeta que lo contiene -- la misma regla del listado -- y,
+            # con STRICT_ISO_VISIBILITY, la misma regla ISO para los documentos.
+            import vistas_de_obra as _vistas
+            results = _vistas.filtrar_visibles(cursor, user, model_urn, results)
+            for r in results:
+                r.pop('parent_id', None)
+                r.pop('status', None)
+
         return jsonify({"success": True, "data": results}), 200
     except Exception as e:
         print(f"[Search] Error: {e}")
@@ -2265,18 +2335,18 @@ def batch_update():
                 # /api/docs/trazabilidad busca por entity_id: sin esto un borrado
                 # en lote desaparece de la historia de los documentos que borro,
                 # que es justo lo que preguntaria una supervision.
-                # Se inserta con el cursor YA ABIERTO y de una sola vez, no con
-                # log_activity en un bucle: esa funcion pide una conexion nueva
-                # por llamada y aqui serian una por documento (~0,5 s cada una).
+                # Se inserta con el cursor YA ABIERTO, no con log_activity en un
+                # bucle: esa funcion pide una conexion nueva por llamada y aqui
+                # serian una por documento (~0,5 s cada una).
+                # Y uno a uno por `registrar_actividad`, no con un INSERT ... unnest
+                # de golpe: cada evento entra SELLADO en la cadena. El INSERT de
+                # golpe los dejaba todos fuera (PROPUESTA_CONSULTA_Y_TRAZABILIDAD §5-A).
                 if permitidos:
-                    cursor.execute("""
-                        INSERT INTO activity_log
-                            (model_urn, action, entity_type, entity_id, performed_by, details)
-                        SELECT %s, 'delete', 'file_or_folder', x, %s, %s::jsonb
-                          FROM unnest(%s::text[]) AS x
-                    """, (model_urn, performed_by,
-                          json.dumps({'via': 'batch_delete'}),
-                          [str(i) for i in permitidos]))
+                    from db import registrar_actividad
+                    for _id in permitidos:
+                        registrar_actividad(cursor, model_urn, 'delete', 'file_or_folder',
+                                            str(_id), None, performed_by,
+                                            {'via': 'batch_delete'})
 
                 conn.commit()
                 # Callar los denegados haria creer que se borro todo. Se dice.
@@ -3930,29 +4000,101 @@ def trazabilidad_de_documento():
             # La obra sale del documento, no del parámetro que manda el cliente.
             if not verify_project_access(user, doc[0]):
                 return jsonify({"success": False, "error": "Sin acceso a este documento"}), 403
+            # Y EL PERMISO DE SU CARPETA (14-oct-2026): ser de la obra no basta para
+            # leer la historia de un documento que la carpeta esconde. La misma
+            # decisión que el listado, la búsqueda y la entrega de bytes.
+            import permiso_documental as _pd
+            _negado = _pd.guardia(cur, user, doc[0], 'consultar la trazabilidad de este documento',
+                                  minimo='viewer', node_id=node_id)
+            if _negado:
+                return _negado
 
-            cur.execute("""SELECT action, performed_by, details, created_at
+            # `sellado`: si el evento entró en la cadena. Hasta el 14-oct-2026
+            # cuatro vías escribían fuera de ella (accesos, reservas, la retirada
+            # de una aprobación y el borrado en lote): esos eventos antiguos salen
+            # como no sellados, que es la verdad.
+            cur.execute("""SELECT id, action, performed_by, details, created_at,
+                                  hash IS NOT NULL
                              FROM activity_log
                             WHERE entity_id = %s
                             ORDER BY created_at DESC LIMIT 500""", (node_id,))
+            filas = cur.fetchall()
             eventos = [{"accion": a, "por": p or "Sistema", "detalle": d or {},
-                        "cuando": c.isoformat() if c else None}
-                       for a, p, d, c in cur.fetchall()]
+                        "cuando": c.isoformat() if c else None, "sellado": bool(se)}
+                       for _i, a, p, d, c, se in filas]
+            ids_de_eventos = {f[0] for f in filas}
 
+            # La HUELLA de cada versión: lo que permite decir «este es exactamente
+            # el fichero que se emitió». Antes la ruta no la devolvía.
             cur.execute("""SELECT version_number, codigo_revision, codigo_idoneidad,
-                                  emitida_en, emitida_por, created_at, created_by
+                                  emitida_en, emitida_por, created_at, created_by,
+                                  id, sha256, huella_en, gcs_urn
                              FROM file_versions WHERE file_node_id = %s
                             ORDER BY version_number DESC""", (node_id,))
+            filas_v = cur.fetchall()
             versiones = [{"version": v, "revision": r, "idoneidad": i,
                           "emitida_en": e.isoformat() if e else None, "emitida_por": ep,
-                          "subida_en": c.isoformat() if c else None, "subida_por": cb}
-                         for v, r, i, e, ep, c, cb in cur.fetchall()]
+                          "subida_en": c.isoformat() if c else None, "subida_por": cb,
+                          "huella": sha, "huella_en": he.isoformat() if he else None}
+                         for v, r, i, e, ep, c, cb, _vid, sha, he, _u in filas_v]
+            sin_huella = [(str(vid), u) for *_x, vid, sha, _he, u in filas_v
+                          if not sha and u]
+
+            # El HISTORIAL de emisiones. `file_versions.emitida_en` es el «ahora
+            # mismo» y se pisa en cada emisión; la memoria está en file_emisiones.
+            emisiones = []
+            cur.execute("SELECT to_regclass('file_emisiones') IS NOT NULL")
+            hay = cur.fetchone()
+            if hay and hay[0]:
+                cur.execute("""SELECT e.destino, e.codigo_idoneidad, e.codigo_revision,
+                                      e.emitida_por, e.emitida_en, v.version_number
+                                 FROM file_emisiones e
+                                 LEFT JOIN file_versions v ON v.id = e.file_version_id
+                                WHERE e.file_node_id = %s
+                                ORDER BY e.emitida_en ASC""", (node_id,))
+                emisiones = [{"destino": d, "idoneidad": i, "revision": r, "por": p,
+                              "cuando": c.isoformat() if c else None, "version": v}
+                             for d, i, r, p, c, v in cur.fetchall()]
+
+            # La CADENA, desde el primer evento de este documento hasta hoy. Solo
+            # se informan las roturas que caen en SUS eventos, y si el tramo
+            # entero está íntegro. Detecta alteraciones; no las impide.
+            cadena_doc = {"eventos": len(filas),
+                          "sellados": sum(1 for f in filas if f[5]),
+                          "roturas": [], "tramo_integro": None}
+            if ids_de_eventos:
+                import auditoria_encadenada as _cadena
+                r = _cadena.verificar(cur, desde_id=min(ids_de_eventos))
+                cadena_doc["roturas"] = [x for x in r['roturas'] if x['id'] in ids_de_eventos]
+                cadena_doc["tramo_integro"] = r['integra']
+
+            # LO CONECTADO (ficha, paso 3): revisiones, envíos, RFI, plan de
+            # entregas y marcas en las que aparece este documento, por su ID.
+            import ficha_documento as _ficha
+            relacionados = _ficha.relacionados(cur, doc[0], node_id, doc[2])
+
+        # Las versiones que se quedaron sin huella (el sellado en segundo plano
+        # falló y nada lo reintentaba) se vuelven a sellar al consultar el
+        # documento. Seguro de repetir: nunca se sobrescribe una huella.
+        en_curso = 0
+        if sin_huella and os.getenv('GCS_BUCKET_NAME'):
+            try:
+                import integridad
+                from file_system_db import gcs_executor
+                gcs_executor.submit(integridad.sellar_pendientes, sin_huella)
+                en_curso = len(sin_huella)
+            except Exception as _e:
+                print(f"[trazabilidad] no se pudo lanzar el sellado pendiente: {_e}")
 
         return jsonify({"success": True,
                         "documento": {"nombre": doc[1], "estado": doc[2],
                                       "codigo_idoneidad": doc[3], "codigo_revision": doc[4]},
                         "versiones": versiones,
-                        "eventos": eventos}), 200
+                        "emisiones": emisiones,
+                        "eventos": eventos,
+                        "cadena": cadena_doc,
+                        "relacionados": relacionados,
+                        "huellas_en_curso": en_curso}), 200
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
 

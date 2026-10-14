@@ -70,12 +70,6 @@ def list_contents(parent_id, model_urn, base_path="", user=None):
     # autoridad por obra; aqui solo se necesita para las decisiones de
     # VISIBILIDAD que no pasan por el.
     is_admin = False
-    if u_id:
-        try:
-            from administracion_de_obra import es_admin_de_obra as _adm
-            is_admin = _adm(cursor, {'id': u_id, 'role': u_role}, model_urn)
-        except Exception:
-            is_admin = False              # FAIL-CLOSED
 
     # Modo ISO 19650 estricto (opt-in por entorno): los no-admin solo ven
     # documentos Compartido/Publicado. Los WIP son borradores internos del
@@ -94,6 +88,12 @@ def list_contents(parent_id, model_urn, base_path="", user=None):
     
     with get_db_connection() as conn:
         cursor = conn.cursor()
+        if u_id:
+            try:
+                from administracion_de_obra import es_admin_de_obra as _adm
+                is_admin = _adm(cursor, {'id': u_id, 'role': u_role}, model_urn)
+            except Exception:
+                is_admin = False          # FAIL-CLOSED
         
         # ── QUERY OPTIMIZADA: JOIN con folder_permissions en una sola consulta ──
         # Si el usuario no es admin y tiene ID, hacemos LEFT JOIN para traer permisos.
@@ -359,22 +359,20 @@ def _registrar_vuelta_a_borrador(cursor, model_urn, node_id, nombre, anterior, v
     documento: subir una version nueva y promocionar una antigua. La segunda tambien
     retira la aprobacion, y el auditor merece leer cual de las dos fue.
     """
-    import json as _json
     import estados_ecd as ecd
+    # Por `registrar_actividad`: el evento entra SELLADO en la cadena. Es el mas
+    # probatorio de todos (que retiro una aprobacion) y era de los que iban por un
+    # INSERT a mano, fuera de la cadena (PROPUESTA_CONSULTA_Y_TRAZABILIDAD §5-A).
     try:
-        cursor.execute(
-            "INSERT INTO activity_log "
-            "(model_urn, action, entity_type, entity_id, entity_name, performed_by, details) "
-            "VALUES (%s, %s, %s, %s, %s, %s, %s)",
-            (model_urn, 'cambio_de_estado', 'file', str(node_id), nombre, autor,
-             _json.dumps({
-                 'estado_anterior': anterior,
-                 'estado_nuevo': ecd.WIP,
-                 'anterior_etiqueta': ecd.ETIQUETAS.get(anterior, anterior),
-                 'nuevo_etiqueta': ecd.ETIQUETAS[ecd.WIP],
-                 'motivo': motivo or f'se subio la version {version}: lo aprobado fue la anterior',
-             })),
-        )
+        from db import registrar_actividad
+        registrar_actividad(cursor, model_urn, 'cambio_de_estado', 'file', str(node_id),
+                            nombre, autor, {
+                                'estado_anterior': anterior,
+                                'estado_nuevo': ecd.WIP,
+                                'anterior_etiqueta': ecd.ETIQUETAS.get(anterior, anterior),
+                                'nuevo_etiqueta': ecd.ETIQUETAS[ecd.WIP],
+                                'motivo': motivo or f'se subio la version {version}: lo aprobado fue la anterior',
+                            })
     except Exception as e:  # pragma: no cover - defensivo
         print(f"[ESTADO] no se pudo registrar la vuelta a borrador de {nombre}: {e}")
 
@@ -509,6 +507,29 @@ def create_file_record(model_urn, parent_id, filename, size_bytes, gcs_uuid, mim
                 gcs_executor.submit(integridad.sellar_desde_almacen, v_id, gcs_uuid)
         except Exception as _e:
             print(f"[file_system_db] no se pudo lanzar el sellado de {v_id}: {_e}")
+
+    # 5. EL PLAN DE ENTREGAS SE CUMPLE SOLO (B1, 14-oct-2026): si el nombre ES el
+    # código de un único compromiso sin atar del plan de esta obra, se ata. Las
+    # reglas estrictas viven en plan_de_entrega.vincular_al_subir. Va DESPUÉS del
+    # commit y en su propia transacción: la subida ya terminó bien y nada de esto
+    # la puede deshacer. Queda en el registro, sellado, que lo ató el sistema.
+    try:
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            cur.execute("SELECT to_regclass('public.plan_entregas')")
+            hay_plan = cur.fetchone()
+            if hay_plan and hay_plan[0]:
+                import plan_de_entrega
+                plan_id = plan_de_entrega.vincular_al_subir(cur, model_urn, f_id, filename)
+                if plan_id:
+                    from db import registrar_actividad
+                    registrar_actividad(cur, model_urn, 'vincular_compromiso', 'plan',
+                                        str(plan_id), filename, created_by,
+                                        {'automatico': True, 'file_node_id': str(f_id),
+                                         'regla': 'nombre = código, compromiso único'})
+                conn.commit()
+    except Exception as _e:
+        print(f"[file_system_db] no se pudo cotejar {filename} con el plan: {_e}")
 
     return f_id, new_v
 

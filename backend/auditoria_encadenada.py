@@ -233,7 +233,19 @@ def verificar(cursor, desde_id=None, limite=None, ancla=None):
     esperado = None
     for (fid, urn, accion, tipo, eid, enom, quien, det, cuando, h_ant, h) in cursor.fetchall():
         if h is None:
-            sin_sellar += 1
+            if esperado is None:
+                # ANTES de la primera fila sellada: son las anteriores al
+                # encadenamiento. No estan alteradas, estan sin sellar.
+                sin_sellar += 1
+            else:
+                # DESPUES de la primera sellada, una fila sin sello no tiene
+                # excusa de "es antigua": se inserto salteando el sellado. Hasta
+                # el 14-oct-2026 se contaba igual que las antiguas, y asi cuatro
+                # vias del codigo escribian fuera de la cadena sin que esto lo
+                # dijera (PROPUESTA_CONSULTA_Y_TRAZABILIDAD §5-A). Se puede
+                # alterar o borrar sin que nada lo note: es una rotura.
+                roturas.append({'id': fid, 'motivo': 'sin huella',
+                                'detalle': 'fila posterior al encadenamiento escrita sin sellar'})
             continue
         contenido = {'model_urn': urn, 'action': accion, 'entity_type': tipo,
                      'entity_id': eid, 'entity_name': enom, 'performed_by': quien,
@@ -273,6 +285,22 @@ def sellar_pendientes(cursor, tope=5000):
     cual una alteracion se notaria. Se deja dicho en la evidencia.
     """
     cursor.execute("SELECT pg_advisory_xact_lock(%s)", (CERROJO,))
+    # Solo vale para filas sin sellar que esten TODAS al principio (las de antes
+    # de la cadena). Si hay alguna intercalada entre filas selladas, encadenarla
+    # al FINAL, en orden de id, dejaria la cadena desordenada respecto de
+    # verificar() -- que recorre por id -- y fabricaria roturas "eslabon roto"
+    # falsas. Y reescribirla en su sitio obligaria a recalcular todas las
+    # posteriores, que es justo lo que la cadena existe para impedir. Se niega.
+    cursor.execute("SELECT min(id) FROM activity_log WHERE hash IS NULL")
+    primera_sin = cursor.fetchone()
+    primera_sin = primera_sin[0] if primera_sin else None
+    if primera_sin is not None:
+        cursor.execute("SELECT 1 FROM activity_log WHERE hash IS NOT NULL AND id > %s LIMIT 1",
+                       (primera_sin,))
+        if cursor.fetchone():
+            logger.warning("sellar_pendientes: hay filas sin sellar intercaladas entre filas "
+                           "selladas; no se encadenan para no fabricar roturas falsas")
+            return 0
     cursor.execute("SELECT hash FROM activity_log WHERE hash IS NOT NULL ORDER BY id DESC LIMIT 1")
     fila = cursor.fetchone()
     anterior = fila[0] if fila else GENESIS

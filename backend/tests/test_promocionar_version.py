@@ -84,7 +84,8 @@ class Cursor:
     @property
     def auditoria(self):
         a = self.de('INSERT INTO activity_log')
-        return json.loads(a[0][1][-1]) if a else None
+        # `details` en la posición 6 (detrás van la fecha y las huellas de la cadena).
+        return json.loads(a[0][1][6]) if a else None
 
 
 class Conn:

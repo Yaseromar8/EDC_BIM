@@ -854,11 +854,27 @@ def registrar_actividad(cursor, model_urn, action, entity_type, entity_id=None,
         'details': _json.loads(detalles), 'created_at': cuando,
     }
     hash_anterior = h = None
+    # El sellado va dentro de un SAVEPOINT. Sin el, un fallo al sellar (en
+    # PostgreSQL, cualquier sentencia que falla) abortaba la transaccion entera:
+    # el INSERT de abajo fallaba tambien y, con el cursor de quien llama, se
+    # llevaba por delante su operacion. Asi, si no se puede sellar, se vuelve
+    # solo hasta aqui y el evento se escribe sin sello -- que la verificacion
+    # sabe senalar -- en vez de perderse.
+    try:
+        cursor.execute("SAVEPOINT sello_de_actividad")
+        punto = True
+    except Exception:
+        punto = False
     try:
         import auditoria_encadenada as cadena
         hash_anterior, h = cadena.sello_para_insercion(cursor, contenido)
+        if punto:
+            cursor.execute("RELEASE SAVEPOINT sello_de_actividad")
     except Exception as _e:
         print(f"[activity_log] sin sello: {_e}")
+        hash_anterior = h = None
+        if punto:
+            cursor.execute("ROLLBACK TO SAVEPOINT sello_de_actividad")
 
     cursor.execute("""
         INSERT INTO activity_log (model_urn, action, entity_type, entity_id,
@@ -870,7 +886,8 @@ def registrar_actividad(cursor, model_urn, action, entity_type, entity_id=None,
         model_urn, action, entity_type, entity_id, entity_name,
         performed_by, detalles, cuando, hash_anterior, h
     ))
-    return cursor.fetchone()[0]
+    fila = cursor.fetchone()
+    return fila[0] if fila else None
 
 
 def log_activity(model_urn, action, entity_type, entity_id=None, entity_name=None, performed_by=None, details=None):

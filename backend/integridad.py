@@ -178,3 +178,45 @@ def resumen_de_obra(cursor, model_urn):
     return {'versiones': total, 'con_huella': con, 'sin_huella': total - con,
             'emitidas': emitidas, 'emitidas_sin_huella': emitidas_sin,
             'cobertura': round(100.0 * con / total, 1) if total else 0.0}
+
+
+# ── Huellas pendientes (14-oct-2026) ─────────────────────────────────────────
+# El sellado de las subidas por URL firmada y troceadas corre en segundo plano.
+# Si falla -- un corte leyendo un plano de 272 MB, un reinicio del servicio --
+# la version se quedaba SIN HUELLA PARA SIEMPRE: la cobertura lo contaba, pero
+# nada lo reparaba (docs/ux/PROPUESTA_CONSULTA_Y_TRAZABILIDAD.md §5-B).
+
+TOPE_PENDIENTES = 20
+
+
+def versiones_sin_huella(cursor, model_urn, tope=TOPE_PENDIENTES):
+    """Las versiones de una obra que aun no tienen huella y SI tienen objeto en el
+    almacen (sin `gcs_urn` no hay nada que leer). Las mas recientes primero: son
+    las que mas probablemente se van a consultar."""
+    cursor.execute("""
+        SELECT fv.id, fv.gcs_urn
+          FROM file_versions fv
+          JOIN file_nodes fn ON fn.id = fv.file_node_id
+         WHERE fn.model_urn = %s AND COALESCE(fn.is_deleted, FALSE) = FALSE
+           AND fv.sha256 IS NULL AND fv.gcs_urn IS NOT NULL
+         ORDER BY fv.created_at DESC
+         LIMIT %s
+    """, (model_urn, int(tope)))
+    return [(str(v), u) for v, u in cursor.fetchall()]
+
+
+def sellar_pendientes(pendientes, sellar=None):
+    """Sella una lista [(version_id, gcs_urn)] UNA DETRAS DE OTRA.
+
+    En serie a proposito: el servicio corre con un solo worker y 1 CPU, y cuatro
+    lecturas de planos grandes a la vez dejarian la plataforma sin responder.
+    Es seguro repetirlo: `anotar()` nunca sobrescribe una huella existente.
+    Devuelve cuantas quedaron selladas.
+    """
+    sellar = sellar or sellar_desde_almacen
+    hechas = 0
+    for version_id, gcs_urn in pendientes:
+        if sellar(version_id, gcs_urn):
+            hechas += 1
+    logger.info(f"huellas pendientes: {hechas} de {len(pendientes)} selladas")
+    return hechas

@@ -92,7 +92,9 @@ def test_no_dice_descarga_porque_no_puede_saberlo(monkeypatch):
 def test_guarda_la_via_y_la_ip(monkeypatch):
     c = _con(monkeypatch, ConexionFalsa())
     reg.registrar(USUARIO, 'obra/X', 'enlace firmado', node_id='n1', ip='190.1.2.3')
-    detalle = c.insertados[0][-1]
+    # El detalle va en la columna `details` (posición 6). Desde el 14-oct-2026 el
+    # INSERT lleva detrás la fecha y las dos huellas de la cadena.
+    detalle = c.insertados[0][6]
     assert 'enlace firmado' in detalle
     assert '190.1.2.3' in detalle
 
@@ -230,3 +232,40 @@ def test_si_falla_la_escritura_NO_se_silencian_los_5_minutos(monkeypatch):
     c = _con(monkeypatch, ConexionIntermitente())
     assert reg.registrar(USUARIO, 'obra/X', 'sesión', node_id='n1', ahora=1000) is False
     assert reg.registrar(USUARIO, 'obra/X', 'sesión', node_id='n1', ahora=1001) is True
+
+
+# ── Sellado y versión (14-oct-2026) ─────────────────────────────────────────
+
+class ConexionConVersion(ConexionFalsa):
+    """Como la falsa, pero la consulta del documento devuelve también la versión."""
+
+    def execute(self, sql, params=None):
+        if 'INSERT INTO activity_log' in sql:
+            self.insertados.append(params)
+            self._ultima = []
+        elif 'FROM file_nodes' in sql or 'FROM file_versions' in sql:
+            self._ultima = [('doc-1', self.nombre, 'obra/X', 3)]
+        else:
+            self._ultima = []
+
+
+def test_el_acceso_dice_que_version_se_entrego(monkeypatch):
+    """«Accesos» tiene que poder responder cuál de las versiones se llevó."""
+    c = _con(monkeypatch, ConexionConVersion())
+    reg.registrar(USUARIO, 'obra/X', 'sesión', node_id='n1')
+    assert '"version": 3' in c.insertados[0][6]
+
+
+def test_el_acceso_entra_por_la_via_sellada(monkeypatch):
+    """Se escribe con las columnas de la cadena: ya no queda fuera de ella."""
+    sentencias = []
+
+    class Registra(ConexionFalsa):
+        def execute(self, sql, params=None):
+            sentencias.append(' '.join(sql.split()))
+            super().execute(sql, params)
+
+    _con(monkeypatch, Registra())
+    reg.registrar(USUARIO, 'obra/X', 'sesión', node_id='n1')
+    insert = [s for s in sentencias if s.startswith('INSERT INTO activity_log')][0]
+    assert 'hash_anterior, hash' in insert

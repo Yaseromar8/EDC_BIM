@@ -179,7 +179,9 @@ def test_quitarle_la_reserva_a_otro_deja_dicho_a_quien():
     bloq.liberar(cur, 'obra/X', 'a1', JEFE)
     inserts = [p for s, p in cur.ejecutadas if 'INSERT INTO activity_log' in s]
     assert 'reserva_retirada' in inserts[0]
-    detalle = inserts[0][-1]
+    # `details` va en la posición 6: desde el 14-oct-2026 el INSERT lleva detrás
+    # la fecha y las dos huellas de la cadena (registrar_actividad).
+    detalle = inserts[0][6]
     assert 'ana@contratista.pe' in detalle
     assert 'jefe@obra.pe' in detalle
 

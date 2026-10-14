@@ -117,20 +117,26 @@ def registrar(user, ambito, via, gcs_urn=None, node_id=None, ip=None, ahora=None
             # nombre, y por eso la fila se escribia con entity_id vacio (el
             # expediente del documento no la encontraba, porque busca por id) y
             # con la obra en 'global' (el historial de la obra tampoco).
+            # Y una cuarta: QUÉ VERSIÓN se entregó. Sin ella, «Accesos» decía quién
+            # se llevó el documento pero no cuál de sus versiones, que es lo que
+            # pregunta una supervisión cuando hay una V2 y una V3 circulando.
+            # Por la URL del almacén se sabe exactamente; por el id, es la vigente.
             if node_id:
-                cur.execute("SELECT id, name, model_urn FROM file_nodes WHERE id = %s",
-                            (str(node_id),))
+                cur.execute("SELECT id, name, model_urn, version_number FROM file_nodes "
+                            "WHERE id = %s", (str(node_id),))
             elif gcs_urn:
                 cur.execute(
-                    "SELECT n.id, n.name, n.model_urn FROM file_nodes n WHERE n.gcs_urn = %s "
+                    "SELECT n.id, n.name, n.model_urn, n.version_number FROM file_nodes n "
+                    "WHERE n.gcs_urn = %s "
                     "UNION ALL "
-                    "SELECT n.id, n.name, n.model_urn FROM file_versions v "
+                    "SELECT n.id, n.name, n.model_urn, v.version_number FROM file_versions v "
                     "JOIN file_nodes n ON n.id = v.file_node_id WHERE v.gcs_urn = %s LIMIT 1",
                     (gcs_urn, gcs_urn))
             fila = cur.fetchone() if (node_id or gcs_urn) else None
             if not fila:
                 return False
             doc_id, nombre, obra = str(fila[0]), fila[1], fila[2]
+            version = fila[3] if len(fila) > 3 else None
 
             if _es_evidencia_de_campo(nombre):
                 # Se marca igualmente: la decision depende solo del nombre y no va
@@ -139,16 +145,16 @@ def registrar(user, ambito, via, gcs_urn=None, node_id=None, ip=None, ahora=None
                 _anotar_freno(clave, ahora)
                 return False
 
-            cur.execute(
-                "INSERT INTO activity_log "
-                "(model_urn, action, entity_type, entity_id, entity_name, performed_by, details) "
-                "VALUES (%s, %s, %s, %s, %s, %s, %s)",
-                (ambito or obra or 'global', 'acceso_a_documento', 'file',
-                 doc_id, nombre, quien,
-                 _json.dumps({'via': via, 'ip': ip,
-                              'nota': 'se entregó el acceso; la transferencia ocurre '
-                                      'contra el almacenamiento'})),
-            )
+            detalle = {'via': via, 'ip': ip,
+                       'nota': 'se entregó el acceso; la transferencia ocurre '
+                               'contra el almacenamiento'}
+            if version is not None:
+                detalle['version'] = version
+            # Por `registrar_actividad`: el acceso entra SELLADO en la cadena. Con
+            # el INSERT a mano quedaba fuera (PROPUESTA_CONSULTA_Y_TRAZABILIDAD §5-A).
+            from db import registrar_actividad
+            registrar_actividad(cur, ambito or obra or 'global', 'acceso_a_documento',
+                                'file', doc_id, nombre, quien, detalle)
             conn.commit()
         _anotar_freno(clave, ahora)
         return True

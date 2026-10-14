@@ -10,9 +10,12 @@ entera -- pero convierte una alteracion silenciosa en una alteracion visible.
 Estos tests fijan las tres roturas que hay que saber distinguir:
   - cambiar el CONTENIDO de una fila            -> 'huella no coincide'
   - BORRAR una fila del medio                   -> 'eslabon roto'
-  - insertar salteando el sellado               -> no cuenta como rotura, cuenta
+  - filas sin sellar ANTERIORES a la cadena      -> no cuentan como rotura, cuentan
                                                    como 'sin_sellar', que es otra
                                                    cosa y hay que poder decirla
+  - insertar salteando el sellado DESPUES de la
+    primera fila sellada (14-oct-2026)            -> 'sin huella', que SI es rotura:
+                                                   ya no hay excusa de "es antigua"
 """
 import auditoria_encadenada as cadena
 
@@ -174,3 +177,73 @@ def test_sin_ancla_la_verificacion_se_comporta_como_antes():
     """El ancla es opcional: quien no la tenga no ve peor de lo que veia."""
     cur = CursorConAncla(_cadena_sana(3))
     assert cadena.verificar(cur)['integra'] is True
+
+
+# ── Filas sin sellar DESPUÉS de la cadena (14-oct-2026) ────────────────────
+# Cuatro vías del código insertaban en activity_log sin sellar, y verificar()
+# las contaba como «anteriores al encadenamiento». Así se podían alterar o
+# borrar sin que nada lo notara (docs/ux/PROPUESTA_CONSULTA_Y_TRAZABILIDAD.md §5-A).
+
+def test_una_fila_sin_sellar_despues_de_la_cadena_es_rotura():
+    filas = _cadena_sana(2)
+    filas.append((3, _fila(3), None, None))          # alguien escribe salteando el sello
+    r = cadena.verificar(CursorCadena(filas))
+    assert r['integra'] is False
+    assert any(x['motivo'] == 'sin huella' and x['id'] == 3 for x in r['roturas'])
+
+
+def test_las_antiguas_siguen_sin_ser_rotura_aunque_haya_nuevas_rotas():
+    """El caso de las 1.755 filas anteriores no cambia."""
+    filas = _cadena_sana(2)
+    filas.insert(0, (0, _fila(0), None, None))
+    filas.append((3, _fila(3), None, None))
+    r = cadena.verificar(CursorCadena(filas))
+    assert r['sin_sellar'] == 1
+    assert [x['id'] for x in r['roturas']] == [3]
+
+
+class CursorPendientes:
+    """Responde a las consultas de sellar_pendientes() sobre una tabla en memoria."""
+
+    def __init__(self, filas):
+        self.filas = filas            # [(id, hash)]
+        self.updates = []
+        self._u = None
+
+    def execute(self, sql, params=None):
+        s = ' '.join(sql.split())
+        sin = [i for i, h in self.filas if h is None]
+        if s.startswith('SELECT min(id)'):
+            self._u = [(min(sin) if sin else None,)]
+        elif 'hash IS NOT NULL AND id >' in s:
+            self._u = [(1,)] if any(h is not None and i > params[0] for i, h in self.filas) else []
+        elif 'ORDER BY id DESC LIMIT 1' in s:
+            con = [(i, h) for i, h in self.filas if h is not None]
+            self._u = [(con[-1][1],)] if con else []
+        elif s.startswith('SELECT id, model_urn'):
+            self._u = [(i, 'o', 'a', 't', 'e', 'n', 'p', {}, '2026-10-14T00:00:00') for i in sin]
+        elif s.startswith('UPDATE'):
+            self.updates.append(params)
+            self._u = []
+        else:
+            self._u = []
+
+    def fetchone(self):
+        return self._u[0] if self._u else None
+
+    def fetchall(self):
+        return self._u or []
+
+
+def test_sellar_pendientes_se_niega_si_hay_filas_intercaladas():
+    """Encadenarlas al final fabricaría roturas falsas, y en su sitio obligaría a
+    reescribir todas las posteriores. Se niega y no toca nada."""
+    c = CursorPendientes([(1, 'a' * 64), (2, None), (3, 'b' * 64)])
+    assert cadena.sellar_pendientes(c) == 0
+    assert c.updates == []
+
+
+def test_sellar_pendientes_sigue_sellando_las_antiguas():
+    c = CursorPendientes([(1, None), (2, None)])
+    assert cadena.sellar_pendientes(c) == 2
+    assert len(c.updates) == 2

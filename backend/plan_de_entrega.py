@@ -597,3 +597,45 @@ def sugerir_vinculos(cursor, model_urn, tipo=None):
     cursor.execute(sql, params)
     return [{'plan_id': a, 'identificador': b, 'node_id': str(c), 'nombre': d}
             for a, b, c, d in cursor.fetchall()]
+
+
+def vincular_al_subir(cursor, model_urn, file_node_id, nombre):
+    """Al subir un documento, lo ata a SU compromiso del plan si no hay ninguna duda.
+
+    Devuelve el id del compromiso atado, o None.
+
+    `sugerir_vinculos` deja escrito por qué NO se ata por parecido: el nombre de
+    un fichero se parece al código pero no es el código, y atar el plano
+    equivocado es peor que no atar. Esto respeta esa regla, porque no ata por
+    parecido: solo cuando TODO cuadra (14-oct-2026,
+    docs/ux/PROCORE_VS_ALEPHIA_NUCLEO_DOCUMENTAL.md, B1):
+
+      · el nombre sin extensión ES el identificador, entero (no «lo contiene»);
+      · hay UN SOLO compromiso sin atar con ese identificador: si el mismo
+        contenedor se entrega en varias etapas, elegir una sería adivinar;
+      · si el plan dice el formato esperado, la extensión del fichero cuadra;
+      · ese compromiso es de la MISMA obra que el documento.
+
+    En cualquier otro caso no ata: queda como sugerencia, como hasta ahora. El
+    vínculo se deshace con `desvincular`, como cualquier otro.
+    """
+    import os
+    base, ext = os.path.splitext(str(nombre or '').strip())
+    base, ext = base.upper(), ext.lstrip('.').upper()
+    if not base:
+        return None
+    cursor.execute("""
+        SELECT id, formato FROM plan_entregas
+         WHERE model_urn = %s AND file_node_id IS NULL
+           AND upper(identificador) = %s
+    """, (model_urn, base))
+    filas = cursor.fetchall()
+    if len(filas) != 1:
+        return None
+    plan_id, formato = filas[0]
+    if formato and ext and ext not in str(formato).upper():
+        return None
+    if not vincular(cursor, plan_id, file_node_id, autor='automático (código del nombre)',
+                    model_urn=model_urn):
+        return None
+    return plan_id
