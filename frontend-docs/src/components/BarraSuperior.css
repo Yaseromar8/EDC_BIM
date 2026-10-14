@@ -1,0 +1,189 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   BARRA SUPERIOR DE ALEPHIA DOCS (13-oct-2026 · clara desde el 14-oct-2026, tema de Claude)
+   Estructura estándar (selectores de obra y herramienta arriba); identidad
+   de ALEPHIA (Navy, símbolo, logo, iconos sólidos). Solo tokens del canon.
+   ─────────────────────────────────────────────────────────────────────── */
+
+.a-sup {
+  position: relative;
+  z-index: 50;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 46px;
+  padding-right: 12px;
+  background: var(--a-surface-base);
+  color: var(--a-text-primary);
+  border-bottom: 1px solid var(--a-border-default);
+}
+
+/* El símbolo de la marca como «Inicio»: el icono de aplicación del manual. */
+.a-sup__inicio {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 46px;
+  margin-right: 8px;
+  padding: 0 12px 0 20px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.a-sup__inicio:hover { background: var(--bg-hover); }
+.a-sup__simbolo { display: none; width: 24px; height: auto; }
+
+/* Casi el tamaño de la lista de proyectos (28 px en una barra de 48): 26 px en esta de 46. */
+.a-sup__logo { height: 26px; width: auto; display: block; }
+.a-sup__producto {
+  padding-left: 10px;
+  border-left: 1px solid var(--a-border-default);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: .02em;
+}
+
+/* Selectores con su etiqueta pequeña encima. */
+.a-sup__selector {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 180px;
+  max-width: 300px;
+  height: 34px;
+  padding: 0 30px 0 10px;
+  border: 0;
+  border-radius: var(--a-radius-md);
+  background: rgb(var(--a-ink-900-rgb) / .04);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.a-sup__selector small { font-size: 10px; line-height: 1.1; color: var(--a-text-muted); }
+.a-sup__selector b {
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.a-sup__selector::after {
+  content: '';
+  position: absolute;
+  right: 11px;
+  top: 50%;
+  margin-top: -2px;
+  border: 4px solid transparent;
+  border-top-color: var(--a-text-secondary);
+}
+.a-sup__selector:hover,
+.a-sup__selector.es-abierto { background: rgb(var(--a-ink-900-rgb) / .08); }
+
+/* Menú de herramientas: los grupos en columnas. */
+.a-sup__caja { position: relative; }
+.a-sup__menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 10050;
+  width: max-content;
+  max-width: calc(100vw - 40px);
+  background: var(--a-surface-raised);
+  color: var(--a-text-primary);
+  border: 1px solid var(--a-border-default);
+  border-radius: var(--a-radius-md);
+  box-shadow: var(--a-shadow-lg);
+  animation: dialogo-entra var(--a-motion-fast) var(--a-ease);
+}
+.a-sup__columnas {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(170px, auto));
+  gap: 4px;
+  padding: 12px 8px;
+}
+.a-sup__titulo {
+  margin: 0 10px 6px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--a-text-muted);
+}
+.a-sup__herramienta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: var(--a-size-menu-item);
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--a-radius-md);
+  background: none;
+  color: var(--a-text-primary);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.a-sup__herramienta:hover { background: var(--bg-hover); }
+.a-sup__herramienta.es-activa { background: var(--a-state-selected); font-weight: 600; }
+.a-sup__icono { display: flex; color: var(--a-text-muted); }
+.a-sup__icono svg { width: 18px; height: 18px; }
+.a-sup__herramienta.es-activa .a-sup__icono { color: var(--a-action-primary); }
+.a-sup__herramienta:focus-visible { box-shadow: inset 0 0 0 2px var(--a-action-text) !important; }
+
+/* Buscador: abre la búsqueda de la obra (Ctrl K). */
+.a-sup__buscar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 1 340px;
+  min-width: 160px;
+  height: 32px;
+  margin-left: 6px;
+  padding: 0 8px 0 10px;
+  border: 0;
+  border-radius: var(--a-radius-md);
+  background: var(--a-surface-raised);
+  box-shadow: inset 0 0 0 1px var(--a-border-default);
+  color: var(--a-text-muted);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+.a-sup__buscar svg { color: var(--a-text-secondary); flex-shrink: 0; }
+.a-sup__buscar span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.a-sup__buscar kbd {
+  font: 600 10px var(--a-font-sans);
+  color: var(--a-text-secondary);
+  background: var(--bg-hover);
+  border: 1px solid var(--a-border-default);
+  border-radius: 3px;
+  padding: 1px 5px;
+}
+
+.a-sup__espacio { flex: 1; }
+.a-sup__derecha { display: flex; align-items: center; gap: 8px; }
+
+/* El avatar del usuario: tinta sobre la barra clara (tema de Claude, 14-oct-2026). */
+.a-sup .header-avatar {
+  background: var(--a-action-primary) !important;
+  color: var(--a-text-on-action) !important;
+  width: 30px !important;
+  height: 30px !important;
+}
+
+@media (max-width: 1100px) {
+  .a-sup__logo, .a-sup__producto { display: none; }
+  .a-sup__simbolo { display: block; }
+  .a-sup__inicio { padding: 0 11px; }
+  .a-sup__selector { min-width: 140px; }
+  .a-sup__columnas { grid-template-columns: repeat(2, minmax(170px, auto)); }
+}

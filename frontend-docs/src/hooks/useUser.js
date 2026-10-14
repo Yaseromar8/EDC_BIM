@@ -7,9 +7,21 @@ import { useState } from 'react';
 import { apiFetch } from '../utils/apiFetch';
 import { API, getAuthHeaders } from '../utils/helpers';
 import { clearRecentPdfCache } from '../utils/recentPdfCache';
+import { esSesionDeEnsayoEnBackendReal } from '../utils/accesoLocal';
 
 export function useUser() {
   const [user, setUser] = useState(() => {
+    const token = localStorage.getItem('visor_session_token')
+      || sessionStorage.getItem('visor_session_token');
+    if (esSesionDeEnsayoEnBackendReal(import.meta.env.VITE_DOCS_REAL_DATA === 'true', token)) {
+      // La identidad local anterior no existe en Virginia. Descartarla antes
+      // del primer render evita mostrar por un instante proyectos de ensayo.
+      localStorage.removeItem('visor_user');
+      localStorage.removeItem('visor_session_token');
+      sessionStorage.removeItem('visor_user');
+      sessionStorage.removeItem('visor_session_token');
+      return null;
+    }
     const savedLocal = localStorage.getItem('visor_user');
     if (savedLocal) return JSON.parse(savedLocal);
     const savedSession = sessionStorage.getItem('visor_user');
@@ -32,10 +44,15 @@ export function useUser() {
     setUser(data);
   };
 
-  const logout = async () => {
-    try {
-      await apiFetch(`${API}/api/auth/logout`, { method: 'POST', headers: getAuthHeaders() });
-    } catch { /* ignore */ }
+  const logout = async ({ notifyServer = true } = {}) => {
+    const token = localStorage.getItem('visor_session_token')
+      || sessionStorage.getItem('visor_session_token');
+    // DEMO_TOKEN solo existe en el ensayo local: nunca se envía a Virginia.
+    if (notifyServer && token && token !== 'DEMO_TOKEN') {
+      try {
+        await apiFetch(`${API}/api/auth/logout`, { method: 'POST', headers: getAuthHeaders() });
+      } catch { /* ignore */ }
+    }
     localStorage.removeItem('visor_user');
     localStorage.removeItem('visor_session_token');
     sessionStorage.removeItem('visor_user');

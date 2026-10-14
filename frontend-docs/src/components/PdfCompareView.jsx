@@ -122,7 +122,7 @@ export default function PdfCompareView({ fileName, versionA, versionB, projectPr
       ctx.fillRect(0, 0, out.width, out.height);
       if (c) ctx.drawImage(c, 0, 0);
       if (result.missing) {
-        ctx.fillStyle = '#6b7280';
+        ctx.fillStyle = '#6d6b67';
         ctx.font = '16px sans-serif';
         ctx.textAlign = 'center';
         ctx.fillText('Esta versión no contiene esta página', out.width / 2, out.height / 2);

@@ -1,6 +1,6 @@
 /* Pantalla de acceso.
    Decisión de diseño principal: el panel del formulario es SÓLIDO, no cristal.
-   El diseño anterior ponía texto casi negro (#1C1C1C) sobre un panel translúcido
+   El diseño anterior ponía texto casi negro (#141413) sobre un panel translúcido
    al 1,5 % encima de un vídeo oscuro: el contraste dependía del fotograma, así
    que era imposible de certificar y en la práctica ilegible. Con fondo sólido el
    contraste es un número fijo (aquí ~16:1) y se sostiene con sol y casco. */
@@ -14,7 +14,7 @@
     --cta-line: var(--a-ink-600);                /* Navy atenuado */
     --cta-line-fuerte: var(--a-ink-500);
     --cta-text: var(--a-neutral-100);                /* ALEPHIA Mist */
-    --cta-muted: #A9B6C2;
+    --cta-muted: #B0AEA5;
     --cta-primary: var(--a-blue-600);             /* ALEPHIA Signal */
     --cta-primary-alto: var(--a-blue-500);        /* Signal iluminado para hover */
 }
@@ -34,7 +34,7 @@
     position: relative;
     flex: 0 0 58%;
     overflow: hidden;
-    background: #06090C;
+    background: #141413;
 }
 
 .cta-obra__video {
@@ -67,14 +67,14 @@
        El segundo gradiente cose la costura con el panel sólido de la derecha,
        que antes era un corte a cuchillo entre vídeo y color plano. */
     background:
-        linear-gradient(90deg, transparent 76%, rgba(11, 14, 18, .55) 100%),
+        linear-gradient(90deg, transparent 76%, rgba(20, 20, 19, .55) 100%),
         linear-gradient(180deg,
-            rgba(11, 14, 18, .28) 0%,
-            rgba(11, 14, 18, .08) 24%,
-            rgba(21, 55, 84, .12) 50%,
-            rgba(11, 14, 18, .55) 72%,
-            rgba(11, 14, 18, .90) 88%,
-            rgba(11, 14, 18, .95) 100%);
+            rgba(20, 20, 19, .28) 0%,
+            rgba(20, 20, 19, .08) 24%,
+            rgba(80, 114, 148, .12) 50%,
+            rgba(20, 20, 19, .55) 72%,
+            rgba(20, 20, 19, .90) 88%,
+            rgba(20, 20, 19, .95) 100%);
 }
 
 .cta-obra__pie {
@@ -175,24 +175,24 @@
     transition: border-color .15s, box-shadow .15s;
 }
 
-.cta-campo input::placeholder { color: #6B7784; }
+.cta-campo input::placeholder { color: #72706B; }
 
 .cta-campo input:hover:not(:disabled) { border-color: var(--cta-line-fuerte); }
 
 .cta-campo input:focus {
     outline: none;
     border-color: var(--cta-primary);
-    /* Signal (#3E6F91), no el azul #1473E6 del diseño anterior: era el único
+    /* Signal (#507294), no el azul #507294 del diseño anterior: era el único
        resto de la paleta vieja que la pasada de identidad no llegó a cambiar,
        y solo se veía con el campo enfocado. */
-    box-shadow: 0 0 0 3px rgba(62, 111, 145, .32);
+    box-shadow: 0 0 0 3px rgba(80, 114, 148, .32);
 }
 
 .cta-campo input:disabled { opacity: .6; cursor: not-allowed; }
 
 .cta-campo input:read-only {
     color: var(--cta-muted);
-    background: #0F151C;
+    background: #141413;
     cursor: default;
 }
 
@@ -257,15 +257,15 @@
 }
 
 .cta-error {
-    background: rgba(255, 107, 107, .12);
-    border: 1px solid rgba(255, 107, 107, .35);
-    color: #FFC4C4;
+    background: rgba(185, 53, 53, .12);
+    border: 1px solid rgba(185, 53, 53, .35);
+    color: #FBEBEB;
 }
 
 .cta-espera {
-    background: rgba(245, 165, 36, .10);
-    border: 1px solid rgba(245, 165, 36, .32);
-    color: #FFDDA1;
+    background: rgba(249, 238, 218, .10);
+    border: 1px solid rgba(249, 238, 218, .32);
+    color: #F9EEDA;
 }
 
 /* ── Botones ─────────────────────────────────────────────────────────────── */

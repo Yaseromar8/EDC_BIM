@@ -16,17 +16,17 @@ import { API } from '../utils/helpers';
 import { apiFetch } from '../utils/apiFetch';
 
 const CAJA = {
-  background: '#111318', border: '1px solid rgba(255,255,255,0.09)',
-  borderRadius: 12, padding: 22, color: '#e9ecf1', width: 460, maxWidth: '92vw',
+  background: '#141413', border: '1px solid rgba(255,255,255,0.09)',
+  borderRadius: 12, padding: 22, color: '#f1f0e8', width: 460, maxWidth: '92vw',
   maxHeight: '90vh', overflowY: 'auto',
 };
 const BOTON = {
-  background: 'var(--alephia-signal, #3E6F91)', border: 'none', borderRadius: 7, color: '#fff',
+  background: 'var(--alephia-signal, #507294)', border: 'none', borderRadius: 7, color: '#fff',
   padding: '9px 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer',
 };
-const BOTON_SUAVE = { ...BOTON, background: 'rgba(255,255,255,0.07)', color: '#cfd6e0', fontWeight: 500 };
+const BOTON_SUAVE = { ...BOTON, background: 'rgba(255,255,255,0.07)', color: '#cccac0', fontWeight: 500 };
 const CAMPO = {
-  width: '100%', boxSizing: 'border-box', background: '#0b0d10', color: '#e9ecf1',
+  width: '100%', boxSizing: 'border-box', background: '#141413', color: '#f1f0e8',
   border: '1px solid rgba(255,255,255,0.14)', borderRadius: 7, padding: '9px 11px', fontSize: 14,
 };
 const SECCION = { borderTop: '1px solid rgba(255,255,255,0.09)', marginTop: 18, paddingTop: 16 };
@@ -78,9 +78,9 @@ export default function MiCuentaPanel({ user, onClose, onAbrir2FA }) {
 
   const Mensaje = ({ m }) => m && (
     <p style={{ margin: '10px 0 0', padding: '8px 11px', borderRadius: 7, fontSize: 13,
-                background: m.ok ? 'rgba(78,130,166,0.15)' : 'rgba(255,107,107,0.12)',
-                border: `1px solid ${m.ok ? 'rgba(78,130,166,0.4)' : 'rgba(255,107,107,0.35)'}`,
-                color: m.ok ? '#cfe0ee' : '#FFC4C4' }}>{m.texto}</p>
+                background: m.ok ? 'rgba(106,155,204,0.15)' : 'rgba(185,53,53,0.12)',
+                border: `1px solid ${m.ok ? 'rgba(106,155,204,0.4)' : 'rgba(185,53,53,0.35)'}`,
+                color: m.ok ? '#ecf0f1' : '#FBEBEB' }}>{m.texto}</p>
   );
 
   return (
@@ -92,7 +92,7 @@ export default function MiCuentaPanel({ user, onClose, onAbrir2FA }) {
           <h2 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>Mi cuenta</h2>
           <button onClick={onClose} style={{ ...BOTON_SUAVE, padding: '4px 9px' }}>Cerrar</button>
         </div>
-        <p style={{ margin: '6px 0 0', fontSize: 12.5, color: '#8b94a1' }}>
+        <p style={{ margin: '6px 0 0', fontSize: 12.5, color: '#72706b' }}>
           {user?.email} · tu cuenta y sus llaves. Lo de las obras vive en cada obra.
         </p>
 
@@ -112,7 +112,7 @@ export default function MiCuentaPanel({ user, onClose, onAbrir2FA }) {
               {guardando ? 'Cambiando…' : 'Cambiar contraseña'}
             </button>
           </div>
-          <p style={{ margin: '8px 0 0', fontSize: 12, color: '#8b94a1' }}>
+          <p style={{ margin: '8px 0 0', fontSize: 12, color: '#72706b' }}>
             Al cambiarla se cierran tus demás sesiones — si perdiste un equipo con la sesión abierta,
             este es el camino completo.
           </p>
@@ -122,7 +122,7 @@ export default function MiCuentaPanel({ user, onClose, onAbrir2FA }) {
         {/* ── Verificación en dos pasos ── */}
         <div style={SECCION}>
           <div style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 6 }}>Verificación en dos pasos</div>
-          <p style={{ margin: '0 0 10px', fontSize: 12.5, color: '#8b94a1', lineHeight: 1.5 }}>
+          <p style={{ margin: '0 0 10px', fontSize: 12.5, color: '#72706b', lineHeight: 1.5 }}>
             El segundo factor protege la cuenta aunque la contraseña se filtre. Se configura con tu
             aplicación de autenticación y entrega códigos de recuperación para el día que pierdas el teléfono.
           </p>
@@ -132,7 +132,7 @@ export default function MiCuentaPanel({ user, onClose, onAbrir2FA }) {
         {/* ── Sesiones (G4a) ── */}
         <div style={SECCION}>
           <div style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 6 }}>Sesiones</div>
-          <p style={{ margin: '0 0 10px', fontSize: 12.5, color: '#8b94a1', lineHeight: 1.5 }}>
+          <p style={{ margin: '0 0 10px', fontSize: 12.5, color: '#72706b', lineHeight: 1.5 }}>
             ¿Dejaste la sesión abierta en la tablet de obra o en otro navegador? Ciérralas todas
             menos esta, sin tocar la contraseña.
           </p>

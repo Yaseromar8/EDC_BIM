@@ -82,8 +82,8 @@ export default function UploadModal({
   // ── Minimized Monitor ──
   if (sopMinimized) {
     return (
-      <div className="acc-upload-monitor" style={{ position: 'fixed', bottom: 20, right: 20, width: 320, background: '#fff', border: '1px solid #ddd', borderRadius: 4, boxShadow: '0 8px 24px rgba(0,0,0,0.15)', zIndex: 10000, overflow: 'hidden' }}>
-        <div style={{ padding: '8px 12px', background: '#fcfcfc', borderBottom: '1px solid #eee', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div className="acc-upload-monitor" style={{ position: 'fixed', bottom: 20, right: 20, width: 320, background: '#fff', border: '1px solid #e8e6dc', borderRadius: 4, boxShadow: '0 8px 24px rgba(0,0,0,0.15)', zIndex: 10000, overflow: 'hidden' }}>
+        <div style={{ padding: '8px 12px', background: '#faf9f5', borderBottom: '1px solid #f1f0e8', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <span style={{ fontSize: 13, fontWeight: 500 }}>Cargar</span>
           <div style={{ display: 'flex', gap: 8 }}>
             <button style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2 }} onClick={() => setSopMinimized(false)}>^</button>
@@ -91,32 +91,32 @@ export default function UploadModal({
           </div>
         </div>
         <div style={{ maxHeight: 400, overflowY: 'auto' }}>
-          <div style={{ padding: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #f0f0f0' }}>
-            <span style={{ fontSize: 12, color: '#333' }}>Total de {chunkedUpload.uploads.length} {chunkedUpload.uploads.length === 1 ? 'archivo' : 'archivos'}...</span>
+          <div style={{ padding: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #f1f0e8' }}>
+            <span style={{ fontSize: 12, color: '#333330' }}>Total de {chunkedUpload.uploads.length} {chunkedUpload.uploads.length === 1 ? 'archivo' : 'archivos'}...</span>
             <span style={{ fontSize: 12, color: 'var(--accent)', cursor: 'pointer', fontWeight: 600 }} onClick={() => { chunkedUpload.cancelAll(); onClose(); }}>Cancelar todo</span>
           </div>
           {chunkedUpload.uploads.map(item => (
-            <div key={item.id} style={{ padding: '12px', borderBottom: '1px solid #f9f9f9', display: 'flex', gap: 12 }}>
+            <div key={item.id} style={{ padding: '12px', borderBottom: '1px solid #faf9f5', display: 'flex', gap: 12 }}>
               {renderFileIconSop(item.filename, 28)}
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 12, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.filename}</div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
                   {item.status === 'completed' ? (
-                    <span style={{ fontSize: 11, color: '#33691e' }}>{uploadStatusLabel(item, formatSize)}</span>
+                    <span style={{ fontSize: 11, color: '#64744e' }}>{uploadStatusLabel(item, formatSize)}</span>
                   ) : item.status === 'error' ? (
                     // EL MISMO MOTIVO QUE ARRIBA. Aquí ponía «Error» a secas, así
                     // que minimizar la ventana te quitaba la razón del fallo:
                     // «No tienes permiso para subir aquí» pasaba a ser «Error».
-                    <span style={{ fontSize: 11, color: '#d32f2f' }}>{item.statusText || 'Error'}</span>
+                    <span style={{ fontSize: 11, color: '#b93535' }}>{item.statusText || 'Error'}</span>
                   ) : (
                     // La misma señal que en el modal grande: si las dos
                     // superficies se escriben por separado acaban divergiendo.
                     <>
                       {hayActividad(item) && <Girador tam={9} />}
-                      <span style={{ fontSize: 11, color: item.status === 'paused' ? '#f57c00' : '#666' }}>{uploadStatusLabel(item, formatSize)}</span>
+                      <span style={{ fontSize: 11, color: item.status === 'paused' ? '#d97757' : '#72706b' }}>{uploadStatusLabel(item, formatSize)}</span>
                     </>
                   )}
-                  <span style={{ fontSize: 11, color: '#999' }}>| {formatSize(item.sizeBytes || 0)}</span>
+                  <span style={{ fontSize: 11, color: '#72706b' }}>| {formatSize(item.sizeBytes || 0)}</span>
                 </div>
               </div>
             </div>
@@ -133,7 +133,7 @@ export default function UploadModal({
         <div className="acc-upload-header">
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <span style={{ fontWeight: 600, fontSize: 14 }}>Cargar archivos</span>
-            <span style={{ color: '#999', fontSize: 12 }}>{currentPath.split('/').filter(Boolean).pop()}</span>
+            <span style={{ color: '#72706b', fontSize: 12 }}>{currentPath.split('/').filter(Boolean).pop()}</span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <button className="file-viewer-close" style={{ background: 'none' }} onClick={() => setSopMinimized(true)}>-</button>
@@ -159,12 +159,12 @@ export default function UploadModal({
         <div className="acc-upload-body" style={{ maxHeight: 600, overflowY: 'auto' }}>
           <div className="acc-upload-entry-section" style={{ marginBottom: 20 }}>
             <button className="acc-upload-btn-secondary" style={{ width: '100%', border: '1px solid var(--accent)', color: '#000', padding: '8px', marginBottom: 12, borderRadius: 2 }} onClick={() => fileRef.current.click()}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="#666"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z"/></svg>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="#72706b"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z"/></svg>
               Desde su equipo
             </button>
-            <div className={`acc-upload-dropzone ${dragOver ? 'drag-over' : ''}`} onClick={() => fileRef.current.click()} onDragOver={onDragOver} onDragLeave={onDragLeave} onDrop={onDrop} style={{ border: '1px dashed #ddd', padding: '40px 20px', borderRadius: 2, textAlign: 'center' }}>
-              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#ddd" strokeWidth="1"><rect x="4" y="2" width="16" height="20" rx="2"/><path d="M14 2v6h6"/><path d="M12 18v-6"/><path d="M9 15l3 3 3-3"/></svg>
-              <div style={{ color: '#999', fontSize: 13, marginTop: 12 }}>Arrastre archivos aqui o elija una opcion arriba</div>
+            <div className={`acc-upload-dropzone ${dragOver ? 'drag-over' : ''}`} onClick={() => fileRef.current.click()} onDragOver={onDragOver} onDragLeave={onDragLeave} onDrop={onDrop} style={{ border: '1px dashed #e8e6dc', padding: '40px 20px', borderRadius: 2, textAlign: 'center' }}>
+              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#e8e6dc" strokeWidth="1"><rect x="4" y="2" width="16" height="20" rx="2"/><path d="M14 2v6h6"/><path d="M12 18v-6"/><path d="M9 15l3 3 3-3"/></svg>
+              <div style={{ color: '#72706b', fontSize: 13, marginTop: 12 }}>Arrastre archivos aqui o elija una opcion arriba</div>
             </div>
             <input
               type="file"
@@ -179,7 +179,7 @@ export default function UploadModal({
           </div>
           {chunkedUpload.uploads.length > 0 && (
             <div style={{ marginTop: 20 }}>
-              <div style={{ fontSize: 13, color: '#333', marginBottom: 16, fontWeight: 300 }}>
+              <div style={{ fontSize: 13, color: '#333330', marginBottom: 16, fontWeight: 300 }}>
                 Total de {chunkedUpload.uploads.length} {chunkedUpload.uploads.length === 1 ? 'archivo' : 'archivos'}
               </div>
               {chunkedUpload.uploads.map(item => (
@@ -189,12 +189,12 @@ export default function UploadModal({
                     <div className="acc-upload-file-name">{item.filename}</div>
                     <div className="acc-upload-file-status" style={{ marginTop: 4 }}>
                       {item.status === 'completed' ? (
-                        <div style={{ color: '#33691e', display: 'flex', alignItems: 'center', gap: 4 }}>
+                        <div style={{ color: '#64744e', display: 'flex', alignItems: 'center', gap: 4 }}>
                           <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
                           {item.statusText}
                         </div>
                       ) : item.status === 'error' ? (
-                        <div style={{ color: '#d32f2f', fontSize: 11 }}>{item.statusText}</div>
+                        <div style={{ color: '#b93535', fontSize: 11 }}>{item.statusText}</div>
                       ) : (
                         // SIN BARRA. El papel de «progressbar» se conserva en la
                         // línea de texto: el rol describe la semántica, no el
@@ -211,26 +211,26 @@ export default function UploadModal({
                           style={{ display: 'flex', alignItems: 'center', gap: 6 }}
                         >
                           {hayActividad(item) && <Girador />}
-                          <span style={{ fontSize: 11, color: item.status === 'paused' ? '#f57c00' : '#666' }}>
+                          <span style={{ fontSize: 11, color: item.status === 'paused' ? '#d97757' : '#72706b' }}>
                             {uploadStatusLabel(item, formatSize)}
                           </span>
                         </div>
                       )}
                     </div>
                   </div>
-                  <div style={{ fontSize: 12, color: '#999', display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div style={{ fontSize: 12, color: '#72706b', display: 'flex', alignItems: 'center', gap: 12 }}>
                     <span style={{ minWidth: 60, textAlign: 'right' }}>{formatSize(item.sizeBytes || 0)}</span>
                     {item.status === 'completed' && item.nodeId && onOpenUploaded && (
                       <button
                         type="button"
                         onClick={() => onOpenUploaded(item)}
-                        style={{ border: '1px solid var(--accent)', borderRadius: 4, background: '#fff', color: '#456b95', cursor: 'pointer', fontSize: 11, fontWeight: 600, padding: '5px 10px' }}
+                        style={{ border: '1px solid var(--accent)', borderRadius: 4, background: '#fff', color: '#507294', cursor: 'pointer', fontSize: 11, fontWeight: 600, padding: '5px 10px' }}
                       >
                         Abrir
                       </button>
                     )}
                     {item.status === 'completed' ? (
-                      <span style={{ color: '#33691e', fontSize: 16 }} title="Subido">✓</span>
+                      <span style={{ color: '#64744e', fontSize: 16 }} title="Subido">✓</span>
                     ) : ['queued', 'init', 'uploading', 'paused'].includes(item.status) ? (
                       <span onClick={() => chunkedUpload.cancelUpload(item.id)} style={{ cursor: 'pointer', fontSize: 16 }} title="Cancelar">✕</span>
                     ) : null}

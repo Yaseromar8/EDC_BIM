@@ -11,10 +11,12 @@
  * almacén puede dejar la tabla inservible.
  */
 
+// Columnas propias desde el 14-oct-2026: se retiraron Indicadores, Marcas de rev.
+// e Incidencias, que venían de ACC y estaban siempre vacías. Un ancho guardado
+// para ellas se descarta al leer (ver leerAnchos): no resucitan.
 export const ANCHOS_POR_DEFECTO = {
-  checkbox: 40, name: 400, description: 150, version: 80,
-  indicators: 150, markup: 100, issues: 80, size: 100,
-  updated: 180, user: 150, status: 120, action: 60
+  checkbox: 40, name: 400, description: 106, tipo: 66, disciplina: 98, version: 84,
+  status: 144, entrega: 108, updated: 170, user: 160, size: 100, action: 60
 };
 
 export const LLAVE_ANCHOS = 'ecd.docs.anchosColumnas';

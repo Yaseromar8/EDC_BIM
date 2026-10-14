@@ -1,4 +1,3 @@
-/* eslint-disable no-restricted-globals */
 /**
  * GAP 07 · EL SERVICE WORKER — que la app ABRA sin cobertura.
  *
@@ -28,6 +27,20 @@
 
 const CACHE = 'alephia-campo-v1';
 
+// Recupera instalaciones anteriores de este SW en el servidor de desarrollo.
+// Vite sirve módulos /src/* sin hash; cache-first impediría ver cambios y
+// podría mantener un flujo de login viejo aunque la página se recargue.
+const ES_DESARROLLO_LOCAL = ['localhost', '127.0.0.1', '[::1]'].includes(self.location.hostname);
+if (ES_DESARROLLO_LOCAL) {
+  self.addEventListener('install', (e) => e.waitUntil(self.skipWaiting()));
+  self.addEventListener('activate', (e) => {
+    e.waitUntil((async () => {
+      await caches.delete(CACHE);
+      await self.registration.unregister();
+    })());
+  });
+}
+
 // El armazón mínimo. Lo demás entra solo cuando se pide, y solo si es nuestro.
 const ARMAZON = [
   '/',
@@ -39,6 +52,7 @@ const ARMAZON = [
 ];
 
 self.addEventListener('install', (e) => {
+  if (ES_DESARROLLO_LOCAL) return;
   e.waitUntil(
     caches.open(CACHE)
       // `addAll` es todo-o-nada: si un icono falta, la instalación entera se
@@ -50,6 +64,7 @@ self.addEventListener('install', (e) => {
 });
 
 self.addEventListener('activate', (e) => {
+  if (ES_DESARROLLO_LOCAL) return;
   e.waitUntil(
     caches.keys()
       .then(ks => Promise.all(ks.filter(k => k !== CACHE).map(k => caches.delete(k))))
@@ -62,6 +77,7 @@ function esNuestro(url) {
 }
 
 self.addEventListener('fetch', (e) => {
+  if (ES_DESARROLLO_LOCAL) return;
   const req = e.request;
   if (req.method !== 'GET') return;              // nada que no sea GET, nunca
 

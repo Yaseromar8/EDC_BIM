@@ -782,10 +782,10 @@ const PartidasModule = ({ project, API, user, isAdmin }) => {
       {/* DATA GRID */}
       <div style={{ border: '1px solid #e0e0e0', borderRadius: 8, background: '#fff', overflowX: 'auto', overflowY: 'auto', flex: 1, minHeight: 0, marginBottom: 16 }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: 11, tableLayout: 'fixed' }}>
-          <thead style={{ background: '#f8f9fa', color: '#5f6368', borderBottom: '2px solid #e0e0e0', position: 'sticky', top: 0, zIndex: 2 }}>
+          <thead style={{ background: '#faf9f5', color: '#5f6368', borderBottom: '2px solid #e0e0e0', position: 'sticky', top: 0, zIndex: 2 }}>
             <tr>
               {COL_DEFS.map((col, idx) => (
-                <th key={col.key} style={{ padding: '8px 10px', fontWeight: 600, width: colWidths[idx], position: 'relative', background: '#f8f9fa' }}>
+                <th key={col.key} style={{ padding: '8px 10px', fontWeight: 600, width: colWidths[idx], position: 'relative', background: '#faf9f5' }}>
                   {col.label}
                   <div
                     onMouseDown={(e) => onResizeStart(e, idx)}
@@ -795,7 +795,7 @@ const PartidasModule = ({ project, API, user, isAdmin }) => {
                   />
                 </th>
               ))}
-              {isAdmin && <th style={{ padding: '8px 10px', width: 80, background: '#f8f9fa', textAlign: 'center' }}>Acción</th>}
+              {isAdmin && <th style={{ padding: '8px 10px', width: 80, background: '#faf9f5', textAlign: 'center' }}>Acción</th>}
             </tr>
           </thead>
           <tbody>
@@ -815,7 +815,7 @@ const PartidasModule = ({ project, API, user, isAdmin }) => {
                 const isCollapsed = collapsedNodes.has(normalizeWbs(p.item));
                 
                 return (
-                  <tr key={p.id} style={{ borderBottom: '1px solid #eee', background: isEditing ? '#f4f6f9' : (isTitle ? '#fafafa' : '#fff'), fontWeight: isTitle ? '600' : '400', color: isTitle ? '#111' : '#444' }}>
+                  <tr key={p.id} style={{ borderBottom: '1px solid #eee', background: isEditing ? '#f5f4ef' : (isTitle ? '#fafafa' : '#fff'), fontWeight: isTitle ? '600' : '400', color: isTitle ? '#111' : '#444' }}>
                     
                     {/* ITEM */}
                     <td style={{ padding: '4px 10px', background: isTitle ? 'transparent' : '#fafafa' }}>
@@ -888,7 +888,7 @@ const PartidasModule = ({ project, API, user, isAdmin }) => {
                       ) : (
                         <span style={{ 
                           padding: '2px 8px', borderRadius: 12, fontSize: 10, fontWeight: 'bold',
-                          background: p.metodologia === 'BIM' ? '#eef2f7' : p.metodologia === 'CONVENCIONAL' ? '#fef7e0' : 'transparent',
+                          background: p.metodologia === 'BIM' ? '#f0eee6' : p.metodologia === 'CONVENCIONAL' ? '#fef7e0' : 'transparent',
                           color: p.metodologia === 'BIM' ? '#7e9bbd' : p.metodologia === 'CONVENCIONAL' ? '#b06000' : '#333'
                         }}>
                           {p.metodologia}
@@ -952,7 +952,7 @@ const PartidasModule = ({ project, API, user, isAdmin }) => {
       </div>
 
       {/* DASHBOARD BOTTOM */}
-      <div id="dashboard-bottom" style={{ display: 'flex', gap: 12, flexShrink: 0, padding: '12px', background: '#f8f9fa', borderRadius: 8, border: '1px solid #e0e0e0', flexWrap: 'wrap', alignItems: 'stretch' }}>
+      <div id="dashboard-bottom" style={{ display: 'flex', gap: 12, flexShrink: 0, padding: '12px', background: '#faf9f5', borderRadius: 8, border: '1px solid #e0e0e0', flexWrap: 'wrap', alignItems: 'stretch' }}>
         
         {/* TOTALES */}
         <div style={{ display: 'flex', flexDirection: 'column', minWidth: 150 }}>

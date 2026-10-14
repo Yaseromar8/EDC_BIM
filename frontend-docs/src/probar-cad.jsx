@@ -133,7 +133,7 @@ window.Autodesk = {
       // bandera que decide el sentido de la rueda.
       this.navigation = { getReverseZoomDirection: () => window.__reverseZoom };
       let marca = null;
-      this.start = () => { anotar('viewer.start()'); marca = document.createElement('div'); marca.className = 'sustituto-lmv'; marca.textContent = 'MOTOR SUSTITUIDO (el banco no mide navegación)'; marca.style.cssText = 'position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#6b7480;font-size:12px;'; contenedor.appendChild(marca); };
+      this.start = () => { anotar('viewer.start()'); marca = document.createElement('div'); marca.className = 'sustituto-lmv'; marca.textContent = 'MOTOR SUSTITUIDO (el banco no mide navegación)'; marca.style.cssText = 'position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#72706b;font-size:12px;'; contenedor.appendChild(marca); };
       this.loadDocumentNode = (doc, node) => { anotar(`loadDocumentNode ${node.data.name}`); window.__vistaMontada = node.data.name; window.__cargas = (window.__cargas || 0) + 1; return Promise.resolve(); };
       this.finish = () => { anotar('viewer.finish()'); window.__visoresVivos -= 1; if (marca) marca.remove(); };
     },
@@ -167,10 +167,10 @@ function Banco() {
     window.__cerrar = () => setMontado(false);
   }, []);
   return (
-    <div style={{ height: '100vh', background: '#11141a' }}>
+    <div style={{ height: '100vh', background: '#141413' }}>
       {montado
         ? <CadViewer file={FICHERO} projectPrefix="banco" />
-        : <div style={{ color: '#7b8494', padding: 24, fontSize: 13 }}>Pulsa window.__abrir() para abrir el archivo.</div>}
+        : <div style={{ color: '#72706b', padding: 24, fontSize: 13 }}>Pulsa window.__abrir() para abrir el archivo.</div>}
     </div>
   );
 }

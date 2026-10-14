@@ -526,13 +526,13 @@ export default function MultimediaModule({ project, user }) {
   };
 
   return (
-    <div className="multimedia-module" style={{ display: 'flex', flexDirection: 'column', height: '100%', background: '#f5f7f9', width: '100%' }}>
+    <div className="multimedia-module" style={{ display: 'flex', flexDirection: 'column', height: '100%', background: '#f1f0e8', width: '100%' }}>
       
       {/* ── Toolbar Superior ── */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 24px', background: '#fff', borderBottom: '1px solid #e0e0e0' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 24px', background: '#fff', borderBottom: '1px solid #e8e6dc' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-          <h2 style={{ margin: 0, fontSize: 18, fontWeight: 600, color: '#333' }}>Multimedia</h2>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#f0f2f5', padding: '4px', borderRadius: 6 }}>
+          <h2 style={{ margin: 0, fontSize: 18, fontWeight: 600, color: '#333330' }}>Multimedia</h2>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#f1f0e8', padding: '4px', borderRadius: 6 }}>
             <input 
               type="text" 
               placeholder="Buscar por descripción..." 
@@ -543,24 +543,24 @@ export default function MultimediaModule({ project, user }) {
           </div>
           
           <div style={{ display: 'flex', gap: 4 }}>
-            <button className="acc-filter-btn" onClick={() => setQuickFilter('today')} style={{ padding: '6px 12px', background: '#eef2f7', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 12 }}>Hoy</button>
-            <button className="acc-filter-btn" onClick={() => setQuickFilter('week')} style={{ padding: '6px 12px', background: '#eef2f7', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 12 }}>Semana</button>
-            <button className="acc-filter-btn" onClick={() => setQuickFilter('month')} style={{ padding: '6px 12px', background: '#eef2f7', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 12 }}>Mes</button>
+            <button className="acc-filter-btn" onClick={() => setQuickFilter('today')} style={{ padding: '6px 12px', background: '#f1f0e8', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 12 }}>Hoy</button>
+            <button className="acc-filter-btn" onClick={() => setQuickFilter('week')} style={{ padding: '6px 12px', background: '#f1f0e8', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 12 }}>Semana</button>
+            <button className="acc-filter-btn" onClick={() => setQuickFilter('month')} style={{ padding: '6px 12px', background: '#f1f0e8', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 12 }}>Mes</button>
           </div>
 
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginLeft: 8 }}>
-            <span style={{ fontSize: 12, fontWeight: 600, color: '#666' }}>Desde:</span>
-            <input type="date" value={dateRange.start} onChange={e => setDateRange({...dateRange, start: e.target.value})} style={{ border: '1px solid #ddd', padding: '4px 8px', borderRadius: 4, fontSize: 12 }} />
-            <span style={{ fontSize: 12, fontWeight: 600, color: '#666' }}>Hasta:</span>
-            <input type="date" value={dateRange.end} onChange={e => setDateRange({...dateRange, end: e.target.value})} style={{ border: '1px solid #ddd', padding: '4px 8px', borderRadius: 4, fontSize: 12 }} />
+            <span style={{ fontSize: 12, fontWeight: 600, color: '#72706b' }}>Desde:</span>
+            <input type="date" value={dateRange.start} onChange={e => setDateRange({...dateRange, start: e.target.value})} style={{ border: '1px solid #e8e6dc', padding: '4px 8px', borderRadius: 4, fontSize: 12 }} />
+            <span style={{ fontSize: 12, fontWeight: 600, color: '#72706b' }}>Hasta:</span>
+            <input type="date" value={dateRange.end} onChange={e => setDateRange({...dateRange, end: e.target.value})} style={{ border: '1px solid #e8e6dc', padding: '4px 8px', borderRadius: 4, fontSize: 12 }} />
             {(dateRange.start || dateRange.end) && (
-              <button onClick={() => setDateRange({start: '', end: ''})} style={{ background: 'none', border: '1px solid #ccc', padding: '4px 8px', borderRadius: 4, cursor: 'pointer', fontSize: 11 }}>× Reset</button>
+              <button onClick={() => setDateRange({start: '', end: ''})} style={{ background: 'none', border: '1px solid #cccac0', padding: '4px 8px', borderRadius: 4, cursor: 'pointer', fontSize: 11 }}>× Reset</button>
             )}
           </div>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <span style={{ fontSize: 13, color: '#666' }}>{filteredPhotos.length} ítems</span>
+          <span style={{ fontSize: 13, color: '#72706b' }}>{filteredPhotos.length} ítems</span>
           <button
             onClick={() => fileInputRef.current?.click()}
             style={{ background: 'var(--accent)', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: 4, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}
@@ -574,16 +574,16 @@ export default function MultimediaModule({ project, user }) {
       <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
         <div ref={scrollRef} onScroll={onGalleryScroll} style={{ position: 'absolute', inset: 0, padding: '8px 40px 24px 24px', overflowY: 'auto' }}>
           {loading ? (
-            <div style={{ textAlign: 'center', padding: 40, color: '#999' }}>Cargando multimedia...</div>
+            <div style={{ textAlign: 'center', padding: 40, color: '#72706b' }}>Cargando multimedia...</div>
           ) : filteredPhotos.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: 40, color: '#999' }}>No se encontraron archivos multimedia. Sube fotos usando el botón superior.</div>
+            <div style={{ textAlign: 'center', padding: 40, color: '#72706b' }}>No se encontraron archivos multimedia. Sube fotos usando el botón superior.</div>
           ) : (
             /* ── Línea de tiempo estilo Google Fotos: agrupado por día ── */
             groupedPhotos.map(([dayKey, dayPhotos]) => (
               <section key={dayKey} data-day={dayKey} style={{ marginBottom: 26 }}>
-                <div style={{ position: 'sticky', top: 0, zIndex: 2, background: '#f5f7f9', padding: '8px 2px 10px', display: 'flex', alignItems: 'baseline', gap: 10 }}>
-                  <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#2b3440', textTransform: 'capitalize' }}>{formatDayHeader(dayKey)}</h3>
-                  <span style={{ fontSize: 12, color: '#8a94a3' }}>{dayPhotos.length} {dayPhotos.length === 1 ? 'elemento' : 'elementos'}</span>
+                <div style={{ position: 'sticky', top: 0, zIndex: 2, background: '#f1f0e8', padding: '8px 2px 10px', display: 'flex', alignItems: 'baseline', gap: 10 }}>
+                  <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#333330', textTransform: 'capitalize' }}>{formatDayHeader(dayKey)}</h3>
+                  <span style={{ fontSize: 12, color: '#72706b' }}>{dayPhotos.length} {dayPhotos.length === 1 ? 'elemento' : 'elementos'}</span>
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 5 }}>
                   {dayPhotos.map((p) => (
@@ -591,7 +591,7 @@ export default function MultimediaModule({ project, user }) {
                       key={p.id}
                       onClick={() => setSelectedPhoto(p)}
                       className="mm-tile"
-                      style={{ position: 'relative', aspectRatio: '1 / 1', borderRadius: 6, overflow: 'hidden', cursor: 'pointer', background: '#e9edf2', contentVisibility: 'auto', containIntrinsicSize: '180px' }}
+                      style={{ position: 'relative', aspectRatio: '1 / 1', borderRadius: 6, overflow: 'hidden', cursor: 'pointer', background: '#f1f0e8', contentVisibility: 'auto', containIntrinsicSize: '180px' }}
                     >
                       {p.mediaType === 'video' || String(p.mimeType || '').startsWith('video/') || isVideoFile(p.filename || p.desc) ? (
                         <video src={p.src} style={{ width: '100%', height: '100%', objectFit: 'cover' }} preload="metadata" />
@@ -630,10 +630,10 @@ export default function MultimediaModule({ project, user }) {
             style={{ position: 'absolute', top: 8, right: 4, bottom: 24, width: 34, cursor: 'ns-resize', zIndex: 5 }}
           >
             {yearMarkers.map(m => (
-              <span key={m.year} style={{ position: 'absolute', right: 4, top: `${m.frac * 100}%`, transform: 'translateY(-50%)', fontSize: 11, color: '#8a94a3', background: '#f5f7f9', padding: '1px 4px', borderRadius: 4, pointerEvents: 'none', userSelect: 'none' }}>{m.year}</span>
+              <span key={m.year} style={{ position: 'absolute', right: 4, top: `${m.frac * 100}%`, transform: 'translateY(-50%)', fontSize: 11, color: '#72706b', background: '#f1f0e8', padding: '1px 4px', borderRadius: 4, pointerEvents: 'none', userSelect: 'none' }}>{m.year}</span>
             ))}
             {scrubLabel && (
-              <span style={{ position: 'absolute', right: 40, top: `${scrubY * 100}%`, transform: 'translateY(-50%)', background: '#2b3440', color: '#fff', fontSize: 12, fontWeight: 600, padding: '4px 10px', borderRadius: 6, whiteSpace: 'nowrap', boxShadow: '0 4px 12px rgba(0,0,0,0.25)', pointerEvents: 'none' }}>{scrubLabel}</span>
+              <span style={{ position: 'absolute', right: 40, top: `${scrubY * 100}%`, transform: 'translateY(-50%)', background: '#333330', color: '#fff', fontSize: 12, fontWeight: 600, padding: '4px 10px', borderRadius: 6, whiteSpace: 'nowrap', boxShadow: '0 4px 12px rgba(0,0,0,0.25)', pointerEvents: 'none' }}>{scrubLabel}</span>
             )}
           </div>
         )}
@@ -641,7 +641,7 @@ export default function MultimediaModule({ project, user }) {
 
       {/* ── Lightbox Modal ── */}
       {selectedPhoto && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,36,0.95)', zIndex: 100000, display: 'flex', flexDirection: 'column' }}>
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(20,20,19,0.95)', zIndex: 100000, display: 'flex', flexDirection: 'column' }}>
           
           {/* Barra superior mínima: fecha + zoom + cerrar (paleta de la interfaz) */}
           <div style={{ padding: '14px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'linear-gradient(to bottom, rgba(0,0,0,0.6), transparent)', zIndex: 4 }}>

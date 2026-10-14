@@ -33,6 +33,33 @@ export default function ContextMenu({
   onNuevaVersion,
   onCopiarEnlace,
 }) {
+  // CERRAR COMO SE ESPERA (UI polish F1). Hasta ahora el menú solo se cerraba
+  // con un clic fuera: Escape no hacía nada, y al desplazar la lista o cambiar
+  // el tamaño de la ventana se quedaba flotando, ya sin la fila a la que
+  // apuntaba. Escape se marca como atendido (`preventDefault`) para que
+  // FilesPage no limpie además la selección con la misma tecla.
+  const abierto = !!activeRowMenu;
+  React.useEffect(() => {
+    if (!abierto) return undefined;
+    const alPulsar = (e) => {
+      if (e.key !== 'Escape') return;
+      e.preventDefault();
+      onClose();
+    };
+    const alDesplazar = (e) => {
+      if (menuRef?.current && e.target instanceof Node && menuRef.current.contains(e.target)) return;
+      onClose();
+    };
+    document.addEventListener('keydown', alPulsar, true);
+    window.addEventListener('scroll', alDesplazar, true);
+    window.addEventListener('resize', onClose);
+    return () => {
+      document.removeEventListener('keydown', alPulsar, true);
+      window.removeEventListener('scroll', alDesplazar, true);
+      window.removeEventListener('resize', onClose);
+    };
+  }, [abierto, onClose, menuRef]);
+
   if (!activeRowMenu) return null;
 
   const item = activeRowMenu.item;
@@ -66,7 +93,9 @@ export default function ContextMenu({
     (onCopiarEnlace && !varios ? 1 : 0) +
     1 +
     (isAdmin ? 2 : 0);
-  const estHeight = 16 + acciones * 40;
+  // Opciones de 36 px, 4 px de margen arriba y abajo y el separador de
+  // «Suprimir» (UI polish F1).
+  const estHeight = 8 + acciones * 36 + 9;
 
   return (
     <div className="row-context-menu"

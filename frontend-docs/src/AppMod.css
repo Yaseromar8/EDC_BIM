@@ -24,7 +24,7 @@
   border-right: 1px solid var(--adsk-border);
   display: flex;
   flex-direction: column;
-  background: #fcfcfc;
+  background: #faf9f5;
 }
 
 .sidebar-header {
@@ -64,8 +64,8 @@
   border-left: 3px solid transparent;
 }
 
-.folder-row:hover { background: #eee; }
-.folder-row.active { background: #eef2f7; border-left-color: var(--adsk-blue); color: var(--adsk-blue); font-weight: 500; }
+.folder-row:hover { background: #f1f0e8; }
+.folder-row.active { background: #f1f0e8; border-left-color: var(--adsk-blue); color: var(--adsk-blue); font-weight: 500; }
 
 .folder-row .expander { width: 20px; display: flex; align-items: center; }
 .folder-row .icon { margin-right: 8px; font-size: 16px; }
@@ -117,8 +117,8 @@
 .search-box-pro {
   display: flex;
   align-items: center;
-  background: #f0f0f0;
-  border-radius: 20px;
+  background: #f1f0e8;
+  border-radius: 8px;
   padding: 4px 16px;
   width: 300px;
 }
@@ -147,11 +147,11 @@
 }
 
 .matrix-table th {
-  background: var(--neutral-50, #f8f9fa);
+  background: var(--neutral-50, #faf9f5);
   padding: 10px 16px;
   text-align: left;
-  border-bottom: 1px solid var(--neutral-300, #cbd2d9);
-  color: var(--neutral-500, #667180);
+  border-bottom: 1px solid var(--neutral-300, #cccac0);
+  color: var(--neutral-500, #72706b);
   font-weight: 600;
   text-transform: uppercase;
   font-size: 11px;
@@ -161,7 +161,7 @@
 
 .matrix-table td {
   padding: 10px 16px;
-  border-bottom: 1px solid var(--neutral-200, #e3e6ea);
+  border-bottom: 1px solid var(--neutral-200, #e8e6dc);
   vertical-align: middle;
   line-height: 1.45;
 }
@@ -171,12 +171,12 @@
 .matrix-table td.size-col,
 .matrix-table td.date-col,
 .matrix-table td.user-col {
-  color: var(--text-secondary, #4a5561);
+  color: var(--text-secondary, #52524d);
   font-size: 12.5px;
 }
 .matrix-table td.version-col { font-weight: 600; }
 
-.matrix-table tr:hover { background: var(--bg-hover, #F3F6F8); }
+.matrix-table tr:hover { background: var(--bg-hover, #F1F0E8); }
 
 /* Sticky Columns */
 .sticky-col {
@@ -186,7 +186,7 @@
   z-index: 2;
 }
 
-.matrix-table tr:hover .sticky-col { background: var(--bg-hover, #F3F6F8); }
+.matrix-table tr:hover .sticky-col { background: var(--bg-hover, #F1F0E8); }
 
 .checkbox-col { width: 40px; }
 .name-col { min-width: 300px; border-right: 1px solid var(--adsk-border); }
@@ -244,16 +244,16 @@ tr:hover .pencil-btn { opacity: 1; }
   font-size: 13px;
 }
 
-.menu-item:hover { background: #f5f5f5; }
-.menu-item.danger { color: #d32f2f; }
+.menu-item:hover { background: #f1f0e8; }
+.menu-item.danger { color: #b93535; }
 
 .dots-btn {
   background: none;
   border: none;
   cursor: pointer;
-  color: #888;
+  color: #72706b;
   padding: 4px;
   border-radius: 50%;
 }
 
-.dots-btn:hover { background: #eee; }
+.dots-btn:hover { background: #f1f0e8; }

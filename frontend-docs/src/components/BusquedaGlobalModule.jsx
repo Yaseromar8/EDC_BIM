@@ -72,14 +72,14 @@ export default function BusquedaGlobalModule({ project }) {
 
   return (
     <div style={{ padding: 32, flex: 1, overflowY: 'auto' }}>
-      <div style={{ fontSize: 24, fontWeight: 300, marginBottom: 4 }}>Buscar documentos</div>
-      <div style={{ fontSize: 12.5, color: '#777', marginBottom: 20, maxWidth: 720 }}>
+      <div style={{ fontSize: 24, fontWeight: 400, marginBottom: 4 }}>Buscar documentos</div>
+      <div style={{ fontSize: 12.5, color: '#72706b', marginBottom: 20, maxWidth: 720 }}>
         Busca en <b>toda esta obra</b> por nombre, código, etiqueta o metadatos.
         Sólo aparece lo que puedes ver.
       </div>
 
       <div style={{ position: 'relative', maxWidth: 560, marginBottom: 22 }}>
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#999"
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#72706b"
              strokeWidth="2" strokeLinecap="round"
              style={{ position: 'absolute', left: 11, top: 11 }}>
           <circle cx="11" cy="11" r="7" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
@@ -91,25 +91,25 @@ export default function BusquedaGlobalModule({ project }) {
           onChange={e => setTexto(e.target.value)}
           placeholder="500125-PQ08-DRE-PL-0012, buzones, SANITARIA…"
           style={{ width: '100%', height: 38, paddingLeft: 34, paddingRight: 12,
-                   border: '1px solid #ddd', borderRadius: 6, fontSize: 14,
+                   border: '1px solid #e8e6dc', borderRadius: 6, fontSize: 14,
                    outline: 'none' }}
         />
       </div>
 
       {texto.trim().length === 1 && (
-        <div style={{ fontSize: 12.5, color: '#999' }}>
+        <div style={{ fontSize: 12.5, color: '#72706b' }}>
           Escribe al menos dos caracteres.
         </div>
       )}
 
       {buscando && (
-        <div style={{ fontSize: 13, color: '#888' }}>Buscando…</div>
+        <div style={{ fontSize: 13, color: '#72706b' }}>Buscando…</div>
       )}
 
       {!buscando && resultados !== null && resultados.length === 0 && (
-        <div style={{ padding: '16px 18px', background: '#fafbfc',
-                      border: '1px dashed #ddd', borderRadius: 8,
-                      fontSize: 13, color: '#777', maxWidth: 720 }}>
+        <div style={{ padding: '16px 18px', background: '#faf9f5',
+                      border: '1px dashed #e8e6dc', borderRadius: 8,
+                      fontSize: 13, color: '#72706b', maxWidth: 720 }}>
           Ningún documento de esta obra coincide con «{texto.trim()}»
           {/* Se dice también la otra posibilidad, sin revelar nada: que exista
               y no se pueda ver es indistinguible de que no exista, y así debe
@@ -123,12 +123,12 @@ export default function BusquedaGlobalModule({ project }) {
 
       {!buscando && resultados !== null && resultados.length > 0 && (
         <>
-          <div style={{ fontSize: 12, color: '#888', marginBottom: 8 }}>
+          <div style={{ fontSize: 12, color: '#72706b', marginBottom: 8 }}>
             {resultados.length} documento{resultados.length !== 1 ? 's' : ''}
             {truncado && ' (se muestran los más recientes)'}
           </div>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-            <thead><tr style={{ borderBottom: '2px solid #eee', color: '#888',
+            <thead><tr style={{ borderBottom: '2px solid #f1f0e8', color: '#72706b',
                                 fontWeight: 500 }}>
               <th style={{ padding: '9px 12px', textAlign: 'left' }}>Documento</th>
               <th style={{ padding: '9px 12px', textAlign: 'left' }}>Carpeta</th>
@@ -140,23 +140,23 @@ export default function BusquedaGlobalModule({ project }) {
               {resultados.map(it => (
                 <tr key={it.node_id}
                     onClick={() => abrir(it)}
-                    style={{ borderBottom: '1px solid #f0f0f0', cursor: 'pointer' }}
-                    onMouseOver={e => (e.currentTarget.style.background = '#fafbfc')}
+                    style={{ borderBottom: '1px solid #f1f0e8', cursor: 'pointer' }}
+                    onMouseOver={e => (e.currentTarget.style.background = '#faf9f5')}
                     onMouseOut={e => (e.currentTarget.style.background = 'none')}>
                   <td style={{ padding: '11px 12px', fontWeight: 500 }}>{it.name}</td>
-                  <td style={{ padding: '11px 12px', color: '#666', fontSize: 12 }}>
-                    {it.ruta || <span style={{ color: '#ccc' }}>raíz</span>}
+                  <td style={{ padding: '11px 12px', color: '#72706b', fontSize: 12 }}>
+                    {it.ruta || <span style={{ color: '#cccac0' }}>raíz</span>}
                   </td>
                   <td style={{ padding: '11px 12px' }}>
                     {it.status ? <Ficha estado={it.status} tamano="pequena" />
-                               : <span style={{ color: '#ccc' }}>—</span>}
+                               : <span style={{ color: '#cccac0' }}>—</span>}
                   </td>
-                  <td style={{ padding: '11px 12px', color: '#666', fontSize: 12 }}>
+                  <td style={{ padding: '11px 12px', color: '#72706b', fontSize: 12 }}>
                     {/* La VIGENTE. Un documento heredado no tiene versión propia:
                         lo vigente es el nodo, y se dice así en vez de fingir. */}
                     {it.version_id ? `v${it.version_number}` : 'versión actual'}
                   </td>
-                  <td style={{ padding: '11px 12px', color: '#999', fontSize: 12 }}>
+                  <td style={{ padding: '11px 12px', color: '#72706b', fontSize: 12 }}>
                     {it.updated_at ? new Date(it.updated_at).toLocaleDateString() : '—'}
                   </td>
                 </tr>
@@ -178,11 +178,11 @@ export default function BusquedaGlobalModule({ project }) {
                         boxShadow: '0 20px 60px rgba(0,0,0,.3)' }}>
             <div style={{ display: 'flex', alignItems: 'center',
                           justifyContent: 'space-between', padding: '12px 16px',
-                          borderBottom: '1px solid #eee' }}>
+                          borderBottom: '1px solid #f1f0e8' }}>
               <div style={{ fontWeight: 600, fontSize: 14 }}>
                 {preview.name}
                 {preview.versionLabel && (
-                  <span style={{ color: '#9aa0a6', fontWeight: 400 }}> · {preview.versionLabel}</span>
+                  <span style={{ color: '#72706b', fontWeight: 400 }}> · {preview.versionLabel}</span>
                 )}
               </div>
               <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
@@ -190,7 +190,7 @@ export default function BusquedaGlobalModule({ project }) {
                    style={{ fontSize: 12, color: 'var(--accent)' }}>Abrir aparte</a>
                 <button onClick={cerrar}
                         style={{ border: 'none', background: 'none', fontSize: 20,
-                                 cursor: 'pointer', color: '#666' }}>×</button>
+                                 cursor: 'pointer', color: '#72706b' }}>×</button>
               </div>
             </div>
             <iframe title={preview.name} src={preview.url}

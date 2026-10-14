@@ -8,6 +8,8 @@ import { PASO_TECLADO, PASO_TECLADO_GRANDE } from './hooks/useColumnResize';
 import { NIVELES } from './utils/capacidadesDeSeleccion';
 import { API } from './utils/helpers';
 import { apiFetch } from './utils/apiFetch';
+import IconoModulo from './components/IconoModulo';
+import { piezasDelCodigo } from './utils/codigoDelNombre';
 
 // ── ISO 19650 Document Lifecycle ──────────────────────────────────────────
 //
@@ -33,20 +35,25 @@ const STATUS_CONFIG = Object.fromEntries(
 // al subir, solo al abrir». El log del 15/16-sep-2026 demostro que SI se
 // traducia al subir: lo que faltaba era contarlo. Y cuando la traduccion
 // fallaba, el fallo solo aparecia al abrir el documento, dias despues.
+// La fecha de la lista SIN segundos: «04 set. 2026, 05:00». Con segundos no cabía
+// en la columna y se cortaba. El valor exacto sigue en el título (al pasar el ratón).
+const FECHA_DE_LISTA = new Intl.DateTimeFormat('es-PE', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+const fechaDeLista = (iso) => { if (!iso) return '—'; const d = new Date(iso); return isNaN(d) ? '—' : FECHA_DE_LISTA.format(d); };
+
 const ES_CAD = /\.(dwg|dxf|dwf|dwfx|rvt|rfa|ifc|nwd|nwc|dgn|3dm|sat|ste?p|ig[es]s?|obj|fbx|stl)$/i;
 const PREPARANDO = new Set(['subiendo', 'inprogress', 'procesando']);
 const AVISO_CAD = {
-  procesando: { texto: 'Procesando', color: '#456f8d',
+  procesando: { texto: 'Procesando', color: '#507294',
                 titulo: 'El archivo ya está en ALEPHIA. La vista estará disponible cuando termine su preparación.' },
-  pausado:   { texto: 'En pausa', color: '#b26a00',
+  pausado:   { texto: 'En pausa', color: '#734500',
                 titulo: 'La preparación temporal está pausada. El original sigue disponible.' },
-  subiendo:   { texto: 'Preparando…', color: '#6b7480',
+  subiendo:   { texto: 'Preparando…', color: '#72706b',
                 titulo: 'Se está enviando a Autodesk para poder verlo en el navegador.' },
-  inprogress: { texto: 'Preparando…', color: '#6b7480',
+  inprogress: { texto: 'Preparando…', color: '#72706b',
                 titulo: 'Autodesk lo está traduciendo. Cuando termine, se abrirá al instante.' },
-  failed:     { texto: 'No se pudo preparar', color: '#c0392b',
+  failed:     { texto: 'No se pudo preparar', color: '#b93535',
                 titulo: 'Autodesk no pudo traducirlo. Ábrelo para volver a intentarlo.' },
-  atascado:   { texto: 'Se quedó a medias', color: '#b26a00',
+  atascado:   { texto: 'Se quedó a medias', color: '#734500',
                 titulo: 'Empezó a prepararse y lleva más de una hora sin terminar. Ábrelo para volver a intentarlo.' },
 };
 
@@ -125,7 +132,7 @@ const ReviewStatusControl = ({ item, isAdmin, onStatusChange }) => {
           background: cfg.bg,
           color: cfg.color,
           border: 'none',
-          borderRadius: 12,
+          borderRadius: 6,   // sin píldora (D-24)
           padding: '2px 10px',
           fontSize: 11,
           fontWeight: 600,
@@ -160,7 +167,7 @@ const ReviewStatusControl = ({ item, isAdmin, onStatusChange }) => {
             left: pos.left,
             zIndex: 10000,
             background: '#fff',
-            border: '1px solid #e5e7eb',
+            border: '1px solid #e8e6dc',
             borderRadius: 6,
             boxShadow: '0 4px 12px rgba(0,0,0,0.12)',
             minWidth: 130,
@@ -187,10 +194,10 @@ const ReviewStatusControl = ({ item, isAdmin, onStatusChange }) => {
                   background: 'none',
                   cursor: 'pointer',
                   fontSize: 12,
-                  color: '#333',
+                  color: '#333330',
                   textAlign: 'left',
                 }}
-                onMouseEnter={(e) => e.target.style.background = '#f3f4f6'}
+                onMouseEnter={(e) => e.target.style.background = '#f1f0e8'}
                 onMouseLeave={(e) => e.target.style.background = 'none'}
               >
                 <span
@@ -248,7 +255,7 @@ const TiradorColumna = ({ columna, etiqueta, ancho, iniciar, ajustar }) => (
  * TableRow Component - Renders an individual row in the virtualized list.
  */
 const TableRow = ({ index, style, data }) => {
-  const { items, selected, toggle, navigate, setActiveFile, onUpdateDescription, onRename, formatSize, formatDate, getInitials, isAdmin, onRowMenu, isTrashMode, onShowVersions, columnWidths, renderFileIconSop, editingNodeId, setEditingNodeId, rightClickedId, processingIds, onStatusChange, estadosCad = {} } = data;
+  const { items, selected, toggle, navigate, setActiveFile, onUpdateDescription, onRename, formatSize, formatDate, getInitials, isAdmin, onRowMenu, isTrashMode, onShowVersions, columnWidths, renderFileIconSop, editingNodeId, setEditingNodeId, rightClickedId, processingIds, onStatusChange, estadosCad = {}, onConsultar, consultadoId, soloLectura = false } = data;
   
   const item = items && items[index] ? items[index] : {};
 
@@ -289,6 +296,7 @@ const TableRow = ({ index, style, data }) => {
   // seleccionado, y «Suprimir» no hacía nada.
   const isSelected = selected.has(item.id);
   const isGrey = item.has_access === false;
+  const codigo = isFolder ? null : piezasDelCodigo(item.name);
   // Renombrar y describir exigen «Editar» en el servidor, no administrar la obra.
   const puedeEditarFila = isAdmin || (NIVELES[item.permission_level] ?? NIVELES.none) >= NIVELES.edit;
 
@@ -339,14 +347,14 @@ const TableRow = ({ index, style, data }) => {
 
   return (
     <div 
-      className={`data-row ${isSelected && !isGrey ? 'selected' : ''} ${item.id === rightClickedId && !isGrey ? 'context-active' : ''}`} 
+      className={`data-row ${isSelected && !isGrey ? 'selected' : ''} ${item.id === rightClickedId && !isGrey ? 'context-active' : ''} ${item.id === consultadoId ? 'consultada' : ''}`} 
       style={{ 
         ...style, 
         width: '100%',
         opacity: processingIds[item.id] ? 0.5 : (isGrey ? 0.6 : 1),
         filter: processingIds[item.id] ? 'grayscale(1)' : 'none',
         pointerEvents: processingIds[item.id] ? 'none' : 'auto',
-        color: isGrey ? '#999' : 'inherit',
+        color: isGrey ? '#72706b' : 'inherit',
         // SIN TRANSICIÓN (UI polish F0, 16-sep-2026). Antes era `all 0.4s ease`:
         // el hover tardaba 400 ms en llegar (medido: seguía en blanco a los 0 ms y
         // solo tenía su color final a los 500) y, al reordenar o insertar, el fondo de selección, la opacidad
@@ -364,7 +372,18 @@ const TableRow = ({ index, style, data }) => {
         if (isEditingName || isEditing) return;
         openItem();
       }}
+      // CONSULTAR (14-oct-2026, maqueta v8): el clic en la fila de un DOCUMENTO,
+      // fuera del nombre y de la casilla, abre el panel de consulta, que es
+      // solo lectura. No selecciona nada: el motivo de dejar la fila inerte era
+      // no marcar sin querer, y eso se respeta. El nombre sigue abriendo, la
+      // casilla sigue seleccionando y las carpetas no cambian.
+      onClick={(e) => {
+        if (!onConsultar || isFolder || isGrey || isTrashMode || isEditingName || isEditing) return;
+        if (e.target.closest('.name-cell, .checkbox-cell, button, input, textarea, a, select, .inline-edit-box')) return;
+        onConsultar(item);
+      }}
       onContextMenu={(e) => {
+        if (soloLectura) return;   // sin menú propio en una vista: el del navegador
         if (isGrey) {
           e.preventDefault();
           return;
@@ -374,7 +393,7 @@ const TableRow = ({ index, style, data }) => {
       }}
     >
       <div className="td-cell checkbox-cell td-frozen-left" style={{ width: columnWidths.checkbox, left: 0 }}>
-        <input
+        {!soloLectura && <input
           type="checkbox"
           checked={isSelected}
           onChange={(e) => {
@@ -382,7 +401,7 @@ const TableRow = ({ index, style, data }) => {
             toggle(item.id);
           }}
           onClick={(e) => e.stopPropagation()}
-        />
+        />}
       </div>
       {/* TODA la columna Nombre abre, no solo el texto: el icono y el hueco a la
           derecha del nombre también. Es lo que hace ACC, y evita el clic que no
@@ -404,12 +423,12 @@ const TableRow = ({ index, style, data }) => {
           <div className="adsk-spinner" style={{ width: 14, height: 14, borderWidth: 2, marginRight: 8 }} />
         ) : (
           isFolder ? (
-            <svg className="adsk-icon" width="20" height="20" viewBox="0 0 24 24" fill="#666" style={{ marginRight: 8 }}>
-              <path d="M18,20.45H6a3.6,3.6,0,0,1-3.6-3.6V7.15A3.6,3.6,0,0,1,6,3.55h4.84a.71.71,0,0,1,.53.22l2.12,2.1H18a3.61,3.61,0,0,1,3.6,3.61v7.37A3.6,3.6,0,0,1,18,20.45ZM3.89,9.48v7.37A2.1,2.1,0,0,0,6,19H18a2.1,2.1,0,0,0,2.1-2.1V9.48A2.1,2.1,0,0,0,18,7.37H13.17a.75.75,0,0,1-.53-.22l-2.12-2.1H6a2.1,2.1,0,0,0-2.1,2.1Z"/>
-            </svg>
+            // Carpeta sólida de ALEPHIA (estilo B, 13-oct-2026): la misma de la barra.
+            <IconoModulo nombre="archivos" tamano={20} className="adsk-icon"
+              style={{ marginRight: 8, color: 'var(--archivo-carpeta)' }} />
           ) : (
             renderFileIconSop ? renderFileIconSop(item.name, 22) : (
-              <svg className="adsk-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ marginRight: 8, color: '#999' }}>
+              <svg className="adsk-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ marginRight: 8, color: '#72706b' }}>
                 <path d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
               </svg>
             )
@@ -462,6 +481,16 @@ const TableRow = ({ index, style, data }) => {
           </div>
         ) : (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, overflow: 'hidden' }}>
+            {/* En una vista (A2-2) cada documento viene de una carpeta distinta: se
+                dice cuál, bajo el nombre, sin columna nueva. */}
+            {item.ubicacion !== undefined ? (
+              <span className="nombre-con-ubicacion" style={{ marginLeft: 8 }}>
+                <span className="file-name-text" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {item.name || 'Sin nombre'}
+                </span>
+                <small title={item.ubicacion || 'Archivos de proyecto'}>{item.ubicacion || 'Archivos de proyecto'}</small>
+              </span>
+            ) : (
             <span 
               className="file-name-text" 
               style={{ 
@@ -474,6 +503,7 @@ const TableRow = ({ index, style, data }) => {
             >
               {item.name || 'Sin nombre'}
             </span>
+            )}
             {/* Como va la preparacion del plano (ver ES_CAD arriba). Lo listo y
                 lo que nadie ha preparado no dicen nada: solo se habla cuando hay
                 algo que esperar o algo que arreglar. */}
@@ -491,7 +521,7 @@ const TableRow = ({ index, style, data }) => {
             {item.bloqueado_por && (
               <span
                 title={`Reservado por ${item.bloqueado_por}` + (item.bloqueado_en ? ` desde el ${new Date(item.bloqueado_en).toLocaleDateString()}` : '')}
-                style={{ display: 'inline-flex', alignItems: 'center', gap: 4, flexShrink: 0, color: '#b26a00', fontSize: 11 }}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 4, flexShrink: 0, color: '#734500', fontSize: 11 }}
               >
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
                   <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
@@ -577,6 +607,18 @@ const TableRow = ({ index, style, data }) => {
 
       {!isTrashMode && (
         <>
+          {/* TIPO y DISCIPLINA, tal cual vienen en el código del nombre (A1,
+              docs/ux/PROCORE_VS_ALEPHIA_NUCLEO_DOCUMENTAL.md). Procore los pide
+              como campos aparte al cargar; aquí ya están en el nombre ISO 19650.
+              Se enseña el CÓDIGO, no un significado: ese lo fija cada obra. */}
+          <div className="td-cell codigo-leido-celda" style={{ width: columnWidths.tipo }}
+            title={codigo ? `Tipo de documento «${codigo.tipo}», leído del nombre` : undefined}>
+            {codigo ? codigo.tipo : ''}
+          </div>
+          <div className="td-cell codigo-leido-celda" style={{ width: columnWidths.disciplina }}
+            title={codigo ? `Disciplina «${codigo.disciplina}», leída del nombre` : undefined}>
+            {codigo ? codigo.disciplina : ''}
+          </div>
           <div className="td-cell" style={{ width: columnWidths.version }}>
             {!isFolder && (
               <button
@@ -593,11 +635,37 @@ const TableRow = ({ index, style, data }) => {
               </button>
             )}
           </div>
-          <div className="td-cell" style={{ width: columnWidths.indicators }}>--</div>
-          <div className="td-cell" style={{ width: columnWidths.markup }}>--</div>
-          <div className="td-cell" style={{ width: columnWidths.issues }}>--</div>
-          <div className="td-cell" style={{ width: columnWidths.size }}>{isFolder ? '--' : formatSize(item.size)}</div>
-          <div className="td-cell" style={{ width: columnWidths.updated }}>{formatDate(item.updated)}</div>
+          <div className="td-cell" style={{ width: columnWidths.status }}>
+            {!isFolder && (
+              <ReviewStatusControl
+                item={item}
+                isAdmin={isAdmin}
+                onStatusChange={onStatusChange}
+              />
+            )}
+          </div>
+          {/* ENTREGA (B1, 14-oct-2026): el compromiso del plan de entregas
+              (MIDP/TIDP) al que está vinculado este documento, con el mismo
+              estado que calcula la pantalla del plan. «—» si no está en el plan. */}
+          <div className="td-cell" style={{ width: columnWidths.entrega }}>
+            {!isFolder && item.entrega ? (
+              // TARDE EN ROJO (como Procore marca lo vencido): vinculado al plan, sin
+              // publicar y con la fecha comprometida ya pasada. El estado sigue siendo
+              // «Vinculado», el del plan; lo rojo solo dice que va tarde.
+              (() => {
+                const hoy = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Lima' });
+                const tarde = item.entrega.estado === 'vinculado' && item.entrega.fecha && item.entrega.fecha < hoy;
+                return (
+                  <span className={`entrega-chip entrega-chip--${item.entrega.estado}${tarde ? ' entrega-chip--tarde' : ''}`}
+                    title={[item.entrega.plan, item.entrega.hito, item.entrega.fecha ? `comprometido para ${item.entrega.fecha}` : null,
+                            tarde ? 'plazo vencido y sin publicar' : null].filter(Boolean).join(' · ')}>
+                    {item.entrega.etiqueta}
+                  </span>
+                );
+              })()
+            ) : (!isFolder ? <span className="entrega-chip entrega-chip--fuera">—</span> : null)}
+          </div>
+          <div className="td-cell" style={{ width: columnWidths.updated }} title={formatDate(item.updated)}>{fechaDeLista(item.updated)}</div>
           <div className="td-cell" style={{ width: columnWidths.user }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                <div className="user-avatar-acc" style={{ width: 24, height: 24, fontSize: 10, flexShrink: 0 }}>
@@ -614,22 +682,21 @@ const TableRow = ({ index, style, data }) => {
                </div>
             </div>
           </div>
-          <div className="td-cell" style={{ width: columnWidths.status }}>
-            {!isFolder && (
-              <ReviewStatusControl
-                item={item}
-                isAdmin={isAdmin}
-                onStatusChange={onStatusChange}
-              />
-            )}
-          </div>
+          <div className="td-cell" style={{ width: columnWidths.size }}>{isFolder ? '--' : formatSize(item.size)}</div>
         </>
       )}
 
       {!isTrashMode && (
-        <div className="td-cell" style={{ width: columnWidths.action, textAlign: 'center', justifyContent: 'center' }}>
-          {!isGrey && (
-            <button className="row-menu-btn" onClick={(e) => { e.stopPropagation(); onRowMenu(item, e); }}>
+        <div className="td-cell td-frozen-right" style={{ width: columnWidths.action, textAlign: 'center', justifyContent: 'center' }}>
+          {!isGrey && !soloLectura && (
+            <button type="button" className="row-menu-btn" aria-label={`Acciones de ${item.name}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                // El menú sale PEGADO AL ⋮, alineado a su borde derecho, como en
+                // ACC; no donde cayó el puntero (UI polish, 13-oct-2026).
+                const r = e.currentTarget.getBoundingClientRect();
+                onRowMenu(item, { clientX: r.right - 220, clientY: r.bottom + 4 });
+              }}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z" />
               </svg>
@@ -645,7 +712,45 @@ const TableRow = ({ index, style, data }) => {
  * MatrixTable Component - A virtualized, high-performance table with synchronized 
  * headers and sticky identity columns, matching the ACC interface.
  */
-const MatrixTable = ({ 
+// Qué valor ordena cada columna. Fuera del componente: no cambia nunca.
+const CLAVES_DE_ORDEN = {
+  name: (i) => i.name || '',
+  version: (i) => Number(i.version) || 0,
+  size: (i) => Number(i.size) || 0,
+  updated: (i) => new Date(i.updated || 0).getTime() || 0,
+  user: (i) => i.updated_by?.name || '',
+  status: (i) => i.status || '',
+  // Tipo y disciplina, leídos del código del nombre (Guía Nacional BIM). Los que
+  // no siguen la convención van al final.
+  tipo: (i) => piezasDelCodigo(i.name)?.tipo || '￿',
+  disciplina: (i) => piezasDelCodigo(i.name)?.disciplina || '￿',
+  entrega: (i) => (i.entrega ? ORDEN_ENTREGA[i.entrega.estado] ?? 9 : 99),
+};
+
+// El plan de entregas en la fila: vencido primero, luego pendiente, vinculado y entregado.
+const ORDEN_ENTREGA = { vencido: 0, comprometido: 1, vinculado: 2, entregado: 3 };
+
+// Rótulo de cabecera que ordena. Es un botón (se alcanza con el teclado) y la
+// celda declara `aria-sort` para que un lector de pantalla diga el orden.
+function CabeceraOrdenable({ col, etiqueta, orden, onOrdenar }) {
+  const activa = orden.col === col;
+  return (
+    <button type="button" className={`col-orden${activa ? ' col-orden--activa' : ''}`}
+      onClick={() => onOrdenar(col)}
+      title={activa ? 'Invertir el orden' : `Ordenar por ${etiqueta.toLowerCase()}`}>
+      {etiqueta}
+      <svg className="col-orden__flecha" width="12" height="12" viewBox="0 0 24 24" fill="none"
+        stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"
+        style={{ rotate: activa && orden.dir < 0 ? '180deg' : '0deg' }}>
+        <line x1="12" y1="19" x2="12" y2="5" /><polyline points="5 12 12 5 19 12" />
+      </svg>
+    </button>
+  );
+}
+
+const ariaSort = (orden, col) => (orden.col === col ? (orden.dir > 0 ? 'ascending' : 'descending') : undefined);
+
+const MatrixTable = ({
   folders, 
   files, 
   selected, 
@@ -672,9 +777,41 @@ const MatrixTable = ({
   setEditingNodeId,
   rightClickedId,
   processingIds,
-  onStatusChange
+  onStatusChange,
+  onConsultar,
+  consultadoId,
+  // SOLO LECTURA (vistas de Archivos, A2-2): sin casillas ni ⋮. Las acciones de la
+  // casilla y del menú se deciden por carpeta, y una vista mezcla carpetas.
+  soloLectura = false,
+  // ORDEN DESDE FUERA (opcional): las vistas propias guardan el orden de la tabla. Sin
+  // estas dos props, la tabla ordena por su cuenta como siempre.
+  orden: ordenControlado = null,
+  onOrdenar = null
 }) => {
-  const allItems = [...folders, ...files];
+  // ORDENAR POR COLUMNA, como ACC (UI polish, 13-oct-2026): pulsar una
+  // cabecera ordena por ella y pulsarla otra vez invierte el sentido. Las
+  // carpetas van siempre antes que los documentos, como en ACC. Por omisión,
+  // nombre ascendente con números naturales (lo que ya hacía el explorador).
+  const [ordenPropio, setOrdenPropio] = useState({ col: 'name', dir: 1 });
+  const orden = ordenControlado || ordenPropio;
+  const ordenarPor = (col) => {
+    const nuevo = orden.col === col ? { col, dir: -orden.dir } : { col, dir: 1 };
+    if (onOrdenar) onOrdenar(nuevo); else setOrdenPropio(nuevo);
+  };
+  const ordenar = (lista) => {
+    const clave = CLAVES_DE_ORDEN[orden.col] || CLAVES_DE_ORDEN.name;
+    return [...lista].sort((a, b) => {
+      const x = clave(a); const y = clave(b);
+      const r = typeof x === 'string'
+        ? x.localeCompare(y, undefined, { numeric: true, sensitivity: 'base' })
+        : x - y;
+      return r * orden.dir;
+    });
+  };
+  const allItems = [...ordenar(folders), ...ordenar(files)];
+  const cabecera = (col, etiqueta) => (
+    <CabeceraOrdenable col={col} etiqueta={etiqueta} orden={orden} onOrdenar={ordenarPor} />
+  );
 
   // Una pregunta por carpeta, y solo se insiste mientras haya algo preparandose
   // (ver AVISO_CAD arriba). Se contesta con lo guardado en la version: la lista
@@ -736,14 +873,44 @@ const MatrixTable = ({
   // el estado por su cuenta (regla `set-state-in-effect`).
   const avisosDeCad = claveCad ? estadosCad : {};
 
+  // COLUMNAS FIJAS EN EL CUERPO (UI polish F1, 13-oct-2026). La cabecera fija
+  // casilla y Nombre con `position: sticky`, pero en las filas no puede: viven
+  // dentro del desplazador de react-window, que no se mueve en horizontal, así
+  // que su `sticky` no tiene contra qué pegarse. Al desplazar la tabla, la
+  // cabecera «Nombre» se quedaba y los nombres se iban debajo de otra columna,
+  // y el ⋮ de cada fila quedaba fuera de la vista en cuanto la tabla era más
+  // ancha que el panel.
+  //
+  // Se publica el desplazamiento en dos variables CSS sobre `.table-wrap` y
+  // las celdas fijas de las filas se trasladan con ellas (index.css, «columnas
+  // fijas»). Sin estado de React: un desplazamiento no vuelve a dibujar la
+  // lista, solo recalcula el estilo de las ~20 filas visibles.
+  const tablaRef = useRef(null);
+  useEffect(() => {
+    const tabla = tablaRef.current;
+    if (!tabla) return undefined;
+    const publicar = () => {
+      tabla.style.setProperty('--tabla-x', `${tabla.scrollLeft}px`);
+      tabla.style.setProperty('--tabla-sobra', `${Math.max(0, tabla.scrollWidth - tabla.clientWidth)}px`);
+    };
+    publicar();
+    tabla.addEventListener('scroll', publicar, { passive: true });
+    const observador = typeof ResizeObserver === 'function' ? new ResizeObserver(publicar) : null;
+    observador?.observe(tabla);
+    return () => {
+      tabla.removeEventListener('scroll', publicar);
+      observador?.disconnect();
+    };
+  }, [totalTableWidth]);
+
   return (
-    <div className="table-wrap" style={{ display: 'flex', flexDirection: 'column', overflowX: 'auto', overflowY: 'hidden', height: '100%', background: '#fff' }}>
+    <div className="table-wrap" ref={tablaRef} style={{ display: 'flex', flexDirection: 'column', overflowX: 'auto', overflowY: 'hidden', height: '100%', background: '#fff' }}>
       <div style={{ width: totalTableWidth, flex: 1, display: 'flex', flexDirection: 'column' }}>
         
         {/* Cabecera Tipo Div (Sticky al tope) */}
         <div className="data-header" style={{ width: totalTableWidth, flexShrink: 0 }}>
           <div className="td-cell checkbox-cell td-frozen-left" style={{ width: columnWidths.checkbox, left: 0 }}>
-            <input
+            {!soloLectura && <input
               type="checkbox"
               checked={allItems.length > 0 && allItems.every(i => selected.has(i.id))}
               onChange={() => {
@@ -754,10 +921,11 @@ const MatrixTable = ({
                 // aunque haya 12 en pantalla.
                 else setSelected(new Set(allItems.map(i => i.id)));
               }}
-            />
+            />}
           </div>
-          <div className="td-cell name-cell td-frozen-left" style={{ width: columnWidths.name, left: columnWidths.checkbox }}>
-            Nombre
+          <div className="td-cell name-cell td-frozen-left" style={{ width: columnWidths.name, left: columnWidths.checkbox }}
+            role="columnheader" aria-sort={ariaSort(orden, 'name')}>
+            {cabecera('name', 'Nombre')}
             <TiradorColumna columna="name" etiqueta="Nombre" ancho={columnWidths.name} iniciar={startResizing} ajustar={ajustarAncho} />
           </div>
           {!isTrashMode && (
@@ -768,42 +936,48 @@ const MatrixTable = ({
           )}
           {!isTrashMode && (
             <>
-              <div className="td-cell" style={{ width: columnWidths.version }}>
-                Versión
-                <TiradorColumna columna="version" etiqueta="Versión" ancho={columnWidths.version} iniciar={startResizing} ajustar={ajustarAncho} />
+              {/* COLUMNAS PROPIAS (14-oct-2026): hasta hoy eran las de ACC, en su orden, y
+                  tres de ellas (Indicadores, Marcas de rev., Incidencias) estaban SIEMPRE
+                  vacías. Ahora: lo estándar del sector (nombre, descripción, revisión,
+                  estado, fecha y persona) con lo nuestro delante: el estado ISO 19650 al
+                  lado de la revisión. Mismas funciones: ordenar, ensanchar, abrir
+                  versiones y cambiar el estado. Ver docs/ux/PROCORE_PATRONES_ESTANDAR.md. */}
+              <div className="td-cell" style={{ width: columnWidths.tipo }} role="columnheader" aria-sort={ariaSort(orden, 'tipo')}>
+                {cabecera('tipo', 'Tipo')}
+                <TiradorColumna columna="tipo" etiqueta="Tipo" ancho={columnWidths.tipo} iniciar={startResizing} ajustar={ajustarAncho} />
               </div>
-              <div className="td-cell" style={{ width: columnWidths.indicators }}>
-                Indicadores
-                <TiradorColumna columna="indicators" etiqueta="Indicadores" ancho={columnWidths.indicators} iniciar={startResizing} ajustar={ajustarAncho} />
+              <div className="td-cell" style={{ width: columnWidths.disciplina }} role="columnheader" aria-sort={ariaSort(orden, 'disciplina')}>
+                {cabecera('disciplina', 'Disciplina')}
+                <TiradorColumna columna="disciplina" etiqueta="Disciplina" ancho={columnWidths.disciplina} iniciar={startResizing} ajustar={ajustarAncho} />
               </div>
-              <div className="td-cell" style={{ width: columnWidths.markup }}>
-                Marcas de rev.
-                <TiradorColumna columna="markup" etiqueta="Marcas de rev." ancho={columnWidths.markup} iniciar={startResizing} ajustar={ajustarAncho} />
+              <div className="td-cell" style={{ width: columnWidths.version }} role="columnheader" aria-sort={ariaSort(orden, 'version')}>
+                {cabecera('version', 'Revisión')}
+                <TiradorColumna columna="version" etiqueta="Revisión" ancho={columnWidths.version} iniciar={startResizing} ajustar={ajustarAncho} />
               </div>
-              <div className="td-cell" style={{ width: columnWidths.issues }}>
-                Incidencias
-                <TiradorColumna columna="issues" etiqueta="Incidencias" ancho={columnWidths.issues} iniciar={startResizing} ajustar={ajustarAncho} />
+              <div className="td-cell" style={{ width: columnWidths.status }} role="columnheader" aria-sort={ariaSort(orden, 'status')}>
+                {cabecera('status', 'Estado ISO 19650')}
+                <TiradorColumna columna="status" etiqueta="Estado ISO 19650" ancho={columnWidths.status} iniciar={startResizing} ajustar={ajustarAncho} />
               </div>
-              <div className="td-cell" style={{ width: columnWidths.size }}>
-                Tamaño
+              <div className="td-cell" style={{ width: columnWidths.entrega }} role="columnheader" aria-sort={ariaSort(orden, 'entrega')}>
+                {cabecera('entrega', 'Entrega')}
+                <TiradorColumna columna="entrega" etiqueta="Entrega" ancho={columnWidths.entrega} iniciar={startResizing} ajustar={ajustarAncho} />
+              </div>
+              <div className="td-cell" style={{ width: columnWidths.updated }} role="columnheader" aria-sort={ariaSort(orden, 'updated')}>
+                {cabecera('updated', 'Actualizado')}
+                <TiradorColumna columna="updated" etiqueta="Actualizado" ancho={columnWidths.updated} iniciar={startResizing} ajustar={ajustarAncho} />
+              </div>
+              <div className="td-cell" style={{ width: columnWidths.user }} role="columnheader" aria-sort={ariaSort(orden, 'user')}>
+                {cabecera('user', 'Por')}
+                <TiradorColumna columna="user" etiqueta="Por" ancho={columnWidths.user} iniciar={startResizing} ajustar={ajustarAncho} />
+              </div>
+              <div className="td-cell" style={{ width: columnWidths.size }} role="columnheader" aria-sort={ariaSort(orden, 'size')}>
+                {cabecera('size', 'Tamaño')}
                 <TiradorColumna columna="size" etiqueta="Tamaño" ancho={columnWidths.size} iniciar={startResizing} ajustar={ajustarAncho} />
-              </div>
-              <div className="td-cell" style={{ width: columnWidths.updated }}>
-                Últ. actualización
-                <TiradorColumna columna="updated" etiqueta="Últ. actualización" ancho={columnWidths.updated} iniciar={startResizing} ajustar={ajustarAncho} />
-              </div>
-              <div className="td-cell" style={{ width: columnWidths.user }}>
-                Actualizado por
-                <TiradorColumna columna="user" etiqueta="Actualizado por" ancho={columnWidths.user} iniciar={startResizing} ajustar={ajustarAncho} />
-              </div>
-              <div className="td-cell" style={{ width: columnWidths.status }}>
-                Estado de rev.
-                <TiradorColumna columna="status" etiqueta="Estado de rev." ancho={columnWidths.status} iniciar={startResizing} ajustar={ajustarAncho} />
               </div>
             </>
           )}
           {!isTrashMode && (
-            <div className="td-cell" style={{ width: columnWidths.action }} />
+            <div className="td-cell td-frozen-right" style={{ width: columnWidths.action }} />
           )}
         </div>
  
@@ -846,7 +1020,10 @@ const MatrixTable = ({
                   rightClickedId,
                   processingIds,
                   onStatusChange,
-                  estadosCad: avisosDeCad
+                  estadosCad: avisosDeCad,
+                  onConsultar,
+                  consultadoId,
+                  soloLectura
                 }}
               >
                 {TableRow}

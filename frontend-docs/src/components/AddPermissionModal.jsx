@@ -172,9 +172,9 @@ export default function AddPermissionModal({ folder, modelUrn, apiBaseUrl, onClo
                     style={{
                       flex: 1, padding: '7px 8px', fontSize: 12.5, borderRadius: 5,
                       cursor: 'pointer',
-                      border: `1px solid ${tipo === s.tipo ? 'var(--accent)' : '#ddd'}`,
+                      border: `1px solid ${tipo === s.tipo ? 'var(--accent)' : '#e8e6dc'}`,
                       background: tipo === s.tipo ? 'var(--accent)' : '#fff',
-                      color: tipo === s.tipo ? '#fff' : '#555',
+                      color: tipo === s.tipo ? '#fff' : '#52524d',
                     }}>
                     {s.label}
                   </button>
@@ -182,7 +182,7 @@ export default function AddPermissionModal({ folder, modelUrn, apiBaseUrl, onClo
               </div>
 
               <select value={sujetoId} onChange={e => setSujetoId(e.target.value)}
-                      style={{ width: '100%', padding: '8px', border: '1px solid #ddd',
+                      style={{ width: '100%', padding: '8px', border: '1px solid #e8e6dc',
                                borderRadius: 5, fontSize: 13 }}>
                 <option value="">
                   {errorCatalogo ? 'No se pudo cargar'
@@ -204,8 +204,8 @@ export default function AddPermissionModal({ folder, modelUrn, apiBaseUrl, onClo
                   peligrosa. */}
               {tipo === 'CONTRACTUAL_FUNCTION' && (
                 <div role="note" style={{
-                  marginTop: 10, background: '#fffbeb', border: '1px solid #fde68a',
-                  color: '#92400e', borderRadius: 6, padding: '9px 11px', fontSize: 12,
+                  marginTop: 10, background: '#faf9f5', border: '1px solid #f9eeda',
+                  color: '#9e5943', borderRadius: 6, padding: '9px 11px', fontSize: 12,
                   lineHeight: 1.5,
                 }}>
                   <b>Alcanza también a quien llegue después.</b> Cualquier empresa que
@@ -216,8 +216,8 @@ export default function AddPermissionModal({ folder, modelUrn, apiBaseUrl, onClo
               )}
               {tipo === 'COMPANY' && elegido && (
                 <div role="note" style={{
-                  marginTop: 10, background: '#f8fafc', border: '1px solid #e2e8f0',
-                  color: '#475569', borderRadius: 6, padding: '9px 11px', fontSize: 12,
+                  marginTop: 10, background: '#faf9f5', border: '1px solid #e8e6dc',
+                  color: '#52524d', borderRadius: 6, padding: '9px 11px', fontSize: 12,
                 }}>
                   Alcanza a <b>todas las personas de {elegido.nombre}</b> en esta obra,
                   también a las que se incorporen después.

@@ -163,15 +163,15 @@ const IssueModule = ({ project, API, user, isAdmin, cfg }) => {
   };
 
   const CHIP_FLUJO = {
-    BLOQUEADO:   { texto: 'Bloqueado',   bg: '#fee2e2', color: '#b91c1c' },
-    SIN_ASIGNAR: { texto: 'Sin asignar', bg: '#fef7e0', color: '#b06000' },
+    BLOQUEADO:   { texto: 'Bloqueado',   bg: '#fbebeb', color: '#b93535' },
+    SIN_ASIGNAR: { texto: 'Sin asignar', bg: '#f9eeda', color: '#734500' },
   };
 
   const STATES = [
-    { value: 'Emitido',      bg: '#f1f3f4', text: '#5f6368', icon: '●' },
-    { value: 'En revisión',  bg: '#fef7e0', text: '#b06000', icon: '◐' },
-    { value: 'Respondido',   bg: '#eef2f7', text: '#7e9bbd', icon: '◉' },
-    { value: 'Cerrado',      bg: '#e6f4ea', text: '#1e8e3e', icon: '✓' },
+    { value: 'Emitido',      bg: '#f1f0e8', text: '#52524d', icon: '●' },
+    { value: 'En revisión',  bg: '#f9eeda', text: '#734500', icon: '◐' },
+    { value: 'Respondido',   bg: '#f1f0e8', text: '#6a9bcc', icon: '◉' },
+    { value: 'Cerrado',      bg: '#e0e3d7', text: '#64744e', icon: '✓' },
   ];
 
   useEffect(() => {
@@ -304,14 +304,14 @@ const IssueModule = ({ project, API, user, isAdmin, cfg }) => {
     
     if (isResolved) {
       const onTime = diffDays <= SLA_DAYS;
-      return { text: `Resuelto en ${diffDays} día(s)`, color: onTime ? '#1e8e3e' : '#e37400' };
+      return { text: `Resuelto en ${diffDays} día(s)`, color: onTime ? '#64744e' : '#d97757' };
     } else {
       if (diffDays > SLA_DAYS) {
         const overdue = diffDays - SLA_DAYS;
-        return { text: `Retraso de ${overdue}d (${diffDays}d total)`, color: '#d32f2f' };
+        return { text: `Retraso de ${overdue}d (${diffDays}d total)`, color: '#b93535' };
       }
       const remaining = SLA_DAYS - Math.abs(diffDays);
-      return { text: `Hace ${Math.abs(diffDays)}d · Quedan ${remaining}d`, color: '#888' };
+      return { text: `Hace ${Math.abs(diffDays)}d · Quedan ${remaining}d`, color: '#72706b' };
     }
   };
 
@@ -534,25 +534,25 @@ const IssueModule = ({ project, API, user, isAdmin, cfg }) => {
   // SVG icons for file types
   const PdfIcon = () => (
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
-      <rect x="3" y="1" width="18" height="22" rx="2" fill="#E53935" />
+      <rect x="3" y="1" width="18" height="22" rx="2" fill="#B93535" />
       <text x="12" y="15" textAnchor="middle" fill="#fff" fontWeight="bold" fontSize="7" fontFamily="sans-serif">PDF</text>
     </svg>
   );
   const CadIcon = () => (
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
-      <rect x="3" y="1" width="18" height="22" rx="2" fill="#4d6a8f" />
+      <rect x="3" y="1" width="18" height="22" rx="2" fill="#507294" />
       <text x="12" y="15" textAnchor="middle" fill="#fff" fontWeight="bold" fontSize="6" fontFamily="sans-serif">CAD</text>
     </svg>
   );
   const ImgIcon = () => (
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
-      <rect x="3" y="1" width="18" height="22" rx="2" fill="#43A047" />
+      <rect x="3" y="1" width="18" height="22" rx="2" fill="#788C5D" />
       <text x="12" y="15" textAnchor="middle" fill="#fff" fontWeight="bold" fontSize="6" fontFamily="sans-serif">IMG</text>
     </svg>
   );
   const FileIcon = () => (
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
-      <rect x="3" y="1" width="18" height="22" rx="2" fill="#757575" />
+      <rect x="3" y="1" width="18" height="22" rx="2" fill="#72706b" />
       <text x="12" y="15" textAnchor="middle" fill="#fff" fontWeight="bold" fontSize="6" fontFamily="sans-serif">FILE</text>
     </svg>
   );
@@ -738,17 +738,17 @@ const IssueModule = ({ project, API, user, isAdmin, cfg }) => {
   return (
     <div style={{ padding: '0px 24px 16px', flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       {/* RED LINE ACCENT BAR */}
-      <div style={{ height: 3, background: 'linear-gradient(90deg, #d32f2f, #e53935, #ef5350)', borderRadius: '0 0 4px 4px', flexShrink: 0 }} />
+      <div style={{ height: 3, background: 'linear-gradient(90deg, #b93535, #b93535, #b93535)', borderRadius: '0 0 4px 4px', flexShrink: 0 }} />
       {/* HEADER */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, paddingTop: 12, backgroundColor: '#fff', paddingBottom: 8, borderBottom: '1px solid #eee', flexShrink: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, paddingTop: 12, backgroundColor: '#fff', paddingBottom: 8, borderBottom: '1px solid #f1f0e8', flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <h1 style={{ fontSize: 18, fontWeight: 400, color: '#333', margin: 0 }}>{`Listado de ${cfg.plural}`}</h1>
+          <h1 style={{ fontSize: 18, fontWeight: 400, color: '#333330', margin: 0 }}>{`Listado de ${cfg.plural}`}</h1>
           {dashFilter && (
             <span
               onClick={() => setDashFilter(null)}
-              style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: '#eef2f7', color: '#7e9bbd', fontSize: 12, fontWeight: 600, padding: '4px 12px', borderRadius: 20, cursor: 'pointer', transition: 'background 0.15s' }}
-              onMouseOver={e => e.currentTarget.style.background = '#d2e3fc'}
-              onMouseOut={e => e.currentTarget.style.background = '#eef2f7'}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: '#f1f0e8', color: '#507294', fontSize: 12, fontWeight: 600, padding: '4px 12px', borderRadius: 6, cursor: 'pointer', transition: 'background 0.15s' }}
+              onMouseOver={e => e.currentTarget.style.background = '#c8d8e7'}
+              onMouseOut={e => e.currentTarget.style.background = '#f1f0e8'}
             >
               {dashFilter.type === 'respuesta' ? `Respuesta: ${dashFilter.value}` : `Estado: ${dashFilter.value}`}
               <span style={{ fontWeight: 400, fontSize: 14 }}>&times;</span>
@@ -757,51 +757,51 @@ const IssueModule = ({ project, API, user, isAdmin, cfg }) => {
         </div>
         <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
           <div style={{ position: 'relative' }}>
-            <svg style={{ position: 'absolute', left: 10, top: 8, color: '#999' }} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+            <svg style={{ position: 'absolute', left: 10, top: 8, color: '#72706b' }} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
             <input
               type="text"
               placeholder={`Buscar ${cfg.singular}...`}
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              style={{ padding: '8px 12px 8px 32px', border: '1px solid #ddd', borderRadius: 4, width: 200, fontSize: 13 }}
+              style={{ padding: '8px 12px 8px 32px', border: '1px solid #e8e6dc', borderRadius: 4, width: 200, fontSize: 13 }}
             />
           </div>
           {isAdmin && (
-            <button onClick={createRfi} style={{ background: '#d32f2f', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: 4, cursor: 'pointer', fontWeight: 500, fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <button onClick={createRfi} style={{ background: '#b93535', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: 4, cursor: 'pointer', fontWeight: 500, fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}>
               <span>+</span> {`Nuevo ${cfg.singular}`}
             </button>
           )}
-          <button onClick={fetchRfis} title="Actualizar" style={{ width: 36, height: 36, background: '#f5f5f5', border: '1px solid #ddd', borderRadius: 4, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#666" strokeWidth="2"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8" /><path d="M21 3v5h-5" /></svg>
+          <button onClick={fetchRfis} title="Actualizar" style={{ width: 36, height: 36, background: '#f1f0e8', border: '1px solid #e8e6dc', borderRadius: 4, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#72706b" strokeWidth="2"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8" /><path d="M21 3v5h-5" /></svg>
           </button>
           {/* Export Dropdown */}
           <div ref={exportRef} style={{ position: 'relative' }}>
             <button
               onClick={() => setShowExportMenu(!showExportMenu)}
               title="Exportar"
-              style={{ width: 36, height: 36, background: '#f5f5f5', border: '1px solid #ddd', borderRadius: 4, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              style={{ width: 36, height: 36, background: '#f1f0e8', border: '1px solid #e8e6dc', borderRadius: 4, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
             >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#666" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#72706b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
             </button>
             {showExportMenu && (
-              <div style={{ position: 'absolute', right: 0, top: 40, background: '#fff', border: '1px solid #e0e0e0', borderRadius: 8, boxShadow: '0 4px 16px rgba(0,0,0,0.12)', zIndex: 100, minWidth: 180, overflow: 'hidden' }}>
+              <div style={{ position: 'absolute', right: 0, top: 40, background: '#fff', border: '1px solid #e8e6dc', borderRadius: 8, boxShadow: '0 4px 16px rgba(0,0,0,0.12)', zIndex: 100, minWidth: 180, overflow: 'hidden' }}>
                 <button
                   onClick={exportToExcel}
-                  style={{ width: '100%', padding: '10px 16px', border: 'none', background: 'none', cursor: 'pointer', fontSize: 13, display: 'flex', alignItems: 'center', gap: 10, color: '#333', textAlign: 'left' }}
-                  onMouseOver={e => e.currentTarget.style.background = '#f8f9fa'}
+                  style={{ width: '100%', padding: '10px 16px', border: 'none', background: 'none', cursor: 'pointer', fontSize: 13, display: 'flex', alignItems: 'center', gap: 10, color: '#333330', textAlign: 'left' }}
+                  onMouseOver={e => e.currentTarget.style.background = '#faf9f5'}
                   onMouseOut={e => e.currentTarget.style.background = 'none'}
                 >
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#1e8e3e" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#64744e" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
                   Exportar a Excel
                 </button>
-                <div style={{ height: 1, background: '#eee' }} />
+                <div style={{ height: 1, background: '#f1f0e8' }} />
                 <button
                   onClick={exportToPDF}
-                  style={{ width: '100%', padding: '10px 16px', border: 'none', background: 'none', cursor: 'pointer', fontSize: 13, display: 'flex', alignItems: 'center', gap: 10, color: '#333', textAlign: 'left' }}
-                  onMouseOver={e => e.currentTarget.style.background = '#f8f9fa'}
+                  style={{ width: '100%', padding: '10px 16px', border: 'none', background: 'none', cursor: 'pointer', fontSize: 13, display: 'flex', alignItems: 'center', gap: 10, color: '#333330', textAlign: 'left' }}
+                  onMouseOver={e => e.currentTarget.style.background = '#faf9f5'}
                   onMouseOut={e => e.currentTarget.style.background = 'none'}
                 >
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#d93025" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#b93535" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
                   Exportar a PDF
                 </button>
               </div>
@@ -811,12 +811,12 @@ const IssueModule = ({ project, API, user, isAdmin, cfg }) => {
       </div>
 
       {/* DATA GRID */}
-      <div style={{ border: '1px solid #e0e0e0', borderRadius: 8, background: '#fff', overflowX: 'auto', overflowY: 'auto', flex: 1, minHeight: 0 }}>
+      <div style={{ border: '1px solid #e8e6dc', borderRadius: 8, background: '#fff', overflowX: 'auto', overflowY: 'auto', flex: 1, minHeight: 0 }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: 11, tableLayout: 'fixed' }}>
-          <thead style={{ background: '#f8f9fa', color: '#5f6368', borderBottom: '2px solid #e0e0e0', position: 'sticky', top: 0, zIndex: 2 }}>
+          <thead style={{ background: '#faf9f5', color: '#52524d', borderBottom: '2px solid #e8e6dc', position: 'sticky', top: 0, zIndex: 2 }}>
             <tr>
               {COL_DEFS.map((col, idx) => (
-                <th key={col.key} style={{ padding: '5px 10px', fontWeight: 600, width: colWidths[idx], position: 'relative', textAlign: col.key === 'accion' ? 'center' : 'left', background: '#f8f9fa', fontSize: 11 }}>
+                <th key={col.key} style={{ padding: '5px 10px', fontWeight: 600, width: colWidths[idx], position: 'relative', textAlign: col.key === 'accion' ? 'center' : 'left', background: '#faf9f5', fontSize: 11 }}>
                   {col.label}
                   <div
                     onMouseDown={(e) => onResizeStart(e, idx)}
@@ -833,9 +833,9 @@ const IssueModule = ({ project, API, user, isAdmin, cfg }) => {
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan="8" style={{ textAlign: 'center', padding: 40, color: '#888' }}>{`Cargando ${cfg.plural}...`}</td></tr>
+              <tr><td colSpan="8" style={{ textAlign: 'center', padding: 40, color: '#72706b' }}>{`Cargando ${cfg.plural}...`}</td></tr>
             ) : filteredRfis.length === 0 ? (
-              <tr><td colSpan="8" style={{ textAlign: 'center', padding: 40, color: '#888' }}>{`No se encontraron ${cfg.plural}. Presiona "+ Nuevo ${cfg.singular}" para comenzar.`}</td></tr>
+              <tr><td colSpan="8" style={{ textAlign: 'center', padding: 40, color: '#72706b' }}>{`No se encontraron ${cfg.plural}. Presiona "+ Nuevo ${cfg.singular}" para comenzar.`}</td></tr>
             ) : (
               filteredRfis.map(rfi => {
                 const isEditing = editingId === rfi.id;
@@ -848,10 +848,10 @@ const IssueModule = ({ project, API, user, isAdmin, cfg }) => {
                   // aviso del flujo y el historial-- y un `.map` sólo devuelve
                   // un elemento raíz.
                   <React.Fragment key={rfi.id}>
-                  <tr style={{ borderBottom: '1px solid #eee', background: isEditing ? '#f4f6f9' : '#fff', transition: 'background 0.2s' }}>
+                  <tr style={{ borderBottom: '1px solid #f1f0e8', background: isEditing ? '#f1f0e8' : '#fff', transition: 'background 0.2s' }}>
 
                     {/* CODIGO */}
-                    <td style={{ padding: '3px 10px', fontWeight: 600, color: '#d32f2f', fontFamily: 'monospace', fontSize: 11 }}>
+                    <td style={{ padding: '3px 10px', fontWeight: 600, color: '#b93535', fontFamily: 'monospace', fontSize: 11 }}>
                       {rfi.codigo}
                     </td>
 
@@ -863,12 +863,12 @@ const IssueModule = ({ project, API, user, isAdmin, cfg }) => {
                           value={editFormData.titulo}
                           onChange={e => handleFieldChange('titulo', e.target.value)}
                           placeholder={`Escribir título del ${cfg.singular}...`}
-                          style={{ width: '100%', padding: '4px 10px', border: '1.5px solid #d32f2f', borderRadius: 4, outline: 'none', fontSize: 13 }}
+                          style={{ width: '100%', padding: '4px 10px', border: '1.5px solid #b93535', borderRadius: 4, outline: 'none', fontSize: 13 }}
                           autoFocus
                         />
                       ) : (
                         <span onClick={() => isAdmin && startEditing(rfi)} style={{ cursor: isAdmin ? 'pointer' : 'default', display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                          {rfi.titulo || <span style={{ color: '#bbb', fontStyle: 'italic' }}>Sin título</span>}
+                          {rfi.titulo || <span style={{ color: '#cccac0', fontStyle: 'italic' }}>Sin título</span>}
                         </span>
                       )}
                     </td>
@@ -881,8 +881,8 @@ const IssueModule = ({ project, API, user, isAdmin, cfg }) => {
                             value={editFormData.estado}
                             onChange={e => handleFieldChange('estado', e.target.value)}
                             style={{
-                              padding: '5px 10px', borderRadius: 16, outline: 'none', cursor: 'pointer', fontWeight: 500, fontSize: 12,
-                              border: '1.5px solid #d32f2f',
+                              padding: '5px 10px', borderRadius: 6, outline: 'none', cursor: 'pointer', fontWeight: 500, fontSize: 12,
+                              border: '1.5px solid #b93535',
                               background: getStateStyle(editFormData.estado).bg,
                               color: getStateStyle(editFormData.estado).text,
                               appearance: 'none', WebkitAppearance: 'none',
@@ -891,7 +891,7 @@ const IssueModule = ({ project, API, user, isAdmin, cfg }) => {
                           >
                             {STATES.map(s => <option key={s.value} value={s.value}>{s.icon} {s.value}</option>)}
                           </select>
-                          <span style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', fontSize: 10, color: '#999' }}>▼</span>
+                          <span style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', fontSize: 10, color: '#72706b' }}>▼</span>
                         </div>
                       ) : (
                         <div
@@ -899,7 +899,7 @@ const IssueModule = ({ project, API, user, isAdmin, cfg }) => {
                           style={{
                             display: 'inline-flex', alignItems: 'center', gap: 6,
                             background: stateStyle.bg, color: stateStyle.text,
-                            padding: '4px 12px', borderRadius: 16, fontWeight: 500, fontSize: 12,
+                            padding: '4px 12px', borderRadius: 6, fontWeight: 500, fontSize: 12,
                             cursor: isAdmin ? 'pointer' : 'default', transition: 'all 0.15s'
                           }}
                         >
@@ -918,12 +918,22 @@ const IssueModule = ({ project, API, user, isAdmin, cfg }) => {
                             value={(editFormData.vence_en || '').slice(0, 10)}
                             onChange={e => handleFieldChange('vence_en', e.target.value || null)}
                             title="Fecha límite (día calendario). No hay calendario de días hábiles: un plazo vence en la fecha indicada aunque caiga en fin de semana."
-                            style={{ padding: '4px 6px', border: '1px solid #ddd', borderRadius: 4, fontSize: 12, width: '100%' }}
+                            style={{ padding: '4px 6px', border: '1px solid #e8e6dc', borderRadius: 4, fontSize: 12, width: '100%' }}
                           />
                         ) : (
-                          <span style={{ fontSize: 12, color: rfi.vence_en ? '#555' : '#bbb' }}>
-                            {rfi.vence_en ? new Date(rfi.vence_en).toLocaleDateString() : '—'}
-                          </span>
+                          // VENCIDO EN ROJO (como en Procore): solo si sigue sin responder. Se
+                          // compara el DÍA: lo que vence hoy aún no está vencido.
+                          (() => {
+                            const resuelto = rfi.estado === 'Respondido' || rfi.estado === 'Cerrado';
+                            const dia = (d) => new Date(d).toLocaleDateString('en-CA', { timeZone: 'America/Lima' });
+                            const vencido = Boolean(rfi.vence_en) && !resuelto && dia(rfi.vence_en) < dia(Date.now());
+                            return (
+                              <span style={{ fontSize: 12, color: !rfi.vence_en ? '#cccac0' : vencido ? '#b93535' : '#52524d', fontWeight: vencido ? 600 : 400 }}
+                                title={vencido ? 'Plazo vencido y sin responder' : undefined}>
+                                {rfi.vence_en ? new Date(rfi.vence_en).toLocaleDateString() : '—'}
+                              </span>
+                            );
+                          })()
                         )}
                       </td>
                     )}
@@ -936,8 +946,8 @@ const IssueModule = ({ project, API, user, isAdmin, cfg }) => {
                           onChange={e => handleFieldChange('respuesta', e.target.value)}
                           style={{
                             padding: '5px 10px', borderRadius: 4, outline: 'none', cursor: 'pointer', fontSize: 12,
-                            border: '1px solid #ddd', width: '100%',
-                            background: editFormData.respuesta === 'Aceptado' ? '#e6f4ea' : editFormData.respuesta === 'Rechazado' ? '#fce8e6' : '#fff'
+                            border: '1px solid #e8e6dc', width: '100%',
+                            background: editFormData.respuesta === 'Aceptado' ? '#e0e3d7' : editFormData.respuesta === 'Rechazado' ? '#fbebeb' : '#fff'
                           }}
                         >
                           <option value="">Pendiente</option>
@@ -949,8 +959,8 @@ const IssueModule = ({ project, API, user, isAdmin, cfg }) => {
                           cursor: isAdmin ? 'pointer' : 'default', display: 'inline-block', minHeight: 20, 
                           padding: rfi.respuesta ? '4px 10px' : '0', 
                           borderRadius: 12, fontSize: 12, fontWeight: rfi.respuesta ? 500 : 400,
-                          background: rfi.respuesta === 'Aceptado' ? '#e6f4ea' : rfi.respuesta === 'Rechazado' ? '#fce8e6' : 'transparent',
-                          color: rfi.respuesta === 'Aceptado' ? '#1e8e3e' : rfi.respuesta === 'Rechazado' ? '#d93025' : '#bbb',
+                          background: rfi.respuesta === 'Aceptado' ? '#e0e3d7' : rfi.respuesta === 'Rechazado' ? '#fbebeb' : 'transparent',
+                          color: rfi.respuesta === 'Aceptado' ? '#64744e' : rfi.respuesta === 'Rechazado' ? '#b93535' : '#cccac0',
                         }}>
                           {rfi.respuesta || <span style={{ fontStyle: 'italic' }}>--</span>}
                         </span>
@@ -964,20 +974,20 @@ const IssueModule = ({ project, API, user, isAdmin, cfg }) => {
                           <div
                             onClick={() => setShowResponsableDropdown(!showResponsableDropdown)}
                             style={{
-                              padding: '5px 10px', border: '1.5px solid #d32f2f', borderRadius: 4,
+                              padding: '5px 10px', border: '1.5px solid #b93535', borderRadius: 4,
                               cursor: 'pointer', fontSize: 13, display: 'flex', alignItems: 'center',
                               justifyContent: 'space-between', minHeight: 30, background: '#fff'
                             }}
                           >
-                            <span style={{ color: editFormData.responsable ? '#333' : '#bbb' }}>
+                            <span style={{ color: editFormData.responsable ? '#333330' : '#cccac0' }}>
                               {editFormData.responsable || 'Seleccionar...'}
                             </span>
-                            <span style={{ fontSize: 10, color: '#999' }}>▼</span>
+                            <span style={{ fontSize: 10, color: '#72706b' }}>▼</span>
                           </div>
                           {showResponsableDropdown && (
                             <div style={{
                               position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 100,
-                              background: '#fff', border: '1px solid #ddd', borderRadius: 6,
+                              background: '#fff', border: '1px solid #e8e6dc', borderRadius: 6,
                               boxShadow: '0 4px 12px rgba(0,0,0,0.12)', maxHeight: 220, overflowY: 'auto', marginTop: 4
                             }}>
                               {cfg.usaDirectorio && miembros.map((m) => (
@@ -992,22 +1002,22 @@ const IssueModule = ({ project, API, user, isAdmin, cfg }) => {
                                   }}
                                   style={{
                                     padding: '8px 12px', fontSize: 13, cursor: 'pointer',
-                                    background: String(editFormData.responsable_id) === String(m.id) ? '#eef2f7' : '#fff',
-                                    borderBottom: '1px solid #f5f5f5'
+                                    background: String(editFormData.responsable_id) === String(m.id) ? '#f1f0e8' : '#fff',
+                                    borderBottom: '1px solid #f1f0e8'
                                   }}
-                                  onMouseOver={e => e.currentTarget.style.background = '#f4f6f9'}
-                                  onMouseOut={e => e.currentTarget.style.background = String(editFormData.responsable_id) === String(m.id) ? '#eef2f7' : '#fff'}
+                                  onMouseOver={e => e.currentTarget.style.background = '#f1f0e8'}
+                                  onMouseOut={e => e.currentTarget.style.background = String(editFormData.responsable_id) === String(m.id) ? '#f1f0e8' : '#fff'}
                                 >
                                   {m.name || m.email}
                                   {(m.funcion || m.empresa) && (
-                                    <span style={{ color: '#999', fontSize: 11 }}>
+                                    <span style={{ color: '#72706b', fontSize: 11 }}>
                                       {' · '}{m.funcion || m.empresa}
                                     </span>
                                   )}
                                 </div>
                               ))}
                               {cfg.usaDirectorio && !miembros.length && (
-                                <div style={{ padding: '10px 12px', fontSize: 12, color: '#999' }}>
+                                <div style={{ padding: '10px 12px', fontSize: 12, color: '#72706b' }}>
                                   Esta obra todavía no tiene miembros a los que dirigirlo.
                                 </div>
                               )}
@@ -1017,11 +1027,11 @@ const IssueModule = ({ project, API, user, isAdmin, cfg }) => {
                                   onClick={() => { handleFieldChange('responsable', name); setShowResponsableDropdown(false); }}
                                   style={{
                                     padding: '8px 12px', fontSize: 13, cursor: 'pointer',
-                                    background: editFormData.responsable === name ? '#eef2f7' : '#fff',
-                                    borderBottom: '1px solid #f5f5f5'
+                                    background: editFormData.responsable === name ? '#f1f0e8' : '#fff',
+                                    borderBottom: '1px solid #f1f0e8'
                                   }}
-                                  onMouseOver={e => e.currentTarget.style.background = '#f4f6f9'}
-                                  onMouseOut={e => e.currentTarget.style.background = editFormData.responsable === name ? '#eef2f7' : '#fff'}
+                                  onMouseOver={e => e.currentTarget.style.background = '#f1f0e8'}
+                                  onMouseOut={e => e.currentTarget.style.background = editFormData.responsable === name ? '#f1f0e8' : '#fff'}
                                 >
                                   {name}
                                 </div>
@@ -1030,7 +1040,7 @@ const IssueModule = ({ project, API, user, isAdmin, cfg }) => {
                                   Sólo sin directorio. Con él, teclear un nombre
                                   suelto es exactamente el defecto que se quita. */}
                               {!cfg.usaDirectorio && (
-                              <div style={{ padding: '8px 10px', borderTop: '1px solid #eee', display: 'flex', gap: 6 }}>
+                              <div style={{ padding: '8px 10px', borderTop: '1px solid #f1f0e8', display: 'flex', gap: 6 }}>
                                 <input
                                   type="text"
                                   value={newResponsableName}
@@ -1038,11 +1048,11 @@ const IssueModule = ({ project, API, user, isAdmin, cfg }) => {
                                   onKeyDown={e => { if (e.key === 'Enter') addResponsable(); }}
                                   placeholder="Nuevo nombre..."
                                   onClick={e => e.stopPropagation()}
-                                  style={{ flex: 1, padding: '4px 8px', border: '1px solid #ddd', borderRadius: 4, fontSize: 12, outline: 'none' }}
+                                  style={{ flex: 1, padding: '4px 8px', border: '1px solid #e8e6dc', borderRadius: 4, fontSize: 12, outline: 'none' }}
                                 />
                                 <button
                                   onClick={(e) => { e.stopPropagation(); addResponsable(); }}
-                                  style={{ background: '#d32f2f', color: '#fff', border: 'none', borderRadius: 4, padding: '4px 10px', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}
+                                  style={{ background: '#b93535', color: '#fff', border: 'none', borderRadius: 4, padding: '4px 10px', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}
                                 >
                                   +
                                 </button>
@@ -1053,13 +1063,13 @@ const IssueModule = ({ project, API, user, isAdmin, cfg }) => {
                         </div>
                       ) : (
                         <span onClick={() => isAdmin && startEditing(rfi)} style={{ cursor: isAdmin ? 'pointer' : 'default', display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                          {rfi.responsable || <span style={{ color: '#bbb', fontStyle: 'italic' }}>--</span>}
+                          {rfi.responsable || <span style={{ color: '#cccac0', fontStyle: 'italic' }}>--</span>}
                         </span>
                       )}
                     </td>
 
                     {/* FECHA (MINIMALISTA) */}
-                    <td style={{ padding: '3px 10px', color: '#333', fontSize: 11 }}>
+                    <td style={{ padding: '3px 10px', color: '#333330', fontSize: 11 }}>
                       {isEditing ? (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                           <input 
@@ -1067,7 +1077,7 @@ const IssueModule = ({ project, API, user, isAdmin, cfg }) => {
                             title="Fecha de presentación"
                             value={editFormData.fecha || ''} 
                             onChange={e => handleFieldChange('fecha', e.target.value)}
-                            style={{ padding: '4px 8px', border: '1px solid #ddd', borderRadius: 4, fontSize: 12, outline: 'none' }}
+                            style={{ padding: '4px 8px', border: '1px solid #e8e6dc', borderRadius: 4, fontSize: 12, outline: 'none' }}
                           />
                           {(editFormData.estado === 'Respondido' || editFormData.estado === 'Cerrado') && (
                             <input 
@@ -1075,7 +1085,7 @@ const IssueModule = ({ project, API, user, isAdmin, cfg }) => {
                               title="Fecha de respuesta"
                               value={editFormData.fecha_respuesta || ''} 
                               onChange={e => handleFieldChange('fecha_respuesta', e.target.value)}
-                              style={{ padding: '4px 8px', border: '1px solid #ddd', borderRadius: 4, fontSize: 12, outline: 'none', background: '#f5f5f5' }}
+                              style={{ padding: '4px 8px', border: '1px solid #e8e6dc', borderRadius: 4, fontSize: 12, outline: 'none', background: '#f1f0e8' }}
                             />
                           )}
                         </div>
@@ -1107,12 +1117,12 @@ const IssueModule = ({ project, API, user, isAdmin, cfg }) => {
                                 display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                                 borderRadius: 4, padding: 2, transition: 'transform 0.15s, box-shadow 0.15s, background 0.15s',
                                 transform: isLoadingThis ? 'scale(0.85)' : 'scale(1)',
-                                background: isLoadingThis ? '#eef2f7' : 'transparent',
+                                background: isLoadingThis ? '#f1f0e8' : 'transparent',
                                 boxShadow: isLoadingThis ? '0 0 0 2px var(--accent)' : 'none',
                                 opacity: isLoadingThis ? 0.6 : 1,
                                 position: 'relative'
                               }}
-                              onMouseOver={e => { if (!isEditing && !isLoadingThis) { e.currentTarget.style.transform = 'scale(1.15)'; e.currentTarget.style.background = '#eef2f7'; e.currentTarget.style.boxShadow = '0 2px 8px rgba(95, 127, 163,0.25)'; }}}
+                              onMouseOver={e => { if (!isEditing && !isLoadingThis) { e.currentTarget.style.transform = 'scale(1.15)'; e.currentTarget.style.background = '#f1f0e8'; e.currentTarget.style.boxShadow = '0 2px 8px rgba(106, 155, 204,0.25)'; }}}
                               onMouseOut={e => { if (!isLoadingThis) { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.background = 'transparent'; e.currentTarget.style.boxShadow = 'none'; }}}
                               onMouseDown={e => { if (!isEditing) e.currentTarget.style.transform = 'scale(0.85)'; }}
                               onMouseUp={e => { if (!isEditing) e.currentTarget.style.transform = 'scale(1.15)'; }}
@@ -1128,17 +1138,17 @@ const IssueModule = ({ project, API, user, isAdmin, cfg }) => {
                               )}
                             </span>
                             {isEditing && (
-                              <button onClick={() => removeAdjunto(idx)} style={{ position: 'absolute', top: -6, right: -6, background: '#e53935', color: '#fff', borderRadius: '50%', width: 14, height: 14, border: 'none', fontSize: 10, display: 'flex', justifyContent: 'center', alignItems: 'center', cursor: 'pointer' }}>×</button>
+                              <button onClick={() => removeAdjunto(idx)} style={{ position: 'absolute', top: -6, right: -6, background: '#b93535', color: '#fff', borderRadius: '50%', width: 14, height: 14, border: 'none', fontSize: 10, display: 'flex', justifyContent: 'center', alignItems: 'center', cursor: 'pointer' }}>×</button>
                             )}
                           </div>
                           );
                         })}
-                        {currentAdjuntos.length === 0 && !isEditing && <span style={{ color: '#ccc' }}>--</span>}
+                        {currentAdjuntos.length === 0 && !isEditing && <span style={{ color: '#cccac0' }}>--</span>}
 
                         {isEditing && (
                           <button
                             onClick={() => openFileSelector(rfi)}
-                            style={{ background: 'none', border: '1px dashed #d32f2f', color: '#d32f2f', borderRadius: 4, width: 26, height: 26, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: 16, fontWeight: 300 }}
+                            style={{ background: 'none', border: '1px dashed #b93535', color: '#b93535', borderRadius: 4, width: 26, height: 26, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: 16, fontWeight: 300 }}
                             title="Vincular archivo"
                           >
                             +
@@ -1151,16 +1161,16 @@ const IssueModule = ({ project, API, user, isAdmin, cfg }) => {
                     <td style={{ padding: '3px 10px', textAlign: 'center' }}>
                       {isEditing ? (
                         <div style={{ display: 'flex', gap: 6, justifyContent: 'center' }}>
-                          <button onClick={() => saveRfi(rfi.id)} disabled={saving} style={{ background: '#c62828', color: '#fff', border: 'none', padding: '5px 12px', borderRadius: 4, cursor: 'pointer', fontSize: 12, fontWeight: 500 }}>
+                          <button onClick={() => saveRfi(rfi.id)} disabled={saving} style={{ background: '#b93535', color: '#fff', border: 'none', padding: '5px 12px', borderRadius: 4, cursor: 'pointer', fontSize: 12, fontWeight: 500 }}>
                             {saving ? '...' : 'Guardar'}
                           </button>
-                          <button onClick={cancelEditing} style={{ background: 'none', border: '1px solid #ddd', color: '#888', padding: '5px 8px', borderRadius: 4, cursor: 'pointer', fontSize: 12 }}>
+                          <button onClick={cancelEditing} style={{ background: 'none', border: '1px solid #e8e6dc', color: '#72706b', padding: '5px 8px', borderRadius: 4, cursor: 'pointer', fontSize: 12 }}>
                             ✕
                           </button>
                         </div>
                       ) : (
                         isAdmin && (
-                          <button onClick={() => startEditing(rfi)} style={{ background: 'none', border: 'none', color: '#999', cursor: 'pointer' }} title="Editar">
+                          <button onClick={() => startEditing(rfi)} style={{ background: 'none', border: 'none', color: '#72706b', cursor: 'pointer' }} title="Editar">
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 20h9" /><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" /></svg>
                           </button>
                         )
@@ -1179,9 +1189,9 @@ const IssueModule = ({ project, API, user, isAdmin, cfg }) => {
                     <tr>
                       <td colSpan={COL_DEFS.length + 2} style={{ padding: '0 10px 8px' }}>
                         <div role="alert" style={{
-                          background: rfi.flujo === 'BLOQUEADO' ? '#fff1f2' : '#fffbeb',
-                          border: `1px solid ${rfi.flujo === 'BLOQUEADO' ? '#fecdd3' : '#fde68a'}`,
-                          color: rfi.flujo === 'BLOQUEADO' ? '#9f1239' : '#92400e',
+                          background: rfi.flujo === 'BLOQUEADO' ? '#fbebeb' : '#faf9f5',
+                          border: `1px solid ${rfi.flujo === 'BLOQUEADO' ? '#fbebeb' : '#f9eeda'}`,
+                          color: rfi.flujo === 'BLOQUEADO' ? '#993458' : '#9e5943',
                           borderRadius: 6, padding: '8px 11px', fontSize: 12
                         }}>
                           {necesitaAdopcion(rfi) ? (
@@ -1210,13 +1220,13 @@ const IssueModule = ({ project, API, user, isAdmin, cfg }) => {
                   {cfg.usaDirectorio && isEditing && (rfi.historial || []).length > 0 && (
                     <tr>
                       <td colSpan={COL_DEFS.length + 2} style={{ padding: '0 10px 10px' }}>
-                        <div style={{ background: '#fafbfc', border: '1px solid #eee', borderRadius: 6, padding: '8px 11px' }}>
-                          <div style={{ fontSize: 10, fontWeight: 700, color: '#5f6368', letterSpacing: '.3px', textTransform: 'uppercase', marginBottom: 6 }}>
+                        <div style={{ background: '#faf9f5', border: '1px solid #f1f0e8', borderRadius: 6, padding: '8px 11px' }}>
+                          <div style={{ fontSize: 10, fontWeight: 700, color: '#52524d', letterSpacing: '.3px', textTransform: 'uppercase', marginBottom: 6 }}>
                             Historial
                           </div>
                           {(rfi.historial || []).map((h, i) => (
-                            <div key={i} style={{ fontSize: 12, color: '#555', padding: '2px 0' }}>
-                              <span style={{ color: '#999' }}>
+                            <div key={i} style={{ fontSize: 12, color: '#52524d', padding: '2px 0' }}>
+                              <span style={{ color: '#72706b' }}>
                                 {h.at ? new Date(h.at).toLocaleString() : ''}
                               </span>
                               {' · '}<b>{h.by || '—'}</b>{' · '}
@@ -1319,16 +1329,16 @@ const IssueModule = ({ project, API, user, isAdmin, cfg }) => {
 
         const kpiCards = [
           {
-            label: 'Aceptados', filterValue: 'Aceptado', count: aceptados, color: '#1e8e3e', bg: 'linear-gradient(135deg, #e6f4ea 0%, #d4edda 100%)', border: '#b7dfc3',
-            icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1e8e3e" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+            label: 'Aceptados', filterValue: 'Aceptado', count: aceptados, color: '#64744e', bg: 'linear-gradient(135deg, #e0e3d7 0%, #e0e3d7 100%)', border: '#e0e3d7',
+            icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#64744e" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
           },
           {
-            label: 'Rechazados', filterValue: 'Rechazado', count: rechazados, color: '#d93025', bg: 'linear-gradient(135deg, #fce8e6 0%, #f8d7da 100%)', border: '#f0b8b3',
-            icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#d93025" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+            label: 'Rechazados', filterValue: 'Rechazado', count: rechazados, color: '#b93535', bg: 'linear-gradient(135deg, #fbebeb 0%, #fbebeb 100%)', border: '#fbebeb',
+            icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#b93535" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
           },
           {
-            label: 'Pendientes', filterValue: 'Pendiente', count: pendientes, color: '#80868b', bg: 'linear-gradient(135deg, #f1f3f4 0%, #e8eaed 100%)', border: '#dadce0',
-            icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#80868b" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            label: 'Pendientes', filterValue: 'Pendiente', count: pendientes, color: '#72706b', bg: 'linear-gradient(135deg, #f1f0e8 0%, #f1f0e8 100%)', border: '#e8e6dc',
+            icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#72706b" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
           },
         ];
 
@@ -1338,8 +1348,8 @@ const IssueModule = ({ project, API, user, isAdmin, cfg }) => {
             {/* LEFT: KPI Cards */}
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 4 }}>
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#5f6368" strokeWidth="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
-                <span style={{ fontSize: 10, fontWeight: 600, color: '#5f6368', letterSpacing: '0.3px', textTransform: 'uppercase' }}>Respuestas</span>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#52524d" strokeWidth="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+                <span style={{ fontSize: 10, fontWeight: 600, color: '#52524d', letterSpacing: '0.3px', textTransform: 'uppercase' }}>Respuestas</span>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 4 }}>
                 {kpiCards.map(card => {
@@ -1362,21 +1372,21 @@ const IssueModule = ({ project, API, user, isAdmin, cfg }) => {
                       <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 2, opacity: 0.85 }}>{card.icon}</div>
                       <div style={{ fontSize: 18, fontWeight: 800, color: card.color, lineHeight: 1 }}>{card.count}</div>
                       <div style={{ fontSize: 9, color: card.color, fontWeight: 600, marginTop: 2, letterSpacing: '0.3px' }}>{card.label}</div>
-                      <div style={{ fontSize: 9, color: '#80868b', marginTop: 0, fontWeight: 500 }}>{total > 0 ? Math.round(card.count/total*100) : 0}%</div>
+                      <div style={{ fontSize: 9, color: '#72706b', marginTop: 0, fontWeight: 500 }}>{total > 0 ? Math.round(card.count/total*100) : 0}%</div>
                     </div>
                   );
                 })}
               </div>
 
-              <div style={{ marginTop: 4, background: '#fff', borderRadius: 6, padding: '4px 10px', border: '1px solid #e0e0e0' }}>
+              <div style={{ marginTop: 4, background: '#fff', borderRadius: 6, padding: '4px 10px', border: '1px solid #e8e6dc' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 }}>
-                  <span style={{ fontSize: 9, color: '#80868b', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.5px' }}>{`Total ${cfg.singular}`}</span>
-                  <span style={{ fontSize: 14, fontWeight: 800, color: '#202124' }}>{total}</span>
+                  <span style={{ fontSize: 9, color: '#72706b', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.5px' }}>{`Total ${cfg.singular}`}</span>
+                  <span style={{ fontSize: 14, fontWeight: 800, color: '#141413' }}>{total}</span>
                 </div>
-                <div style={{ display: 'flex', borderRadius: 4, overflow: 'hidden', height: 6, background: '#f1f3f4' }}>
-                  {aceptados > 0 && <div title={`Aceptados: ${aceptados}`} style={{ width: `${aceptados/total*100}%`, background: '#1e8e3e', transition: 'width 0.6s ease' }} />}
-                  {rechazados > 0 && <div title={`Rechazados: ${rechazados}`} style={{ width: `${rechazados/total*100}%`, background: '#d93025', transition: 'width 0.6s ease' }} />}
-                  {pendientes > 0 && <div title={`Pendientes: ${pendientes}`} style={{ width: `${pendientes/total*100}%`, background: '#dadce0', transition: 'width 0.6s ease' }} />}
+                <div style={{ display: 'flex', borderRadius: 4, overflow: 'hidden', height: 6, background: '#f1f0e8' }}>
+                  {aceptados > 0 && <div title={`Aceptados: ${aceptados}`} style={{ width: `${aceptados/total*100}%`, background: '#64744e', transition: 'width 0.6s ease' }} />}
+                  {rechazados > 0 && <div title={`Rechazados: ${rechazados}`} style={{ width: `${rechazados/total*100}%`, background: '#b93535', transition: 'width 0.6s ease' }} />}
+                  {pendientes > 0 && <div title={`Pendientes: ${pendientes}`} style={{ width: `${pendientes/total*100}%`, background: '#e8e6dc', transition: 'width 0.6s ease' }} />}
                 </div>
               </div>
             </div>
@@ -1384,45 +1394,45 @@ const IssueModule = ({ project, API, user, isAdmin, cfg }) => {
             {/* RIGHT: Tendencia de Resolución */}
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 4 }}>
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#5f6368" strokeWidth="2">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#52524d" strokeWidth="2">
                   <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
                 </svg>
-                <span style={{ fontSize: 10, fontWeight: 600, color: '#5f6368', letterSpacing: '0.3px', textTransform: 'uppercase' }}>Tendencia de Resolución</span>
+                <span style={{ fontSize: 10, fontWeight: 600, color: '#52524d', letterSpacing: '0.3px', textTransform: 'uppercase' }}>Tendencia de Resolución</span>
               </div>
-              <div style={{ background: '#fff', borderRadius: 6, padding: '4px 6px', border: '1px solid #e0e0e0' }}>
+              <div style={{ background: '#fff', borderRadius: 6, padding: '4px 6px', border: '1px solid #e8e6dc' }}>
                 {trendData.filter(d => !d.projected).length < 2 ? (
-                  <div style={{ height: 60, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#aaa', fontSize: 10, fontStyle: 'italic' }}>
+                  <div style={{ height: 60, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#72706b', fontSize: 10, fontStyle: 'italic' }}>
                     Se necesitan al menos 2 meses con datos.
                   </div>
                 ) : (
                   <svg width="100%" viewBox={`0 0 ${tW} ${tH}`} style={{ display: 'block' }}>
                     <defs>
                       <linearGradient id="trendGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#e53935" stopOpacity="0.18"/>
-                        <stop offset="100%" stopColor="#e53935" stopOpacity="0.01"/>
+                        <stop offset="0%" stopColor="#b93535" stopOpacity="0.18"/>
+                        <stop offset="100%" stopColor="#b93535" stopOpacity="0.01"/>
                       </linearGradient>
                     </defs>
                     {[0, 0.5, 1].map((pct, i) => {
                       const gy = tPT + tAH - pct * tAH;
                       return (
                         <g key={i}>
-                          <line x1={tPL} y1={gy} x2={tW - tPR} y2={gy} stroke="#f0f0f0" strokeWidth="1"/>
-                          <text x={tPL - 4} y={gy + 3} textAnchor="end" fill="#aaa" fontSize="9">{Math.round(tMax * pct)}d</text>
+                          <line x1={tPL} y1={gy} x2={tW - tPR} y2={gy} stroke="#f1f0e8" strokeWidth="1"/>
+                          <text x={tPL - 4} y={gy + 3} textAnchor="end" fill="#b0aea5" fontSize="9">{Math.round(tMax * pct)}d</text>
                         </g>
                       );
                     })}
                     {/* Area fill (real data only) */}
                     <path d={tArea} fill="url(#trendGrad)"/>
                     {/* Real line */}
-                    <path d={tLine} fill="none" stroke="#e53935" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    <path d={tLine} fill="none" stroke="#b93535" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                     {/* Projected line (dashed) */}
-                    {projLine && <path d={projLine} fill="none" stroke="#f9ab00" strokeWidth="1.5" strokeDasharray="4 3" strokeLinecap="round"/>}
+                    {projLine && <path d={projLine} fill="none" stroke="#f9eeda" strokeWidth="1.5" strokeDasharray="4 3" strokeLinecap="round"/>}
                     {/* Real points */}
                     {realPts.map((p, i) => (
                       <g key={`r${i}`}>
-                        <circle cx={p.x} cy={p.y} r="4" fill="#fff" stroke="#e53935" strokeWidth="2"/>
-                        <text x={p.x} y={p.y - 8} textAnchor="middle" fill="#e53935" fontSize="9" fontWeight="700">{p.avg}d</text>
-                        <text x={p.x} y={tH - 2} textAnchor="middle" fill="#666" fontSize="8">{p.label}</text>
+                        <circle cx={p.x} cy={p.y} r="4" fill="#fff" stroke="#b93535" strokeWidth="2"/>
+                        <text x={p.x} y={p.y - 8} textAnchor="middle" fill="#b93535" fontSize="9" fontWeight="700">{p.avg}d</text>
+                        <text x={p.x} y={tH - 2} textAnchor="middle" fill="#72706b" fontSize="8">{p.label}</text>
                         <rect x={p.x - 16} y={tPT} width="32" height={tAH + tPB} fill="transparent" style={{ cursor: 'pointer' }}>
                           <title>{p.label}: {p.avg} día(s) — {p.count} {cfg.singular}(s)</title>
                         </rect>
@@ -1431,9 +1441,9 @@ const IssueModule = ({ project, API, user, isAdmin, cfg }) => {
                     {/* Projected points */}
                     {projPts.map((p, i) => (
                       <g key={`p${i}`}>
-                        <circle cx={p.x} cy={p.y} r="2.5" fill="#fff" stroke="#f9ab00" strokeWidth="1.5" strokeDasharray="2 1"/>
-                        <text x={p.x} y={p.y - 8} textAnchor="middle" fill="#f9ab00" fontSize="9" fontWeight="600">{p.avg}d</text>
-                        <text x={p.x} y={tH - 2} textAnchor="middle" fill="#aaa" fontSize="8" fontStyle="italic">{p.label}</text>
+                        <circle cx={p.x} cy={p.y} r="2.5" fill="#fff" stroke="#f9eeda" strokeWidth="1.5" strokeDasharray="2 1"/>
+                        <text x={p.x} y={p.y - 8} textAnchor="middle" fill="#f9eeda" fontSize="9" fontWeight="600">{p.avg}d</text>
+                        <text x={p.x} y={tH - 2} textAnchor="middle" fill="#b0aea5" fontSize="8" fontStyle="italic">{p.label}</text>
                         <rect x={p.x - 16} y={tPT} width="32" height={tAH + tPB} fill="transparent" style={{ cursor: 'pointer' }}>
                           <title>{p.label}: Proyección {p.avg} día(s)</title>
                         </rect>
@@ -1480,14 +1490,14 @@ const IssueModule = ({ project, API, user, isAdmin, cfg }) => {
               {/* Header */}
               <div style={{
                 display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                padding: '12px 20px', background: '#222', color: '#fff', flexShrink: 0
+                padding: '12px 20px', background: '#141413', color: '#fff', flexShrink: 0
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                   {isPdf && <PdfIcon />}
                   {isImage && <ImgIcon />}
                   {isVideo && (
                     <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
-                      <rect x="3" y="1" width="18" height="22" rx="2" fill="#4d6a8f" />
+                      <rect x="3" y="1" width="18" height="22" rx="2" fill="#507294" />
                       <text x="12" y="15" textAnchor="middle" fill="#fff" fontWeight="bold" fontSize="6" fontFamily="sans-serif">VID</text>
                     </svg>
                   )}
@@ -1497,7 +1507,7 @@ const IssueModule = ({ project, API, user, isAdmin, cfg }) => {
                     {/* La version se ve, pero NO forma parte del nombre: el
                         tipo de archivo se detecta por la extension. */}
                     {previewFile.etiqueta && (
-                      <span style={{ color: '#9aa0a6', fontWeight: 400 }}>{previewFile.etiqueta}</span>
+                      <span style={{ color: '#72706b', fontWeight: 400 }}>{previewFile.etiqueta}</span>
                     )}
                   </span>
                 </div>
@@ -1507,9 +1517,9 @@ const IssueModule = ({ project, API, user, isAdmin, cfg }) => {
                     target="_blank"
                     rel="noopener noreferrer"
                     title="Abrir en pestaña nueva"
-                    style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 32, height: 32, borderRadius: 6, background: '#333', color: '#ddd', textDecoration: 'none', transition: 'background 0.2s' }}
-                    onMouseOver={e => e.currentTarget.style.background = '#555'}
-                    onMouseOut={e => e.currentTarget.style.background = '#333'}
+                    style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 32, height: 32, borderRadius: 6, background: '#333330', color: '#e8e6dc', textDecoration: 'none', transition: 'background 0.2s' }}
+                    onMouseOver={e => e.currentTarget.style.background = '#52524d'}
+                    onMouseOut={e => e.currentTarget.style.background = '#333330'}
                   >
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
                   </a>
@@ -1517,18 +1527,18 @@ const IssueModule = ({ project, API, user, isAdmin, cfg }) => {
                     href={previewFile.url}
                     download={previewFile.name}
                     title="Descargar"
-                    style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 32, height: 32, borderRadius: 6, background: '#333', color: '#ddd', textDecoration: 'none', transition: 'background 0.2s' }}
-                    onMouseOver={e => e.currentTarget.style.background = '#555'}
-                    onMouseOut={e => e.currentTarget.style.background = '#333'}
+                    style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 32, height: 32, borderRadius: 6, background: '#333330', color: '#e8e6dc', textDecoration: 'none', transition: 'background 0.2s' }}
+                    onMouseOver={e => e.currentTarget.style.background = '#52524d'}
+                    onMouseOut={e => e.currentTarget.style.background = '#333330'}
                   >
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
                   </a>
                   <button
                     onClick={() => setPreviewFile(null)}
                     title="Cerrar"
-                    style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 32, height: 32, borderRadius: 6, background: '#444', color: '#fff', border: 'none', cursor: 'pointer', fontSize: 18, fontWeight: 300, transition: 'background 0.2s' }}
-                    onMouseOver={e => e.currentTarget.style.background = '#d93025'}
-                    onMouseOut={e => e.currentTarget.style.background = '#444'}
+                    style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 32, height: 32, borderRadius: 6, background: '#333330', color: '#fff', border: 'none', cursor: 'pointer', fontSize: 18, fontWeight: 300, transition: 'background 0.2s' }}
+                    onMouseOver={e => e.currentTarget.style.background = '#b93535'}
+                    onMouseOut={e => e.currentTarget.style.background = '#333330'}
                   >
                     ✕
                   </button>
@@ -1536,7 +1546,7 @@ const IssueModule = ({ project, API, user, isAdmin, cfg }) => {
               </div>
 
               {/* Content */}
-              <div style={{ flex: 1, position: 'relative', background: '#f5f5f5', overflow: 'hidden' }}>
+              <div style={{ flex: 1, position: 'relative', background: '#f1f0e8', overflow: 'hidden' }}>
                 {isPdf && (
                   <PDFViewer url={previewFile.url} fileName={previewFile.name}
                     nodeId={previewFile.nodeId || null} projectPrefix={projectPrefix} />
@@ -1555,9 +1565,9 @@ const IssueModule = ({ project, API, user, isAdmin, cfg }) => {
                 )}
                 {!isPdf && !isImage && !isVideo && (
                   <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16 }}>
-                    <svg width="64" height="64" viewBox="0 0 24 24" fill="#bbb"><path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2h12c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>
-                    <p style={{ color: '#666', fontSize: 14, margin: 0 }}>Vista previa no disponible para este tipo de archivo.</p>
-                    <a href={previewFile.url} target="_blank" rel="noopener noreferrer" style={{ background: '#d32f2f', color: '#fff', padding: '10px 24px', borderRadius: 8, textDecoration: 'none', fontWeight: 500, fontSize: 14 }}>Descargar Archivo</a>
+                    <svg width="64" height="64" viewBox="0 0 24 24" fill="#cccac0"><path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2h12c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>
+                    <p style={{ color: '#72706b', fontSize: 14, margin: 0 }}>Vista previa no disponible para este tipo de archivo.</p>
+                    <a href={previewFile.url} target="_blank" rel="noopener noreferrer" style={{ background: '#b93535', color: '#fff', padding: '10px 24px', borderRadius: 8, textDecoration: 'none', fontWeight: 500, fontSize: 14 }}>Descargar Archivo</a>
                   </div>
                 )}
               </div>
@@ -1571,22 +1581,22 @@ const IssueModule = ({ project, API, user, isAdmin, cfg }) => {
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <div style={{ background: '#fff', borderRadius: 12, width: 600, maxHeight: '80vh', display: 'flex', flexDirection: 'column', boxShadow: '0 10px 30px rgba(0,0,0,0.2)' }}>
 
-            <div style={{ padding: '16px 24px', borderBottom: '1px solid #eee', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ padding: '16px 24px', borderBottom: '1px solid #f1f0e8', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <h3 style={{ margin: 0, fontSize: 16, fontWeight: 500 }}>Vincular Archivo del Proyecto</h3>
-              <button onClick={closeFileSelector} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 22, color: '#999' }}>&times;</button>
+              <button onClick={closeFileSelector} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 22, color: '#72706b' }}>&times;</button>
             </div>
 
             {/* Breadcrumbs */}
-            <div style={{ padding: '10px 24px', background: '#f8f9fa', borderBottom: '1px solid #eee', display: 'flex', gap: 6, alignItems: 'center', fontSize: 13, flexWrap: 'wrap' }}>
+            <div style={{ padding: '10px 24px', background: '#faf9f5', borderBottom: '1px solid #f1f0e8', display: 'flex', gap: 6, alignItems: 'center', fontSize: 13, flexWrap: 'wrap' }}>
               {selectorPath.map((crumb, idx) => (
                 <React.Fragment key={idx}>
                   <span
                     onClick={() => navigateBreadcrumb(idx)}
-                    style={{ cursor: 'pointer', color: idx === selectorPath.length - 1 ? '#333' : 'var(--accent)', fontWeight: idx === selectorPath.length - 1 ? 600 : 400 }}
+                    style={{ cursor: 'pointer', color: idx === selectorPath.length - 1 ? '#333330' : 'var(--accent)', fontWeight: idx === selectorPath.length - 1 ? 600 : 400 }}
                   >
                     {crumb.name}
                   </span>
-                  {idx < selectorPath.length - 1 && <span style={{ color: '#ccc' }}>/</span>}
+                  {idx < selectorPath.length - 1 && <span style={{ color: '#cccac0' }}>/</span>}
                 </React.Fragment>
               ))}
             </div>
@@ -1594,27 +1604,27 @@ const IssueModule = ({ project, API, user, isAdmin, cfg }) => {
             {/* File List */}
             <div style={{ flex: 1, overflowY: 'auto', padding: 0, minHeight: 200, maxHeight: 400 }}>
               {nodesLoading ? (
-                <div style={{ textAlign: 'center', padding: 40, color: '#999' }}>Cargando carpetas...</div>
+                <div style={{ textAlign: 'center', padding: 40, color: '#72706b' }}>Cargando carpetas...</div>
               ) : projectNodes.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: 40, color: '#999' }}>Carpeta vacía</div>
+                <div style={{ textAlign: 'center', padding: 40, color: '#72706b' }}>Carpeta vacía</div>
               ) : (
                 <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
                   {projectNodes.map(node => (
                     <li
                       key={node.id}
                       onClick={() => onNodeClick(node)}
-                      style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 24px', borderBottom: '1px solid #f5f5f5', cursor: 'pointer', transition: 'background 0.15s' }}
-                      onMouseOver={e => e.currentTarget.style.background = '#f4f6f9'}
+                      style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 24px', borderBottom: '1px solid #f1f0e8', cursor: 'pointer', transition: 'background 0.15s' }}
+                      onMouseOver={e => e.currentTarget.style.background = '#f1f0e8'}
                       onMouseOut={e => e.currentTarget.style.background = 'none'}
                     >
                       {node._isFolder ? (
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="#ffd54f"><path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z" /></svg>
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="#f9eeda"><path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z" /></svg>
                       ) : (
                         getMimeIconComponent(node.name)
                       )}
-                      <span style={{ fontSize: 13, color: '#333', flex: 1 }}>{node.name}</span>
+                      <span style={{ fontSize: 13, color: '#333330', flex: 1 }}>{node.name}</span>
                       {!node._isFolder && (
-                        <span style={{ fontSize: 11, color: '#d32f2f', fontWeight: 500 }}>Seleccionar</span>
+                        <span style={{ fontSize: 11, color: '#b93535', fontWeight: 500 }}>Seleccionar</span>
                       )}
                     </li>
                   ))}

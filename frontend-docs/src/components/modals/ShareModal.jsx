@@ -74,22 +74,22 @@ export default function ShareModal({ isOpen, shareTarget, user, projectPrefix, s
     <div className="modal-overlay" onClick={onClose}>
       <div className="share-modal-box" onClick={e => e.stopPropagation()}>
         <div className="share-header"><h2>Compartir &quot;{shareTarget.name.replace(/\/$/, '')}&quot;</h2></div>
-        <div style={{ padding: '8px 0', fontSize: 13, color: '#555', lineHeight: 1.55 }}>
+        <div style={{ padding: '8px 0', fontSize: 13, color: '#52524d', lineHeight: 1.55 }}>
           Este piloto crea enlaces públicos de solo lectura. Las invitaciones individuales y los enlaces restringidos se habilitarán cuando exista una lista de acceso persistente. Para usuarios registrados, usa permisos de carpeta.
         </div>
 
         {bloqueada && (
           <div role="alert" style={{ margin: '4px 0 12px', padding: '12px 14px',
-                                     border: '1px solid var(--border-warning, #e6d3a8)',
-                                     background: 'var(--bg-warning, #fbf4e6)',
+                                     border: '1px solid var(--border-warning, #f9eeda)',
+                                     background: 'var(--bg-warning, #f9eeda)',
                                      borderRadius: 6, fontSize: 12.5, lineHeight: 1.5,
-                                     color: 'var(--text-primary, #16202b)' }}>
+                                     color: 'var(--text-primary, #141413)' }}>
             <b>
               {puerta.estado === 'caducado'
                 ? 'El triaje de seguridad de esta obra está caducado.'
                 : 'Esta obra todavía no tiene hecho el triaje de seguridad.'}
             </b>
-            <div style={{ marginTop: 4, color: 'var(--text-secondary, #4a5561)' }}>
+            <div style={{ marginTop: 4, color: 'var(--text-secondary, #52524d)' }}>
               Un enlace público es distribución incontrolada: quien lo tenga, abre.
               La ISO 19650-5 pide decidir antes si la obra maneja información
               delicada. {esAdmin
@@ -112,7 +112,7 @@ export default function ShareModal({ isOpen, shareTarget, user, projectPrefix, s
             destinatarios, número y acuse. Se dice, para que nadie crea que el
             documento está atrapado. */}
         {bloqueada && (
-          <div style={{ margin: '0 0 10px', fontSize: 12, color: 'var(--text-secondary, #667180)' }}>
+          <div style={{ margin: '0 0 10px', fontSize: 12, color: 'var(--text-secondary, #72706b)' }}>
             Mientras tanto puedes emitirlo por <b>Transmittal</b>, que es canal formal
             con acuse y no depende del triaje.
           </div>
@@ -128,7 +128,7 @@ export default function ShareModal({ isOpen, shareTarget, user, projectPrefix, s
           <div className="share-access-details"><strong>Cualquier persona con el enlace</strong><div className="share-access-desc">Lector; revoca el enlace al terminar el piloto.</div></div>
           <span className="share-user-role">Lector</span>
         </div>
-        <div style={{ marginTop: 16, display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, color: '#444' }}>
+        <div style={{ marginTop: 16, display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, color: '#333330' }}>
           <span>El enlace caduca en:</span>
           <select value={expiresDays} onChange={e => setExpiresDays(Number(e.target.value))} disabled={creating}>
             <option value={1}>1 día</option><option value={7}>7 días</option><option value={30}>30 días</option><option value={90}>90 días</option>
@@ -147,7 +147,7 @@ export default function ShareModal({ isOpen, shareTarget, user, projectPrefix, s
             onClick={handleCopyLink}>
             {creating ? 'Creando…' : puerta.estado === 'consultando' ? 'Comprobando…' : 'Copiar enlace'}
           </button>
-          {shareLinkCopied && <div style={{ position: 'absolute', top: 50, left: 24, background: '#323232', color: '#fff', padding: '12px 16px', borderRadius: 4 }}>Enlace copiado</div>}
+          {shareLinkCopied && <div style={{ position: 'absolute', top: 50, left: 24, background: '#333330', color: '#fff', padding: '12px 16px', borderRadius: 4 }}>Enlace copiado</div>}
           <button className="btn-share-done" onClick={onClose}>Hecho</button>
         </div>
       </div>

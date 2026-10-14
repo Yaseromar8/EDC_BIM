@@ -63,7 +63,7 @@ export default function FacultadesDeEntidad() {
   };
 
   if (datos === null) {
-    return <div style={{ fontSize: 13, color: '#888' }}>Cargando facultades…</div>;
+    return <div style={{ fontSize: 13, color: '#72706b' }}>Cargando facultades…</div>;
   }
 
   // Candidatos: personas activas que NO son Entity Admin (esos ya las tienen
@@ -74,12 +74,12 @@ export default function FacultadesDeEntidad() {
   const candidatos = personas.filter(p => !adminIds.has(p.id) && p.activo !== false);
 
   return (
-    <div style={{ background: '#fff', border: '1px solid #e5e5e5', borderRadius: 8,
+    <div style={{ background: '#fff', border: '1px solid #e8e6dc', borderRadius: 8,
                   padding: 24, marginBottom: 20 }}>
-      <div style={{ fontSize: 14, fontWeight: 600, color: '#333', marginBottom: 6 }}>
+      <div style={{ fontSize: 14, fontWeight: 600, color: '#333330', marginBottom: 6 }}>
         Facultades de la entidad
       </div>
-      <p style={{ fontSize: 12.5, color: '#777', margin: '0 0 16px', maxWidth: 760,
+      <p style={{ fontSize: 12.5, color: '#72706b', margin: '0 0 16px', maxWidth: 760,
                   lineHeight: 1.55 }}>
         Delegación <b>acotada</b>: permite encargar una parte de la administración
         sin entregar la entidad entera. Una facultad <b>no administra ninguna obra</b>,
@@ -90,16 +90,16 @@ export default function FacultadesDeEntidad() {
 
       {error && (
         <div role="alert" style={{ marginBottom: 12, padding: '9px 11px', borderRadius: 6,
-                                   background: '#fef2f2', border: '1px solid #fecaca',
-                                   color: '#991b1b', fontSize: 12.5 }}>
+                                   background: '#fbebeb', border: '1px solid #fbebeb',
+                                   color: '#b93535', fontSize: 12.5 }}>
           {error} <b>La lista está incompleta</b>, no vacía.
         </div>
       )}
 
       {(datos.entity_admins || []).length > 0 && (
-        <div style={{ marginBottom: 16, padding: '10px 12px', background: '#f8fafc',
-                      border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 12.3,
-                      color: '#475569', lineHeight: 1.5 }}>
+        <div style={{ marginBottom: 16, padding: '10px 12px', background: '#faf9f5',
+                      border: '1px solid #e8e6dc', borderRadius: 6, fontSize: 12.3,
+                      color: '#52524d', lineHeight: 1.5 }}>
           <b>Administradores de la entidad:</b>{' '}
           {datos.entity_admins.map(a => a.nombre || a.email).join(' · ')}.
           Tienen <b>todas</b> las facultades por definición y no aparecen abajo:
@@ -108,14 +108,14 @@ export default function FacultadesDeEntidad() {
       )}
 
       {candidatos.length === 0 ? (
-        <div style={{ fontSize: 13, color: '#888' }}>
+        <div style={{ fontSize: 13, color: '#72706b' }}>
           No hay personas a las que delegar todavía.
         </div>
       ) : (
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
             <thead>
-              <tr style={{ borderBottom: '2px solid #eee', color: '#888', fontWeight: 500,
+              <tr style={{ borderBottom: '2px solid #f1f0e8', color: '#72706b', fontWeight: 500,
                            textAlign: 'left' }}>
                 <th style={{ padding: '8px 10px' }}>Persona</th>
                 {(datos.catalogo || []).map(f => (
@@ -131,11 +131,11 @@ export default function FacultadesDeEntidad() {
                 const suyas = delegadoDe[p.id] || [];
                 const quien = p.name || p.email;
                 return (
-                  <tr key={p.id} style={{ borderBottom: '1px solid #f2f4f6' }}>
+                  <tr key={p.id} style={{ borderBottom: '1px solid #f1f0e8' }}>
                     <td style={{ padding: '9px 10px' }}>
                       <div style={{ fontWeight: 500 }}>{quien}</div>
                       {p.email && p.name && (
-                        <div style={{ fontSize: 11.5, color: '#98a1ab' }}>{p.email}</div>
+                        <div style={{ fontSize: 11.5, color: '#72706b' }}>{p.email}</div>
                       )}
                     </td>
                     {(datos.catalogo || []).map(f => (
@@ -154,7 +154,7 @@ export default function FacultadesDeEntidad() {
         </div>
       )}
 
-      <div style={{ marginTop: 14, fontSize: 11.5, color: '#98a1ab', maxWidth: 760,
+      <div style={{ marginTop: 14, fontSize: 11.5, color: '#72706b', maxWidth: 760,
                     lineHeight: 1.5 }}>
         {(datos.catalogo || []).map(f => (
           <div key={f.codigo} style={{ marginBottom: 3 }}>

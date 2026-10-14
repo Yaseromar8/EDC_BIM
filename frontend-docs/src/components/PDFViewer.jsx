@@ -131,8 +131,8 @@ function Thumbnail({ pdf, pageNum, isActive, onClick }) {
       style={{
         display: 'flex', flexDirection: 'column', alignItems: 'center',
         padding: '12px 0', cursor: 'pointer',
-        background: isActive ? '#e3eaf0' : 'transparent',
-        borderBottom: '1px solid #e3e6ea',
+        background: isActive ? '#f1f0e8' : 'transparent',
+        borderBottom: '1px solid #e8e6dc',
         transition: 'background 0.2s'
       }}
     >
@@ -146,7 +146,7 @@ function Thumbnail({ pdf, pageNum, isActive, onClick }) {
       }}>
         <canvas ref={canvasRef} />
       </div>
-      <span style={{ fontSize: 11, color: '#4a5561', marginTop: 8, fontVariantNumeric: 'tabular-nums', fontWeight: isActive ? 600 : 400 }}>
+      <span style={{ fontSize: 11, color: '#52524d', marginTop: 8, fontVariantNumeric: 'tabular-nums', fontWeight: isActive ? 600 : 400 }}>
         {pageNum}
       </span>
     </div>
@@ -2136,10 +2136,10 @@ export default function PDFViewer({ url, preparando = false,
   if (error) {
     return (
       <div style={styles.center} role="alert">
-        <svg width="48" height="48" viewBox="0 0 24 24" fill="#d32f2f">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="#b93535">
           <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/>
         </svg>
-        <div style={{ fontSize: 14, color: '#666', marginTop: 12 }}>No se pudo cargar el PDF</div>
+        <div style={{ fontSize: 14, color: '#72706b', marginTop: 12 }}>No se pudo cargar el PDF</div>
         <details className="pdf-error-details">
           <summary>Ver detalle técnico</summary>
           <div>{error}</div>
@@ -2358,8 +2358,8 @@ export default function PDFViewer({ url, preparando = false,
                   <div key={h.key} style={{
                     position: 'absolute', pointerEvents: 'none', zIndex: 9,
                     left: h.left, top: h.top, width: h.width, height: h.height,
-                    background: h.active ? 'rgba(255,145,0,0.55)' : 'rgba(255,235,59,0.38)',
-                    outline: h.active ? '1px solid #ff6d00' : 'none', borderRadius: 2,
+                    background: h.active ? 'rgba(249,238,218,0.55)' : 'rgba(249,238,218,0.38)',
+                    outline: h.active ? '1px solid #d97757' : 'none', borderRadius: 2,
                   }} />
                 ))}
                 {/* EL OVERLAY DE MARCAS NO SE DESMONTA EN CADA REDIBUJADO.
@@ -2529,7 +2529,7 @@ export default function PDFViewer({ url, preparando = false,
 // Estilos en línea: solo los estados SIN chrome (carga y error). Todo lo
 // demás vive en PDFViewer.css, con clases.
 const styles = {
-  center: { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', width: '100%', gap: 4, background: 'var(--alephia-mist, #F3F6F8)' },
-  spinner: { width: 36, height: 36, border: '3px solid #e0e0e0', borderTop: '3px solid var(--accent)', borderRadius: '50%', animation: 'spin-acc 1s linear infinite' },
+  center: { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', width: '100%', gap: 4, background: 'var(--alephia-mist, #F1F0E8)' },
+  spinner: { width: 36, height: 36, border: '3px solid #e8e6dc', borderTop: '3px solid var(--accent)', borderRadius: '50%', animation: 'spin-acc 1s linear infinite' },
   downloadBtn: { marginTop: 16, padding: '8px 20px', background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 4, textDecoration: 'none', fontSize: 13, fontWeight: 500 },
 };

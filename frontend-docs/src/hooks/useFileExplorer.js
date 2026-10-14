@@ -39,6 +39,7 @@ async function copiarAlPortapapeles(texto) {
   if (!copiado) throw new Error('No se pudo copiar');
 }
 import { puedeEditarEn } from '../utils/capacidadesDeSeleccion';
+import { piezasDelCodigo } from '../utils/codigoDelNombre';
 
 export function useFileExplorer(project, user) {
   // EL ALCANCE QUE MANDA EL SERVIDOR, no una ruta deducida del nombre.
@@ -183,6 +184,10 @@ export function useFileExplorer(project, user) {
   const [membersLoading, setMembersLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL'); // ALL | WIP | SHARED | PUBLISHED | ARCHIVED
+  // FILTROS POR METADATO (A2, 14-oct-2026): tipo y disciplina leídos del código
+  // del nombre, y la entrega del plan. null = sin filtro. Se suman al buscador y
+  // al estado, que siguen igual.
+  const [filtrosMeta, setFiltrosMeta] = useState({ tipo: null, disciplina: null, entrega: null });
   const [collapseSignal, setCollapseSignal] = useState(0);
 
   // Lista VACIA a proposito. Aqui vivia una lista de usuarios de prueba con el
@@ -1091,8 +1096,20 @@ export function useFileExplorer(project, user) {
   // qué se puede hacer con ellos (tipo, permiso, acceso).
   const elementosSeleccionados = [...folders, ...files].filter(i => selected.has(i.id));
 
-  const filteredFolders = folders.filter(f => f.name.toLowerCase().includes(searchQuery.toLowerCase()));
+  const hayFiltroMeta = !!(filtrosMeta.tipo || filtrosMeta.disciplina || filtrosMeta.entrega);
+  // Con un filtro por metadato las carpetas se apartan: no tienen tipo, ni
+  // disciplina, ni entrega, así que nunca cumplen el filtro.
+  const filteredFolders = hayFiltroMeta ? [] : folders.filter(f => f.name.toLowerCase().includes(searchQuery.toLowerCase()));
+  const cumpleMeta = (f) => {
+    if (!hayFiltroMeta) return true;
+    const c = piezasDelCodigo(f.name);
+    if (filtrosMeta.tipo && c?.tipo !== filtrosMeta.tipo) return false;
+    if (filtrosMeta.disciplina && c?.disciplina !== filtrosMeta.disciplina) return false;
+    if (filtrosMeta.entrega && (f.entrega?.estado || 'fuera') !== filtrosMeta.entrega) return false;
+    return true;
+  };
   const filteredFiles = files.filter(f =>
+    cumpleMeta(f) &&
     f.name.toLowerCase().includes(searchQuery.toLowerCase()) &&
     (statusFilter === 'ALL' || (f.status || 'WIP') === statusFilter)
   );
@@ -1121,6 +1138,7 @@ export function useFileExplorer(project, user) {
     elementosSeleccionados,
     searchQuery, setSearchQuery,
     statusFilter, setStatusFilter,
+    filtrosMeta, setFiltrosMeta, hayFiltroMeta,
     
     // Trash
     isTrashMode, setIsTrashMode,

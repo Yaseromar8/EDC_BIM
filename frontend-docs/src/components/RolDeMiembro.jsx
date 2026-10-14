@@ -49,7 +49,7 @@ export function RolDeMiembro({ miembro, isAdmin, onCambiado }) {
     return (
       <span title={esYo ? 'Tu propio rol lo cambia otro administrador.' : undefined}
             style={{ padding: '3px 10px', borderRadius: 12, fontSize: 11, fontWeight: 600,
-                     textTransform: 'uppercase', background: '#eef2f7', color: '#4d6a8f' }}>
+                     textTransform: 'uppercase', background: '#f1f0e8', color: '#507294' }}>
         {rol}
       </span>
     );
@@ -117,8 +117,8 @@ export function RolDeMiembro({ miembro, isAdmin, onCambiado }) {
             title="Cambiar el rol de este miembro"
             style={{
               padding: '4px 8px', borderRadius: 8, fontSize: 12, fontWeight: 600,
-              border: '1px solid #d8dee6', background: cambiando ? '#f4f4f4' : '#fff',
-              color: '#4d6a8f', cursor: cambiando ? 'default' : 'pointer',
+              border: '1px solid #ecf0f1', background: cambiando ? '#f1f0e8' : '#fff',
+              color: '#507294', cursor: cambiando ? 'default' : 'pointer',
             }}>
       {ROLES.map(o => (
         <option key={o.valor} value={o.valor}>{o.etiqueta}</option>

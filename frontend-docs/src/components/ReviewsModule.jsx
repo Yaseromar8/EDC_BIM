@@ -1,7 +1,7 @@
 // ReviewsModule.jsx — Flujos de revisión y aprobación (ISO 19650, estilo ACC Reviews)
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import toast from 'react-hot-toast';
-import { API, formatDate, getInitials } from '../utils/helpers';
+import { API, getInitials } from '../utils/helpers';
 import { apiFetch } from '../utils/apiFetch';
 import { confirmAction } from '../utils/confirm';
 import {
@@ -14,6 +14,9 @@ import {
   FILTROS, leerEnlace, conRevision, chipDeEstado, codigoDe, mensajeDeError,
   avisoDeOtrasRevisiones, AVISO_DOCUMENTOS_EN_CURSO,
 } from '../utils/revisiones';
+import Button from '../../../design/ui/Button';
+import IconButton from '../../../design/ui/IconButton';
+import './ReviewsModule.css';
 
 // ── Modal: enviar documentos a revisión ──
 export function ReviewModal({ isOpen, onClose, items, projectPrefix, onCreated }) {
@@ -285,33 +288,35 @@ export function ReviewModal({ isOpen, onClose, items, projectPrefix, onCreated }
   };
 
   return (
-    <div className="modal-overlay" style={{ position: 'fixed', inset: 0, zIndex: 11000, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={onClose}>
-      <div onClick={e => e.stopPropagation()} style={{ width: 520, maxHeight: '85vh', overflowY: 'auto', background: '#fff', borderRadius: 8, boxShadow: '0 10px 40px rgba(0,0,0,0.25)' }}>
-        <div style={{ padding: '14px 20px', borderBottom: '1px solid #eee', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: '#1f1f1f' }}>Enviar a revisión</h3>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 20, color: '#999', cursor: 'pointer' }}>×</button>
+    <div className="modal-overlay" style={{ position: 'fixed', inset: 0, zIndex: 11000, background: 'var(--a-surface-overlay)', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} style={{ width: 520, maxHeight: '85vh', overflowY: 'auto', background: '#fff', borderRadius: 'var(--a-radius-lg)', border: '1px solid var(--a-border-subtle)', boxShadow: 'var(--a-shadow-lg)' }}>
+        <div style={{ padding: '14px 20px', borderBottom: '1px solid #f1f0e8', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: '#141413' }}>Enviar a revisión</h3>
+          <IconButton etiqueta="Cerrar" onClick={onClose}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18" /><line x1="18" y1="6" x2="6" y2="18" /></svg>
+          </IconButton>
         </div>
         <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 16, fontSize: 13 }}>
           <div>
-            <label style={{ display: 'block', color: '#666', marginBottom: 6, fontWeight: 600 }}>Título</label>
+            <label style={{ display: 'block', color: '#72706b', marginBottom: 6, fontWeight: 600 }}>Título</label>
             <input autoFocus value={title} onChange={e => setTitle(e.target.value)} placeholder="Ej: Aprobación planos estructuras Rev B"
-              style={{ width: '100%', boxSizing: 'border-box', padding: '8px 10px', border: '1px solid #ddd', borderRadius: 4, fontSize: 13, outline: 'none' }} />
+              style={{ width: '100%', boxSizing: 'border-box', padding: '8px 10px', border: '1px solid #e8e6dc', borderRadius: 4, fontSize: 13, outline: 'none' }} />
           </div>
 
           <div>
-            <label style={{ display: 'block', color: '#666', marginBottom: 6, fontWeight: 600 }}>Documentos ({items.length})</label>
-            <div style={{ maxHeight: 140, overflowY: 'auto', border: '1px solid #eee', borderRadius: 4 }}>
+            <label style={{ display: 'block', color: '#72706b', marginBottom: 6, fontWeight: 600 }}>Documentos ({items.length})</label>
+            <div style={{ maxHeight: 140, overflowY: 'auto', border: '1px solid #f1f0e8', borderRadius: 4 }}>
               {items.map(it => {
                 const otras = enCurso[it.node_id] || [];
                 const aviso = avisoDeOtrasRevisiones(otras, { enElAlta: true });
                 return (
-                  <div key={it.node_id} style={{ padding: '6px 10px', borderBottom: '1px solid #f5f5f5' }}>
+                  <div key={it.node_id} style={{ padding: '6px 10px', borderBottom: '1px solid #f1f0e8' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
                       <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.name}</span>
                       <span style={{ color: 'var(--accent)', fontWeight: 600 }}>V{it.version || 1}</span>
                     </div>
                     {aviso && (
-                      <div style={{ marginTop: 2, fontSize: 11, color: '#8a5a12' }}
+                      <div style={{ marginTop: 2, fontSize: 11, color: '#734500' }}
                            title={otras.map(o => `${o.codigo} · ${o.title}`).join('\n')}>
                         {aviso}
                       </div>
@@ -321,29 +326,29 @@ export function ReviewModal({ isOpen, onClose, items, projectPrefix, onCreated }
               })}
             </div>
             {Object.keys(enCurso).length > 0 && (
-              <div style={{ marginTop: 6, fontSize: 11, color: '#8a5a12', lineHeight: 1.5 }}>
+              <div style={{ marginTop: 6, fontSize: 11, color: '#734500', lineHeight: 1.5 }}>
                 {AVISO_DOCUMENTOS_EN_CURSO}
               </div>
             )}
           </div>
 
           {errorPlantillas && (
-            <div role="alert" style={{ fontSize: 12, color: '#8a5a12', background: '#fffaf0',
-                                       border: '1px solid #f0d9a0', borderRadius: 4, padding: '6px 9px',
+            <div role="alert" style={{ fontSize: 12, color: '#734500', background: '#faf9f5',
+                                       border: '1px solid #f9eeda', borderRadius: 4, padding: '6px 9px',
                                        lineHeight: 1.5 }}>
               {errorPlantillas}
             </div>
           )}
           {plantillas.length > 0 && (
             <div>
-              <label style={{ display: 'block', color: '#666', marginBottom: 6, fontWeight: 600 }}>
+              <label style={{ display: 'block', color: '#72706b', marginBottom: 6, fontWeight: 600 }}>
                 Flujo de revisión
-                <span style={{ fontWeight: 400, color: '#999', fontSize: 11 }}>
+                <span style={{ fontWeight: 400, color: '#72706b', fontSize: 11 }}>
                   {' '}· la revisión se queda con una copia; cambiar la plantilla después no la toca
                 </span>
               </label>
               <select value={plantillaId} onChange={e => elegirPlantilla(e.target.value)}
-                      style={{ width: '100%', padding: '8px 10px', border: '1px solid #ddd',
+                      style={{ width: '100%', padding: '8px 10px', border: '1px solid #e8e6dc',
                                borderRadius: 4, fontSize: 13, background: '#fff' }}>
                 <option value="">— a mano, paso a paso —</option>
                 {plantillas.map(p => {
@@ -357,7 +362,7 @@ export function ReviewModal({ isOpen, onClose, items, projectPrefix, onCreated }
                 })}
               </select>
               {noUtilizables.length > 0 && (
-                <details style={{ marginTop: 6, fontSize: 11, color: '#8a5a12' }}>
+                <details style={{ marginTop: 6, fontSize: 11, color: '#734500' }}>
                   <summary style={{ cursor: 'pointer' }}>
                     {noUtilizables.length === 1 ? 'Un flujo no se puede usar aquí'
                       : `${noUtilizables.length} flujos no se pueden usar aquí`}
@@ -375,13 +380,13 @@ export function ReviewModal({ isOpen, onClose, items, projectPrefix, onCreated }
                     const molde = (plantillaElegida?.pasos || [])[Number(i)] || {};
                     return (
                       <label key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}>
-                        <span style={{ flex: '0 0 45%', color: '#444' }}>
+                        <span style={{ flex: '0 0 45%', color: '#333330' }}>
                           Paso {Number(i) + 1}{molde.etiqueta ? ` · ${molde.etiqueta}` : ''}
-                          {molde.funcion && <span style={{ color: '#999' }}> · función {molde.funcion}</span>}
+                          {molde.funcion && <span style={{ color: '#72706b' }}> · función {molde.funcion}</span>}
                         </span>
                         <select value={elecciones[i] || ''} onChange={e => elegirPersona(i, e.target.value)}
                                 aria-label={`Quién hace el paso ${Number(i) + 1}`}
-                                style={{ flex: 1, padding: '6px 8px', border: '1px solid #ddd', borderRadius: 4,
+                                style={{ flex: 1, padding: '6px 8px', border: '1px solid #e8e6dc', borderRadius: 4,
                                          fontSize: 12, background: '#fff' }}>
                           <option value="">— elige a quién —</option>
                           {opciones[i].map(c => (
@@ -394,18 +399,18 @@ export function ReviewModal({ isOpen, onClose, items, projectPrefix, onCreated }
                 </div>
               )}
               {plantillaId && previsualizando && (
-                <div style={{ marginTop: 6, fontSize: 12, color: '#666' }}>Comprobando el flujo…</div>
+                <div style={{ marginTop: 6, fontSize: 12, color: '#72706b' }}>Comprobando el flujo…</div>
               )}
               {plantillaId && bloqueo && !previsualizando && (
-                <div role="alert" style={{ marginTop: 6, fontSize: 12, color: '#9f1239', background: '#fff1f2',
-                                           border: '1px solid #fecdd3', borderRadius: 4, padding: '6px 9px',
+                <div role="alert" style={{ marginTop: 6, fontSize: 12, color: '#993458', background: '#fbebeb',
+                                           border: '1px solid #fbebeb', borderRadius: 4, padding: '6px 9px',
                                            lineHeight: 1.5 }}>
                   {bloqueo}
                 </div>
               )}
               {avisoPlantilla && (
-                <div style={{ marginTop: 6, fontSize: 12, color: '#8a5a12',
-                              background: '#fffaf0', border: '1px solid #f0d9a0',
+                <div style={{ marginTop: 6, fontSize: 12, color: '#734500',
+                              background: '#faf9f5', border: '1px solid #f9eeda',
                               borderRadius: 4, padding: '6px 9px', lineHeight: 1.5 }}>
                   {avisoPlantilla}
                 </div>
@@ -414,18 +419,18 @@ export function ReviewModal({ isOpen, onClose, items, projectPrefix, onCreated }
           )}
 
           <div>
-            <label style={{ display: 'block', color: '#666', marginBottom: 6, fontWeight: 600 }}>
+            <label style={{ display: 'block', color: '#72706b', marginBottom: 6, fontWeight: 600 }}>
               Secuencia de revisores (en orden)
               {/* Se dice aquí y no sólo en el tooltip: un plazo que el usuario
                   cree en días hábiles y el sistema cuenta en naturales es una
                   discusión garantizada la primera vez que uno vence en sábado. */}
-              <span style={{ fontWeight: 400, color: '#999', fontSize: 11 }}> · el plazo se cuenta en días calendario (naturales)</span>
+              <span style={{ fontWeight: 400, color: '#72706b', fontSize: 11 }}> · el plazo se cuenta en días calendario (naturales)</span>
             </label>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
               {pasosVisibles && steps.map((s, i) => (
                 // La clave lleva la POSICIÓN (E1.3): una misma persona puede estar en dos
                 // pasos, y con la clave repetida React mezclaba sus controles.
-                <span key={`${i}-${s.id || s.email}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: '#eef2f7', color: '#1a56a8', padding: '4px 10px', borderRadius: 14, fontSize: 12, fontWeight: 600 }}>
+                <span key={`${i}-${s.id || s.email}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: '#f1f0e8', color: '#507294', padding: '4px 10px', borderRadius: 6, fontSize: 12, fontWeight: 600 }}>
                   {i + 1}. {s.etiqueta ? s.etiqueta + ' — ' : ''}{s.name || s.email}
                   {/* QUÉ SE LE PIDE. Editable también cuando viene de una
                       plantilla: cambiarlo suelta la procedencia igual que
@@ -438,8 +443,8 @@ export function ReviewModal({ isOpen, onClose, items, projectPrefix, onCreated }
                     title={s.de_funcion
                       ? 'Sale de la función ' + s.de_funcion
                       : 'REVISA: comenta y da paso. APRUEBA: su firma vale como aprobación. El último paso tiene que aprobar, o la revisión no podría cerrarse.'}
-                    style={{ border: '1px solid #c8d6e8', borderRadius: 8, padding: '1px 2px',
-                             fontSize: 10, fontWeight: 700, color: '#1a56a8', background: '#fff' }}>
+                    style={{ border: '1px solid #cccac0', borderRadius: 8, padding: '1px 2px',
+                             fontSize: 10, fontWeight: 700, color: '#507294', background: '#fff' }}>
                     <option value="REVISA">REVISA</option>
                     <option value="APRUEBA">APRUEBA</option>
                   </select>
@@ -451,34 +456,35 @@ export function ReviewModal({ isOpen, onClose, items, projectPrefix, onCreated }
                     onChange={e => { soltarPlantilla(); setSteps(prev => prev.map((x, j) =>
                       j === i ? { ...x, dias: e.target.value } : x)); }}
                     title="Días CALENDARIO de plazo para este paso (opcional). Son días naturales: no hay calendario de días hábiles, así que un plazo de 3 días vence en 3 días aunque caigan en fin de semana."
-                    style={{ width: 52, border: '1px solid #c8d6e8', borderRadius: 8, padding: '1px 5px', fontSize: 11, color: '#1a56a8', background: '#fff' }}
+                    style={{ width: 52, border: '1px solid #cccac0', borderRadius: 8, padding: '1px 5px', fontSize: 11, color: '#507294', background: '#fff' }}
                   />
-                  <button onClick={() => { soltarPlantilla(); setSteps(prev => prev.filter((_x, j) => j !== i)); }} style={{ background: 'none', border: 'none', color: '#1a56a8', cursor: 'pointer', padding: 0, fontSize: 13 }}>×</button>
+                  <button type="button" aria-label={`Quitar el paso ${i + 1}`} title="Quitar este paso"
+                    onClick={() => { soltarPlantilla(); setSteps(prev => prev.filter((_x, j) => j !== i)); }}
+                    className="rev-quitar-paso">×</button>
                 </span>
               ))}
-              {pasosVisibles && !steps.length && <span style={{ color: '#aaa', fontSize: 12 }}>Haz clic en un usuario para añadirlo como paso…</span>}
-              {!pasosVisibles && <span style={{ color: '#aaa', fontSize: 12 }}>Los pasos del flujo aparecen aquí cuando esté completo.</span>}
+              {pasosVisibles && !steps.length && <span style={{ color: '#72706b', fontSize: 12 }}>Haz clic en un usuario para añadirlo como paso…</span>}
+              {!pasosVisibles && <span style={{ color: '#72706b', fontSize: 12 }}>Los pasos del flujo aparecen aquí cuando esté completo.</span>}
             </div>
-            <div style={{ maxHeight: 140, overflowY: 'auto', border: '1px solid #eee', borderRadius: 4 }}>
+            <div style={{ maxHeight: 140, overflowY: 'auto', border: '1px solid #f1f0e8', borderRadius: 4 }}>
               {users.filter(u => !steps.find(s => s.id === u.id)).map(u => (
-                <div key={u.email} onClick={() => { soltarPlantilla(); setSteps(prev => [...prev, { id: u.id, email: u.email, name: u.name, dias: '' }]); }}
-                  style={{ padding: '7px 10px', display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', borderBottom: '1px solid #f5f5f5' }}
-                  onMouseOver={e => e.currentTarget.style.background = '#f4f6f9'} onMouseOut={e => e.currentTarget.style.background = 'none'}>
+                <button type="button" key={u.email} className="rev-persona"
+                  onClick={() => { soltarPlantilla(); setSteps(prev => [...prev, { id: u.id, email: u.email, name: u.name, dias: '' }]); }}>
                   <span style={{ width: 26, height: 26, borderRadius: '50%', background: 'var(--accent)', color: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700 }}>{getInitials(u.name || u.email)}</span>
-                  <span>{u.name || '—'} <span style={{ color: '#999', fontSize: 11 }}>{u.email}{u.empresa ? ` · ${u.empresa}` : ''}</span>
-                    {u.pendiente && <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 600, color: '#b45309' }}>PENDIENTE</span>}
+                  <span>{u.name || '—'} <span style={{ color: '#72706b', fontSize: 11 }}>{u.email}{u.empresa ? ` · ${u.empresa}` : ''}</span>
+                    {u.pendiente && <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 600, color: '#9e5943' }}>PENDIENTE</span>}
                   </span>
-                </div>
+                </button>
               ))}
               {!users.length && (
-                <div style={{ padding: '8px 10px', color: '#999', fontSize: 12 }}>No hay participantes activos en esta obra.</div>
+                <div style={{ padding: '8px 10px', color: '#72706b', fontSize: 12 }}>No hay participantes activos en esta obra.</div>
               )}
             </div>
-            <div style={{ marginTop: 6, fontSize: 11, color: '#999', lineHeight: 1.5 }}>{AYUDA_PARTICIPANTES}</div>
+            <div style={{ marginTop: 6, fontSize: 11, color: '#72706b', lineHeight: 1.5 }}>{AYUDA_PARTICIPANTES}</div>
           </div>
 
           <div>
-            <label style={{ display: 'block', color: '#666', marginBottom: 6, fontWeight: 600 }}>Al aprobar, los documentos pasan a:</label>
+            <label style={{ display: 'block', color: '#72706b', marginBottom: 6, fontWeight: 600 }}>Al aprobar, los documentos pasan a:</label>
             <div style={{ display: 'flex', gap: 14 }}>
               {[['SHARED', 'Compartido'], ['PUBLISHED', 'Publicado']].map(([v, l]) => (
                 <label key={v} style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
@@ -494,30 +500,32 @@ export function ReviewModal({ isOpen, onClose, items, projectPrefix, onCreated }
           </div>
 
           <div>
-            <label style={{ display: 'block', color: '#666', marginBottom: 6, fontWeight: 600 }}>
+            <label style={{ display: 'block', color: '#72706b', marginBottom: 6, fontWeight: 600 }}>
               Al aprobarse, ¿para qué queda autorizado?
             </label>
             <select
               value={idoneidad}
               onChange={e => setIdoneidad(e.target.value)}
-              style={{ width: '100%', padding: '7px 9px', border: '1px solid #dcdcdc', borderRadius: 4, fontSize: 13 }}
+              style={{ width: '100%', padding: '7px 9px', border: '1px solid #e8e6dc', borderRadius: 4, fontSize: 13 }}
             >
               <option value="">{finalStatus === 'PUBLISHED' ? '— Obligatorio al publicar —' : '— Sin especificar —'}</option>
               {codigos.filter(c => c.familia === (finalStatus === 'PUBLISHED' ? 'publicado' : 'compartido')).map(c => (
                 <option key={c.codigo} value={c.codigo}>{c.codigo} · {c.etiqueta}</option>
               ))}
             </select>
-            <p style={{ margin: '6px 0 0', fontSize: 12, color: '#888', lineHeight: 1.5 }}>
+            <p style={{ margin: '6px 0 0', fontSize: 12, color: '#72706b', lineHeight: 1.5 }}>
               El estado dice dónde está el documento; esto dice para qué puede usarse.
               Un plano publicado «solo para información» no autoriza a construir.
             </p>
           </div>
         </div>
-        <div style={{ padding: '14px 20px', borderTop: '1px solid #eee', display: 'flex', justifyContent: 'flex-end', gap: 10, background: '#fcfcfc' }}>
-          <button onClick={onClose} style={{ padding: '8px 16px', background: '#fff', border: '1px solid #dcdcdc', borderRadius: 4, fontSize: 13, cursor: 'pointer' }}>Cancelar</button>
-          <button onClick={submit} disabled={saving} style={{ padding: '8px 20px', background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 4, fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: saving ? 0.6 : 1 }}>
+        <div style={{ padding: '14px 20px', borderTop: '1px solid #f1f0e8', display: 'flex', justifyContent: 'flex-end', gap: 10, background: '#faf9f5' }}>
+          <Button rango="secondary" onClick={onClose}>Cancelar</Button>
+          {/* `cargando` pone el indicador DENTRO del botón y lo bloquea: antes
+              solo se atenuaba, y no se veía que estaba trabajando. */}
+          <Button rango="primary" className="boton-enviar" cargando={saving} onClick={submit}>
             {saving ? 'Creando…' : 'Iniciar revisión'}
-          </button>
+          </Button>
         </div>
       </div>
     </div>
@@ -533,42 +541,58 @@ export function ReviewModal({ isOpen, onClose, items, projectPrefix, onCreated }
 // consecuencia tiene.
 const LIMITE = 20;
 
-const TONO_DE_LISTA = {
-  exito: { background: '#dcfce7', color: '#15803d' },
-  peligro: { background: '#fee2e2', color: '#b91c1c' },
-  aviso: { background: '#fff7e0', color: '#b26a00' },
-  neutro: { background: '#f3f4f6', color: '#4b5563' },
-};
+// LA LISTA ES UNA TABLA, como la de ACC (UI polish, 13-oct-2026, comparada en
+// vivo con su Revisiones): una fila de 48 px por revisión, el estado como texto
+// con una barra de su color, quién tiene la siguiente acción y cuándo vence (en
+// rojo si ya venció). Antes eran tarjetas con los datos en dos renglones.
+// El tono del estado es un nombre y lo pinta el canon (`--a-status-*`).
+const COLUMNAS_DE_REVISION = ['Estado', 'ID', 'Nombre de la revisión', 'Flujo', 'Siguiente acción de',
+  'Vence', 'Iniciada por', 'Creada el', 'Finalizada el', 'Documentos'];
 
-function FilaDeRevision({ rev, onAbrir }) {
+// Fecha de tabla: dia y hora, sin segundos, como ACC («12 de sep de 2026 12:32»).
+// La completa sigue en el detalle.
+function fechaCorta(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '—';
+  return d.toLocaleString('es-PE', { day: '2-digit', month: 'short', year: 'numeric',
+                                     hour: '2-digit', minute: '2-digit', hour12: false });
+}
+
+function CabeceraDeRevisiones() {
+  return (
+    <div className="rev-tabla__cabeza" role="row">
+      {COLUMNAS_DE_REVISION.map(c => <span key={c} role="columnheader">{c}</span>)}
+    </div>
+  );
+}
+
+function FilaDeRevision({ rev, onAbrir, ahora }) {
   const chip = chipDeEstado(rev);
   const pasos = rev.steps || [];
   const paso = pasos[rev.current_step] || {};
   const documentos = (rev.items || []).length;
+  const enCurso = rev.status === 'pending';
+  const vence = enCurso ? rev.paso_vence_en : null;
+  const vencida = Boolean(vence) && new Date(vence).getTime() < ahora;
   return (
-    <li style={{ marginBottom: 10 }}>
-      <button type="button" onClick={onAbrir} title="Abrir la revisión"
-        style={{ width: '100%', textAlign: 'left', background: '#fff', border: '1px solid #e8e8e8', borderRadius: 8,
-                 padding: '12px 16px', cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: 6,
-                 font: 'inherit', color: 'inherit' }}>
-        <span style={{ display: 'flex', alignItems: 'center', gap: 12, width: '100%' }}>
-          <span style={{ fontSize: 12, color: '#999', fontWeight: 700 }}>{rev.codigo || codigoDe(rev.id)}</span>
-          <span style={{ fontSize: 14, fontWeight: 600, color: '#333', flex: 1 }}>{rev.title}</span>
-          {rev.me_toca && (
-            <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 12,
-                           background: '#e0ecff', color: '#1a56a8' }}>Te toca</span>
-          )}
-          <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 12,
-                         ...TONO_DE_LISTA[chip.tono] }}>{chip.etiqueta}</span>
+    <li role="row">
+      <button type="button" onClick={onAbrir} title="Abrir la revisión" className="rev-fila">
+        <span className={`rev-estado rev-estado--${chip.tono}`}>
+          <span className="rev-estado__texto">{chip.etiqueta}</span>
+          {rev.me_toca && <span className="rev-estado__nota">Te toca</span>}
         </span>
-        <span style={{ fontSize: 12, color: '#666', display: 'flex', flexWrap: 'wrap', gap: 12, width: '100%' }}>
-          <span>{documentos} documento{documentos !== 1 ? 's' : ''}</span>
-          {rev.status === 'pending' && pasos.length > 0 && (
-            <span>Paso {rev.current_step + 1} de {pasos.length}: {paso.name || paso.email || '—'}</span>
-          )}
-          {rev.status === 'pending' && rev.paso_vence_en && <span>Plazo {formatDate(rev.paso_vence_en)}</span>}
-          <span style={{ marginLeft: 'auto', color: '#aaa' }}>{rev.created_by} · {formatDate(rev.created_at)}</span>
+        <span className="rev-fila__codigo">{rev.codigo || codigoDe(rev.id)}</span>
+        <span className="rev-fila__titulo">{rev.title}</span>
+        <span className="rev-celda">{rev.plantilla_nombre || '—'}</span>
+        <span className="rev-celda">
+          {enCurso && pasos.length > 0 ? `${paso.name || paso.email || '—'} · paso ${rev.current_step + 1}/${pasos.length}` : '—'}
         </span>
+        <span className={`rev-celda${vencida ? ' rev-celda--vencida' : ''}`}>{vence ? fechaCorta(vence) : '—'}</span>
+        <span className="rev-celda">{rev.created_by || '—'}</span>
+        <span className="rev-celda">{fechaCorta(rev.created_at)}</span>
+        <span className="rev-celda">{fechaCorta(rev.cerrada_en)}</span>
+        <span className="rev-celda rev-celda--numero">{documentos}</span>
       </button>
     </li>
   );
@@ -582,6 +606,9 @@ export function ReviewsView({ projectPrefix }) {
   const [cargandoMas, setCargandoMas] = useState(false);
   const [error, setError] = useState(null);
   const [abierta, setAbierta] = useState(() => leerEnlace(window.location.search)?.revision || null);
+  // La hora con la que se decide qué está vencido: se toma al recibir la
+  // lista, no al dibujar (un render tiene que ser puro).
+  const [ahora, setAhora] = useState(() => Date.now());
   const peticion = useRef(0);
 
   const cargar = useCallback(async (antesDe = null) => {
@@ -599,6 +626,7 @@ export function ReviewsView({ projectPrefix }) {
         return;
       }
       setError(null);
+      setAhora(Date.now());
       setObraId(d.obra_id || null);
       setReviews(prev => (antesDe ? [...(prev || []), ...(d.reviews || [])] : (d.reviews || [])));
       setSiguiente(d.siguiente ?? null);
@@ -655,49 +683,39 @@ export function ReviewsView({ projectPrefix }) {
   }
 
   return (
-    <div style={{ padding: 32, flex: 1, overflowY: 'auto' }}>
-      <div style={{ fontSize: 24, fontWeight: 300, marginBottom: 4 }}>Revisiones</div>
-      <div style={{ fontSize: 13, color: '#888', marginBottom: 16 }}>
+    <div className="rev-pagina">
+      <div className="rev-titulo">Revisiones</div>
+      <div className="rev-subtitulo">
         Flujos de aprobación: selecciona archivos en Archivos y pulsa "Enviar a revisión".
       </div>
-      <div role="group" aria-label="Filtrar revisiones"
-           style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 16 }}>
-        {FILTROS.map(f => {
-          const activo = filtro === f.id;
-          return (
-            <button key={f.id} type="button" aria-pressed={activo} onClick={() => setFiltro(f.id)}
-              style={{ padding: '5px 12px', borderRadius: 14, fontSize: 12, fontWeight: 600, cursor: 'pointer',
-                       border: activo ? '1px solid var(--accent)' : '1px solid #dcdcdc',
-                       background: activo ? 'var(--accent)' : '#fff', color: activo ? '#fff' : '#444' }}>
-              {f.etiqueta}
-            </button>
-          );
-        })}
+      <div role="group" aria-label="Filtrar revisiones" className="rev-filtros">
+        {FILTROS.map(f => (
+          <button key={f.id} type="button" aria-pressed={filtro === f.id} onClick={() => setFiltro(f.id)}
+            className="rev-filtro">
+            {f.etiqueta}
+          </button>
+        ))}
       </div>
-      {error && (
-        <div role="alert" style={{ marginBottom: 12, padding: '9px 12px', borderRadius: 6, background: '#fff1f2',
-                                   border: '1px solid #fecdd3', color: '#9f1239', fontSize: 12 }}>
-          {error}
-        </div>
-      )}
+      {error && <div role="alert" className="rev-alerta">{error}</div>}
       {reviews === null ? (
-        <div style={{ textAlign: 'center', padding: 48 }}><div className="adsk-spinner" style={{ margin: '0 auto' }} /></div>
+        <div className="rev-vacio"><div className="adsk-spinner" style={{ margin: '0 auto' }} /></div>
       ) : reviews.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: 48, color: '#999', fontSize: 13 }}>
+        <div className="rev-vacio">
           {filtro === 'todas' ? 'No hay revisiones aún.' : 'No hay revisiones en este filtro.'}
         </div>
       ) : (
-        <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
-          {reviews.map(rev => <FilaDeRevision key={rev.id} rev={rev} onAbrir={() => abrir(rev)} />)}
-        </ul>
+        <div className="rev-tabla" role="table" aria-label="Revisiones">
+          <CabeceraDeRevisiones />
+          <ul className="rev-lista" role="rowgroup">
+            {reviews.map(rev => <FilaDeRevision key={rev.id} rev={rev} ahora={ahora} onAbrir={() => abrir(rev)} />)}
+          </ul>
+        </div>
       )}
       {siguiente && reviews?.length > 0 && (
-        <div style={{ textAlign: 'center', marginTop: 8 }}>
-          <button type="button" onClick={() => cargar(siguiente)} disabled={cargandoMas}
-            style={{ padding: '7px 18px', background: '#fff', border: '1px solid #dcdcdc', borderRadius: 4,
-                     fontSize: 13, cursor: cargandoMas ? 'wait' : 'pointer' }}>
+        <div className="rev-mas">
+          <Button rango="secondary" cargando={cargandoMas} onClick={() => cargar(siguiente)}>
             {cargandoMas ? 'Cargando…' : 'Cargar más'}
-          </button>
+          </Button>
         </div>
       )}
     </div>

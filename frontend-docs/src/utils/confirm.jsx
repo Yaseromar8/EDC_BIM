@@ -84,14 +84,14 @@ export function ConfirmHost() {
     danger = false,
   } = state;
 
-  const accent = danger ? '#d32f2f' : 'var(--accent)';
+  const accent = danger ? '#b93535' : 'var(--accent)';
 
   return (
     <div
       role="presentation"
       onClick={() => close(false)}
       style={{
-        position: 'fixed', inset: 0, background: 'rgba(17,24,39,0.45)',
+        position: 'fixed', inset: 0, background: 'rgba(20,20,19,0.45)',
         display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 20000,
       }}
     >
@@ -109,7 +109,7 @@ export function ConfirmHost() {
         <div style={{ padding: '20px 22px 8px', display: 'flex', gap: 14, alignItems: 'flex-start' }}>
           <div style={{
             width: 36, height: 36, borderRadius: '50%', flexShrink: 0,
-            background: danger ? '#fee2e2' : '#eef2f7', color: accent,
+            background: danger ? '#fbebeb' : '#f1f0e8', color: accent,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
           }}>
             <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -119,8 +119,8 @@ export function ConfirmHost() {
             </svg>
           </div>
           <div style={{ minWidth: 0 }}>
-            <h3 id="confirm-title" style={{ margin: 0, fontSize: 15, fontWeight: 600, color: '#1f2937' }}>{title}</h3>
-            <p id="confirm-message" style={{ margin: '6px 0 0', fontSize: 13, color: '#4b5563', lineHeight: 1.55, overflowWrap: 'anywhere' }}>
+            <h3 id="confirm-title" style={{ margin: 0, fontSize: 15, fontWeight: 600, color: '#141413' }}>{title}</h3>
+            <p id="confirm-message" style={{ margin: '6px 0 0', fontSize: 13, color: '#52524d', lineHeight: 1.55, overflowWrap: 'anywhere' }}>
               {message}
             </p>
           </div>
@@ -130,7 +130,7 @@ export function ConfirmHost() {
             onClick={() => close(false)}
             style={{
               padding: '7px 16px', fontSize: 13, fontWeight: 500, cursor: 'pointer',
-              background: '#fff', color: '#374151', border: '1px solid #d1d5db', borderRadius: 5,
+              background: '#fff', color: '#333330', border: '1px solid #cccac0', borderRadius: 5,
             }}
           >
             {cancelText}

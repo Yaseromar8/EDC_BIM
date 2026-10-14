@@ -72,7 +72,7 @@ export function IdoneidadHost() {
       role="presentation"
       onClick={() => cerrar(null)}
       style={{
-        position: 'fixed', inset: 0, background: 'rgba(17,24,39,0.45)',
+        position: 'fixed', inset: 0, background: 'rgba(20,20,19,0.45)',
         display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 20000,
       }}
     >
@@ -87,20 +87,20 @@ export function IdoneidadHost() {
         }}
       >
         <div style={{ padding: '20px 22px 6px' }}>
-          <h3 id="idoneidad-title" style={{ margin: 0, fontSize: 15, fontWeight: 600, color: '#1f2937' }}>
+          <h3 id="idoneidad-title" style={{ margin: 0, fontSize: 15, fontWeight: 600, color: '#141413' }}>
             ¿Para qué queda autorizado?
           </h3>
-          <p style={{ margin: '6px 0 0', fontSize: 13, color: '#4b5563', lineHeight: 1.55 }}>
+          <p style={{ margin: '6px 0 0', fontSize: 13, color: '#52524d', lineHeight: 1.55 }}>
             Publicar no dice para qué sirve el documento. El código de idoneidad sí, y es
             lo que se le enseña a una supervisión.
           </p>
         </div>
 
         <div style={{ padding: '14px 22px', maxHeight: '46vh', overflowY: 'auto' }}>
-          {cargando && <div style={{ fontSize: 13, color: '#666' }}>Cargando el catálogo de la obra…</div>}
-          {error && <div style={{ fontSize: 13, color: '#b91c1c' }}>{error}</div>}
+          {cargando && <div style={{ fontSize: 13, color: '#72706b' }}>Cargando el catálogo de la obra…</div>}
+          {error && <div style={{ fontSize: 13, color: '#b93535' }}>{error}</div>}
           {!cargando && !error && codigos.length === 0 && (
-            <div style={{ fontSize: 13, color: '#666' }}>
+            <div style={{ fontSize: 13, color: '#72706b' }}>
               Esta obra no tiene códigos de idoneidad configurados para esa acción.
             </div>
           )}
@@ -110,7 +110,7 @@ export function IdoneidadHost() {
               style={{
                 display: 'flex', alignItems: 'flex-start', gap: 10, padding: '9px 10px',
                 borderRadius: 6, cursor: 'pointer',
-                background: elegido === c.codigo ? '#eef2f7' : 'transparent',
+                background: elegido === c.codigo ? '#f1f0e8' : 'transparent',
               }}
             >
               <input
@@ -122,19 +122,19 @@ export function IdoneidadHost() {
                 style={{ marginTop: 2 }}
               />
               <span style={{ minWidth: 0 }}>
-                <span style={{ fontWeight: 600, fontSize: 13, color: '#1f2937' }}>{c.codigo}</span>
-                <span style={{ fontSize: 13, color: '#4b5563' }}> · {c.etiqueta}</span>
+                <span style={{ fontWeight: 600, fontSize: 13, color: '#141413' }}>{c.codigo}</span>
+                <span style={{ fontSize: 13, color: '#52524d' }}> · {c.etiqueta}</span>
               </span>
             </label>
           ))}
         </div>
 
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, padding: '14px 22px 18px', borderTop: '1px solid #eee' }}>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, padding: '14px 22px 18px', borderTop: '1px solid #f1f0e8' }}>
           <button
             onClick={() => cerrar(null)}
             style={{
               padding: '7px 16px', fontSize: 13, fontWeight: 500, cursor: 'pointer',
-              background: '#fff', color: '#374151', border: '1px solid #d1d5db', borderRadius: 5,
+              background: '#fff', color: '#333330', border: '1px solid #cccac0', borderRadius: 5,
             }}
           >
             Cancelar
@@ -145,7 +145,7 @@ export function IdoneidadHost() {
             style={{
               padding: '7px 16px', fontSize: 13, fontWeight: 600,
               cursor: elegido ? 'pointer' : 'not-allowed',
-              background: elegido ? 'var(--accent)' : '#c7ced6', color: '#fff',
+              background: elegido ? 'var(--accent)' : '#cccac0', color: '#fff',
               border: 'none', borderRadius: 5,
             }}
           >

@@ -334,13 +334,13 @@ export default function DocumentViewer({
   // «para abrir Civil o Revit debe aparecer el icono segun corresponda».)
   const appEscritorio = (() => {
     const n = (file.name || '').toLowerCase();
-    if (/\.(rvt|rfa|rte)$/.test(n)) return { nombre: 'Revit', letra: 'R', color: '#1961A9' };
-    if (/\.(dwg|dxf|dwf|dwfx)$/.test(n)) return { nombre: 'Civil 3D', letra: 'C', color: '#0E8577' };
-    if (/\.(nwd|nwc)$/.test(n)) return { nombre: 'Navisworks', letra: 'N', color: '#175A93' };
+    if (/\.(rvt|rfa|rte)$/.test(n)) return { nombre: 'Revit', letra: 'R', color: '#507294' };
+    if (/\.(dwg|dxf|dwf|dwfx)$/.test(n)) return { nombre: 'Civil 3D', letra: 'C', color: '#0F7E5C' };
+    if (/\.(nwd|nwc)$/.test(n)) return { nombre: 'Navisworks', letra: 'N', color: '#507294' };
     // Sin nombre de marca: el lector de PDF lo elige el usuario en su Windows,
     // asi que prometer «Acrobat» seria mentir la mitad de las veces.
-    if (/\.pdfx?$/.test(n)) return { nombre: 'tu lector de PDF', letra: 'P', color: '#B23B3B' };
-    return { nombre: 'el escritorio', letra: null, color: '#5B6875' };
+    if (/\.pdfx?$/.test(n)) return { nombre: 'tu lector de PDF', letra: 'P', color: '#B93535' };
+    return { nombre: 'el escritorio', letra: null, color: '#72706B' };
   })();
 
   // El botón invoca el protocolo alephia:// del CONECTOR ALEPHIA (ver
@@ -400,12 +400,12 @@ export default function DocumentViewer({
   };
   const popoverVersiones = (
               <div className="version-popover" style={{ top: 32, left: 0, width: 350 }}>
-                <div style={{ padding: '8px 12px', borderBottom: '1px solid #eee', fontSize: 12, fontWeight: 600, color: '#666' }}>
+                <div style={{ padding: '8px 12px', borderBottom: '1px solid #f1f0e8', fontSize: 12, fontWeight: 600, color: '#72706b' }}>
                   Versiones
                 </div>
                 <div style={{ maxHeight: 300, overflowY: 'auto', overflowX: 'hidden' }}>  {/* overflowX explícito: fijar solo overflowY hace que el navegador calcule overflowX=auto, y ahí nacía la barra horizontal */}
                   {(!versionHistory || versionHistory.length === 0) ? (
-                    <div style={{ padding: '24px', textAlign: 'center', color: '#999', fontSize: 13 }}>
+                    <div style={{ padding: '24px', textAlign: 'center', color: '#72706b', fontSize: 13 }}>
                        <div className="adsk-spinner" style={{ width: 20, height: 20, margin: '0 auto 8px', borderWidth: 2 }} />
                        Cargando historial...
                     </div>
@@ -418,8 +418,8 @@ export default function DocumentViewer({
                         className="version-popover-item"
                         style={{ 
                           padding: '12px', 
-                          borderBottom: '1px solid #f5f5f5',
-                          background: viewedVersionInfo?.id === v.id ? '#f0faff' : 'transparent',
+                          borderBottom: '1px solid #f1f0e8',
+                          background: viewedVersionInfo?.id === v.id ? '#ecf0f1' : 'transparent',
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'space-between'
@@ -431,8 +431,8 @@ export default function DocumentViewer({
                         >
                            <div className="version-link-acc" style={{ minWidth: 32 }}>V{v.version_number || 1}</div>
                            <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                             <span title={file.name} style={{ fontSize: 13, fontWeight: 500, color: '#333' }}>{file.name}</span>
-                             <span style={{ fontSize: 11, color: '#999' }}>
+                             <span title={file.name} style={{ fontSize: 13, fontWeight: 500, color: '#333330' }}>{file.name}</span>
+                             <span style={{ fontSize: 11, color: '#72706b' }}>
                                Cargado por <span style={{ textTransform: 'uppercase' }}>{v.updated_by || 'ADMIN'}</span> el {formatDate(v.updated)}
                              </span>
                            </div>
@@ -467,7 +467,7 @@ export default function DocumentViewer({
   return (
     <div className="file-viewer-overlay" style={isShared ? { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 9999, display: 'flex', flexDirection: 'column', background: '#fff' } : undefined}>
       {!esPdf && (
-      <div className="file-viewer-header" style={isShared ? { padding: '0 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #e0e0e0', flexShrink: 0 } : undefined}>
+      <div className="file-viewer-header" style={isShared ? { padding: '0 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #e8e6dc', flexShrink: 0 } : undefined}>
         <div className="file-viewer-title" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <span style={{ fontSize: 16, fontWeight: 500, color: 'var(--accent)', maxWidth: 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {file.name}
@@ -500,7 +500,7 @@ export default function DocumentViewer({
         <div className="file-viewer-actions">
            {esCad && !isShared && !esVistaPuente && accLinkFor === accKey && accLink && (
              <span title="Se usa la vista ya preparada de Autodesk; el original sigue en Docs"
-               style={{ marginRight: 12, color: '#25638d', fontSize: 12 }}>
+               style={{ marginRight: 12, color: '#507294', fontSize: 12 }}>
                {previewOnly ? 'Prueba local' : 'Vista ACC'} · V{accLink.version_number || '?'}
              </span>
            )}
@@ -522,7 +522,7 @@ export default function DocumentViewer({
              </button>
            )}
            {isShared && sharedRole && (
-             <span style={{ fontFamily: 'Inter', fontSize: 13, fontWeight: 500, color: '#666', marginRight: 16 }}>
+             <span style={{ fontFamily: 'Inter', fontSize: 13, fontWeight: 500, color: '#72706b', marginRight: 16 }}>
                Acceso compartido: {sharedRole === 'viewer' ? 'Lector' : 'Comentador'}
              </span>
            )}
@@ -541,19 +541,19 @@ export default function DocumentViewer({
 
       {conectorAviso && (
         <div onClick={() => setConectorAviso(null)}
-          style={{ position: 'fixed', inset: 0, zIndex: 10050, background: 'rgba(15,22,30,0.45)',
+          style={{ position: 'fixed', inset: 0, zIndex: 10050, background: 'rgba(20,20,19,0.45)',
                    display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <div onClick={e => e.stopPropagation()}
             style={{ width: 470, maxWidth: '92vw', background: '#fff', borderRadius: 10,
-                     padding: '22px 24px', boxShadow: '0 18px 50px rgba(15,22,30,0.35)' }}>
-            <div style={{ fontSize: 15.5, fontWeight: 700, color: '#1a2430', marginBottom: 8 }}>
+                     padding: '22px 24px', boxShadow: '0 18px 50px rgba(20,20,19,0.35)' }}>
+            <div style={{ fontSize: 15.5, fontWeight: 700, color: '#141413', marginBottom: 8 }}>
               ¿Se abrió en tu software?
             </div>
-            <div style={{ fontSize: 13, color: '#4a5560', lineHeight: 1.6, marginBottom: 14 }}>
+            <div style={{ fontSize: 13, color: '#52524d', lineHeight: 1.6, marginBottom: 14 }}>
               Acabamos de avisar al Conector ALEPHIA. Si el modelo se está abriendo (verás un aviso
               junto al reloj), confirma abajo y no volveremos a preguntar. Si no pasó nada, es que
               falta el Conector: un instalador de <b>un clic, sin administrador</b> que registra el
-              enlace {' '}<code style={{ background: '#f2f4f6', padding: '1px 5px', borderRadius: 3 }}>alephia://</code>{' '}
+              enlace {' '}<code style={{ background: '#f1f0e8', padding: '1px 5px', borderRadius: 3 }}>alephia://</code>{' '}
               — el navegador no puede lanzar Revit ni Civil 3D por sí solo.
             </div>
             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
@@ -569,15 +569,15 @@ export default function DocumentViewer({
               </a>
               <button onClick={() => { window.open(conectorAviso.firmada, '_blank', 'noopener'); setConectorAviso(null); }}
                  style={{ padding: '8px 12px', fontSize: 13, background: 'transparent', border: 'none',
-                          color: '#7b8794', cursor: 'pointer', textDecoration: 'underline' }}>
+                          color: '#72706b', cursor: 'pointer', textDecoration: 'underline' }}>
                 Solo descargar el archivo
               </button>
             </div>
-            <div style={{ fontSize: 11.5, color: '#8a95a1', marginTop: 12, lineHeight: 1.6 }}>
+            <div style={{ fontSize: 11.5, color: '#72706b', marginTop: 12, lineHeight: 1.6 }}>
               Tras instalarlo (doble clic al .bat), vuelve y pulsa «Abrir en el escritorio» otra vez.
               Si el navegador bloquea el .bat, abre PowerShell y pega esta línea — hace lo mismo:
-              <code style={{ display: 'block', marginTop: 5, padding: '6px 8px', background: '#f2f4f6',
-                             borderRadius: 4, fontSize: 11, color: '#33404c', userSelect: 'all' }}>
+              <code style={{ display: 'block', marginTop: 5, padding: '6px 8px', background: '#f1f0e8',
+                             borderRadius: 4, fontSize: 11, color: '#333330', userSelect: 'all' }}>
                 irm https://visor-ecd-portal.onrender.com/conector/instalar.ps1 | iex
               </code>
             </div>
@@ -595,7 +595,7 @@ export default function DocumentViewer({
         </div>
       )}
       
-      <div className="file-viewer-content" style={{ flex: 1, position: 'relative', background: '#f5f5f5', display: 'flex', justifyContent: 'center' }}>
+      <div className="file-viewer-content" style={{ flex: 1, position: 'relative', background: '#f1f0e8', display: 'flex', justifyContent: 'center' }}>
         {(() => {
           const fileUrl = isShared && file.url ? file.url : securePreviewUrl;
           const lowerName = file.name.toLowerCase();
@@ -615,17 +615,17 @@ export default function DocumentViewer({
           if (!isShared && !esPdfAqui && !esCadAqui && !['.docx', '.doc', '.xlsx', '.xls', '.pptx', '.ppt'].some(ext => lowerName.endsWith(ext)) && loadingPreview && !fileUrl) {
             return (
               <div role="status" aria-live="polite" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 16 }}>
-                <div className="spinner-acc" style={{ width: 40, height: 40, border: '3px solid #e5e7eb', borderTop: '3px solid var(--accent)', borderRadius: '50%', animation: 'spin-acc 1s linear infinite' }} />
-                <div style={{ fontSize: 14, color: '#666' }}>Preparando vista segura…</div>
+                <div className="spinner-acc" style={{ width: 40, height: 40, border: '3px solid #e8e6dc', borderTop: '3px solid var(--accent)', borderRadius: '50%', animation: 'spin-acc 1s linear infinite' }} />
+                <div style={{ fontSize: 14, color: '#72706b' }}>Preparando vista segura…</div>
               </div>
             );
           }
 
           if (!isShared && !esCadAqui && previewError) {
             return (
-              <div role="alert" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 12, color: '#5f6368' }}>
+              <div role="alert" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 12, color: '#52524d' }}>
                 <div>No se pudo abrir la vista previa.</div>
-                <div style={{ fontSize: 12, color: '#8a9099' }}>{previewError}</div>
+                <div style={{ fontSize: 12, color: '#72706b' }}>{previewError}</div>
                 <button type="button" onClick={() => setPreviewRetry(value => value + 1)} style={{ padding: '8px 16px', background: 'var(--accent)', color: '#fff', border: 0, borderRadius: 4, cursor: 'pointer' }}>
                   Reintentar
                 </button>
@@ -657,14 +657,14 @@ export default function DocumentViewer({
             if (loadingOffice) {
               return (
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 16 }}>
-                  <div className="spinner-acc" style={{ width: 40, height: 40, border: '3px solid #f3f3f3', borderTop: '3px solid var(--accent)', borderRadius: '50%', animation: 'spin-acc 1s linear infinite' }}></div>
-                  <div style={{ fontSize: 14, color: '#666' }}>Cargando visor de Office...</div>
+                  <div className="spinner-acc" style={{ width: 40, height: 40, border: '3px solid #f1f0e8', borderTop: '3px solid var(--accent)', borderRadius: '50%', animation: 'spin-acc 1s linear infinite' }}></div>
+                  <div style={{ fontSize: 14, color: '#72706b' }}>Cargando visor de Office...</div>
                 </div>
               );
             }
             if (!officeUrl) {
               return (
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#666' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#72706b' }}>
                   <div style={{ fontSize: 14 }}>No se pudo cargar la vista previa de Office.</div>
                   <button onClick={() => window.open(fileUrl, '_blank')} style={{ marginTop: 12, padding: '8px 16px', background: 'var(--accent)', color: 'white', border: 'none', borderRadius: 4, cursor: 'pointer' }}>Descargar archivo</button>
                 </div>
@@ -697,11 +697,11 @@ export default function DocumentViewer({
               && isShared) {
              return (
                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', background: '#fff', width: '100%' }}>
-                 <div style={{ background: '#f1f3f4', padding: 32, borderRadius: '50%', marginBottom: 24 }}>
-                   <svg width="48" height="48" viewBox="0 0 24 24" fill="#5f6368"><path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2h12c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>
+                 <div style={{ background: '#f1f0e8', padding: 32, borderRadius: '50%', marginBottom: 24 }}>
+                   <svg width="48" height="48" viewBox="0 0 24 24" fill="#52524d"><path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2h12c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>
                  </div>
-                 <p style={{ fontFamily: 'Inter', fontSize: 16, color: '#3c4043', fontWeight: 500 }}>No hay vista previa disponible</p>
-                 <a href={fileUrl} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, marginTop: 24, background: 'var(--accent)', color: '#fff', padding: '10px 24px', borderRadius: 20, textDecoration: 'none', fontFamily: 'Inter', fontWeight: 500, fontSize: 14, transition: 'background 0.2s' }}>
+                 <p style={{ fontFamily: 'Inter', fontSize: 16, color: '#333330', fontWeight: 500 }}>No hay vista previa disponible</p>
+                 <a href={fileUrl} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, marginTop: 24, background: 'var(--accent)', color: '#fff', padding: '10px 24px', borderRadius: 8, textDecoration: 'none', fontFamily: 'Inter', fontWeight: 500, fontSize: 14, transition: 'background 0.2s' }}>
                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
                    Descargar Archivo
                  </a>
@@ -767,21 +767,21 @@ export default function DocumentViewer({
             return (
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center',
                             justifyContent: 'center', height: '100%', gap: 14, padding: 30,
-                            textAlign: 'center', background: '#f5f6f7' }}>
-                <svg width="46" height="46" viewBox="0 0 24 24" fill="none" stroke="#5b6875"
+                            textAlign: 'center', background: '#f1f0e8' }}>
+                <svg width="46" height="46" viewBox="0 0 24 24" fill="none" stroke="#72706b"
                   strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
                   <polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
                 </svg>
-                <div style={{ fontSize: 15, fontWeight: 600, color: '#1a2430' }}>{file.name}</div>
-                <div style={{ fontSize: 13, color: '#5b6875', maxWidth: 420, lineHeight: 1.6 }}>
+                <div style={{ fontSize: 15, fontWeight: 600, color: '#141413' }}>{file.name}</div>
+                <div style={{ fontSize: 13, color: '#72706b', maxWidth: 420, lineHeight: 1.6 }}>
                   Este plano CAD todavía no tiene vista previa preparada. Puedes
                   descargar el archivo original y abrirlo en tu AutoCAD, Civil 3D
                   o Revit.
                 </div>
                 <a href={fileUrl} download={file.name}
                   style={{ padding: '9px 18px', fontSize: 13, fontWeight: 600,
-                           background: 'var(--accent, #3e6f91)', color: '#fff',
+                           background: 'var(--accent, #507294)', color: '#fff',
                            borderRadius: 6, textDecoration: 'none' }}>
                   Descargar el archivo original
                 </a>

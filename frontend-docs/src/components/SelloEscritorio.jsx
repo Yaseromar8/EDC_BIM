@@ -25,10 +25,10 @@ export default function SelloEscritorio({ app, tamano = 16 }) {
         style={{ display: 'block', flexShrink: 0 }}>
         {/* La hoja, con la esquina doblada */}
         <path d="M6 2.5h7.2L19 8.3V20a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 5 20V4A1.5 1.5 0 0 1 6.5 2.5Z"
-          fill="#fff" stroke="#D93025" strokeWidth="1.8" strokeLinejoin="round" />
-        <path d="M13 2.6V8h5.3" fill="none" stroke="#D93025" strokeWidth="1.8" strokeLinejoin="round" />
+          fill="#fff" stroke="#B93535" strokeWidth="1.8" strokeLinejoin="round" />
+        <path d="M13 2.6V8h5.3" fill="none" stroke="#B93535" strokeWidth="1.8" strokeLinejoin="round" />
         {/* La banda roja: es lo que hace reconocible el icono a tamaño pequeño */}
-        <rect x="3" y="11.6" width="17" height="7.6" rx="1.2" fill="#D93025" />
+        <rect x="3" y="11.6" width="17" height="7.6" rx="1.2" fill="#B93535" />
         <text x="11" y="17.2" textAnchor="middle" fill="#fff"
           fontSize="6.1" fontWeight="700" fontFamily="Inter, Arial, sans-serif"
           letterSpacing="0.2">PDF</text>
@@ -40,7 +40,7 @@ export default function SelloEscritorio({ app, tamano = 16 }) {
   return (
     <span style={{
       width: tamano, height: tamano, borderRadius: 3,
-      background: app?.color || '#5B6875', color: '#fff',
+      background: app?.color || '#72706B', color: '#fff',
       fontSize: Math.round(tamano * 0.66), fontWeight: 800,
       display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
       lineHeight: 1, flexShrink: 0,

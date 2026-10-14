@@ -107,7 +107,7 @@ export default function MiTrabajo({ compacto = false, onAbrir = null }) {
             return (
               <li key={p.id} style={{ ...(abrible ? S.filaAbrible : S.fila), ...(i === 0 ? S.primera : {}) }}>
                 {abrible ? (
-                  <button type="button" style={S.boton} title="Abrir la revisión"
+                  <button type="button" className="mt-abrir" title="Abrir la revisión"
                           onClick={() => onAbrir({ obra: p.project_id, revision: p.objeto_id })}>
                     {contenido}
                   </button>
@@ -125,7 +125,7 @@ export default function MiTrabajo({ compacto = false, onAbrir = null }) {
 // solo vive dentro de `.entrada-gris`, en la portada.
 const S = {
   caja: { background: 'var(--eg-sup)', border: '1px solid var(--eg-linea)',
-          borderRadius: 4, padding: '14px 18px 6px', color: 'var(--eg-texto)',
+          borderRadius: 8, padding: '14px 18px 6px', color: 'var(--eg-texto)',
           width: 536, maxWidth: '100%', boxSizing: 'border-box' },
   titulo: { fontSize: 14, fontWeight: 600, marginBottom: 6,
             display: 'flex', alignItems: 'center', gap: 8 },
@@ -137,11 +137,10 @@ const S = {
           borderTop: '1px solid var(--eg-fila)' },
   filaAbrible: { borderTop: '1px solid var(--eg-fila)' },
   primera: { borderTop: 'none' },
-  boton: { display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', width: '100%',
-           background: 'none', border: 'none', color: 'inherit', font: 'inherit',
-           textAlign: 'left', cursor: 'pointer' },
+  // La fila que se abre es `.mt-abrir` (entradaGris.css): un estilo en línea
+  // no puede tener :hover, y la fila no respondía al puntero (UI polish F4).
   tipo: { fontSize: 10.5, fontWeight: 600, letterSpacing: '.05em', textTransform: 'uppercase',
-          background: 'var(--eg-chip)', color: 'var(--eg-chip-texto)', borderRadius: 2,
+          background: 'var(--eg-chip)', color: 'var(--eg-chip-texto)', borderRadius: 4,
           padding: '4px 6px', minWidth: 92, textAlign: 'center' },
   tipoVencido: { background: 'var(--eg-peligro-fondo)', color: 'var(--eg-peligro)' },
   centro: { flex: 1, minWidth: 0 },

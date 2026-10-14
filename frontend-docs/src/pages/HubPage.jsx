@@ -37,8 +37,8 @@ function ProductCard({ icon, producto, onClick, locked = false, lockNote }) {
         background: 'var(--eg-sup)',
         border: `1px solid ${active ? 'var(--eg-foco)' : 'var(--eg-linea)'}`,
         outline: 'none',
-        boxShadow: foco ? '0 0 0 3px rgb(62 111 145 / .30)' : (active ? 'var(--eg-sombra)' : 'none'),
-        borderRadius: 4,
+        boxShadow: foco ? '0 0 0 3px rgb(80 114 148 / .30)' : (active ? 'var(--eg-sombra)' : 'none'),
+        borderRadius: 8,
         cursor: locked ? 'default' : 'pointer',
         opacity: locked ? 0.5 : 1,
         transition: 'border-color .18s, box-shadow .18s',
@@ -101,7 +101,7 @@ export default function HubPage({ user, onChooseDocs, onLogout, onAbrirRevision 
             nunca redibujado. 22px de alto ⇒ ~138px, sobre el mínimo de 120px;
             cabe entero incluso en móvil, así que el símbolo suelto queda para
             espacios realmente compactos (favicon, launcher). */}
-        <img src="/brand/ALEPHIA_Logo_Horizontal_White.svg" alt="ALEPHIA"
+        <img src="/brand/ALEPHIA_Logo_Horizontal_Light.svg" alt="ALEPHIA"
              style={{ height: 22, width: 'auto', display: 'block' }} />
         <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
         <button className="eg-cab-enlace" onClick={() => setPanel('cuenta')}>

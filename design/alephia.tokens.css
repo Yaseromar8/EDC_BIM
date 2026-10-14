@@ -154,6 +154,21 @@
   --a-motion-slow: 280ms;
   --a-ease: cubic-bezier(.2, .7, .3, 1);
 
+  /* ─── TAMAÑOS DE CONTROL (UI polish F2, 13-oct-2026) ─────────────────
+     Una altura por TIPO de control, como en ACC (UI_POLISH_01 §2): en una
+     misma barra de Archivos convivían 24, 30, 32 y 34 px. El mediano es
+     36 px, el que mide ACC en todos sus controles (medido en su Archivos el
+     13-oct-2026); la primitiva Button lo toma de aquí. Son escalas, no
+     semánticos de tema: valen igual en claro y en oscuro. */
+  --a-size-control-sm: 26px;
+  --a-size-control-md: 36px;
+  --a-size-control-lg: 40px;
+  --a-size-row:        48px;   /* fila de tabla o de lista                */
+  --a-size-menu-item:  36px;   /* opción de menú contextual              */
+
+  /* Deshabilitado: un único valor. Había siete (.3, .32, .42, .45, .5…). */
+  --a-opacity-disabled: .45;
+
   /* ─── BREAKPOINTS ────────────────────────────────────────────────────
      CUIDADO: las custom properties NO funcionan dentro de @media NI de
      @container -- la condición se evalúa antes de sustituirlas, así que

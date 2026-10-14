@@ -17,6 +17,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { urlsDeMiniaturas } from '../utils/colaMiniaturas';
 import { renderFileIconSop } from '../utils/fileIcons';
+import IconoModulo from './IconoModulo';
 
 const CON_VISTA = /\.(pdfx?|jpe?g|png|webp|gif)$/i;
 
@@ -97,8 +98,8 @@ export default function MatrixGrid({
               onChange={() => toggle(f.id)} />
           </label>
           <div className="rejilla-lienzo">
-            <svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="#8a95a1"
-              strokeWidth="1.4"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+            {/* Carpeta sólida de ALEPHIA (estilo B, 13-oct-2026). */}
+            <IconoModulo nombre="archivos" tamano={52} style={{ color: 'var(--archivo-carpeta)' }} />
           </div>
           <div className="rejilla-pie">
             <div className="rejilla-nombre" title={f.name}>{f.name}</div>

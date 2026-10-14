@@ -22,16 +22,16 @@
 
 .pdf-viewer {
   --pdf-chrome: var(--a-neutral-0);
-  --pdf-field: #f4f5f7;
-  --pdf-line: #e2e6ea;
-  --pdf-ink: #1a2430;
-  --pdf-icon: #5b6875;
-  --pdf-muted: #7b8794;
-  --pdf-hover: #eef1f4;
-  --pdf-active-bg: #e7eff6;
+  --pdf-field: #f1f0e8;
+  --pdf-line: #e8e6dc;
+  --pdf-ink: #141413;
+  --pdf-icon: #72706b;
+  --pdf-muted: #72706b;
+  --pdf-hover: #f1f0e8;
+  --pdf-active-bg: #ecf0f1;
   --pdf-active: var(--a-blue-800);
   --pdf-focus: var(--a-blue-800);
-  --pdf-shadow: 0 4px 16px rgba(20, 30, 42, 0.12), 0 1px 3px rgba(20, 30, 42, 0.08);
+  --pdf-shadow: 0 4px 16px rgba(20, 20, 19, 0.12), 0 1px 3px rgba(20, 20, 19, 0.08);
 
   position: absolute;
   inset: 0;
@@ -65,10 +65,10 @@
 .pdf-chip-ver {
   flex-shrink: 0; align-self: center;
   padding: 2px 8px;
-  border: 1px solid #cfdae4;
+  border: 1px solid #e8e6dc;
   border-radius: 4px;
-  background: #eef3f8;
-  color: #2c4d67;
+  background: #f1f0e8;
+  color: #507294;
   font-size: 11.5px; font-weight: 700; letter-spacing: 0.03em;
   font-variant-numeric: tabular-nums;
 }
@@ -78,7 +78,7 @@
   cursor: pointer; font-family: inherit;
 }
 
-.pdf-chip-ver--menu:hover { background: #e3ecf4; }
+.pdf-chip-ver--menu:hover { background: #ecf0f1; }
 
 .pdf-file-title {
   overflow: hidden; color: var(--pdf-ink);
@@ -135,7 +135,7 @@
   display: flex; align-items: center; gap: 2px; min-width: 0;
   margin-left: 4px; padding: 2px 4px 2px 8px;
   border: 1px solid var(--pdf-line); border-radius: 6px;
-  background: #f8fafb;
+  background: #faf9f5;
 }
 
 .pdf-search input {
@@ -165,7 +165,7 @@
 .pdf-sidebar {
   display: flex; flex-direction: column; flex-shrink: 0;
   width: 188px; overflow-y: auto;
-  background: #fafbfc; border-right: 1px solid var(--pdf-line);
+  background: #faf9f5; border-right: 1px solid var(--pdf-line);
 }
 
 /* EL ESCENARIO ES UNA COLUMNA: arriba el lienzo, abajo la cinta. Con esto la
@@ -232,7 +232,7 @@
 .pdf-page canvas {
   display: block;
   background: #fff;
-  box-shadow: 0 0 0 1px rgba(20, 30, 42, 0.10), 0 6px 20px rgba(20, 30, 42, 0.12);
+  box-shadow: 0 0 0 1px rgba(20, 20, 19, 0.10), 0 6px 20px rgba(20, 20, 19, 0.12);
 }
 
 /* EL DETALLE NITIDO de lo que se ve, encima de la hoja entera (ver
@@ -329,8 +329,8 @@
   white-space: nowrap;
   padding: 5px 10px;
   border-radius: 12px;
-  background: #26313c;
-  box-shadow: 0 8px 26px rgba(15, 22, 30, 0.34);
+  background: #333330;
+  box-shadow: 0 8px 26px rgba(20, 20, 19, 0.34);
   transform: translateX(-50%);
 }
 
@@ -342,7 +342,7 @@
   border-left: 1px solid rgba(255, 255, 255, 0.16);
 }
 
-.pdf-dock .pdf-ico { color: #d3dbe3; }
+.pdf-dock .pdf-ico { color: #e8e6dc; }
 .pdf-dock .pdf-ico:hover { background: rgba(255, 255, 255, 0.13); color: #fff; }
 .pdf-dock .pdf-ico[aria-pressed="true"] { background: rgba(255, 255, 255, 0.20); color: #fff; }
 .pdf-dock .pdf-sep { background: rgba(255, 255, 255, 0.16); }
@@ -350,7 +350,7 @@
 .pdf-zoom-label {
   min-width: 52px; height: 30px; padding: 0 6px;
   border: none; border-radius: 7px;
-  background: transparent; color: #eaf0f5;
+  background: transparent; color: #f1f0e8;
   cursor: pointer; font: inherit;
   font-size: 12.5px; font-weight: 600;
   font-variant-numeric: tabular-nums;
@@ -361,12 +361,12 @@
 .pdf-medida {
   display: flex; align-items: baseline; gap: 4px;
   padding: 0 8px;
-  color: #9fadba;
+  color: #b0aea5;
   font-size: 11.5px; font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
-.pdf-medida b { color: #eaf0f5; font-weight: 600; }
+.pdf-medida b { color: #f1f0e8; font-weight: 600; }
 
 .pdf-zoom-menu {
   position: absolute;
@@ -375,20 +375,20 @@
   display: flex; flex-direction: column;
   min-width: 190px; padding: 5px;
   border-radius: 11px;
-  background: #26313c;
-  box-shadow: 0 8px 26px rgba(15, 22, 30, 0.34);
+  background: #333330;
+  box-shadow: 0 8px 26px rgba(20, 20, 19, 0.34);
   transform: translateX(-50%);
 }
 
 .pdf-zoom-menu button {
   display: flex; justify-content: space-between; gap: 18px;
   padding: 8px 10px; border: none; border-radius: 7px;
-  background: transparent; color: #eaf0f5;
+  background: transparent; color: #f1f0e8;
   cursor: pointer; font: inherit; font-size: 12.5px; text-align: left;
 }
 
 .pdf-zoom-menu button:hover { background: rgba(255, 255, 255, 0.13); }
-.pdf-zoom-menu span:last-child { color: #9fadba; font-size: 11.5px; }
+.pdf-zoom-menu span:last-child { color: #b0aea5; font-size: 11.5px; }
 
 .pdf-tool-hint {
   position: absolute;
@@ -417,7 +417,7 @@
   display: flex; width: max-content; max-width: calc(100% - 32px);
   margin: 12px auto -44px;
   align-items: center; gap: 10px;
-  border: 1px solid var(--pdf-line); border-radius: 999px;
+  border: 1px solid var(--pdf-line); border-radius: 8px;
   background: rgba(255, 255, 255, 0.97);
   box-shadow: var(--pdf-shadow);
   color: var(--pdf-muted); font-size: 12px; padding: 7px 14px;
@@ -425,8 +425,8 @@
 }
 
 .pdf-render-error {
-  border-color: var(--border-danger, #eec6c3); border-radius: 8px;
-  background: var(--bg-danger, #fdf0ef); color: var(--danger, #a8241b);
+  border-color: var(--border-danger, #cccac0); border-radius: 8px;
+  background: var(--bg-danger, #fbebeb); color: var(--danger, #b93535);
   pointer-events: auto;
 }
 
@@ -471,7 +471,7 @@
   .pdf-sidebar {
     position: absolute; inset: 0 auto 0 0; z-index: 14;
     width: min(78vw, 250px);
-    box-shadow: 8px 0 24px rgba(20, 30, 42, 0.18);
+    box-shadow: 8px 0 24px rgba(20, 20, 19, 0.18);
   }
   .pdf-topbar__right .pdf-ico:not(:last-child) { display: none; }
 }
@@ -495,19 +495,19 @@
   position: relative;
   flex-shrink: 0;
   z-index: 9;
-  background: rgba(28, 35, 43, 0.97);
-  box-shadow: 0 -8px 26px rgba(15, 22, 30, 0.28);
+  background: rgba(20, 20, 19, 0.97);
+  box-shadow: 0 -8px 26px rgba(20, 20, 19, 0.28);
 }
 
 .pdf-tira-cabecera {
   display: flex; align-items: center; justify-content: space-between;
   padding: 6px 14px;
-  color: #9fadba; font-size: 11.5px;
+  color: #b0aea5; font-size: 11.5px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.09);
 }
 
 .pdf-tira-cabecera button {
-  background: none; border: none; color: #9fadba;
+  background: none; border: none; color: #b0aea5;
   font-size: 15px; cursor: pointer; line-height: 1;
 }
 
@@ -536,8 +536,8 @@
   background: #fff;
 }
 
-.pdf-tira-item.es-actual .pdf-tira-lienzo { border-color: #7CCBF0; }
-.pdf-tira-item:hover .pdf-tira-lienzo { border-color: rgba(124, 203, 240, 0.55); }
+.pdf-tira-item.es-actual .pdf-tira-lienzo { border-color: #6A9BCC; }
+.pdf-tira-item:hover .pdf-tira-lienzo { border-color: rgba(106, 155, 204, 0.55); }
 .pdf-tira-item.es-actual { cursor: default; }
 
 .pdf-tira-lienzo img { max-width: 100%; max-height: 100%; display: block; }
@@ -545,12 +545,12 @@
 .pdf-tira-vacio {
   width: 100%; height: 100%;
   display: flex; align-items: center; justify-content: center;
-  background: #eef1f4; color: #8a95a1; font-size: 10px;
+  background: #f1f0e8; color: #72706b; font-size: 10px;
 }
 
 .pdf-tira-nombre {
   margin-top: 5px;
-  color: #c6d0d9; font-size: 10.5px; line-height: 1.3;
+  color: #cccac0; font-size: 10.5px; line-height: 1.3;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
@@ -563,7 +563,7 @@
 .pdf-tira-preparar {
   padding: 3px 10px;
   border: 1px solid rgba(255, 255, 255, 0.22); border-radius: 5px;
-  background: transparent; color: #c6d0d9;
+  background: transparent; color: #cccac0;
   font: inherit; font-size: 11px; cursor: pointer;
 }
 
@@ -572,14 +572,14 @@
 
 .pdf-tira-aviso {
   padding: 5px 14px;
-  color: #7CCBF0; font-size: 11.5px;
+  color: #6A9BCC; font-size: 11.5px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.09);
 }
 
 
 /* La ✕ de la cinta, con area de toque de verdad (antes era un glifo suelto). */
 .pdf-tira-cerrar {
-  background: none; border: none; color: #9fadba;
+  background: none; border: none; color: #b0aea5;
   font-size: 15px; line-height: 1; cursor: pointer;
   padding: 4px 8px; border-radius: 5px;
 }
@@ -600,13 +600,13 @@
 /* La lamina que se esta abriendo: senal inmediata al pulsar, porque
    interpretar un plano lleva segundos y sin aviso el clic parecia perdido. */
 .pdf-tira-item.esta-abriendo .pdf-tira-lienzo {
-  border-color: #7CCBF0;
+  border-color: #6A9BCC;
   opacity: 0.55;
 }
 
 .pdf-tira-item.esta-abriendo .pdf-tira-nombre::after {
   content: ' · abriendo…';
-  color: #7CCBF0;
+  color: #6A9BCC;
 }
 
 
@@ -672,7 +672,7 @@
 
 .pdf-marca-pista {
   fill: none;
-  stroke: rgba(28, 35, 43, 0.09);
+  stroke: rgba(20, 20, 19, 0.09);
   stroke-width: 3.5;
 }
 
@@ -681,7 +681,7 @@
    informacion, no un fallo. */
 .pdf-marca-trazo {
   fill: none;
-  stroke: var(--accent, #2E6E9E);
+  stroke: var(--accent, #507294);
   stroke-width: 3.5;
   stroke-linecap: round;
   transition: stroke-dashoffset 0.25s ease-out;
@@ -693,7 +693,7 @@
   transform: translateX(-50%);
   font-size: 11px;
   font-weight: 600;
-  color: #46525E;
+  color: #52524D;
   background: rgba(255, 255, 255, 0.9);
   padding: 0 6px;
   border-radius: 4px;

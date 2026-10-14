@@ -62,14 +62,14 @@ export default function GatewayPanel({ project, onClose }) {
     <div className="file-viewer-overlay" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 10000, display: 'flex', flexDirection: 'column', background: '#fff' }}>
 
       {/* Header del Overlay para mantener estilo nativo ACC */}
-      <div className="file-viewer-header" style={{ padding: '0 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #e0e0e0', flexShrink: 0 }}>
+      <div className="file-viewer-header" style={{ padding: '0 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #e8e6dc', flexShrink: 0 }}>
         <div className="file-viewer-title" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <span style={{ fontSize: 16, fontWeight: 500, color: 'var(--accent)' }}>
             Frentes 3D — {project.name}
           </span>
         </div>
         <div className="file-viewer-actions">
-           <button className="file-viewer-close" onClick={onClose} style={{ fontSize: 20, cursor: 'pointer', background: 'none', border: 'none', color: '#666' }}>✕</button>
+           <button className="file-viewer-close" onClick={onClose} style={{ fontSize: 20, cursor: 'pointer', background: 'none', border: 'none', color: '#72706b' }}>✕</button>
         </div>
       </div>
 
@@ -81,18 +81,18 @@ export default function GatewayPanel({ project, onClose }) {
         </div>
 
         {frentes === null && (
-          <div style={{ textAlign: 'center', padding: 60, color: '#888', fontSize: 14 }}>
+          <div style={{ textAlign: 'center', padding: 60, color: '#72706b', fontSize: 14 }}>
             <div className="adsk-spinner" style={{ margin: '0 auto 16px' }} />
             Cargando frentes del proyecto...
           </div>
         )}
 
         {frentes !== null && error && (
-          <div style={{ textAlign: 'center', padding: 60, color: '#c62828', fontSize: 14 }}>{error}</div>
+          <div style={{ textAlign: 'center', padding: 60, color: '#b93535', fontSize: 14 }}>{error}</div>
         )}
 
         {frentes !== null && !error && cards.length === 0 && (
-          <div style={{ textAlign: 'center', padding: 60, color: '#888', fontSize: 14 }}>
+          <div style={{ textAlign: 'center', padding: 60, color: '#72706b', fontSize: 14 }}>
             <div style={{ fontSize: 40, marginBottom: 12 }}>🏗️</div>
             Este proyecto aún no tiene frentes 3D con modelos vinculados.<br />
             Vincula modelos desde el Visor (Files → Importar) para que aparezcan aquí.

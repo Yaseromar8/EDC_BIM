@@ -165,10 +165,10 @@ setInterval(() => {
 // MARCAS DE MENTIRA, en coordenadas PDF de la hoja A1 (2384 x 1684 pt): un
 // marco, un conteo en el centro, una medida y una nube.
 const MARCAS_DEL_BANCO = [
-  { id: 'm1', page: 1, kind: 'rect', geometry: { x: 1000, y: 700, w: 300, h: 200 }, style: { color: '#e53935' } },
-  { id: 'm2', page: 1, kind: 'count', geometry: { p: [1192, 842] }, style: { color: '#1e88e5' } },
-  { id: 'm3', page: 1, kind: 'measure', geometry: { points: [[200, 200], [800, 200], [800, 500]] }, style: { color: '#43a047' } },
-  { id: 'm4', page: 1, kind: 'cloud', geometry: { x: 1600, y: 1100, w: 400, h: 250 }, style: { color: '#fb8c00' } },
+  { id: 'm1', page: 1, kind: 'rect', geometry: { x: 1000, y: 700, w: 300, h: 200 }, style: { color: '#b93535' } },
+  { id: 'm2', page: 1, kind: 'count', geometry: { p: [1192, 842] }, style: { color: '#507294' } },
+  { id: 'm3', page: 1, kind: 'measure', geometry: { points: [[200, 200], [800, 200], [800, 500]] }, style: { color: '#788c5d' } },
+  { id: 'm4', page: 1, kind: 'cloud', geometry: { x: 1600, y: 1100, w: 400, h: 250 }, style: { color: '#f9eeda' } },
 ];
 
 const fetchReal = window.fetch.bind(window);

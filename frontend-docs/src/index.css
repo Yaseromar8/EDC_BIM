@@ -3,6 +3,9 @@
    Debe ir ANTES que cualquier regla -- el CSS exige que los @import
    encabecen la hoja. Ver UX-01 · fase K1. */
 @import '../../design/alephia.tokens.css';
+/* Tema cálido (paleta de Claude), solo en Docs y solo en claro. Quitar esta
+   línea devuelve la paleta fría del manual. Ver src/tema-claude.css. */
+@import './tema-claude.css';
 
 /* ==========================================
    ALEPHIA Docs — GESTIÓN DOCUMENTAL
@@ -15,7 +18,7 @@
    que comunicar; nunca de adorno.
 
    POR QUÉ CAMBIÓ: el tema anterior desaturaba TODO (--danger era un rosa
-   #bd8585, --success un salvia #7ea88f). Apagar los colores que deben avisar
+   #fbebeb, --success un salvia #e0e3d7). Apagar los colores que deben avisar
    no es sobriedad, es que un error deje de parecer un error. Y --text-muted
    estaba a 2,60:1 de contraste sobre blanco, por debajo del 4,5:1 que exige
    la WCAG AA: ilegible en una tablet a pleno sol, que es donde se usa esto.
@@ -41,7 +44,7 @@
      Todo gris de la aplicación sale de aquí. Si necesitas un gris que no
      está en esta lista, casi seguro que ya existe uno que hace ese papel.
      Con ALEPHIA solo cambian DOS anclas: 100 = Mist exacto (antes
-     #f1f3f5, indistinguible a ojo) y 900 = Ink (antes #1a2027). Los
+     #f1f0e8, indistinguible a ojo) y 900 = Ink (antes #141413). Los
      demás grises siguen siendo grises de verdad. */
   --neutral-0: var(--a-neutral-0);
   --neutral-50: var(--a-neutral-50);
@@ -374,34 +377,78 @@ table { font-variant-numeric: tabular-nums; }
 }
 
 /* ─── FOLDER TREE COMPONENTS ─── */
+/* UNA sola definición (UI polish F1, QW2). Había dos, con otros tamaños y otros
+   grises; ganaba la segunda solo por estar más abajo. Estos son los valores que
+   de verdad se veían, con el hover y la selección de las filas de la tabla.
+   La sangría y el color del texto los pone FolderNode en línea. */
 .folder-tree-item {
   display: flex;
   align-items: center;
-  min-height: 35px;
-  padding: 0 8px;
-  /* Internal only, external padding handled in component */
-  color: #3c3c3c;
-  font-size: 14px;
+  gap: 8px;
+  box-sizing: border-box;
+  /* 36 px como en ACC (medía 40). Y el ancho del panel, no el del nombre:
+     antes `min-width: max-content` hacía que un nombre largo sacara una
+     barra horizontal en el árbol. */
+  min-height: var(--a-size-menu-item);
+  padding: 0 4px 0 16px;
+  color: var(--text-secondary);
+  font-size: 13px;
   cursor: pointer;
   user-select: none;
-  transition: background 0.1s;
   position: relative;
-  min-width: max-content;
+  min-width: 0;
+  border-left: 3px solid transparent;
 }
 
-
-
-.folder-tree-item:hover {
-  background: rgba(95, 127, 163, 0.08);
+.folder-tree-item .tree-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.folder-tree-item.active {
-  background: #eef2f7;
-  color: var(--accent);
+/* ⋮ de la carpeta: visible al pasar el puntero, con el foco y en la abierta. */
+.tree-menu-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--a-radius-md);
+  background: transparent;
+  color: var(--a-text-secondary);
+  cursor: pointer;
+  opacity: 0;
 }
+
+.folder-tree-item:hover .tree-menu-btn,
+.folder-tree-item.active .tree-menu-btn,
+.folder-tree-item.context-active .tree-menu-btn,
+.tree-menu-btn:focus-visible {
+  opacity: 1;
+}
+
+.tree-menu-btn:hover { background: var(--a-state-hover); color: var(--a-text-primary); }
 
 .folder-tree-item.child-active {
-  background: rgba(95, 127, 163, 0.04);
+  background: rgba(106, 155, 204, 0.04);
+}
+
+/* Hover instantáneo, como las filas. */
+.folder-tree-item:hover {
+  background-color: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.folder-tree-item.active,
+.folder-tree-item.context-active {
+  background-color: var(--bg-active) !important;
+  color: var(--accent);
+  border-left-color: var(--accent);
 }
 
 .folder-icon-btn {
@@ -425,7 +472,7 @@ table { font-variant-numeric: tabular-nums; }
   top: 30px;
   right: -100px;
   background: #ffffff;
-  border: 1px solid #dcdcdc;
+  border: 1px solid #e8e6dc;
   border-radius: 4px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
   z-index: 9999;
@@ -442,7 +489,7 @@ table { font-variant-numeric: tabular-nums; }
   gap: 12px;
   padding: 8px 16px;
   cursor: pointer;
-  color: #3c3c3c;
+  color: #333330;
   font-size: 14px;
   background: none;
   border: none;
@@ -451,11 +498,11 @@ table { font-variant-numeric: tabular-nums; }
 }
 
 .tree-context-item:hover {
-  background: #f6f6f6;
+  background: #f1f0e8;
 }
 
 .tree-context-item svg {
-  color: #3c3c3c;
+  color: #333330;
   width: 20px;
   height: 20px;
 }
@@ -479,7 +526,7 @@ table { font-variant-numeric: tabular-nums; }
   background: transparent;
   padding: 0 8px;
   font-size: 13px;
-  color: #333;
+  color: #333330;
   width: 100%;
   height: 100%;
 }
@@ -499,18 +546,18 @@ table { font-variant-numeric: tabular-nums; }
 }
 
 .inline-edit-box button.btn-cancel {
-  border-color: #dcdcdc;
+  border-color: #e8e6dc;
   color: var(--accent);
   background: #fff;
 }
-.inline-edit-box button.btn-cancel:hover { background: #f0f0f0; }
+.inline-edit-box button.btn-cancel:hover { background: #f1f0e8; }
 
 .inline-edit-box button.btn-submit {
   border-color: var(--accent);
   color: #fff;
   background: var(--accent);
 }
-.inline-edit-box button.btn-submit:hover { background: #4d6a8f; }
+.inline-edit-box button.btn-submit:hover { background: #507294; }
 
 .tree-toggle {
   width: 16px;
@@ -519,7 +566,7 @@ table { font-variant-numeric: tabular-nums; }
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  color: #999;
+  color: #72706b;
 }
 
 .tree-toggle:hover {
@@ -589,7 +636,7 @@ table { font-variant-numeric: tabular-nums; }
 .acc-top-header {
   height: 48px;
   background-color: #ffffff;
-  border-bottom: 1px solid #cccccc;
+  border-bottom: 1px solid #cccac0;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -605,7 +652,7 @@ table { font-variant-numeric: tabular-nums; }
 
 .acc-left-sidebar {
   width: 220px;
-  background-color: #f6f6f6;
+  background-color: #f1f0e8;
   display: flex;
   flex-direction: column;
   padding-top: 10px;
@@ -633,7 +680,7 @@ table { font-variant-numeric: tabular-nums; }
   font-weight: 300;
   margin: 0;
   margin-bottom: 24px;
-  color: #333;
+  color: #333330;
 }
 
 .acc-tabs {
@@ -646,7 +693,7 @@ table { font-variant-numeric: tabular-nums; }
 .acc-tab {
   padding-bottom: 8px;
   cursor: pointer;
-  color: #666;
+  color: #72706b;
   border-bottom: 2px solid transparent;
 }
 
@@ -660,7 +707,7 @@ table { font-variant-numeric: tabular-nums; }
   margin: 0;
   width: 100%;
   height: 1px;
-  background-color: #dcdcdc;
+  background-color: #e8e6dc;
 }
 
 .acc-workspace {
@@ -690,14 +737,14 @@ table { font-variant-numeric: tabular-nums; }
   justify-content: center;
   cursor: col-resize;
   background: transparent;
-  border-left: 1px solid #dcdcdc;
-  border-right: 1px solid #dcdcdc;
+  border-left: 1px solid #e8e6dc;
+  border-right: 1px solid #e8e6dc;
   transition: background 0.15s;
   z-index: 5;
 }
 
 .acc-resize-handle:hover {
-  background: #eef2f7;
+  background: #f1f0e8;
 }
 
 .acc-resize-dots {
@@ -711,7 +758,7 @@ table { font-variant-numeric: tabular-nums; }
   width: 3px;
   height: 3px;
   border-radius: 50%;
-  background: #999;
+  background: #72706b;
 }
 
 .acc-resize-handle:hover .acc-resize-dots span {
@@ -734,16 +781,16 @@ table { font-variant-numeric: tabular-nums; }
   align-items: center;
   height: 40px;
   padding: 0 16px;
-  border-top: 1px solid #dcdcdc;
+  border-top: 1px solid #e8e6dc;
   font-size: 12px;
-  color: #999;
+  color: #72706b;
   flex-shrink: 0;
 }
 
 .data-row, .data-header {
   display: flex !important;
   align-items: center;
-  border-bottom: 1px solid #eee;
+  border-bottom: 1px solid #f1f0e8;
   background: #fff;
   transition: background 0.1s;
   width: 100%;
@@ -783,50 +830,54 @@ table { font-variant-numeric: tabular-nums; }
   z-index: 20 !important;
   background-color: inherit !important;
   box-shadow: 2px 0 5px rgba(0,0,0,0.08);
-  border-right: 1px solid #eee;
+  border-right: 1px solid #f1f0e8;
 }
 
-.data-header .td-frozen-left {
-  background-color: #f5f5f5 !important;
+/* Las celdas fijas de la cabecera llevan EL MISMO fondo que la cabecera.
+   Antes era un gris fijo distinto del de la cabecera: se veía la costura. */
+.data-header .td-frozen-left,
+.data-header .td-frozen-right {
+  background-color: var(--neutral-50) !important;
   z-index: 25 !important;
 }
 
-.data-row:hover {
-  background-color: #f5f5f5;
-}
+/* El hover y la selección de la fila viven en UNA sola regla, en «TABLA
+   VIRTUALIZADA». Aquí había otra con otros grises fijos, y las
+   celdas fijas se pintaban de un azul distinto al de su propia fila (F1). */
 
-.data-row.selected, .data-row.context-active {
-  background-color: #eef2f7 !important;
-}
-
-.data-row.selected .td-frozen-left, .data-row.context-active .td-frozen-left {
-  background-color: #eef2f7 !important;
-}
-
+/* Columna de acciones fija a la derecha: el ⋮ se ve siempre, aunque la tabla
+   sea más ancha que el panel (QW6). Hereda el fondo de su fila, como las
+   fijas de la izquierda, así acompaña al hover y a la selección.
+   No usa `sticky` sino el desplazamiento que publica MatrixTable en
+   `--tabla-x` / `--tabla-sobra`: en las filas, `sticky` no tiene contra qué
+   pegarse (están dentro del desplazador vertical de react-window), y en la
+   cabecera, medido en Chrome, tampoco se pegaba a la derecha. */
 .td-frozen-right {
-  position: sticky;
-  right: 0;
+  position: relative;
   z-index: 10;
-  background: white;
-  border-left: 1px solid #dcdcdc;
+  background-color: inherit;
+  border-left: 1px solid var(--a-border-subtle);
+  transform: translateX(calc(var(--tabla-x, 0px) - var(--tabla-sobra, 0px)));
 }
 
-.data-row.selected .td-frozen-right {
-  background: #eef2f7;
+/* Casilla y Nombre en las FILAS: el mismo traslado. En la cabecera ya los fija
+   `sticky` (allí sí funciona), así que esto es solo para el cuerpo. */
+.data-row .td-frozen-left {
+  transform: translateX(var(--tabla-x, 0px));
 }
 
 .data-table thead th.td-frozen-left {
   position: sticky;
   z-index: 25 !important;
-  background: #f5f5f5 !important;
+  background: #f1f0e8 !important;
 }
 
 .data-table thead th.td-frozen-right {
   position: sticky;
   right: 0;
   z-index: 11;
-  background: #f5f5f5;
-  border-left: 1px solid #dcdcdc;
+  background: #f1f0e8;
+  border-left: 1px solid #e8e6dc;
 }
 
 /* ─── IMPROVED AVATARS ─── */
@@ -845,124 +896,19 @@ table { font-variant-numeric: tabular-nums; }
 .acc-avatar-name {
   font-size: 12px;
   font-weight: 600;
-  color: #333;
+  color: #333330;
 }
 
 .acc-avatar-company {
   font-size: 10px;
-  color: #888;
+  color: #72706b;
   text-transform: uppercase;
 }
 
-/* ─── ROW ACTIONS ─── */
-/* ─── ACC CONTEXT MENU ─── */
-.row-context-menu {
-  background: #fff;
-  border: 1px solid #dcdcdc;
-  border-radius: 4px;
-  box-shadow: 0 8px 24px rgba(0,0,0,0.15);
-  padding: 8px 0;
-  display: flex;
-  flex-direction: column;
-  z-index: 10002;
-  min-width: 220px;
-}
-
-.row-context-menu button {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 16px;
-  border: none;
-  background: transparent;
-  color: #333;
-  font-size: 13.5px;
-  font-weight: 400;
-  cursor: pointer;
-  text-align: left;
-  transition: background 0.1s;
-}
-
-.row-context-menu button:hover {
-  background: #f5f5f5;
-}
-
-.row-context-menu button .menu-icon {
-  width: 18px;
-  height: 18px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #555;
-}
-
-.row-context-menu button:hover .menu-icon {
-  color: var(--accent);
-}
-
-.menu-divider {
-  height: 1px;
-  background: #f0f0f0;
-  margin: 4px 0;
-}
-
-.row-action-btn {
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  color: #666;
-  padding: 4px;
-  border-radius: 4px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: background 0.1s;
-}
-
-.row-action-btn:hover {
-  background: #eee;
-  color: var(--accent);
-}
-
-.row-action-menu {
-  position: absolute;
-  top: 36px;
-  right: 8px;
-  background: white;
-  border: 1px solid #dcdcdc;
-  border-radius: 4px;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-  z-index: 1000;
-  min-width: 160px;
-  padding: 4px 0;
-}
-
-.row-action-menu button {
-  width: 100%;
-  padding: 8px 12px;
-  text-align: left;
-  background: transparent;
-  border: none;
-  font-size: 13px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  cursor: pointer;
-  color: #333;
-}
-
-.row-action-menu button:hover {
-  background: #f5f5f5;
-  color: var(--accent);
-}
-
-.row-action-menu button.danger {
-  color: #d32f2f;
-}
-
-.row-action-menu button.danger:hover {
-  background: #fdf2f2;
-}
+/* El menú contextual de fila vive en UNA sola regla, más abajo («ROW
+   CONTEXT MENU»). Aquí había otra definición del mismo menú con valores
+   distintos, y un `.row-action-menu` que ningún componente usaba (UI polish
+   F1, QW2). */
 
 .acc-toolbar {
   display: flex;
@@ -985,8 +931,8 @@ table { font-variant-numeric: tabular-nums; }
 .acc-search-box {
   display: flex;
   align-items: center;
-  background: #f4f4f4;
-  border: 1px solid #dcdcdc;
+  background: #f1f0e8;
+  border: 1px solid #e8e6dc;
   border-radius: 4px;
   padding: 0 10px;
   height: 32px;
@@ -1007,12 +953,12 @@ table { font-variant-numeric: tabular-nums; }
   padding: 0 8px;
   font-size: 13px;
   width: 100%;
-  color: #333;
+  color: #333330;
 }
 
 .acc-type-selector {
   display: flex;
-  background: #f0f0f0;
+  background: #f1f0e8;
   border-radius: 4px;
   padding: 2px;
   gap: 2px;
@@ -1024,7 +970,7 @@ table { font-variant-numeric: tabular-nums; }
   padding: 4px 12px;
   font-size: 11px;
   font-weight: 600;
-  color: #666;
+  color: #72706b;
   border-radius: 3px;
   cursor: pointer;
   transition: all 0.15s;
@@ -1033,7 +979,7 @@ table { font-variant-numeric: tabular-nums; }
 
 .acc-type-selector button:hover {
   background: rgba(0,0,0,0.05);
-  color: #333;
+  color: #333330;
 }
 
 .acc-type-selector button.active {
@@ -1050,6 +996,143 @@ table { font-variant-numeric: tabular-nums; }
   border-bottom: 1px solid var(--border);
 }
 
+/* ─── BARRA DE ARCHIVOS (UI polish F1, 13-oct-2026) ───
+   Una sola altura para todo lo que vive en la barra, como en ACC: antes
+   «Cargar archivos» medía 27 px, «Nueva carpeta» 30, «Vincular ACC» 29 y el
+   buscador 32. Y como iban en línea, ninguno tenía hover ni pulsado.
+   Se conserva el aspecto que ya tenían; lo que cambia es que ahora es uno. */
+.barra-btn {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: var(--a-size-control-md);
+  padding: 0 12px;
+  border: 1px solid transparent;
+  border-radius: var(--a-radius-md);
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color var(--a-motion-fast) var(--a-ease),
+              border-color var(--a-motion-fast) var(--a-ease),
+              color var(--a-motion-fast) var(--a-ease);
+}
+
+/* La acción principal de la pantalla. */
+.barra-btn--primario {
+  padding: 0 16px;
+  background: var(--a-action-primary);
+  color: var(--a-text-on-action);
+}
+.barra-btn--primario:hover:not(:disabled) { background: var(--a-action-primary-hover); }
+
+/* Acciones de la carpeta: con contorno. Al pasar el puntero, un HALO gris
+   de 2 px y no un cambio de fondo; al pulsar, el halo crece a 4 px. Es lo que
+   hace ACC (medido el 13-oct-2026: 0 0 0 2px gris al 15 %, en 300 ms). */
+.barra-btn--contorno {
+  background: var(--a-surface-base);
+  border-color: var(--accent);
+}
+.barra-btn--contorno,
+.barra-btn--neutro {
+  transition: background-color var(--a-motion-fast) var(--a-ease),
+              border-color var(--a-motion-fast) var(--a-ease),
+              color var(--a-motion-fast) var(--a-ease),
+              box-shadow var(--a-motion-slow) var(--a-ease);
+}
+.barra-btn--contorno:hover:not(:disabled),
+.barra-btn--neutro:hover:not(:disabled) {
+  box-shadow: 0 0 0 2px rgb(var(--a-ink-900-rgb) / .12);
+}
+.barra-btn--contorno:active:not(:disabled),
+.barra-btn--neutro:active:not(:disabled) {
+  box-shadow: 0 0 0 4px rgb(var(--a-ink-900-rgb) / .18);
+}
+
+/* Acciones sobre la selección: solo texto e icono, como en ACC. */
+.barra-btn--texto { padding: 0 8px; }
+.barra-btn--texto:hover:not(:disabled) { background: var(--bg-hover); }
+
+.barra-btn--peligro { color: var(--a-action-danger); }
+.barra-btn--peligro:hover:not(:disabled) { background: var(--a-status-danger-surface); }
+
+/* Papelera: restaurar. */
+.barra-btn--neutro {
+  background: var(--a-surface-base);
+  border-color: var(--a-border-strong);
+  color: var(--a-text-primary);
+}
+
+.barra-btn:active:not(:disabled) { translate: 0 1px; }
+
+/* Una acción que no se puede usar se ve apagada y dice por qué (su title). */
+.barra-btn:disabled {
+  color: var(--a-text-disabled);
+  cursor: not-allowed;
+}
+
+/* Buscador y filtro de estado: la misma altura y la misma respuesta. */
+.barra-campo {
+  box-sizing: border-box;
+  height: var(--a-size-control-md);
+  border: 1px solid var(--a-border-strong);
+  border-radius: var(--a-radius-md);
+  background: var(--a-surface-base);
+  font: inherit;
+  font-size: 13px;
+  outline: none;
+  transition: border-color var(--a-motion-fast) var(--a-ease);
+}
+.barra-campo:hover { border-color: var(--a-text-muted); }
+
+/* ─── CARGA DEL PANEL DE ARCHIVOS (UI polish, 13-oct-2026) ───
+   La lista anterior se queda mientras llega la nueva, como en ACC. Solo se
+   atenúa si la espera pasa de 150 ms: una carpeta que ya llega no parpadea.
+   Al terminar, vuelve al instante (la transición vive solo en el estado de
+   carga). */
+.panel-cargando > :not(.barra-progreso) {
+  opacity: .55;
+  pointer-events: none;
+  transition: opacity var(--a-motion-base) var(--a-ease) 150ms;
+}
+
+.barra-progreso {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  overflow: hidden;
+  z-index: 6;
+  opacity: 0;
+  animation: barra-progreso-aparece 0s linear 150ms forwards;
+}
+
+.barra-progreso::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 30%;
+  background: var(--a-action-text);
+  animation: barra-progreso-avanza 1.1s var(--a-ease) infinite;
+}
+
+@keyframes barra-progreso-aparece { to { opacity: 1; } }
+@keyframes barra-progreso-avanza {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(350%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .barra-progreso::before { animation: none; width: 100%; opacity: .6; }
+}
+
 /* ─── BUTTONS ─── */
 .btn {
   display: inline-flex;
@@ -1061,7 +1144,12 @@ table { font-variant-numeric: tabular-nums; }
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
-  transition: all 0.15s;
+  /* Solo colores (UI polish F1). Con `all`, el anillo de foco y el pulsado
+     CRECÍAN durante 150 ms: el anillo no llegaba a 3:1 hasta los 43–71 ms
+     (pendiente desde F0/T2). */
+  transition: background-color var(--a-motion-fast) var(--a-ease),
+              color var(--a-motion-fast) var(--a-ease),
+              border-color var(--a-motion-fast) var(--a-ease);
   font-family: inherit;
 }
 
@@ -1071,8 +1159,8 @@ table { font-variant-numeric: tabular-nums; }
 }
 
 .btn-primary:hover {
-  background: #4d6a8f;
-  box-shadow: 0 2px 8px rgba(95, 127, 163, 0.25);
+  background: #507294;
+  box-shadow: 0 2px 8px rgba(106, 155, 204, 0.25);
 }
 
 .btn-create {
@@ -1081,7 +1169,7 @@ table { font-variant-numeric: tabular-nums; }
 }
 
 .btn-create:hover {
-  background: #d85a25;
+  background: #9e5943;
 }
 
 .btn-secondary {
@@ -1096,13 +1184,13 @@ table { font-variant-numeric: tabular-nums; }
 }
 
 .btn-danger {
-  background: #fff0f0;
+  background: #fbebeb;
   color: var(--danger);
-  border: 1px solid #f5c6c6;
+  border: 1px solid #fbebeb;
 }
 
 .btn-danger:hover {
-  background: #ffe0e0;
+  background: #fbebeb;
 }
 
 .btn-icon {
@@ -1113,7 +1201,8 @@ table { font-variant-numeric: tabular-nums; }
   padding: 6px;
   border-radius: 4px;
   font-size: 16px;
-  transition: all 0.12s;
+  transition: background-color var(--a-motion-fast) var(--a-ease),
+              color var(--a-motion-fast) var(--a-ease);
 }
 
 .btn-icon:hover {
@@ -1150,7 +1239,7 @@ table { font-variant-numeric: tabular-nums; }
   padding: 14px 16px;
   font-size: 13px;
   color: var(--text-secondary);
-  border-bottom: 1px solid #f0f0f0;
+  border-bottom: 1px solid #f1f0e8;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1163,7 +1252,7 @@ table { font-variant-numeric: tabular-nums; }
 }
 
 .data-table tbody tr:hover td {
-  background: #f8f9fa;
+  background: #faf9f5;
 }
 /* BREADCRUMBS */
 .acc-breadcrumb-strip {
@@ -1171,7 +1260,7 @@ table { font-variant-numeric: tabular-nums; }
   align-items: center;
   gap: 4px;
   font-size: 13px;
-  color: #666;
+  color: #72706b;
 }
 .bc-item.link {
   cursor: pointer;
@@ -1181,7 +1270,7 @@ table { font-variant-numeric: tabular-nums; }
   text-decoration: underline;
 }
 .bc-sep {
-  color: #999;
+  color: #72706b;
   margin: 0 2px;
 }
 
@@ -1193,7 +1282,6 @@ table { font-variant-numeric: tabular-nums; }
   display: flex;
   align-items: center;
   border-bottom: 1px solid var(--neutral-200);
-  transition: background 0.08s;
   cursor: pointer;
   background: var(--bg-primary);
   width: 1750px; /* Ancho fijo para sincronizar con la cabecera */
@@ -1201,11 +1289,14 @@ table { font-variant-numeric: tabular-nums; }
   font-variant-numeric: tabular-nums;
 }
 
+/* Hover instantáneo, como en ACC: sin transición (F0 ya la quitó en línea). */
 .data-row:hover {
   background: var(--bg-hover);
 }
 
-.data-row.selected {
+/* La fila con el menú abierto se marca igual que una seleccionada. */
+.data-row.selected,
+.data-row.context-active {
   background: var(--bg-active) !important;
 }
 
@@ -1269,18 +1360,18 @@ table { font-variant-numeric: tabular-nums; }
   width: 22px;
   height: 22px;
   border-radius: 50%;
-  background: #e0e0e0;
+  background: #e8e6dc;
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 10px;
   font-weight: 700;
   margin-right: 8px;
-  color: #666;
+  color: #72706b;
 }
 
 .data-table tbody tr.selected td {
-  background: #eef2f7;
+  background: #f1f0e8;
 }
 
 .data-table th:nth-child(1),
@@ -1319,7 +1410,7 @@ table { font-variant-numeric: tabular-nums; }
 }
 
 .table-wrap::-webkit-scrollbar-thumb {
-  background: #ddd;
+  background: #e8e6dc;
   border-radius: 4px;
 }
 
@@ -1329,7 +1420,7 @@ table { font-variant-numeric: tabular-nums; }
    nada -- ni diálogo, ni aviso, ni error. */
 .menu-apagado,
 .row-context-menu button:disabled {
-  opacity: 0.42;
+  opacity: var(--a-opacity-disabled);
   cursor: not-allowed;
 }
 
@@ -1406,12 +1497,12 @@ th {
 
 /* ─── FILE NAME CELL ─── */
 .version-badge {
-  background: #EBEBEB;
+  background: #F1F0E8;
   border-radius: 4px;
   padding: 2px 6px;
   font-size: 11px;
   font-weight: 600;
-  color: #333;
+  color: #333330;
 }
 
 .user-cell {
@@ -1435,7 +1526,7 @@ th {
 
 .user-cell span {
   font-size: 12px;
-  color: #333;
+  color: #333330;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1499,7 +1590,7 @@ th {
 }
 
 .breadcrumb-sep {
-  color: #ccc;
+  color: #cccac0;
 }
 
 .breadcrumb-current {
@@ -1556,14 +1647,14 @@ th {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  border-bottom: 1px solid #eee;
+  border-bottom: 1px solid #f1f0e8;
 }
 
 .acc-upload-header h3 {
   margin: 0;
   font-size: 18px;
   font-weight: 300;
-  color: #333;
+  color: #333330;
 }
 
 .acc-upload-body {
@@ -1574,19 +1665,19 @@ th {
 }
 
 .acc-batch-group {
-  border: 1px solid #f0f0f0;
+  border: 1px solid #f1f0e8;
   border-radius: 4px;
   overflow: hidden;
 }
 
 .acc-batch-header {
-  background: #fcfcfc;
+  background: #faf9f5;
   padding: 8px 12px;
-  border-bottom: 1px solid #f0f0f0;
+  border-bottom: 1px solid #f1f0e8;
 }
 
 .acc-batch-header:hover {
-  background: #f5f5f5;
+  background: #f1f0e8;
 }
 
 .acc-batch-content {
@@ -1595,13 +1686,13 @@ th {
 
 .acc-upload-dropzone.drag-over {
   border-color: var(--accent);
-  background: #eef2f7;
+  background: #f1f0e8;
 }
 
 .acc-upload-btn-secondary {
   width: 100%;
   padding: 8px;
-  border: 1px solid #dcdcdc;
+  border: 1px solid #e8e6dc;
   background: #fff;
   border-radius: 4px;
   font-size: 13px;
@@ -1675,13 +1766,13 @@ th {
 
 .acc-upload-file-status {
   font-size: 11px;
-  color: #808080;
+  color: #72706b;
 }
 
 .acc-progress-container {
   width: 100%;
   height: 4px;
-  background: #eee;
+  background: #f1f0e8;
   border-radius: 2px;
   overflow: hidden;
   margin-top: 4px;
@@ -1697,7 +1788,7 @@ th {
   width: 100% !important;
   position: relative;
   overflow: hidden;
-  background: #cdd8e4;
+  background: #e8e6dc;
 }
 
 .acc-progress-bar.indeterminate::after {
@@ -1718,7 +1809,7 @@ th {
 
 .acc-upload-footer {
   padding: 16px 20px;
-  border-top: 1px solid #eee;
+  border-top: 1px solid #f1f0e8;
   display: flex;
   justify-content: flex-end;
   gap: 12px;
@@ -1736,8 +1827,8 @@ th {
 }
 
 .acc-btn-listo:disabled {
-  background: #f0f0f0;
-  color: #aaa;
+  background: #f1f0e8;
+  color: #b0aea5;
   cursor: not-allowed;
 }
 
@@ -1746,9 +1837,9 @@ th {
   position: fixed;
   top: 20px;
   right: 20px;
-  background: #f1f8e9;
-  border: 1px solid #c5e1a5;
-  color: #33691e;
+  background: #e0e3d7;
+  border: 1px solid #e0e3d7;
+  color: #64744e;
   padding: 12px 24px;
   border-radius: 4px;
   display: flex;
@@ -1766,7 +1857,7 @@ th {
   right: 20px;
   width: 280px;
   background: #fff;
-  border: 1px solid #dcdcdc;
+  border: 1px solid #e8e6dc;
   border-radius: 4px;
   box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
   z-index: 10500;
@@ -1775,7 +1866,7 @@ th {
 
 .acc-upload-monitor-header {
   padding: 8px 12px;
-  background: #f5f5f5;
+  background: #f1f0e8;
   font-size: 12px;
   font-weight: 600;
   display: flex;
@@ -1798,7 +1889,7 @@ th {
   box-shadow: 0 4px 16px rgba(0,0,0,0.15);
   cursor: pointer;
   z-index: 1000;
-  border: 1px solid #eee;
+  border: 1px solid #f1f0e8;
   transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
   overflow: hidden; /* Para que el logo no se salga */
 }
@@ -1841,7 +1932,7 @@ th {
   flex-direction: column;
   z-index: 1000;
   overflow: hidden;
-  border: 1px solid #eee;
+  border: 1px solid #f1f0e8;
   animation: modal-pop 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
@@ -1875,7 +1966,7 @@ th {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  background: #fdfdfd;
+  background: #faf9f5;
 }
 
 .ai-msg {
@@ -1919,20 +2010,20 @@ th {
   background: #fff;
   border-radius: 4px;
   overflow: hidden;
-  border: 1px solid #e0e0e0;
+  border: 1px solid #e8e6dc;
 }
 
 .ai-markdown-content th {
-  background: #f8f9fa;
+  background: #faf9f5;
   padding: 8px;
   text-align: left;
   font-weight: 600;
-  border-bottom: 2px solid #eee;
+  border-bottom: 2px solid #f1f0e8;
 }
 
 .ai-markdown-content td {
   padding: 8px;
-  border-bottom: 1px solid #f0f0f0;
+  border-bottom: 1px solid #f1f0e8;
 }
 
 .ai-markdown-content tr:last-child td {
@@ -1948,16 +2039,16 @@ th {
 
 .ai-msg.bot {
   align-self: flex-start;
-  background: #f8f9fa;
-  color: #333;
+  background: #faf9f5;
+  color: #333330;
   border-bottom-left-radius: 2px;
-  border: 1px solid #eef0f2;
+  border: 1px solid #f1f0e8;
 }
 
 .ai-citations {
   margin-top: 12px;
   padding-top: 12px;
-  border-top: 1px dashed #ddd;
+  border-top: 1px dashed #e8e6dc;
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -1965,11 +2056,11 @@ th {
 
 .citation-btn {
   background: #fff;
-  border: 1px solid #e0e0e0;
+  border: 1px solid #e8e6dc;
   padding: 6px 10px;
   border-radius: 6px;
   font-size: 11.5px;
-  color: #333;
+  color: #333330;
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -1984,22 +2075,22 @@ th {
 }
 
 .citation-btn:hover {
-  background: #f0f8ff;
+  background: #ecf0f1;
   border-color: var(--accent);
   transform: translateX(4px);
 }
 
 .ai-footer {
   padding: 12px;
-  border-top: 1px solid #eee;
+  border-top: 1px solid #f1f0e8;
   display: flex;
   gap: 8px;
 }
 
 .ai-input {
   flex: 1;
-  border: 1px solid #ddd;
-  border-radius: 20px;
+  border: 1px solid #e8e6dc;
+  border-radius: 8px;
   padding: 8px 16px;
   font-size: 14px;
   outline: none;
@@ -2027,7 +2118,7 @@ th {
 .dot {
   width: 6px;
   height: 6px;
-  background: #ccc;
+  background: #cccac0;
   border-radius: 50%;
   animation: bounce 1.4s infinite ease-in-out both;
 }
@@ -2136,24 +2227,24 @@ th {
 }
 
 .modal-actions button:hover:not(:disabled) {
-  background: var(--neutral-100, #eef2f7);
+  background: var(--neutral-100, #f1f0e8);
 }
 
 .modal-actions button:active:not(:disabled) {
-  background: var(--neutral-200, #d9e3ef);
+  background: var(--neutral-200, #ecf0f1);
 }
 
 /* Con teclado hay que ver DONDE estas antes de pulsar. */
 .modal-actions button:focus-visible {
   outline: none;
   border-color: var(--accent);
-  background: var(--neutral-100, #eef2f7);
+  background: var(--neutral-100, #f1f0e8);
 }
 
 /* Mientras la peticion viaja el boton queda apagado: sin esto se podia pulsar
    «Crear» tres veces seguidas y salian tres carpetas. */
 .modal-actions button:disabled {
-  color: var(--text-muted, #aaa);
+  color: var(--text-muted, #b0aea5);
   cursor: default;
 }
 
@@ -2170,45 +2261,23 @@ th {
 }
 
 .access-badge-docs {
-  background: #eef2f7;
+  background: #f1f0e8;
   color: var(--accent);
 }
 
 .access-badge-docs:hover {
-  background: #d5ecf8;
+  background: #ecf0f1;
 }
 
 /* ─── DRAG & DROP ─── */
 .dropzone-active {
   outline: 2px dashed var(--accent) !important;
   outline-offset: -4px;
-  background: #f4f6f9 !important;
+  background: #f1f0e8 !important;
 }
 
-/* ─── FOLDER TREE ─── */
-.folder-tree-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 16px;
-  cursor: pointer;
-  color: var(--text-secondary);
-  font-size: 13px;
-  transition: all 0.1s;
-  border-left: 3px solid transparent;
-}
-
-.folder-tree-item:hover {
-  background-color: #f5f5f5;
-  color: var(--text-primary);
-}
-
-.folder-tree-item.active, .folder-tree-item.context-active {
-  background-color: #eef2f7 !important;
-  color: var(--accent);
-  border-left-color: var(--accent);
-}
-
+/* ─── FOLDER TREE ─── (la regla de `.folder-tree-item` está en «FOLDER TREE
+   COMPONENTS», arriba) */
 .folder-tree-item .tree-icon {
   font-size: 15px;
 }
@@ -2252,7 +2321,7 @@ th {
   justify-content: center;
   min-height: 100vh;
   /* Minimalist light background */
-  background: #f4f5f7;
+  background: #f1f0e8;
   position: relative;
   overflow: hidden;
 }
@@ -2270,7 +2339,7 @@ th {
   padding: 48px 40px;
   border-radius: 8px;
   box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06);
-  border: 1px solid #e1e4e8;
+  border: 1px solid #e8e6dc;
 }
 
 .adsk-logo {
@@ -2308,14 +2377,14 @@ th {
 .adsk-input-group label {
   display: block;
   font-size: 12px;
-  color: #555;
+  color: #52524d;
   margin-bottom: 6px;
 }
 
 .adsk-input {
   width: 100%;
   padding: 12px 14px;
-  border: 1px solid #707070;
+  border: 1px solid #72706b;
   border-radius: 2px;
   font-size: 15px;
   outline: none;
@@ -2348,20 +2417,20 @@ th {
 }
 
 .adsk-btn:disabled {
-  background: #ccc;
+  background: #cccac0;
   cursor: not-allowed;
 }
 
 .adsk-link {
   font-size: 13px;
-  color: #555;
+  color: #52524d;
   display: flex;
   align-items: center;
   gap: 4px;
 }
 
 .adsk-link a {
-  color: #555;
+  color: #52524d;
   text-decoration: underline;
   cursor: pointer;
   transition: color 0.15s;
@@ -2384,7 +2453,7 @@ th {
   text-align: center;
   font-size: 24px;
   font-weight: 600;
-  border: 1px solid #707070;
+  border: 1px solid #72706b;
   border-radius: 2px;
   outline: none;
 }
@@ -2398,13 +2467,13 @@ th {
   position: absolute;
   bottom: 30px;
   left: 30px;
-  color: #555;
+  color: #52524d;
   font-size: 12px;
   z-index: 1;
 }
 
 .adsk-footer-links a {
-  color: #555;
+  color: #52524d;
   text-decoration: underline;
   font-weight: 600;
   cursor: pointer;
@@ -2431,6 +2500,34 @@ th {
   to { transform: rotate(360deg); }
 }
 
+/* UN SOLO INDICADOR DE CARGA (UI polish F6, 13-oct-2026).
+   El portal usaba seis nombres de girador y solo `adsk-spinner` tenía estilo:
+   `spinner` (lista de proyectos, tres sitios), `spinner-tiny` (árbol lateral)
+   y `spinner-acc` (cuarentena) eran cajas VACÍAS: mientras cargaban no se veía
+   nada. Ahora todos son el mismo girador, en tres tamaños. Donde el
+   componente ya traía su estilo en línea, ese manda y no cambia nada. */
+.spinner,
+.spinner-acc,
+.spinner-tiny,
+.acc-mini-spinner {
+  box-sizing: border-box;
+  display: inline-block;
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  border: 3px solid var(--a-border-default);
+  border-top-color: var(--a-action-primary);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+.spinner-acc { width: 32px; height: 32px; }
+.spinner-tiny,
+.acc-mini-spinner { width: 14px; height: 14px; border-width: 2px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .adsk-spinner, .spinner, .spinner-acc, .spinner-tiny, .acc-mini-spinner { animation-duration: 2.4s; }
+}
+
 /* ─── ABRIR UN PLANO CAD (CadViewer, 21-sep-2026) ───
    Como ACC: el lienzo gris del visor, tres puntos que laten y, abajo a la
    izquierda, cuanto lleva cargado. Nada de «enviando a Autodesk» cuando el
@@ -2438,7 +2535,7 @@ th {
 .cad-abriendo {
   position: absolute;
   inset: 0;
-  background: #ececec;
+  background: #f1f0e8;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2464,20 +2561,20 @@ th {
   left: 8px;
   bottom: 8px;
   font-size: 12px;
-  color: #1f2733;
+  color: #333330;
 }
 .cad-carga-barra {
   width: 228px;
   height: 4px;
   margin-top: 4px;
-  background: #1f2733;
+  background: #333330;
   overflow: hidden;
 }
-.cad-carga-barra div { height: 100%; background: #37c871; transition: width 0.3s; }
+.cad-carga-barra div { height: 100%; background: #e0e3d7; transition: width 0.3s; }
 .cad-preparando-barra {
   width: 260px;
   height: 6px;
-  background: #dfe4ea;
+  background: #e8e6dc;
   border-radius: 3px;
   overflow: hidden;
   position: relative;
@@ -2501,7 +2598,7 @@ th {
 
 /* ============== CUSTOM DRAG OVER ============ */
 .dropzone-active {
-  background: rgba(95, 127, 163, 0.05);
+  background: rgba(106, 155, 204, 0.05);
   /* azul muy suave indicando drag over */
 }
 
@@ -2599,7 +2696,7 @@ th {
   width: 100vw;
   height: 100vh;
   z-index: 999999;
-  background: #f2f2f2;
+  background: #f1f0e8;
   display: flex;
   flex-direction: column;
 }
@@ -2607,7 +2704,7 @@ th {
 .file-viewer-header {
   height: 48px;
   background: #ffffff;
-  border-bottom: 1px solid #dcdcdc;
+  border-bottom: 1px solid #e8e6dc;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -2625,8 +2722,8 @@ th {
 }
 
 .file-viewer-version {
-  background: #EBEBEB;
-  color: #333;
+  background: #F1F0E8;
+  color: #333330;
   padding: 2px 6px;
   border-radius: 12px;
   font-size: 11px;
@@ -2637,7 +2734,7 @@ th {
 
 .file-viewer-center {
   font-size: 13px;
-  color: #555;
+  color: #52524d;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -2654,7 +2751,7 @@ th {
   background: transparent;
   border: none;
   font-size: 20px;
-  color: #555;
+  color: #52524d;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2663,7 +2760,7 @@ th {
 }
 
 .file-viewer-close:hover {
-  background: #ebebeb;
+  background: #f1f0e8;
 }
 
 .file-viewer-content {
@@ -2680,7 +2777,7 @@ th {
   background: #ffffff;
   border-radius: 4px;
   box-shadow: 0 8px 16px rgba(0, 0, 0, 0.15);
-  border: 1px solid #dcdcdc;
+  border: 1px solid #e8e6dc;
   width: 320px;
   z-index: 10000;
   padding: 0;
@@ -2694,7 +2791,7 @@ th {
   align-items: center;
   gap: 12px;
   padding: 12px;
-  border-bottom: 1px solid #f5f5f5;
+  border-bottom: 1px solid #f1f0e8;
   transition: background 0.2s;
   /* El nombre de un plano es largo (RL_0046_JUNTAS_APORTANTE_02_...) y sacaba
      una barra de desplazamiento HORIZONTAL dentro del desplegable: había que
@@ -2715,14 +2812,14 @@ th {
 }
 
 .version-popover-item:hover {
-  background: #f4f6f9;
+  background: #f1f0e8;
 }
 
 .no-actual-badge {
-  background: #FEF0D4;
-  color: #333;
+  background: #F9EEDA;
+  color: #333330;
   padding: 2px 10px;
-  border-radius: 16px;
+  border-radius: 4px;
   font-size: 11px;
   font-weight: 600;
   display: flex;
@@ -2730,7 +2827,7 @@ th {
 }
 
 .version-popover-item .v-tag {
-  background: #eee;
+  background: #f1f0e8;
   border-radius: 50%;
   width: 32px;
   height: 32px;
@@ -2739,7 +2836,7 @@ th {
   justify-content: center;
   font-size: 12px;
   font-weight: 600;
-  color: #333;
+  color: #333330;
 }
 
 .version-popover-item .v-info {
@@ -2750,13 +2847,13 @@ th {
 .version-popover-item .v-name {
   font-size: 13px;
   font-weight: 500;
-  color: #333;
+  color: #333330;
   word-break: break-all;
 }
 
 .version-popover-item .v-meta {
   font-size: 11px;
-  color: #777;
+  color: #72706b;
   margin-top: 2px;
 }
 
@@ -2765,7 +2862,7 @@ th {
   position: fixed;
   bottom: 24px;
   right: 24px;
-  background: #333;
+  background: #333330;
   color: #fff;
   padding: 12px 20px;
   border-radius: 4px;
@@ -2807,8 +2904,8 @@ th {
 
 /* --- AI Assistant Thinking Styles --- */
 .agent-thinking-docs {
-  background: #f8f9fa;
-  border: 1px solid #e0e0e0;
+  background: #faf9f5;
+  border: 1px solid #e8e6dc;
   border-radius: 4px;
   margin-bottom: 12px;
   padding: 8px;
@@ -2830,7 +2927,7 @@ th {
   margin: 6px 0 0 16px;
   padding: 0;
   font-size: 11px;
-  color: #666;
+  color: #72706b;
   list-style-type: circle;
 }
 
@@ -2840,8 +2937,8 @@ th {
 
 .ai-msg.user {
   align-self: flex-end !important;
-  background: #e1f5fe !important;
-  color: #01579b !important;
+  background: #ecf0f1 !important;
+  color: #507294 !important;
   border-radius: 12px 12px 2px 12px !important;
   padding: 8px 12px !important;
   margin-bottom: 12px !important;
@@ -2852,8 +2949,8 @@ th {
 .ai-msg.bot {
   align-self: flex-start !important;
   background: #fff !important;
-  color: #333 !important;
-  border: 1px solid #e0e0e0 !important;
+  color: #333330 !important;
+  border: 1px solid #e8e6dc !important;
   border-radius: 12px 12px 12px 2px !important;
   padding: 12px !important;
   margin-bottom: 16px !important;
@@ -2864,15 +2961,15 @@ th {
 .ai-citations {
   margin-top: 10px;
   padding-top: 8px;
-  border-top: 1px dashed #eee;
+  border-top: 1px dashed #f1f0e8;
   display: flex;
   flex-direction: column;
   gap: 4px;
 }
 
 .citation-btn {
-  background: #f4f6f9;
-  border: 1px solid #d0e7ff;
+  background: #f1f0e8;
+  border: 1px solid #ecf0f1;
   color: var(--accent);
   padding: 4px 8px;
   border-radius: 4px;
@@ -2885,14 +2982,14 @@ th {
 .ai-markdown-content {
   font-size: 13px;
   line-height: 1.5;
-  color: #2c3e50;
+  color: #333330;
 }
 
 .ai-markdown-content h2, .ai-markdown-content h3 {
   margin: 16px 0 8px 0;
   font-size: 14px;
-  color: #333;
-  border-bottom: 2px solid #eee;
+  color: #333330;
+  border-bottom: 2px solid #f1f0e8;
   padding-bottom: 4px;
 }
 
@@ -2918,13 +3015,13 @@ th {
 }
 
 .ai-markdown-content th, .ai-markdown-content td {
-  border: 1px solid #e0e0e0;
+  border: 1px solid #e8e6dc;
   padding: 6px 8px;
   text-align: left;
 }
 
 .ai-markdown-content th {
-  background: #f5f7f9;
+  background: #f1f0e8;
   font-weight: 600;
 }
 
@@ -2932,20 +3029,20 @@ th {
   border-left: 4px solid var(--accent);
   margin: 12px 0;
   padding-left: 12px;
-  color: #555;
+  color: #52524d;
   font-style: italic;
 }
 
 .citation-btn:hover {
-  background: #e1f0ff;
+  background: #ecf0f1;
 }
 
 /* --- Version History Styling (Estilo ACC) --- */
 .version-link-acc {
   background: white;
   padding: 1px 10px;
-  border-radius: 12px;
-  border: 1px solid #dcdcdc;
+  border-radius: 4px;   /* sin píldora (D-24) */
+  border: 1px solid #e8e6dc;
   transition: all 0.2s ease;
   display: inline-flex;
   align-items: center;
@@ -2962,7 +3059,7 @@ th {
 
 .version-link-acc:hover {
   border-color: var(--accent);
-  background: #f4f6f9;
+  background: #f1f0e8;
   box-shadow: 0 1px 3px rgba(0,0,0,0.05);
 }
 
@@ -2971,25 +3068,25 @@ th {
 }
 
 .version-popover-item:hover {
-  background: #f4f6f9 !important;
+  background: #f1f0e8 !important;
 }
 
 .btn-v-action {
   background: #fff;
-  border: 1px solid #dcdcdc;
+  border: 1px solid #e8e6dc;
   border-radius: 4px;
   padding: 4px 10px;
   font-size: 11px;
   font-weight: 500;
   cursor: pointer;
-  color: #333;
+  color: #333330;
   transition: all 0.2s ease;
 }
 
 .btn-v-action:hover {
   border-color: var(--accent);
   color: var(--accent);
-  background: #f6fcff;
+  background: #faf9f5;
   box-shadow: 0 1px 3px rgba(0,0,0,0.05);
 }
 
@@ -2998,10 +3095,10 @@ th {
   width: 6px;
 }
 .version-popover div::-webkit-scrollbar-track {
-  background: #f1f1f1;
+  background: #f1f0e8;
 }
 .version-popover div::-webkit-scrollbar-thumb {
-  background: #ccc;
+  background: #cccac0;
   border-radius: 3px;
 }
 .version-popover div::-webkit-scrollbar-thumb:hover {
@@ -3022,9 +3119,9 @@ th {
 .panel-version-table-container table thead th {
   position: sticky;
   top: 0;
-  background: #f5f5f5;
+  background: #f1f0e8;
   z-index: 10;
-  border-bottom: 1px solid #dcdcdc;
+  border-bottom: 1px solid #e8e6dc;
 }
 
 .version-actions button:hover {
@@ -3032,7 +3129,7 @@ th {
 }
 
 .user-avatar-acc {
-  background: #ff8a80;
+  background: #b93535;
   color: #fff;
   border-radius: 50%;
   display: flex;
@@ -3045,7 +3142,7 @@ th {
   background: none;
   border: none;
   cursor: pointer;
-  color: #666;
+  color: #72706b;
   padding: 4px;
   border-radius: 4px;
   display: flex;
@@ -3055,38 +3152,43 @@ th {
 }
 
 .row-menu-btn:hover {
-  background: #eee;
-  color: #333;
+  background: #f1f0e8;
+  color: #333330;
 }
 
 .menu-divider {
   height: 1px;
-  background: #eee;
+  background: #f1f0e8;
   margin: 4px 0;
 }
 
-/* ─── ROW CONTEXT MENU (ACC STYLE) ─── */
+/* ─── ROW CONTEXT MENU ───
+   El contrato medido en ACC (UI_POLISH_01 §2): opciones de 36 px, todas
+   iguales, hover INSTANTÁNEO, elevación sin borde duro. Con la paleta y los
+   tokens de ALEPHIA, no los de ACC. Lo usan el menú de fila y el de
+   versiones (VersionPanel). */
 .row-context-menu {
-  background: #ffffff;
-  border: 1px solid #dcdcdc;
-  border-radius: 4px;
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.2);
-  padding: 8px 0;
+  background: var(--a-surface-raised);
+  border: 1px solid var(--a-border-subtle);
+  border-radius: var(--a-radius-md);
+  box-shadow: var(--a-shadow-lg);
+  padding: 4px 0;
   display: flex !important;
   flex-direction: column;
   z-index: 10000;
   overflow: hidden;
-  animation: adsk-fade-in 0.1s ease-out;
+  animation: adsk-fade-in var(--a-motion-fast) var(--a-ease);
 }
 
 @keyframes adsk-fade-in {
-  from { opacity: 0; transform: translateY(-4px); }
+  from { opacity: 0; transform: translateY(-2px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
 .row-context-menu button {
   width: 100%;
-  padding: 10px 16px;
+  min-height: var(--a-size-menu-item);
+  padding: 0 16px;
   background: transparent;
   border: none;
   display: flex;
@@ -3094,37 +3196,46 @@ th {
   gap: 12px;
   font-size: 13px;
   font-family: inherit;
-  color: #3c3c3c;
+  color: var(--a-text-primary);
   cursor: pointer;
   text-align: left;
-  transition: background 0.15s;
 }
 
-.row-context-menu button:hover {
-  background: #f3f3f3;
+.row-context-menu button:hover,
+.row-context-menu button:focus-visible {
+  background: var(--bg-hover);
+}
+
+.row-context-menu button .menu-icon {
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: var(--a-text-secondary);
 }
 
 .row-context-menu button svg {
-  color: #666;
+  color: var(--a-text-secondary);
   flex-shrink: 0;
 }
 
 .row-context-menu .menu-divider {
   height: 1px;
-  background: #eeeeee;
+  background: var(--a-border-subtle);
   margin: 4px 0;
 }
 
-.row-context-menu button.delete {
-  color: #d9534f;
+.row-context-menu button.delete,
+.row-context-menu button.delete svg,
+.row-context-menu button.delete .menu-icon {
+  color: var(--a-action-danger);
 }
 
-.row-context-menu button.delete:hover {
-  background: #fff1f0;
-}
-
-.row-context-menu button.delete svg {
-  color: #d9534f;
+.row-context-menu button.delete:hover,
+.row-context-menu button.delete:focus-visible {
+  background: var(--a-status-danger-surface);
 }
 
 /* --- ADVANCED ACC LAYOUT --- */
@@ -3138,7 +3249,7 @@ th {
   font-size: 24px !important;
   margin: 0 0 12px 0 !important;
   font-weight: 300 !important;
-  color: #3c3c3c;
+  color: #333330;
 }
 
 .acc-tabs-row {
@@ -3146,7 +3257,7 @@ th {
   align-items: center !important;
   justify-content: space-between !important;
   width: 100% !important;
-  border-bottom: 1px solid #dcdcdc;
+  border-bottom: 1px solid #e8e6dc;
 }
 
 .acc-tabs-right {
@@ -3159,7 +3270,7 @@ th {
   background: transparent;
   border: none;
   font-size: 13px;
-  color: #666;
+  color: #72706b;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -3170,12 +3281,12 @@ th {
 }
 
 .acc-tab-btn:hover {
-  background: #f0f0f0;
-  color: #333;
+  background: #f1f0e8;
+  color: #333330;
 }
 
 .acc-tab-btn svg {
-  color: #666;
+  color: #72706b;
 }
 
 .acc-action-toolbar {
@@ -3197,25 +3308,25 @@ th {
   height: 32px;
   padding: 0 12px;
   background: #ffffff;
-  border: 1px solid #dcdcdc;
+  border: 1px solid #e8e6dc;
   border-radius: 4px;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  color: #666;
+  color: #72706b;
   font-size: 13px;
   transition: all 0.2s;
   gap: 8px;
 }
 
 .toolbar-btn:hover {
-  background: #f6f6f6;
-  border-color: #ccc;
+  background: #f1f0e8;
+  border-color: #cccac0;
 }
 
 .toolbar-btn.active {
-  background: #eef2f7;
+  background: #f1f0e8;
   color: var(--accent);
   border-color: var(--accent);
 }
@@ -3227,7 +3338,7 @@ th {
 .sidebar-footer {
   margin-top: auto;
   padding: 12px 16px;
-  border-top: 1px solid #eee;
+  border-top: 1px solid #f1f0e8;
   display: flex;
   justify-content: flex-start;
 }
@@ -3236,7 +3347,7 @@ th {
   background: transparent;
   border: none;
   cursor: pointer;
-  color: #999;
+  color: #72706b;
   padding: 4px;
   border-radius: 4px;
   display: flex;
@@ -3244,8 +3355,8 @@ th {
 }
 
 .collapse-btn:hover {
-  background: #eee;
-  color: #666;
+  background: #f1f0e8;
+  color: #72706b;
 }
 
 /* --- Breadcrumbs --- */
@@ -3253,7 +3364,7 @@ th {
   display: flex;
   align-items: center;
   font-size: 13px;
-  color: #666;
+  color: #72706b;
   margin-bottom: 8px;
   gap: 4px;
 }
@@ -3265,11 +3376,11 @@ th {
 }
 
 .breadcrumb-item:hover {
-  background: #f0f0f0;
+  background: #f1f0e8;
 }
 
 .breadcrumb-separator {
-  color: #ccc;
+  color: #cccac0;
 }
 
 .breadcrumb-module {
@@ -3284,7 +3395,7 @@ th {
 .share-modal-box {
   width: 520px;
   background: #fff;
-  border-radius: 28px; /* Drive style rounding */
+  border-radius: 12px;
   padding: 24px;
   box-shadow: 0 4px 15px rgba(0,0,0,0.15);
   display: flex;
@@ -3308,7 +3419,7 @@ th {
   margin: 0;
   font-size: 22px;
   font-weight: 400;
-  color: #1f1f1f;
+  color: #141413;
   line-height: 1.2;
 }
 
@@ -3323,7 +3434,7 @@ th {
   cursor: pointer;
   padding: 8px;
   border-radius: 50%;
-  color: #444746;
+  color: #333330;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -3331,7 +3442,7 @@ th {
 }
 
 .share-icon-btn:hover {
-  background: #f1f3f4;
+  background: #f1f0e8;
 }
 
 .share-input-wrapper {
@@ -3342,7 +3453,7 @@ th {
 .share-input-acc {
   width: 100%;
   padding: 12px 16px;
-  border: 1px solid #747775;
+  border: 1px solid #72706b;
   border-radius: 4px;
   font-size: 14px;
   outline: none;
@@ -3365,13 +3476,13 @@ th {
 }
 
 .share-result-item:hover {
-  background: #f8f9fa;
+  background: #faf9f5;
 }
 
 .share-section-title {
   font-size: 16px;
   font-weight: 500;
-  color: #1f1f1f;
+  color: #141413;
   margin-bottom: 8px;
 }
 
@@ -3399,17 +3510,17 @@ th {
 .share-user-name {
   font-size: 14px;
   font-weight: 500;
-  color: #1f1f1f;
+  color: #141413;
 }
 
 .share-user-email {
   font-size: 12px;
-  color: #444746;
+  color: #333330;
 }
 
 .share-user-role {
   font-size: 14px;
-  color: #444746;
+  color: #333330;
 }
 
 .share-general-access {
@@ -3422,12 +3533,12 @@ th {
 .share-access-icon {
   width: 40px;
   height: 40px;
-  background: #f1f3f4;
+  background: #f1f0e8;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #444746;
+  color: #333330;
   flex-shrink: 0;
 }
 
@@ -3441,13 +3552,13 @@ th {
   gap: 4px;
   cursor: pointer;
   font-size: 14px;
-  color: #1f1f1f;
+  color: #141413;
   font-weight: 500;
 }
 
 .share-access-desc {
   font-size: 12px;
-  color: #444746;
+  color: #333330;
   margin-top: 2px;
 }
 
@@ -3463,8 +3574,8 @@ th {
   align-items: center;
   gap: 8px;
   background: transparent;
-  border: 1px solid #747775;
-  border-radius: 20px;
+  border: 1px solid #72706b;
+  border-radius: 8px;
   padding: 8px 16px;
   color: var(--accent);
   font-size: 14px;
@@ -3474,7 +3585,7 @@ th {
 }
 
 .btn-copy-link:hover {
-  background: #f4f6f9;
+  background: #f1f0e8;
   border-color: var(--accent);
 }
 
@@ -3482,7 +3593,7 @@ th {
   background: var(--accent);
   color: #fff;
   border: none;
-  border-radius: 20px;
+  border-radius: 8px;
   padding: 10px 24px;
   font-size: 14px;
   font-weight: 500;
@@ -3491,7 +3602,7 @@ th {
 }
 
 .btn-share-done:hover {
-  background: #0585bf;
+  background: #6a9bcc;
 }
 
 /* Custom Role Dropdown */
@@ -3499,14 +3610,14 @@ th {
   background: transparent;
   border: none;
   font-size: 14px;
-  color: #444746;
+  color: #333330;
   cursor: pointer;
   padding: 4px 8px;
   border-radius: 4px;
 }
 
 .role-select-acc:hover {
-  background: #f1f3f4;
+  background: #f1f0e8;
 }
 
 .restore-btn-acc:hover {
@@ -3532,7 +3643,7 @@ th {
 
 .acc-move-tree-container {
   background: #fff;
-  border: 1px solid #eee !important;
+  border: 1px solid #f1f0e8 !important;
   height: 350px;
 }
 
@@ -3544,21 +3655,21 @@ th {
   background: transparent;
 }
 .acc-move-tree-container::-webkit-scrollbar-thumb {
-  background: #ddd;
+  background: #e8e6dc;
   border-radius: 4px;
 }
 
 .acc-btn-flat:hover {
-  background: #f0faff !important;
+  background: #ecf0f1 !important;
 }
 
 .acc-btn-primary-2:hover {
-  background: #0585bf !important;
+  background: #6a9bcc !important;
 }
 
 .acc-btn-disabled {
-  background: #eeeeee !important;
-  color: #999 !important;
+  background: #f1f0e8 !important;
+  color: #72706b !important;
   cursor: default !important;
 }
 
@@ -3596,7 +3707,7 @@ th {
   border-radius: 4px;
   outline: none;
   font-size: 13px;
-  color: #333;
+  color: #333330;
   background: #fff;
 }
 
@@ -3606,7 +3717,7 @@ th {
   overflow: hidden;
   text-overflow: ellipsis;
   font-size: 13px;
-  color: #333;
+  color: #333330;
 }
 
 .toolbar-btn svg {
@@ -3616,7 +3727,7 @@ th {
 .sidebar-footer {
   margin-top: auto;
   padding: 12px 16px;
-  border-top: 1px solid #eee;
+  border-top: 1px solid #f1f0e8;
   display: flex;
   justify-content: flex-start;
 }
@@ -3625,7 +3736,7 @@ th {
   background: transparent;
   border: none;
   cursor: pointer;
-  color: #999;
+  color: #72706b;
   padding: 4px;
   border-radius: 4px;
   display: flex;
@@ -3633,8 +3744,8 @@ th {
 }
 
 .collapse-btn:hover {
-  background: #eee;
-  color: #666;
+  background: #f1f0e8;
+  color: #72706b;
 }
 
 /* ─── Breadcrumbs ─── */
@@ -3642,7 +3753,7 @@ th {
   display: flex;
   align-items: center;
   font-size: 13px;
-  color: #666;
+  color: #72706b;
   margin-bottom: 8px;
   gap: 4px;
 }
@@ -3654,11 +3765,11 @@ th {
 }
 
 .breadcrumb-item:hover {
-  background: #f0f0f0;
+  background: #f1f0e8;
 }
 
 .breadcrumb-separator {
-  color: #ccc;
+  color: #cccac0;
 }
 
 .breadcrumb-module {
@@ -3691,7 +3802,7 @@ th {
   justify-content: space-between;
   align-items: flex-start;
   border-bottom: 1px solid var(--border);
-  background: #fafafa;
+  background: #faf9f5;
 }
 
 .permissions-title {
@@ -3802,7 +3913,7 @@ th {
   font-weight: 600;
   color: var(--text-muted);
   border-bottom: 1px solid var(--border);
-  background: #fafafa;
+  background: #faf9f5;
   position: sticky;
   top: 0;
   z-index: 1;
@@ -3810,7 +3921,7 @@ th {
 
 .permissions-table td {
   padding: 16px 24px;
-  border-bottom: 1px solid #f0f0f0;
+  border-bottom: 1px solid #f1f0e8;
   font-size: 13px;
   vertical-align: middle;
 }
@@ -3868,7 +3979,7 @@ th {
 .acc-pill-bar {
   width: 16px;
   height: 6px;
-  background: #e0e0e0;
+  background: #e8e6dc;
   border-radius: 4px;
 }
 
@@ -3892,7 +4003,7 @@ th {
 .perm-badge .lvl-text {
   font-size: 12px;
   font-weight: 500;
-  color: #333;
+  color: #333330;
 }
 
 /* Modal Añadir Permiso */
@@ -3981,7 +4092,7 @@ th {
   background: #fff;
   cursor: pointer;
   font-size: 14px;
-  color: #333;
+  color: #333330;
 }
 
 .acc-select-trigger .trigger-content {
@@ -3991,7 +4102,7 @@ th {
 }
 
 .acc-select-trigger svg {
-  color: #666;
+  color: #72706b;
   transition: transform 0.2s;
 }
 
@@ -4005,7 +4116,7 @@ th {
   left: 0;
   right: 0;
   background: #fff;
-  border: 1px solid #dcdcdc;
+  border: 1px solid #e8e6dc;
   box-shadow: 0 4px 12px rgba(0,0,0,0.15);
   border-radius: 4px;
   z-index: 1000;
@@ -4020,12 +4131,12 @@ th {
   align-items: center;
   gap: 16px;
   cursor: pointer;
-  border-bottom: 1px solid #f5f5f5;
+  border-bottom: 1px solid #f1f0e8;
   transition: background 0.1s;
 }
 
 .acc-select-option:hover {
-  background: #f0f7fb;
+  background: #f1f0e8;
 }
 
 .acc-select-option .option-text {
@@ -4037,12 +4148,12 @@ th {
 .option-text .opt-title {
   font-size: 13px;
   font-weight: 600;
-  color: #333;
+  color: #333330;
 }
 
 .option-text .opt-desc {
   font-size: 11px;
-  color: #666;
+  color: #72706b;
 }
 
 .acc-folder-icon {
@@ -4055,7 +4166,7 @@ th {
   display: flex;
   justify-content: flex-end;
   gap: 12px;
-  background: #fafafa;
+  background: #faf9f5;
   border-radius: 0 0 6px 6px;
 }
 
@@ -4068,7 +4179,7 @@ th {
   height: 100%;
   width: 100%;
   padding: 40px;
-  background-color: #f9f9f9;
+  background-color: #faf9f5;
 }
 
 .gateway-header {
@@ -4079,12 +4190,12 @@ th {
 .gateway-header h2 {
   font-size: 28px;
   font-weight: 500;
-  color: #1a1a1a;
+  color: #141413;
   margin-bottom: 8px;
 }
 
 .gateway-header p {
-  color: #666;
+  color: #72706b;
   font-size: 15px;
 }
 
@@ -4099,7 +4210,7 @@ th {
 
 .gateway-card {
   background: #ffffff;
-  border: 1px solid #e0e0e0;
+  border: 1px solid #e8e6dc;
   border-radius: 8px;
   padding: 24px;
   width: 300px;
@@ -4128,24 +4239,24 @@ th {
   justify-content: center;
   font-size: 24px;
   margin-bottom: 16px;
-  background: #f0f7fb;
+  background: #f1f0e8;
   color: var(--accent);
 }
 
 .gateway-card.canal:hover .gateway-icon { background: var(--accent); color: white; }
-.gateway-card.drenaje:hover .gateway-icon { background: #10b981; color: white; }
-.gateway-card.infraworks:hover .gateway-icon { background: #8b5cf6; color: white; }
+.gateway-card.drenaje:hover .gateway-icon { background: #1baf7a; color: white; }
+.gateway-card.infraworks:hover .gateway-icon { background: #507294; color: white; }
 
 .gateway-card h3 {
   font-size: 18px;
   font-weight: 600;
   margin: 0 0 8px 0;
-  color: #1a1a1a;
+  color: #141413;
 }
 
 .gateway-card p {
   font-size: 13px;
-  color: #666;
+  color: #72706b;
   line-height: 1.5;
   margin: 0;
   flex-grow: 1;
@@ -4190,19 +4301,22 @@ th {
 
 .acc-vista-switch button {
   display: inline-flex; align-items: center; justify-content: center;
-  width: 32px; height: 30px;
-  border: 1px solid var(--border, #dcdcdc); background: #fff;
-  color: var(--text-secondary, #6b7480);
+  /* La altura de la barra (UI polish F1): era 30 junto a controles de 32. */
+  width: var(--a-size-control-md); height: var(--a-size-control-md);
+  box-sizing: border-box;
+  border: 1px solid var(--a-border-strong); background: var(--a-surface-base);
+  color: var(--a-text-secondary);
   cursor: pointer;
 }
 
-.acc-vista-switch button:first-child { border-radius: 5px 0 0 5px; }
-.acc-vista-switch button:last-child { border-radius: 0 5px 5px 0; border-left: none; }
-.acc-vista-switch button:hover { background: #f4f6f8; }
+.acc-vista-switch button:first-child { border-radius: var(--a-radius-md) 0 0 var(--a-radius-md); }
+.acc-vista-switch button:last-child { border-radius: 0 var(--a-radius-md) var(--a-radius-md) 0; border-left: none; }
+.acc-vista-switch button:hover { background: var(--bg-hover); }
+.acc-vista-switch button:active { translate: 0 1px; }
 .acc-vista-switch button.activo {
-  background: var(--bg-accent, #eaf1f7);
-  border-color: var(--accent, #3e6f91);
-  color: var(--accent, #3e6f91);
+  background: var(--bg-accent, #f1f0e8);
+  border-color: var(--accent, #507294);
+  color: var(--accent, #507294);
 }
 
 .rejilla {
@@ -4236,7 +4350,7 @@ th {
   display: block;
   width: 210px;
   flex: 0 0 210px;
-  border: 1px solid var(--border, #e3e6ea);
+  border: 1px solid var(--border, #e8e6dc);
   border-radius: 8px;
   overflow: hidden;
   background: #fff;
@@ -4245,11 +4359,11 @@ th {
 }
 
 .rejilla-tarjeta:hover {
-  border-color: var(--accent, #3e6f91);
-  box-shadow: 0 3px 12px rgba(20, 30, 42, 0.10);
+  border-color: var(--accent, #507294);
+  box-shadow: 0 3px 12px rgba(20, 20, 19, 0.10);
 }
 
-.rejilla-tarjeta.esta-marcada { border-color: var(--accent, #3e6f91); }
+.rejilla-tarjeta.esta-marcada { border-color: var(--accent, #507294); }
 .rejilla-tarjeta.es-carpeta { cursor: default; }
 
 .rejilla-lienzo {
@@ -4259,8 +4373,8 @@ th {
   align-items: center;
   justify-content: center;
   overflow: hidden;
-  background: #f6f8fa;
-  border-bottom: 1px solid var(--border-soft, #eef1f4);
+  background: #faf9f5;
+  border-bottom: 1px solid var(--border-soft, #f1f0e8);
 }
 
 .rejilla-lienzo img {
@@ -4274,14 +4388,14 @@ th {
 
 .rejilla-punto {
   width: 16px; height: 16px; border-radius: 50%;
-  border: 2px solid #c8d2dc; border-top-color: var(--accent, #3e6f91);
+  border: 2px solid #cccac0; border-top-color: var(--accent, #507294);
   animation: spin 0.9s linear infinite;
 }
 
 .rejilla-pie { padding: 9px 11px 11px; }
 
 .rejilla-nombre {
-  font-size: 12.5px; font-weight: 600; color: var(--text-primary, #22303c);
+  font-size: 12.5px; font-weight: 600; color: var(--text-primary, #333330);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
@@ -4289,13 +4403,13 @@ th {
 
 .rejilla-version {
   flex-shrink: 0; padding: 1px 7px;
-  border: 1px solid #cfdae4; border-radius: 10px;
-  background: #eef3f8; color: #2c4d67;
+  border: 1px solid #e8e6dc; border-radius: 10px;
+  background: #f1f0e8; color: #507294;
   font-size: 10.5px; font-weight: 700;
 }
 
 .rejilla-desc {
-  font-size: 11px; color: var(--text-secondary, #7b8794);
+  font-size: 11px; color: var(--text-secondary, #72706b);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
@@ -4305,25 +4419,25 @@ th {
   position: absolute; top: 6px; right: 6px; z-index: 2;
   width: 24px; height: 24px;
   border: none; border-radius: 4px;
-  background: rgba(255, 255, 255, 0.9); color: #5b6875;
+  background: rgba(255, 255, 255, 0.9); color: #72706b;
   cursor: pointer; font-size: 15px; line-height: 1;
   opacity: 0; transition: opacity 0.14s ease;
 }
 
 .rejilla-tarjeta:hover .rejilla-menu { opacity: 1; }
-.rejilla-menu:hover { background: #eef1f4; }
+.rejilla-menu:hover { background: #f1f0e8; }
 
 .rejilla-vacia {
   grid-column: 1 / -1;
   padding: 50px; text-align: center;
-  color: var(--text-secondary, #8a95a1); font-size: 13px;
+  color: var(--text-secondary, #72706b); font-size: 13px;
 }
 
 .rejilla-aviso {
   grid-column: 1 / -1;
   padding: 8px 12px; margin-bottom: 2px;
-  border: 1px solid #d9e6f2; border-radius: 6px;
-  background: #f2f8fd; color: #2c4d67; font-size: 12px;
+  border: 1px solid #ecf0f1; border-radius: 6px;
+  background: #f1f0e8; color: #507294; font-size: 12px;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -4360,6 +4474,13 @@ th {
    `outline: none`. El anillo va en el cuadro entero, no encima del campo. */
 .inline-edit-box:focus-within { box-shadow: var(--a-focus-ring); }
 .inline-edit-box input:focus-visible { box-shadow: none !important; }
+
+/* Opciones de menú: el menú recorta lo que sobresale (`overflow: hidden`),
+   así que el anillo exterior se cortaba por los lados. Dentro del menú el
+   anillo va POR DENTRO de la opción (UI polish F1). */
+.row-context-menu button:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--a-action-text) !important;
+}
 
 /* PULSADO · el desplazamiento de 1 px de ALEPHIA, el mismo que la primitiva
    (QW4). Medido antes, con el ratón abajo de verdad: .btn-primary y
@@ -4402,3 +4523,297 @@ input[type="checkbox"]:indeterminate:hover:not(:disabled) {
 /* El anillo azul de Tailwind salía también al CLICAR. El de teclado lo pone
    la regla de foco visible de arriba. */
 input[type="checkbox"]:focus { box-shadow: none; }
+
+/* Casillas de la tabla: 16 px y con mano (UI polish, 13-oct-2026). Medían
+   13 px con cursor normal; las de ACC miden 20 px. Es lo que más se pulsa de
+   la tabla: que se acierte a la primera. */
+.data-header input[type="checkbox"],
+.data-row input[type="checkbox"],
+.rejilla input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;   /* su celda es estrecha: sin esto, la caja la encogía a 13 */
+  margin: 0;
+  cursor: pointer;
+}
+
+/* ─── LO PULSABLE PINTADO A MANO TAMBIÉN RESPONDE (UI polish, 13-oct-2026) ───
+   Incidencias, Partidas, Multimedia, Protocolos, Especificaciones, Punch,
+   Conjuntos, Transmittals… pintan sus botones y filas con estilo en línea y SIN
+   clase, y un estilo en línea no puede tener :hover: nada respondía al
+   puntero. En vez de reescribir cientos de elementos módulo a módulo, una
+   regla los reconoce por lo que son -- un botón sin clase, o un bloque sin
+   clase que declara `cursor: pointer` -- y les da respuesta:
+     · al pasar, un velo muy suave POR ENCIMA de su fondo (sombra interior):
+       no cambia sus colores, vale sobre blanco, gris, rojo o Navy, y queda
+       debajo del texto y los iconos;
+     · al pulsar, el botón baja 1 px (el mismo gesto que el resto del portal).
+   Solo CSS: no toca ni un dato ni un comportamiento. Quedan fuera los
+   elementos con clase (tienen su propio estado), los enlaces de texto, los
+   gráficos SVG y lo deshabilitado. Si un elemento trae su propia sombra en
+   línea, esa manda y no pasa nada. */
+:is(button:not([class]),
+    :is(div, li, tr, label):not([class])[style*="cursor: pointer"]):not(:disabled):not([aria-disabled="true"]):hover {
+  box-shadow: inset 0 0 0 100vmax rgb(var(--a-ink-900-rgb) / .05);
+}
+
+button:not([class]):not(:disabled):not([aria-disabled="true"]):active {
+  translate: 0 1px;
+  box-shadow: inset 0 0 0 100vmax rgb(var(--a-ink-900-rgb) / .09);
+}
+
+/* ─── CABECERA QUE ORDENA (como ACC) ─── */
+.col-orden {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.col-orden:hover { color: var(--a-text-primary); }
+
+/* La flecha solo se ve en la columna que manda; en las demás, al pasar. */
+.col-orden__flecha { flex-shrink: 0; opacity: 0; }
+.col-orden:hover .col-orden__flecha { opacity: .45; }
+.col-orden--activa { color: var(--a-text-primary); }
+.col-orden--activa .col-orden__flecha,
+.col-orden--activa:hover .col-orden__flecha { opacity: 1; }
+
+/* ═══ DIÁLOGOS · UN SOLO ASPECTO (UI polish, 13-oct-2026) ═══════════════════
+   SOLO ASPECTO. El comportamiento (cerrar con Escape, retener el foco) no
+   cambia aquí: es decisión del propietario.
+   Había seis radios de esquina (2, 4, 6, 8 y 28 px -- el de Compartir imitaba
+   a Google Drive) y seis sombras, y el fondo oscuro iba del 35 % al 60 %.
+   Ahora: el fondo del sistema (`--a-surface-overlay`), caja con esquinas de
+   8 px, la sombra grande del sistema y un borde fino, y una entrada corta.
+   Va al final del fichero para mandar sobre las reglas viejas de cada caja.
+   El fondo NO lleva !important: hay capas `.modal-overlay` transparentes a
+   propósito (la del menú de versiones), y esas se quedan como están. */
+.modal-overlay,
+.add-permission-modal-overlay {
+  background: var(--a-surface-overlay);
+}
+
+.modal-box,
+.modal-content,
+.acc-modal-box,
+.share-modal-box,
+.acc-upload-modal,
+.add-permission-modal {
+  background: var(--a-surface-raised);
+  border-radius: var(--a-radius-lg);
+  border: 1px solid var(--a-border-subtle);
+  box-shadow: var(--a-shadow-lg);
+  /* Sin `overflow: hidden` a propósito: recortaría las listas desplegables
+     que algunos diálogos sacan por fuera de su caja. */
+  animation: dialogo-entra var(--a-motion-base) var(--a-ease);
+}
+
+/* `translate` y no `transform`: no pisa el transform con el que alguna caja
+   se centra. */
+@keyframes dialogo-entra {
+  from { opacity: 0; translate: 0 6px; }
+  to   { opacity: 1; translate: 0 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .modal-box, .modal-content, .acc-modal-box, .share-modal-box,
+  .acc-upload-modal, .add-permission-modal { animation: none; }
+}
+
+/* ═══ COLORES DE FAMILIA DE ARCHIVO (iconos de ALEPHIA, estilo B, 13-oct-2026) ═══
+   Los usa utils/fileIcons.jsx. Apagados a propósito, para convivir con la
+   paleta de la marca; ninguno es el color de marca de otro programa. CAD y BIM
+   salen de la propia paleta (Signal y Navy). */
+:root {
+  --archivo-pdf: #B93535;
+  --archivo-cad: #507294;
+  --archivo-bim: #507294;
+  --archivo-3d: #72706B;
+  --archivo-hoja: #64744e;
+  --archivo-texto: #507294;
+  --archivo-pres: #734500;
+  --archivo-imagen: #72706B;
+  --archivo-video: #52524D;
+  --archivo-comprimido: #52524D;
+  --archivo-otro: #72706B;
+  --archivo-carpeta: #52524D;
+}
+
+/* Tipo y disciplina leídos del código del nombre (columnas propias, 14-oct-2026).
+   Tipografía de código: es lo que pone el nombre, no una etiqueta inventada. */
+.codigo-leido-celda {
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 12px;
+  color: #52524D;
+  letter-spacing: .02em;
+}
+
+/* Entrega del plan (MIDP/TIDP) en la fila de Archivos. Colores de la lista cerrada
+   (D-24): entregado en verde, vinculado en azul, vencido en rojo; sin píldora. */
+.entrega-chip {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: 4px;
+  font-size: 11.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.entrega-chip--entregado { background: #E0E3D7; color: #64744E; }
+.entrega-chip--vinculado { background: #ECF0F1; color: #507294; border: 1px solid #C8D8E7; }
+.entrega-chip--vencido { background: #FBEBEB; color: #B93535; }
+.entrega-chip--comprometido { background: #F1F0E8; color: #52524D; }
+.entrega-chip--fuera { padding: 0; font-weight: 400; color: #B0AEA5; }
+
+/* Plan de entregas · coincidencias por código (B1, 14-oct-2026). */
+.coincidencias {
+  margin-top: 16px;
+  background: #FFFFFF;
+  border: 1px solid #E8E6DC;
+  border-radius: 8px;
+}
+.coincidencias__cab {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 16px;
+}
+.coincidencias__cab b { display: block; font-size: 13.5px; color: #141413; }
+.coincidencias__cab span { font-size: 12px; color: #72706B; }
+.coincidencias__tabla { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.coincidencias__tabla th {
+  text-align: left;
+  padding: 8px 12px;
+  background: #F1F0E8;
+  color: #52524D;
+  font-weight: 600;
+  border-top: 1px solid #E8E6DC;
+  border-bottom: 1px solid #E8E6DC;
+}
+.coincidencias__tabla td { padding: 7px 12px; border-bottom: 1px solid #F1F0E8; color: #333330; }
+.coincidencias__codigo { font-family: ui-monospace, Consolas, monospace; font-size: 12px; }
+.coincidencias__pie { display: flex; justify-content: flex-end; padding: 10px 16px; }
+.coincidencias__etapa { display: block; color: #72706B; font-size: 11.5px; }
+.coincidencias input[type=checkbox] { accent-color: #141413; }
+
+/* A2 · Añadir filtro ▾ y fichas de filtros activos (14-oct-2026). Lista cerrada D-24. */
+.filtros-meta { position: relative; }
+.filtros-meta__boton { padding: 0 10px; color: #52524D; cursor: pointer; background: #FFFFFF; }
+.filtros-meta__boton span { margin-left: 4px; font-size: 10px; }
+.filtros-meta__menu {
+  position: absolute; top: calc(100% + 6px); left: 0; z-index: 60;
+  display: grid; grid-template-columns: repeat(3, minmax(150px, auto)); gap: 4px 12px;
+  padding: 10px; background: #FFFFFF; border: 1px solid #E8E6DC; border-radius: 8px;
+  box-shadow: 0 8px 24px rgb(20 20 19 / .12);
+}
+.filtros-meta__grupo h6 { margin: 2px 6px 6px; font-size: 11px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: #52524D; }
+.filtros-meta__grupo h6 small { text-transform: none; letter-spacing: 0; font-weight: 400; color: #72706B; }
+.filtros-meta__op {
+  display: flex; justify-content: space-between; gap: 12px; width: 100%;
+  padding: 5px 8px; border: 0; border-radius: 6px; background: none; color: #141413;
+  font: inherit; font-size: 12.5px; cursor: pointer; text-align: left;
+}
+.filtros-meta__op:hover { background: #F1F0E8; }
+.filtros-meta__op.es-activo { background: #ECF0F1; font-weight: 600; }
+.filtros-meta__op b { font-weight: 400; color: #72706B; }
+.filtros-meta__vacio { margin: 0 8px; font-size: 12px; color: #72706B; max-width: 170px; }
+.filtros-meta__fichas { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 0 16px 8px; }
+.filtros-meta__ficha {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 2px 4px 2px 8px; border: 1px solid #C8D8E7; border-radius: 6px;
+  background: #ECF0F1; color: #507294; font-size: 12px;
+}
+.filtros-meta__ficha b { color: #141413; font-weight: 600; }
+.filtros-meta__ficha button {
+  border: 0; background: none; color: #52524D; cursor: pointer; font-size: 11px;
+  width: 18px; height: 18px; border-radius: 4px;
+}
+.filtros-meta__ficha button:hover { background: #C8D8E7; }
+.filtros-meta__limpiar { border: 0; background: none; color: #507294; font-size: 12px; cursor: pointer; text-decoration: underline; }
+
+/* A2-2 · Vistas encima del árbol y «Guardar como vista» (14-oct-2026). Lista cerrada D-24:
+   texto y una cifra, raya Orange en lo activo (--a-indicador), sin píldoras. */
+.vistas { padding: 0 8px 10px; margin-bottom: 8px; border-bottom: 1px solid #E8E6DC; }
+.vistas__titulo {
+  display: flex; align-items: center; justify-content: space-between; width: 100%;
+  padding: 2px 8px 6px; border: 0; background: none; cursor: pointer;
+  font: inherit; font-size: 11px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: #52524D;
+}
+.vistas__nivel { margin: 6px 8px 2px; font-size: 11px; font-weight: 400; color: #72706B; }
+.vistas ul { list-style: none; margin: 0; padding: 0; }
+.vistas__op {
+  display: flex; justify-content: space-between; align-items: center; gap: 8px; width: 100%;
+  padding: 5px 8px; border: 0; border-radius: 6px; background: none; color: #141413;
+  font: inherit; font-size: 13px; text-align: left; cursor: pointer;
+}
+.vistas__op span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vistas__op b { font-weight: 400; color: #72706B; font-variant-numeric: tabular-nums; }
+.vistas__op:hover { background: #F1F0E8; }
+.vistas__op.es-activa { background: #FFFFFF; box-shadow: inset 2px 0 0 var(--a-indicador, #D97757); font-weight: 600; }
+.vistas__propia { display: flex; align-items: center; }
+.vistas__borrar {
+  flex-shrink: 0; width: 22px; height: 22px; border: 0; border-radius: 4px; background: none;
+  color: #72706B; font-size: 11px; cursor: pointer; visibility: hidden;
+}
+.vistas__propia:hover .vistas__borrar, .vistas__borrar:focus-visible { visibility: visible; }
+.vistas__borrar:hover { background: #E8E6DC; color: #141413; }
+.vistas__vacio { margin: 2px 8px 0; font-size: 12px; color: #72706B; }
+
+.vista-cabecera {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 4px 12px;
+  padding: 8px 16px; font-size: 13px; background: #FAF9F5; border-bottom: 1px solid #F1F0E8;
+}
+.vista-cabecera__nombre { font-weight: 600; color: #141413; }
+.vista-cabecera__dato { color: #72706B; }
+.vista-cabecera__salir { margin-left: auto; border: 0; background: none; color: #507294; font-size: 12px; cursor: pointer; }
+.vista-cabecera__salir:hover { text-decoration: underline; }
+.vista-cabecera__aviso { flex-basis: 100%; color: #52524D; font-size: 12px; }
+.vista-cabecera__aviso button { border: 0; background: none; padding: 0; color: #507294; font: inherit; cursor: pointer; text-decoration: underline; }
+
+.filtros-y-vista { display: flex; align-items: flex-start; flex-wrap: wrap; }
+.filtros-y-vista .filtros-meta__fichas { padding-right: 8px; }
+.guardar-vista { position: relative; padding: 2px 16px 8px 0; }
+.filtros-y-vista > .guardar-vista:first-child { padding-left: 16px; }
+.guardar-vista__caja {
+  position: absolute; top: calc(100% - 2px); left: 0; z-index: 60; width: 280px;
+  display: grid; gap: 8px; padding: 12px; background: #FFFFFF; border: 1px solid #E8E6DC; border-radius: 8px;
+  box-shadow: 0 8px 24px rgb(20 20 19 / .12); font-size: 12.5px; color: #141413;
+}
+.guardar-vista__caja label { display: grid; gap: 4px; }
+.guardar-vista__caja input[type=text], .guardar-vista__caja input:not([type]) {
+  height: 30px; padding: 0 8px; border: 1px solid #E8E6DC; border-radius: 6px; font: inherit;
+}
+.guardar-vista__caja fieldset { display: grid; gap: 4px; margin: 0; padding: 0; border: 0; }
+.guardar-vista__caja fieldset label { display: flex; align-items: center; gap: 6px; }
+.guardar-vista__caja input[type=radio] { accent-color: #141413; }
+.guardar-vista__filtros { margin: 0; color: #52524D; }
+.guardar-vista__nota { margin: 0; color: #72706B; font-size: 11.5px; }
+.guardar-vista__botones { display: flex; justify-content: flex-end; gap: 8px; }
+
+/* La carpeta de cada documento, bajo su nombre, solo en una vista. */
+.nombre-con-ubicacion { display: flex; flex-direction: column; min-width: 0; line-height: 1.25; }
+.nombre-con-ubicacion small { font-size: 11px; color: #72706B; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Vistas · colección › vista y fichas de criterio (14-oct-2026, tras ver los vídeos de Procore).
+   Los criterios definen la vista y no llevan ✕; los filtros añadidos encima sí (filtros-meta). */
+.vista-cabecera__coleccion { font-weight: 400; color: #72706B; }
+.vista-cabecera__criterios { flex-basis: 100%; display: flex; flex-wrap: wrap; gap: 6px; }
+.vista-criterio {
+  display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px;
+  border: 1px solid #E8E6DC; border-radius: 6px; background: #FFFFFF; color: #52524D; font-size: 12px;
+}
+.vista-criterio b { color: #141413; font-weight: 600; }
+/* Vinculado al plan pero con el plazo vencido y sin publicar: el rojo de la lista D-24. */
+.entrega-chip--tarde { background: #FBEBEB; color: #B93535; border-color: #B93535; }

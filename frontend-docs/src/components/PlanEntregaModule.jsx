@@ -50,7 +50,7 @@ function Chip({ estado, etiqueta }) {
   const c = COLOR[estado] || COLOR.comprometido;
   return (
     <span style={{
-      display: 'inline-block', padding: '2px 9px', borderRadius: 999, fontSize: 11.5,
+      display: 'inline-block', padding: '2px 9px', borderRadius: 4, fontSize: 11.5,
       fontWeight: 600, background: c.fondo, border: `1px solid ${c.borde}`, color: c.texto,
       whiteSpace: 'nowrap',
     }}>{etiqueta}</span>
@@ -226,6 +226,126 @@ function Ficha({ f }) {
   );
 }
 
+
+// ── COINCIDENCIAS POR CÓDIGO (B1, 14-oct-2026) ──────────────────────────────
+// Los documentos que YA estaban en Archivos cuando se importó el plan. La ruta
+// /api/plan/sugerencias existía y ninguna pantalla la usaba. Propone; no ata
+// sola (lo dice `sugerir_vinculos`): vincula quien pulsa. Llegan marcadas solo
+// las coincidencias EXACTAS (nombre sin extensión = código) y sin ambigüedad
+// (un solo compromiso con ese código); las que solo CONTIENEN el código quedan
+// sin marcar, para que decida una persona. Los documentos que se suban a partir
+// de ahora se atan solos en el servidor, con esas mismas reglas.
+function baseSinExtension(nombre) {
+  return String(nombre || '').trim().replace(/\.[^.]+$/, '').toUpperCase();
+}
+
+function CoincidenciasPorCodigo({ projectPrefix, alVincular, plan = [] }) {
+  // La ETAPA y la fecha de cada compromiso salen del propio plan: sin ellas, dos
+  // etapas del mismo contenedor se ven idénticas y no hay forma de elegir.
+  const delPlan = useMemo(() => Object.fromEntries((plan || []).map(p => [p.id, p])), [plan]);
+  const [lista, setLista] = useState(null);
+  const [abierta, setAbierta] = useState(false);
+  const [marcadas, setMarcadas] = useState(new Set());
+  const [enCurso, setEnCurso] = useState(false);
+
+  const cargar = useCallback(() => {
+    apiFetch(`${API}/api/plan/sugerencias?model_urn=${encodeURIComponent(projectPrefix)}`)
+      .then(r => r.json())
+      .then(d => {
+        const s = d.sugerencias || [];
+        const porCodigo = {};
+        s.forEach(x => { porCodigo[x.identificador] = (porCodigo[x.identificador] || 0) + 1; });
+        const conClase = s.map(x => ({
+          ...x,
+          exacta: baseSinExtension(x.nombre) === String(x.identificador || '').toUpperCase(),
+          unica: porCodigo[x.identificador] === 1,
+        }));
+        setLista(conClase);
+        setMarcadas(new Set(conClase.filter(x => x.exacta && x.unica).map(x => `${x.plan_id}:${x.node_id}`)));
+      })
+      .catch(() => setLista([]));
+  }, [projectPrefix]);
+
+  useEffect(() => { cargar(); }, [cargar]);
+
+  if (!lista || lista.length === 0) return null;
+
+  const clave = (x) => `${x.plan_id}:${x.node_id}`;
+  const alternar = (x) => setMarcadas(prev => {
+    const n = new Set(prev);
+    n.has(clave(x)) ? n.delete(clave(x)) : n.add(clave(x));
+    return n;
+  });
+
+  const vincular = async () => {
+    const elegidas = lista.filter(x => marcadas.has(clave(x)));
+    if (!elegidas.length) return;
+    setEnCurso(true);
+    let bien = 0;
+    for (const x of elegidas) {
+      try {
+        const r = await apiFetch(`${API}/api/plan/${x.plan_id}/vincular`, {
+          method: 'POST', body: JSON.stringify({ model_urn: projectPrefix, node_id: x.node_id }),
+        });
+        if (r.ok) bien += 1;
+      } catch { /* se cuenta abajo */ }
+    }
+    setEnCurso(false);
+    if (bien === elegidas.length) toast.success(`${bien} compromiso${bien === 1 ? '' : 's'} vinculado${bien === 1 ? '' : 's'}`);
+    else toast.error(`Se vincularon ${bien} de ${elegidas.length}. Revisa los que faltan.`);
+    cargar();
+    alVincular();
+  };
+
+  const exactas = lista.filter(x => x.exacta && x.unica).length;
+  return (
+    <div className="coincidencias">
+      <div className="coincidencias__cab">
+        <div>
+          <b>{lista.length} documento{lista.length === 1 ? '' : 's'} de Archivos coincide{lista.length === 1 ? '' : 'n'} con compromisos sin vincular</b>
+          <span>{exactas} con el código exacto y sin duda; el resto, para revisar.</span>
+        </div>
+        <button type="button" className="barra-btn barra-btn--contorno" onClick={() => setAbierta(a => !a)}>
+          {abierta ? 'Ocultar' : 'Revisar'}
+        </button>
+      </div>
+      {abierta && (
+        <>
+          <table className="coincidencias__tabla">
+            <thead><tr><th /><th>Compromiso</th><th>Documento en Archivos</th><th>Coincidencia</th></tr></thead>
+            <tbody>
+              {lista.map(x => (
+                <tr key={clave(x)}>
+                  <td><input type="checkbox" checked={marcadas.has(clave(x))} onChange={() => alternar(x)}
+                             aria-label={`Vincular ${x.identificador}`} /></td>
+                  <td>
+                    <span className="coincidencias__codigo">{x.identificador}</span>
+                    {delPlan[x.plan_id] && (delPlan[x.plan_id].hito || delPlan[x.plan_id].fecha_comprometida) && (
+                      <small className="coincidencias__etapa">
+                        {[delPlan[x.plan_id].hito, delPlan[x.plan_id].fecha_comprometida && `para el ${delPlan[x.plan_id].fecha_comprometida}`].filter(Boolean).join(' · ')}
+                      </small>
+                    )}
+                  </td>
+                  <td>{x.nombre}</td>
+                  <td>{x.exacta
+                    ? (x.unica ? 'Exacta' : 'Exacta · varias etapas')
+                    : 'El nombre contiene el código'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <div className="coincidencias__pie">
+            <button type="button" className="barra-btn barra-btn--primario" disabled={enCurso || marcadas.size === 0}
+                    onClick={vincular}>
+              {enCurso ? 'Vinculando…' : `Vincular ${marcadas.size} seleccionado${marcadas.size === 1 ? '' : 's'}`}
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 export function PlanEntregaView({ projectPrefix, isAdmin }) {
   const [datos, setDatos] = useState(null);
   const [tipo, setTipo] = useState('');          // '' = MIDP y TIDP
@@ -330,6 +450,8 @@ export function PlanEntregaView({ projectPrefix, isAdmin }) {
           </div>
         )}
       </div>
+
+      {!datos?.error && datos && <CoincidenciasPorCodigo projectPrefix={projectPrefix} alVincular={cargar} plan={datos.plan} />}
 
       {datos?.error && (
         <div style={{

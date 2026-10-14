@@ -88,8 +88,8 @@ export default function AccFolderBridge({ API, folder, modelUrn, onClose, onSave
     <div role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) onClose(); }}
       style={{ position: 'fixed', inset: 0, zIndex: 11000, background: '#0f172acc', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <div role="dialog" aria-modal="true" aria-label="Puente temporal de carpetas ACC"
-        style={{ width: 680, maxWidth: '96vw', maxHeight: '90vh', background: '#fff', color: '#172334', borderRadius: 8, display: 'flex', flexDirection: 'column' }}>
-        <div style={{ padding: '16px 20px', borderBottom: '1px solid #e4e8ed', display: 'flex', justifyContent: 'space-between' }}>
+        style={{ width: 680, maxWidth: '96vw', maxHeight: '90vh', background: '#fff', color: '#141413', borderRadius: 8, display: 'flex', flexDirection: 'column' }}>
+        <div style={{ padding: '16px 20px', borderBottom: '1px solid #e8e6dc', display: 'flex', justifyContent: 'space-between' }}>
           <strong>Puente temporal con ACC</strong>
           <button type="button" onClick={onClose} aria-label="Cerrar">✕</button>
         </div>
@@ -102,11 +102,11 @@ export default function AccFolderBridge({ API, folder, modelUrn, onClose, onSave
             Estado: <strong>{config.enabled && serviceEnabled ? 'Activado' : config.enabled ? 'Configurado, pero apagado en el servidor' : 'Desactivado'}</strong>
             {config.folder_name && ` · destino: ${config.project_name || config.project_id} / ${config.folder_name}`}
           </p>}
-          {!serviceEnabled && <p style={{ color: '#8a5214', marginBottom: 0 }}>
+          {!serviceEnabled && <p style={{ color: '#9e5943', marginBottom: 0 }}>
             El cortacircuito del servidor está apagado. Guardar la pareja de carpetas no enviará ningún archivo a ACC.
           </p>}
         </div>
-        <div style={{ padding: '8px 20px', borderTop: '1px solid #e4e8ed', borderBottom: '1px solid #e4e8ed', fontSize: 13 }}>
+        <div style={{ padding: '8px 20px', borderTop: '1px solid #e8e6dc', borderBottom: '1px solid #e8e6dc', fontSize: 13 }}>
           {(hub || project || ancestors.length > 0) && <button type="button" onClick={back}>← Volver</button>}
           <span style={{ marginLeft: 8 }}>{[hub, project, ...ancestors].filter(Boolean).map(nameOf).join(' / ') || 'Centros de Autodesk'}</span>
         </div>
@@ -114,14 +114,14 @@ export default function AccFolderBridge({ API, folder, modelUrn, onClose, onSave
           {loading && <p style={{ padding: '8px 20px' }}>Consultando ACC…</p>}
           {!loading && entries.map(entry => (
             <button key={entry.id} type="button" onClick={() => choose(entry)}
-              style={{ display: 'block', width: '100%', textAlign: 'left', padding: '10px 20px', background: 'white', border: 0, borderBottom: '1px solid #edf0f3', cursor: 'pointer' }}>
+              style={{ display: 'block', width: '100%', textAlign: 'left', padding: '10px 20px', background: 'white', border: 0, borderBottom: '1px solid #f1f0e8', cursor: 'pointer' }}>
               📁 {nameOf(entry)} ›
             </button>
           ))}
           {!loading && !entries.length && !error && <p style={{ padding: '8px 20px' }}>No hay más subcarpetas.</p>}
         </div>
-        {error && <p role="alert" style={{ color: '#b42318', margin: '8px 20px' }}>{error}</p>}
-        <div style={{ padding: '12px 20px', borderTop: '1px solid #e4e8ed', display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+        {error && <p role="alert" style={{ color: '#b93535', margin: '8px 20px' }}>{error}</p>}
+        <div style={{ padding: '12px 20px', borderTop: '1px solid #e8e6dc', display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
           {config?.enabled && <button type="button" disabled={saving} onClick={() => save(false)}>Desactivar puente</button>}
           {config && !config.enabled && <button type="button" disabled={saving} onClick={() => save(true, true)}>Reactivar mismo destino</button>}
           <button type="button" onClick={onClose}>Cancelar</button>

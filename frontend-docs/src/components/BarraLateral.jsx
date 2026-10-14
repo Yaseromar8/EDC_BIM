@@ -81,11 +81,16 @@ export default function BarraLateral({ grupos, activo, ancho, onAlternar }) {
 
   const textoAviso = aviso && (aviso.clave === ALTERNAR ? (iconos ? 'Expandir' : 'Contraer') : aviso.texto);
 
-  return (
-    <nav aria-label="Módulos de la obra" className={'a-barra' + (iconos ? ' a-barra--iconos' : '')} style={{ width: ancho }}>
-      <div className="a-barra__lista" onScroll={aviso ? cerrar : undefined}>
-        <ul className="a-barra__grupos">
-          {grupos.map((grupo, gi) => (
+  // ADMINISTRACIÓN ABAJO, como ACC (UI polish, 13-oct-2026). Un grupo con
+  // `alPie` se dibuja al pie de la barra, separado por una línea, y el resto
+  // arriba. Mismas entradas, mismo orden dentro de cada grupo y mismo
+  // comportamiento: solo cambia DÓNDE se ven. Con veintiuna entradas seguidas
+  // la barra no se podía leer de un vistazo (lo dijo el propietario al
+  // compararla con la de ACC: «muy desordenado, marea»).
+  const arriba = grupos.filter(g => !g.alPie);
+  const abajo = grupos.filter(g => g.alPie);
+
+  const dibujarGrupo = (grupo, gi) => (
             <li key={grupo.titulo} className="a-barra__grupo">
               {iconos
                 ? gi > 0 && <div className="a-barra__separador" aria-hidden="true" />
@@ -120,9 +125,23 @@ export default function BarraLateral({ grupos, activo, ancho, onAlternar }) {
                 })}
               </ul>
             </li>
-          ))}
+  );
+
+  return (
+    <nav aria-label="Módulos de la obra" className={'a-barra' + (iconos ? ' a-barra--iconos' : '')} style={{ width: ancho }}>
+      <div className="a-barra__lista" onScroll={aviso ? cerrar : undefined}>
+        <ul className="a-barra__grupos">
+          {arriba.map((grupo, gi) => dibujarGrupo(grupo, gi))}
         </ul>
       </div>
+
+      {abajo.length > 0 && (
+        <div className="a-barra__abajo">
+          <ul className="a-barra__grupos">
+            {abajo.map((grupo) => dibujarGrupo(grupo, 0))}
+          </ul>
+        </div>
+      )}
 
       <div className="a-barra__pie">
         <button

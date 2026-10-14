@@ -80,11 +80,11 @@ export default function PlantillasDeObra({ obras = [] }) {
   };
 
   return (
-    <div style={{ background: '#fff', border: '1px solid #e5e5e5', borderRadius: 8,
+    <div style={{ background: '#fff', border: '1px solid #e8e6dc', borderRadius: 8,
                   padding: 24, marginBottom: 20 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                     marginBottom: 6 }}>
-        <div style={{ fontSize: 14, fontWeight: 600, color: '#333' }}>
+        <div style={{ fontSize: 14, fontWeight: 600, color: '#333330' }}>
           Plantillas de obra
         </div>
         <button className="btn btn-primary" style={{ padding: '5px 12px', fontSize: 12.5 }}
@@ -92,16 +92,16 @@ export default function PlantillasDeObra({ obras = [] }) {
           + Capturar de una obra
         </button>
       </div>
-      <p style={{ fontSize: 12.5, color: '#777', margin: '0 0 14px', maxWidth: 760,
+      <p style={{ fontSize: 12.5, color: '#72706b', margin: '0 0 14px', maxWidth: 760,
                   lineHeight: 1.55 }}>
         La <b>configuración</b> de una obra, para reproducirla en otras: estructura de
         carpetas, herramientas activas, empresas con su función y códigos de
         idoneidad. Se aplica desde <b>Configuración</b> de la obra nueva.
       </p>
 
-      <div role="note" style={{ background: '#f8fafc', border: '1px solid #e2e8f0',
+      <div role="note" style={{ background: '#faf9f5', border: '1px solid #e8e6dc',
                                 borderRadius: 6, padding: '10px 12px', marginBottom: 16,
-                                fontSize: 12.3, color: '#475569', lineHeight: 1.55 }}>
+                                fontSize: 12.3, color: '#52524d', lineHeight: 1.55 }}>
         <b>Un molde vacío, no una fotocopia.</b> Nunca copia documentos, RFI,
         observaciones, revisiones, transmittals, auditoría ni responsabilidades —
         eso es la historia de <i>esa</i> obra. Y <b>tampoco copia los miembros</b>: la
@@ -110,16 +110,16 @@ export default function PlantillasDeObra({ obras = [] }) {
 
       {error && (
         <div role="alert" style={{ marginBottom: 12, padding: '9px 11px', borderRadius: 6,
-                                   background: '#fef2f2', border: '1px solid #fecaca',
-                                   color: '#991b1b', fontSize: 12.5 }}>
+                                   background: '#fbebeb', border: '1px solid #fbebeb',
+                                   color: '#b93535', fontSize: 12.5 }}>
           {error} <b>La lista está incompleta</b>, no vacía.
         </div>
       )}
 
       {plantillas === null ? (
-        <div style={{ fontSize: 13, color: '#888' }}>Cargando…</div>
+        <div style={{ fontSize: 13, color: '#72706b' }}>Cargando…</div>
       ) : plantillas.length === 0 ? (
-        <div style={{ fontSize: 13, color: '#888', padding: '8px 2px' }}>
+        <div style={{ fontSize: 13, color: '#72706b', padding: '8px 2px' }}>
           Todavía no hay plantillas. Se capturan de una obra ya montada, cuando
           repetir su estructura a mano empieza a producir resultados distintos.
         </div>
@@ -131,11 +131,11 @@ export default function PlantillasDeObra({ obras = [] }) {
                 <td style={{ padding: '10px 8px' }}>
                   <div style={{ fontWeight: 500 }}>{p.nombre}</div>
                   {p.descripcion && (
-                    <div style={{ fontSize: 11.5, color: '#98a1ab', marginTop: 2 }}>
+                    <div style={{ fontSize: 11.5, color: '#72706b', marginTop: 2 }}>
                       {p.descripcion}
                     </div>
                   )}
-                  <div style={{ fontSize: 11.5, color: '#98a1ab', marginTop: 3 }}>
+                  <div style={{ fontSize: 11.5, color: '#72706b', marginTop: 3 }}>
                     {p.contiene?.carpetas} carpetas ·{' '}
                     {p.contiene?.herramientas_activas} herramientas ·{' '}
                     {p.contiene?.empresas} empresas ·{' '}
@@ -145,7 +145,7 @@ export default function PlantillasDeObra({ obras = [] }) {
                 <td style={{ padding: '10px 8px', textAlign: 'right', width: 40 }}>
                   <button onClick={() => borrar(p)} title="Borrar plantilla"
                           style={{ border: 'none', background: 'none', cursor: 'pointer',
-                                   color: '#c0392b', fontSize: 15 }}>×</button>
+                                   color: '#b93535', fontSize: 15 }}>×</button>
                 </td>
               </tr>
             ))}
@@ -157,7 +157,7 @@ export default function PlantillasDeObra({ obras = [] }) {
         <div className="modal-overlay" onClick={() => setCapturando(null)}>
           <div className="modal-box" onClick={e => e.stopPropagation()} style={{ maxWidth: 500 }}>
             <h3 style={{ margin: 0 }}>Capturar plantilla</h3>
-            <p style={{ fontSize: 12.3, color: '#777', margin: '8px 0 14px', lineHeight: 1.5 }}>
+            <p style={{ fontSize: 12.3, color: '#72706b', margin: '8px 0 14px', lineHeight: 1.5 }}>
               Se lee la <b>configuración</b> de la obra elegida. No se copia ni un
               documento, ni un acto, ni un miembro.
             </p>
@@ -171,7 +171,7 @@ export default function PlantillasDeObra({ obras = [] }) {
                    onChange={e => setCapturando(c => ({ ...c, descripcion: e.target.value }))} />
             <select value={capturando.desde_obra}
                     onChange={e => setCapturando(c => ({ ...c, desde_obra: e.target.value }))}
-                    style={{ width: '100%', padding: '8px', border: '1px solid #ddd',
+                    style={{ width: '100%', padding: '8px', border: '1px solid #e8e6dc',
                              borderRadius: 5, fontSize: 13 }}>
               <option value="">Capturar de la obra…</option>
               {obras.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}

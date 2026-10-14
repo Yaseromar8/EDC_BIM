@@ -26,12 +26,12 @@ import toast from 'react-hot-toast';
 import { apiFetch } from '../utils/apiFetch';
 import SelectorDeDocumento from './SelectorDeDocumento';
 
-const CAJA = { border: '1px solid #dfe3e8', borderRadius: 6, boxSizing: 'border-box' };
+const CAJA = { border: '1px solid #e8e6dc', borderRadius: 6, boxSizing: 'border-box' };
 
 const COLOR_REV = {
-  'Vigente':  { fondo: '#e8f5ec', texto: '#1e6b3a' },
-  'Superada': { fondo: '#f3f4f6', texto: '#8a9199' },
-  'Anulada':  { fondo: '#fdecec', texto: '#a12f2f' },
+  'Vigente':  { fondo: '#e0e3d7', texto: '#64744e' },
+  'Superada': { fondo: '#f1f0e8', texto: '#72706b' },
+  'Anulada':  { fondo: '#fbebeb', texto: '#b93535' },
 };
 
 export default function EspecificacionesModule({ project, API, user, isAdmin }) {
@@ -110,23 +110,23 @@ export default function EspecificacionesModule({ project, API, user, isAdmin }) 
   return (
     <div style={{ padding: '18px 22px', height: '100%', overflowY: 'auto' }}>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
-        <h2 style={{ margin: 0, fontSize: 19, fontWeight: 650, color: '#1f2933' }}>
+        <h2 style={{ margin: 0, fontSize: 19, fontWeight: 650, color: '#141413' }}>
           Especificaciones
         </h2>
-        <span style={{ fontSize: 12.5, color: '#78838f' }}>
+        <span style={{ fontSize: 12.5, color: '#72706b' }}>
           Contra esto se aprueban los materiales.
         </span>
         <div style={{ flex: 1 }} />
         {isAdmin && (
           <button type="button" onClick={() => setCreandoDivision(true)}
                   style={{ ...CAJA, padding: '7px 13px', background: '#fff',
-                           fontSize: 13, cursor: 'pointer', color: '#3E6F91' }}>
+                           fontSize: 13, cursor: 'pointer', color: '#507294' }}>
             Nueva división
           </button>
         )}
         <button type="button" onClick={() => setCreando(true)}
                 style={{ padding: '8px 15px', borderRadius: 6, border: 'none',
-                         background: 'var(--accent, #3E6F91)', color: '#fff',
+                         background: 'var(--accent, #507294)', color: '#fff',
                          fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
           Nueva sección
         </button>
@@ -152,9 +152,9 @@ export default function EspecificacionesModule({ project, API, user, isAdmin }) 
       </div>
 
       {sinVigente > 0 && (
-        <div style={{ ...CAJA, borderColor: '#f5c9c9', background: '#fdf2f2',
+        <div style={{ ...CAJA, borderColor: '#fbebeb', background: '#f1f0e8',
                       padding: '9px 13px', marginBottom: 12, fontSize: 12.5,
-                      color: '#a12f2f' }}>
+                      color: '#b93535' }}>
           <b>{sinVigente}</b> sección(es) sin revisión vigente: hay exigencias
           registradas sin ningún texto que las respalde. Someter un material contra
           ellas no prueba nada.
@@ -162,20 +162,20 @@ export default function EspecificacionesModule({ project, API, user, isAdmin }) 
       )}
 
       {error && (
-        <div style={{ ...CAJA, borderColor: '#f5c9c9', background: '#fdecec',
+        <div style={{ ...CAJA, borderColor: '#fbebeb', background: '#fbebeb',
                       padding: '9px 13px', marginBottom: 12, fontSize: 12.5,
-                      color: '#a12f2f' }}>{error}</div>
+                      color: '#b93535' }}>{error}</div>
       )}
 
       {secciones === null && (
-        <div style={{ padding: 30, textAlign: 'center', color: '#98a1ab', fontSize: 13 }}>
+        <div style={{ padding: 30, textAlign: 'center', color: '#72706b', fontSize: 13 }}>
           Cargando…
         </div>
       )}
 
       {secciones !== null && visibles.length === 0 && (
-        <div style={{ padding: '26px 20px', textAlign: 'center', color: '#98a1ab',
-                      fontSize: 13, border: '1px dashed #dfe3e8', borderRadius: 8,
+        <div style={{ padding: '26px 20px', textAlign: 'center', color: '#72706b',
+                      fontSize: 13, border: '1px dashed #e8e6dc', borderRadius: 8,
                       lineHeight: 1.6 }}>
           Sin secciones. Una <b>sección</b> es una exigencia con número propio
           («03 30 00 · Concreto vaciado in situ»), y sus revisiones dicen qué
@@ -185,7 +185,7 @@ export default function EspecificacionesModule({ project, API, user, isAdmin }) 
 
       {porDivision.map(g => (
         <div key={g.numero || 'sin'} style={{ marginBottom: 18 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: '#8a9199',
+          <div style={{ fontSize: 11, fontWeight: 700, color: '#72706b',
                         letterSpacing: '.05em', margin: '0 0 7px' }}>
             {g.numero ? `DIVISIÓN ${g.numero} · ${(g.titulo || '').toUpperCase()}`
                       : 'SIN DIVISIÓN ASIGNADA'}
@@ -229,15 +229,15 @@ function FilaSeccion({ s, onAbrir, onSometer }) {
   const v = s.vigente;
   return (
     <div style={{ ...CAJA, background: '#fff', padding: '10px 13px',
-                  borderColor: v ? '#e5e8eb' : '#f0c9c9',
+                  borderColor: v ? '#e8e6dc' : '#cccac0',
                   display: 'flex', alignItems: 'center', gap: 11, flexWrap: 'wrap' }}>
       <button type="button" onClick={onAbrir}
               style={{ border: 'none', background: 'none', padding: 0, cursor: 'pointer',
                        fontFamily: 'ui-monospace, monospace', fontSize: 12.5,
-                       fontWeight: 700, color: '#3E6F91' }}>
+                       fontWeight: 700, color: '#507294' }}>
         {s.numero}
       </button>
-      <span style={{ fontSize: 13.5, color: '#1f2933', flex: 1, minWidth: 150 }}>
+      <span style={{ fontSize: 13.5, color: '#141413', flex: 1, minWidth: 150 }}>
         {s.titulo}
       </span>
 
@@ -248,24 +248,24 @@ function FilaSeccion({ s, onAbrir, onSometer }) {
         </span>
       ) : (
         <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 10,
-                       background: '#fdecec', color: '#a12f2f' }}>
+                       background: '#fbebeb', color: '#b93535' }}>
           SIN REVISIÓN VIGENTE
         </span>
       )}
 
-      <span style={{ fontSize: 11.5, color: '#8a9199' }}>
+      <span style={{ fontSize: 11.5, color: '#72706b' }}>
         {s.revisiones} rev.
       </span>
       {/* Cuantos submittals se han sometido contra esta seccion: el dato que
           dice si la especificacion se esta USANDO o solo guardando. */}
-      <span style={{ fontSize: 11.5, color: s.submittals ? '#2c5d8a' : '#c3c9d0' }}
+      <span style={{ fontSize: 11.5, color: s.submittals ? '#507294' : '#cccac0' }}
             title="Submittals sometidos contra esta sección">
         {s.submittals} sometimiento(s)
       </span>
 
       <button type="button" onClick={onSometer}
               style={{ ...CAJA, padding: '4px 10px', background: '#fff', fontSize: 11.5,
-                       cursor: 'pointer', color: '#3E6F91', fontWeight: 600 }}>
+                       cursor: 'pointer', color: '#507294', fontWeight: 600 }}>
         Someter material
       </button>
     </div>
@@ -334,7 +334,7 @@ function PanelSeccion({ s, API, project, urn, onCerrar, onCambio }) {
 
   return (
     <div onClick={onCerrar}
-         style={{ position: 'fixed', inset: 0, background: 'rgba(15,20,26,.45)',
+         style={{ position: 'fixed', inset: 0, background: 'rgba(20,20,19,.45)',
                   display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
       <div onClick={e => e.stopPropagation()}
            style={{ background: '#fff', borderRadius: 10, padding: 24, width: 600,
@@ -342,11 +342,11 @@ function PanelSeccion({ s, API, project, urn, onCerrar, onCambio }) {
                     boxShadow: '0 12px 40px rgba(0,0,0,.22)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: 13,
-                         fontWeight: 700, color: '#3E6F91' }}>{s.numero}</span>
+                         fontWeight: 700, color: '#507294' }}>{s.numero}</span>
           <div style={{ flex: 1 }} />
           <button type="button" onClick={onCerrar}
                   style={{ border: 'none', background: 'none', fontSize: 20,
-                           color: '#98a1ab', cursor: 'pointer', lineHeight: 1 }}>×</button>
+                           color: '#72706b', cursor: 'pointer', lineHeight: 1 }}>×</button>
         </div>
         <h3 style={{ margin: '8px 0 14px', fontSize: 16.5, fontWeight: 650 }}>{s.titulo}</h3>
 
@@ -366,7 +366,7 @@ function PanelSeccion({ s, API, project, urn, onCerrar, onCambio }) {
           <button type="button" onClick={crearSet} disabled={!setNuevo.trim()}
                   style={{ ...CAJA, padding: '0 12px', background: '#fff', fontSize: 12.5,
                            cursor: setNuevo.trim() ? 'pointer' : 'not-allowed',
-                           color: '#3E6F91' }}>
+                           color: '#507294' }}>
             Crear
           </button>
         </div>
@@ -374,27 +374,27 @@ function PanelSeccion({ s, API, project, urn, onCerrar, onCambio }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
           <button type="button" onClick={() => setEligiendo(true)} disabled={ocupado}
                   style={{ padding: '8px 15px', borderRadius: 6, border: 'none',
-                           background: 'var(--accent, #3E6F91)', color: '#fff',
+                           background: 'var(--accent, #507294)', color: '#fff',
                            fontSize: 13, fontWeight: 600,
                            cursor: ocupado ? 'wait' : 'pointer' }}>
             {ocupado ? 'Emitiendo…' : 'Emitir revisión'}
           </button>
-          <span style={{ fontSize: 11.5, color: '#8a9199', lineHeight: 1.5 }}>
+          <span style={{ fontSize: 11.5, color: '#72706b', lineHeight: 1.5 }}>
             La nueva pasa a ser la vigente y la anterior queda <b>superada</b>,
             en el mismo acto.
           </span>
         </div>
 
-        <div style={{ fontSize: 10.5, fontWeight: 700, color: '#8a9199',
+        <div style={{ fontSize: 10.5, fontWeight: 700, color: '#72706b',
                       letterSpacing: '.05em', margin: '0 0 7px' }}>
           REVISIONES
         </div>
         {revisiones === null && (
-          <div style={{ fontSize: 12.5, color: '#98a1ab' }}>Cargando…</div>
+          <div style={{ fontSize: 12.5, color: '#72706b' }}>Cargando…</div>
         )}
         {revisiones !== null && revisiones.length === 0 && (
           <div style={{ ...CAJA, borderStyle: 'dashed', padding: '16px 14px',
-                        textAlign: 'center', fontSize: 12.5, color: '#a12f2f',
+                        textAlign: 'center', fontSize: 12.5, color: '#b93535',
                         lineHeight: 1.55 }}>
             Esta sección no tiene <b>ninguna revisión</b>. Está registrada como
             exigencia, pero no hay texto que la respalde.
@@ -406,19 +406,19 @@ function PanelSeccion({ s, API, project, urn, onCerrar, onCambio }) {
             return (
               <div key={r.id} style={{ ...CAJA, padding: '9px 12px', display: 'flex',
                                        alignItems: 'center', gap: 10, flexWrap: 'wrap',
-                                       background: r.estado === 'Vigente' ? '#fbfdfc' : '#fff' }}>
+                                       background: r.estado === 'Vigente' ? '#faf9f5' : '#fff' }}>
                 <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: 12.5,
                                fontWeight: 700 }}>{r.codigo}</span>
                 <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px',
                                borderRadius: 10, background: c.fondo, color: c.texto }}>
                   {r.estado.toUpperCase()}
                 </span>
-                <span style={{ fontSize: 11.5, color: '#8a9199', flex: 1 }}>
+                <span style={{ fontSize: 11.5, color: '#72706b', flex: 1 }}>
                   emitida {String(r.emitida_en || '').slice(0, 10)}
                   {r.superada_en && ` · superada ${String(r.superada_en).slice(0, 10)}`}
                 </span>
                 {r.set && (
-                  <span style={{ fontSize: 11, color: '#2c5d8a' }}>{r.set}</span>
+                  <span style={{ fontSize: 11, color: '#507294' }}>{r.set}</span>
                 )}
               </div>
             );
@@ -459,14 +459,14 @@ function ModalDivision({ API, urn, sugeridas, yaCreadas, onCerrar, onCreada }) {
 
   return (
     <div onClick={onCerrar}
-         style={{ position: 'fixed', inset: 0, background: 'rgba(15,20,26,.45)',
+         style={{ position: 'fixed', inset: 0, background: 'rgba(20,20,19,.45)',
                   display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
       <div onClick={e => e.stopPropagation()}
            style={{ background: '#fff', borderRadius: 10, padding: 24, width: 480,
                     maxWidth: '92vw', maxHeight: '86vh', overflowY: 'auto',
                     boxShadow: '0 12px 40px rgba(0,0,0,.22)' }}>
         <h3 style={{ margin: '0 0 4px', fontSize: 16, fontWeight: 650 }}>Nueva división</h3>
-        <p style={{ margin: '0 0 14px', fontSize: 12.5, color: '#78838f', lineHeight: 1.5 }}>
+        <p style={{ margin: '0 0 14px', fontSize: 12.5, color: '#72706b', lineHeight: 1.5 }}>
           La estructura la fija <b>el contrato de esta obra</b>, no la plataforma.
           Abajo está el catálogo estándar por si sirve; también puedes poner el
           número y el título que use el presupuesto.
@@ -483,7 +483,7 @@ function ModalDivision({ API, urn, sugeridas, yaCreadas, onCerrar, onCreada }) {
 
         {libres.length > 0 && (
           <>
-            <div style={{ fontSize: 10.5, fontWeight: 700, color: '#8a9199',
+            <div style={{ fontSize: 10.5, fontWeight: 700, color: '#72706b',
                           letterSpacing: '.05em', margin: '10px 0 6px' }}>
               CATÁLOGO ESTÁNDAR
             </div>
@@ -492,7 +492,7 @@ function ModalDivision({ API, urn, sugeridas, yaCreadas, onCerrar, onCreada }) {
                 <button key={d.numero} type="button"
                         onClick={() => setF({ numero: d.numero, titulo: d.titulo })}
                         style={{ ...CAJA, padding: '3px 9px', background: '#fff',
-                                 fontSize: 11.5, cursor: 'pointer', color: '#5f6b76' }}>
+                                 fontSize: 11.5, cursor: 'pointer', color: '#52524d' }}>
                   {d.numero} {d.titulo}
                 </button>
               ))}
@@ -506,7 +506,7 @@ function ModalDivision({ API, urn, sugeridas, yaCreadas, onCerrar, onCreada }) {
                            fontSize: 13, cursor: 'pointer' }}>Cancelar</button>
           <button type="button" onClick={crear} disabled={guardando}
                   style={{ padding: '8px 16px', borderRadius: 6, border: 'none',
-                           background: 'var(--accent, #3E6F91)', color: '#fff',
+                           background: 'var(--accent, #507294)', color: '#fff',
                            fontSize: 13, fontWeight: 600,
                            cursor: guardando ? 'wait' : 'pointer' }}>
             {guardando ? 'Creando…' : 'Crear división'}
@@ -580,35 +580,35 @@ function ModalSeccion({ API, urn, project, divisiones, onCerrar, onCreada }) {
 
   return (
     <div onClick={onCerrar}
-         style={{ position: 'fixed', inset: 0, background: 'rgba(15,20,26,.45)',
+         style={{ position: 'fixed', inset: 0, background: 'rgba(20,20,19,.45)',
                   display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
       <div onClick={e => e.stopPropagation()}
            style={{ background: '#fff', borderRadius: 10, padding: 24, width: 520,
                     maxWidth: '92vw', maxHeight: '88vh', overflowY: 'auto',
                     boxShadow: '0 12px 40px rgba(0,0,0,.22)' }}>
         <h3 style={{ margin: '0 0 4px', fontSize: 16, fontWeight: 650 }}>Nueva sección</h3>
-        <p style={{ margin: '0 0 16px', fontSize: 12.5, color: '#78838f', lineHeight: 1.5 }}>
+        <p style={{ margin: '0 0 16px', fontSize: 12.5, color: '#72706b', lineHeight: 1.5 }}>
           El <b>número es la identidad</b> y no se repite en la obra. Admite las dos
           convenciones: <code>03 30 00</code> y <code>03.02.01</code> — no se
           convierte una en la otra.
         </p>
 
         <button type="button" onClick={() => setEligiendo(true)}
-                style={{ ...CAJA, width: '100%', padding: '10px 12px', background: '#fafbfc',
+                style={{ ...CAJA, width: '100%', padding: '10px 12px', background: '#faf9f5',
                          cursor: 'pointer', textAlign: 'left', fontSize: 12.5,
-                         marginBottom: 10, color: doc ? '#1f2933' : '#78838f' }}>
+                         marginBottom: 10, color: doc ? '#141413' : '#72706b' }}>
           {doc ? `📄 ${doc.nombre}${doc.version ? ` · v${doc.version}` : ''}`
                : '📄 Elegir el documento del expediente (opcional)'}
         </button>
         {leyendo && (
-          <div style={{ fontSize: 12, color: '#78838f', marginBottom: 10 }}>
+          <div style={{ fontSize: 12, color: '#72706b', marginBottom: 10 }}>
             Leyendo el encabezado…
           </div>
         )}
         {aviso && (
-          <div style={{ ...CAJA, borderColor: '#f0d9a0', background: '#fffaf0',
+          <div style={{ ...CAJA, borderColor: '#f9eeda', background: '#faf9f5',
                         padding: '8px 11px', marginBottom: 10, fontSize: 12,
-                        color: '#8a5a12', lineHeight: 1.5 }}>{aviso}</div>
+                        color: '#734500', lineHeight: 1.5 }}>{aviso}</div>
         )}
 
         <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
@@ -637,7 +637,7 @@ function ModalSeccion({ API, urn, project, divisiones, onCerrar, onCreada }) {
                            fontSize: 13, cursor: 'pointer' }}>Cancelar</button>
           <button type="button" onClick={crear} disabled={guardando}
                   style={{ padding: '8px 16px', borderRadius: 6, border: 'none',
-                           background: 'var(--accent, #3E6F91)', color: '#fff',
+                           background: 'var(--accent, #507294)', color: '#fff',
                            fontSize: 13, fontWeight: 600,
                            cursor: guardando ? 'wait' : 'pointer' }}>
             {guardando ? 'Creando…' : 'Crear sección'}
@@ -687,7 +687,7 @@ function ModalSometer({ API, urn, propuesta, onCerrar, onCreado }) {
 
   return (
     <div onClick={onCerrar}
-         style={{ position: 'fixed', inset: 0, background: 'rgba(15,20,26,.45)',
+         style={{ position: 'fixed', inset: 0, background: 'rgba(20,20,19,.45)',
                   display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
       <div onClick={e => e.stopPropagation()}
            style={{ background: '#fff', borderRadius: 10, padding: 24, width: 520,
@@ -695,7 +695,7 @@ function ModalSometer({ API, urn, propuesta, onCerrar, onCreado }) {
         <h3 style={{ margin: '0 0 4px', fontSize: 16, fontWeight: 650 }}>
           Someter material
         </h3>
-        <p style={{ margin: '0 0 14px', fontSize: 12.5, color: '#78838f', lineHeight: 1.5 }}>
+        <p style={{ margin: '0 0 14px', fontSize: 12.5, color: '#72706b', lineHeight: 1.5 }}>
           Contra <b>{propuesta.spec_seccion}</b>
           {propuesta.spec_titulo && ` · ${propuesta.spec_titulo}`}. El submittal
           nace en <b>Submittals</b>, con su flujo de revisión y su veredicto:
@@ -703,9 +703,9 @@ function ModalSometer({ API, urn, propuesta, onCerrar, onCreado }) {
         </p>
 
         {propuesta.sin_revision_vigente && (
-          <div style={{ ...CAJA, borderColor: '#f5c9c9', background: '#fdf2f2',
+          <div style={{ ...CAJA, borderColor: '#fbebeb', background: '#f1f0e8',
                         padding: '9px 12px', marginBottom: 12, fontSize: 12.5,
-                        color: '#a12f2f', lineHeight: 1.5 }}>
+                        color: '#b93535', lineHeight: 1.5 }}>
             Esta sección <b>no tiene revisión vigente</b>: no hay texto contra el
             que aprobar nada. Puedes crear el submittal igualmente, pero quien lo
             revise no tendrá exigencia que comprobar.
@@ -726,7 +726,7 @@ function ModalSometer({ API, urn, propuesta, onCerrar, onCreado }) {
                            fontSize: 13, cursor: 'pointer' }}>Cancelar</button>
           <button type="button" onClick={crear} disabled={guardando}
                   style={{ padding: '8px 16px', borderRadius: 6, border: 'none',
-                           background: 'var(--accent, #3E6F91)', color: '#fff',
+                           background: 'var(--accent, #507294)', color: '#fff',
                            fontSize: 13, fontWeight: 600,
                            cursor: guardando ? 'wait' : 'pointer' }}>
             {guardando ? 'Creando…' : 'Crear submittal'}

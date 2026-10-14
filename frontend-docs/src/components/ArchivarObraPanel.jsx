@@ -81,13 +81,13 @@ export function ArchivarObraPanel({ project, isAdmin, onArchivada }) {
 
   return (
     <div style={{
-      background: '#fff', border: '1px solid var(--border-danger, #f0c9c9)',
+      background: '#fff', border: '1px solid var(--border-danger, #cccac0)',
       borderRadius: 8, padding: 24, marginBottom: 20,
     }}>
-      <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--danger, #b3261e)', marginBottom: 6 }}>
+      <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--danger, #b93535)', marginBottom: 6 }}>
         Archivar esta obra
       </div>
-      <p style={{ margin: '0 0 14px', fontSize: 12.5, color: '#666', lineHeight: 1.6, maxWidth: 620 }}>
+      <p style={{ margin: '0 0 14px', fontSize: 12.5, color: '#72706b', lineHeight: 1.6, maxWidth: 620 }}>
         La obra deja de aparecer en las listas y nadie sigue trabajando en ella.
         <strong> No se borra nada</strong>: sus documentos, su plan y su historial
         siguen donde están, y puedes devolverla al trabajo desde esta misma
@@ -96,20 +96,20 @@ export function ArchivarObraPanel({ project, isAdmin, onArchivada }) {
 
       <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end', flexWrap: 'wrap' }}>
         <div>
-          <div style={{ fontSize: 10.5, color: '#888', letterSpacing: 0.3, marginBottom: 4 }}>
-            ESCRIBE <strong style={{ color: '#333' }}>{nombre}</strong> PARA CONFIRMAR
+          <div style={{ fontSize: 10.5, color: '#72706b', letterSpacing: 0.3, marginBottom: 4 }}>
+            ESCRIBE <strong style={{ color: '#333330' }}>{nombre}</strong> PARA CONFIRMAR
           </div>
           <input value={confirmacion} onChange={e => setConfirmacion(e.target.value)}
                  placeholder={nombre}
                  style={{
                    fontSize: 13, padding: '8px 11px', minWidth: 260,
-                   border: '1px solid #ddd', borderRadius: 7,
+                   border: '1px solid #e8e6dc', borderRadius: 7,
                  }} />
         </div>
         <button onClick={archivar} disabled={!puedeArchivar || trabajando}
                 style={{
-                  background: puedeArchivar ? 'var(--danger, #b3261e)' : '#e8e8e8',
-                  color: puedeArchivar ? '#fff' : '#aaa',
+                  background: puedeArchivar ? 'var(--danger, #b93535)' : '#e8e6dc',
+                  color: puedeArchivar ? '#fff' : '#b0aea5',
                   border: 'none', borderRadius: 7, padding: '9px 18px',
                   fontSize: 12.5, fontWeight: 600,
                   cursor: puedeArchivar && !trabajando ? 'pointer' : 'default',
@@ -117,37 +117,37 @@ export function ArchivarObraPanel({ project, isAdmin, onArchivada }) {
           {trabajando ? 'Archivando…' : 'Archivar obra'}
         </button>
       </div>
-      <p style={{ margin: '10px 0 0', fontSize: 11.5, color: '#999', maxWidth: 620, lineHeight: 1.6 }}>
+      <p style={{ margin: '10px 0 0', fontSize: 11.5, color: '#72706b', maxWidth: 620, lineHeight: 1.6 }}>
         Hay que escribir el nombre a propósito. El 7 de agosto de 2026 esta obra
         se archivó por error y hubo que arreglarlo por fuera del producto.
       </p>
 
       {archivadas.length > 0 && (
-        <div style={{ marginTop: 22, borderTop: '1px solid #eee', paddingTop: 16 }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: '#333', marginBottom: 4 }}>
+        <div style={{ marginTop: 22, borderTop: '1px solid #f1f0e8', paddingTop: 16 }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: '#333330', marginBottom: 4 }}>
             Obras archivadas
           </div>
-          <p style={{ margin: '0 0 10px', fontSize: 11.5, color: '#888' }}>
+          <p style={{ margin: '0 0 10px', fontSize: 11.5, color: '#72706b' }}>
             Siguen completas. Restaurar las devuelve a las listas tal y como estaban.
           </p>
           <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
             {archivadas.map(o => (
               <li key={o.id} style={{
                 display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                gap: 12, padding: '9px 0', borderBottom: '1px solid #f4f4f4', fontSize: 13,
+                gap: 12, padding: '9px 0', borderBottom: '1px solid #f1f0e8', fontSize: 13,
               }}>
-                <span style={{ color: '#333' }}>
+                <span style={{ color: '#333330' }}>
                   {o.name}
                   {o.archivada_en && (
-                    <span style={{ color: '#aaa', fontSize: 11.5, marginLeft: 8 }}>
+                    <span style={{ color: '#72706b', fontSize: 11.5, marginLeft: 8 }}>
                       {String(o.archivada_en).slice(0, 10)}
                     </span>
                   )}
                 </span>
                 <button onClick={() => restaurar(o)} disabled={trabajando}
                         style={{
-                          background: 'transparent', color: 'var(--accent, #1a73e8)',
-                          border: '1px solid var(--accent, #1a73e8)', borderRadius: 6,
+                          background: 'transparent', color: 'var(--accent, #507294)',
+                          border: '1px solid var(--accent, #507294)', borderRadius: 6,
                           padding: '5px 12px', fontSize: 12, fontWeight: 600,
                           cursor: trabajando ? 'default' : 'pointer',
                         }}>

@@ -185,7 +185,7 @@ function Banco() {
   }, [subida]);
 
   return (
-    <div style={{ height: '100vh', background: '#f4f6f9' }}>
+    <div style={{ height: '100vh', background: '#f1f0e8' }}>
       <UploadModal
         isOpen={abierto} sopMinimized={minimizado} setSopMinimized={setMinimizado}
         currentPath="banco/01_COSTOS/" chunkedUpload={subida} fileRef={refFichero}

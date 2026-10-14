@@ -80,10 +80,10 @@ const ESTADOS = {
 };
 
 const TONOS = {
-  espera: { fondo: '#eef2f7', borde: '#c8d4e3', texto: '#33475b' },
-  decide: { fondo: '#fff5e6', borde: '#e8c48a', texto: '#8a5a00' },
-  no:     { fondo: '#fdeeee', borde: '#e5b4b4', texto: '#8a2020' },
-  ok:     { fondo: '#eaf6ee', borde: '#a9d5b8', texto: '#1f6b3a' },
+  espera: { fondo: '#f1f0e8', borde: '#cccac0', texto: '#333330' },
+  decide: { fondo: '#faf9f5', borde: '#f9eeda', texto: '#734500' },
+  no:     { fondo: '#fbebeb', borde: '#fbebeb', texto: '#b93535' },
+  ok:     { fondo: '#e0e3d7', borde: '#e0e3d7', texto: '#64744e' },
 };
 
 function comoSeLlama(op) {
@@ -121,11 +121,11 @@ function Fila({ op, onDescartar, onVerConflicto }) {
       <div style={{ display: 'flex', justifyContent: 'space-between',
                     alignItems: 'flex-start', gap: 12 }}>
         <div style={{ minWidth: 0 }}>
-          <div style={{ fontWeight: 600, color: '#16202b', overflow: 'hidden',
+          <div style={{ fontWeight: 600, color: '#141413', overflow: 'hidden',
                         textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {comoSeLlama(op)}
           </div>
-          <div style={{ fontSize: 12, color: '#5a6b7d', marginTop: 2 }}>
+          <div style={{ fontSize: 12, color: '#52524d', marginTop: 2 }}>
             {queEs(op)}
             {op.capturado_en && (
               <>
@@ -152,7 +152,7 @@ function Fila({ op, onDescartar, onVerConflicto }) {
       )}
 
       {op.ultimo_error && op.estado !== local.SINCRONIZADA && (
-        <div style={{ fontSize: 12, color: '#5a6b7d', marginTop: 4,
+        <div style={{ fontSize: 12, color: '#52524d', marginTop: 4,
                       fontStyle: 'italic' }}>
           {op.ultimo_error}
         </div>
@@ -161,7 +161,7 @@ function Fila({ op, onDescartar, onVerConflicto }) {
       {op.estado === local.CONFLICTO && op.conflict_state && (
         <button onClick={() => onVerConflicto(op)}
                 style={{ marginTop: 8, fontSize: 12, padding: '4px 10px',
-                         border: '1px solid #e8c48a', background: '#fff',
+                         border: '1px solid #f9eeda', background: '#fff',
                          borderRadius: 6, cursor: 'pointer' }}>
           Ver qué cambió
         </button>
@@ -172,7 +172,7 @@ function Fila({ op, onDescartar, onVerConflicto }) {
       {(op.estado === local.RECHAZADA || op.estado === local.CONFLICTO) && (
         <button onClick={() => onDescartar(op)}
                 style={{ marginTop: 8, marginLeft: 8, fontSize: 12,
-                         padding: '4px 10px', border: '1px solid #d5dde6',
+                         padding: '4px 10px', border: '1px solid #e8e6dc',
                          background: '#fff', borderRadius: 6, cursor: 'pointer' }}>
           Descartar de mi dispositivo
         </button>
@@ -272,7 +272,7 @@ export default function SincronizacionModule({ project, usuario }) {
   };
 
   if (!ctx) {
-    return <div style={{ padding: 20, color: '#5a6b7d' }}>
+    return <div style={{ padding: 20, color: '#52524d' }}>
       Entra a una obra para ver su trabajo de campo.
     </div>;
   }
@@ -290,7 +290,7 @@ export default function SincronizacionModule({ project, usuario }) {
                     alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
         <div>
           <h2 style={{ margin: 0, fontSize: 20 }}>Trabajo de campo</h2>
-          <div style={{ fontSize: 12, color: enRed ? '#1f6b3a' : '#8a5a00',
+          <div style={{ fontSize: 12, color: enRed ? '#64744e' : '#734500',
                         marginTop: 2, fontWeight: 600 }}>
             {enRed ? 'Con conexión' : 'Sin conexión — puedes seguir capturando'}
           </div>
@@ -298,13 +298,13 @@ export default function SincronizacionModule({ project, usuario }) {
         <div style={{ display: 'flex', gap: 8 }}>
           <button onClick={precargarAhora} disabled={!enRed || sincronizando}
                   style={{ padding: '8px 14px', borderRadius: 8,
-                           border: '1px solid #c8d4e3', background: '#fff',
+                           border: '1px solid #cccac0', background: '#fff',
                            cursor: enRed ? 'pointer' : 'not-allowed' }}>
             Llevarme la obra
           </button>
           <button onClick={sincronizarAhora} disabled={!enRed || sincronizando}
                   style={{ padding: '8px 14px', borderRadius: 8, border: 'none',
-                           background: enRed ? '#16202b' : '#9aa7b4',
+                           background: enRed ? '#141413' : '#b0aea5',
                            color: '#fff', fontWeight: 600,
                            cursor: enRed ? 'pointer' : 'not-allowed' }}>
             {sincronizando ? 'Sincronizando…' : 'Sincronizar'}
@@ -314,14 +314,14 @@ export default function SincronizacionModule({ project, usuario }) {
 
       {precargado && !precargado.lista && (
         <div style={{ marginTop: 12, padding: '10px 12px', borderRadius: 8,
-                      background: '#fff5e6', border: '1px solid #e8c48a',
-                      fontSize: 13, color: '#8a5a00' }}>
+                      background: '#faf9f5', border: '1px solid #f9eeda',
+                      fontSize: 13, color: '#734500' }}>
           Todavía no te has llevado {precargado.falta.join(' ni ')}. Sin eso no
           podrás levantar actas cuando pierdas la cobertura.
         </div>
       )}
       {precargado && precargado.lista && (
-        <div style={{ marginTop: 12, fontSize: 12, color: '#5a6b7d' }}>
+        <div style={{ marginTop: 12, fontSize: 12, color: '#52524d' }}>
           Obra descargada {pre.antiguedad(precargado.descargado_en)}. Lo que ves
           sin conexión es de ese momento, no de ahora.
         </div>
@@ -330,32 +330,32 @@ export default function SincronizacionModule({ project, usuario }) {
       {aviso && (
         <div style={{ marginTop: 12, padding: '10px 12px', borderRadius: 8,
                       fontSize: 13,
-                      background: aviso.mal ? '#fdeeee' : '#eef2f7',
-                      border: `1px solid ${aviso.mal ? '#e5b4b4' : '#c8d4e3'}`,
-                      color: aviso.mal ? '#8a2020' : '#33475b' }}>
+                      background: aviso.mal ? '#fbebeb' : '#f1f0e8',
+                      border: `1px solid ${aviso.mal ? '#fbebeb' : '#cccac0'}`,
+                      color: aviso.mal ? '#b93535' : '#333330' }}>
           {aviso.texto}
         </div>
       )}
 
       {piden.length > 0 && (
         <div style={{ marginTop: 16, padding: '10px 12px', borderRadius: 8,
-                      background: '#fff5e6', border: '1px solid #e8c48a',
-                      fontSize: 13, color: '#8a5a00', fontWeight: 600 }}>
+                      background: '#faf9f5', border: '1px solid #f9eeda',
+                      fontSize: 13, color: '#734500', fontWeight: 600 }}>
           {piden.length === 1 ? 'Una captura necesita' : `${piden.length} capturas necesitan`}
           {' '}que decidas algo. No suben solas.
         </div>
       )}
 
       <section style={{ marginTop: 22 }}>
-        <h3 style={{ fontSize: 14, margin: '0 0 4px', color: '#8a5a00' }}>
+        <h3 style={{ fontSize: 14, margin: '0 0 4px', color: '#734500' }}>
           GUARDADO EN ESTE DISPOSITIVO
         </h3>
-        <p style={{ fontSize: 12, color: '#5a6b7d', margin: '0 0 10px' }}>
+        <p style={{ fontSize: 12, color: '#52524d', margin: '0 0 10px' }}>
           El servidor todavía NO tiene esto. Si borras los datos del navegador o
           desinstalas la app, se pierde.
         </p>
         {soloAqui.length === 0
-          ? <div style={{ fontSize: 13, color: '#5a6b7d', padding: '8px 0' }}>
+          ? <div style={{ fontSize: 13, color: '#52524d', padding: '8px 0' }}>
               Nada pendiente. Todo lo que capturaste está en el servidor.
             </div>
           : soloAqui.map(op => (
@@ -365,14 +365,14 @@ export default function SincronizacionModule({ project, usuario }) {
       </section>
 
       <section style={{ marginTop: 26 }}>
-        <h3 style={{ fontSize: 14, margin: '0 0 4px', color: '#1f6b3a' }}>
+        <h3 style={{ fontSize: 14, margin: '0 0 4px', color: '#64744e' }}>
           CONFIRMADO POR EL SERVIDOR
         </h3>
-        <p style={{ fontSize: 12, color: '#5a6b7d', margin: '0 0 10px' }}>
+        <p style={{ fontSize: 12, color: '#52524d', margin: '0 0 10px' }}>
           Esto ya es parte de la obra y lo ve el resto del equipo.
         </p>
         {confirmadas.length === 0
-          ? <div style={{ fontSize: 13, color: '#5a6b7d', padding: '8px 0' }}>
+          ? <div style={{ fontSize: 13, color: '#52524d', padding: '8px 0' }}>
               Todavía nada.
             </div>
           : confirmadas.slice(0, 20).map(op => (
@@ -383,8 +383,8 @@ export default function SincronizacionModule({ project, usuario }) {
 
       {ajeno > 0 && (
         <div style={{ marginTop: 24, padding: '10px 12px', borderRadius: 8,
-                      background: '#eef2f7', border: '1px solid #c8d4e3',
-                      fontSize: 12, color: '#33475b' }}>
+                      background: '#f1f0e8', border: '1px solid #cccac0',
+                      fontSize: 12, color: '#333330' }}>
           Este dispositivo guarda {ajeno} captura{ajeno === 1 ? '' : 's'} de otra
           cuenta. No puedes verlas ni subirlas, y no se han borrado: volverán
           cuando entre esa persona.
@@ -393,8 +393,8 @@ export default function SincronizacionModule({ project, usuario }) {
 
       {espacio && espacio.cuota > 0 && espacio.libre < 50 * 1024 * 1024 && (
         <div style={{ marginTop: 12, padding: '10px 12px', borderRadius: 8,
-                      background: '#fdeeee', border: '1px solid #e5b4b4',
-                      fontSize: 12, color: '#8a2020' }}>
+                      background: '#fbebeb', border: '1px solid #fbebeb',
+                      fontSize: 12, color: '#b93535' }}>
           Queda poco espacio en este dispositivo ({Math.round(espacio.libre / 1048576)} MB).
           Sincroniza antes de seguir capturando fotos.
         </div>

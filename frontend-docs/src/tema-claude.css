@@ -1,0 +1,308 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   TEMA DE ALEPHIA DOCS · PALETA OFICIAL DE CLAUDE (14-oct-2026)
+   ───────────────────────────────────────────────────────────────────────
+   El propietario: «necesitamos la paleta de colores de Claude, y pasemos eso a
+   Docs» · «debe ser todo» · «combinar mejor con la paleta oficial … la paleta
+   de Claude».
+
+   LA PALETA OFICIAL (guía de marca de Anthropic, skill «brand-guidelines») y su LISTA CERRADA
+   de derivados: docs/ux/PALETA_OFICIAL_CLAUDE_DEFINICION.md (fuente de verdad, D-24).
+     Dark       #141413  texto principal y fondos oscuros
+     Light      #faf9f5  fondos claros y texto sobre oscuro
+     Mid Gray   #b0aea5  elementos secundarios
+     Light Gray #e8e6dc  fondos sutiles
+     Orange     #d97757  acento PRINCIPAL
+     Blue       #6a9bcc  acento secundario
+     Green      #788c5d  acento terciario
+
+   Los tintes y los tonos de texto se DERIVAN de esos siete (mezclados con
+   Light o con Dark) y se comprobaron con contraste WCAG ≥ 4,5:1 para texto.
+   Lo que la paleta oficial no trae (rojo de error, ámbar de aviso) sale del
+   sistema de la app de Claude (claude.ai).
+
+   Alcance: SOLO Docs (el visor no importa este fichero) y SOLO modo claro.
+   Quitar el @import de index.css devuelve la paleta del manual de ALEPHIA.
+   ═══════════════════════════════════════════════════════════════════════ */
+:root:not([data-theme="dark"]) {
+  /* ── Neutros: Light · Light Gray · Mid Gray · Dark ── */
+  --a-neutral-0:   #FFFFFF;   /* tarjetas y tablas (blanco, como claude.com) */
+  --a-neutral-25:  #FAF9F5;
+  --a-neutral-50:  #FAF9F5;   /* LIGHT: página */
+  --a-neutral-100: #F1F0E8;   /* Light Gray al 50 %: laterales, hover */
+  --a-neutral-200: #E8E6DC;   /* LIGHT GRAY: bordes, fondos sutiles */
+  --a-neutral-300: #CCCAC0;   /* entre Light Gray y Mid Gray: borde fuerte */
+  --a-neutral-400: #B0AEA5;   /* MID GRAY: secundario, deshabilitado */
+  --a-neutral-500: #72706B;   /* texto de apoyo · 5,3:1 */
+  --a-neutral-600: #52524D;   /* texto secundario · 6,3:1 */
+  --a-neutral-700: #333330;
+  --a-neutral-800: #141413;
+  --a-neutral-900: #141413;   /* DARK: texto principal · 17,5:1 */
+  --a-ink-900:     #141413;
+  --a-ink-900-rgb: 20 20 19;
+
+  /* ── Acentos oficiales y sus derivados ── */
+  --c-orange:        #D97757;  /* ORANGE · acento principal (marca) */
+  --c-orange-fuerte: #9E5943;  /* el mismo, más intenso, para rellenos con texto (como «Pregunta a Claude») */
+  --c-orange-texto:  #9E5943;  /* texto · 4,7:1 */
+  --c-orange-tinte:  #F7ECE5;
+  --c-blue:          #6A9BCC;  /* BLUE · acento secundario */
+  --c-blue-relleno:  #507294;  /* relleno con texto blanco · 4,6:1 */
+  --c-blue-texto:    #507294;  /* enlaces · 4,8:1 */
+  --c-blue-tinte:    #ECF0F1;  /* selección */
+  --c-green:         #788C5D;  /* GREEN · acento terciario */
+  --c-green-relleno: #64744E;
+  --c-green-texto:   #64744E;  /* 4,7:1 */
+  --c-green-tinte:   #E0E3D7;
+
+  /* La escala azul del sistema pasa a ser la del acento azul oficial */
+  --a-blue-900: #507294;
+  --a-blue-800: #507294;
+  --a-blue-600: #507294;
+  --a-blue-500: #6A9BCC;
+  --a-blue-400: #6A9BCC;
+  --a-blue-200: #C8D8E7;
+  --a-blue-100: #ECF0F1;
+  --a-blue-600-rgb: 80 114 148;
+  --a-blue-400-rgb: 106 155 204;
+  --a-steel-500: #72706B;
+  --a-marca: #9E5943;          /* el gesto de enviar lleva el ORANGE oficial */
+  --a-marca-hover: #D97757;
+
+  /* ── Superficies ── */
+  --a-surface-base:   var(--a-neutral-50);
+  --a-surface-raised: var(--a-neutral-0);
+  --a-surface-chrome: var(--a-neutral-0);
+  --a-surface-sunken: var(--a-neutral-100);
+  --a-field-surface:  var(--a-neutral-0);
+
+  /* ── Texto y bordes ── */
+  --a-text-primary:   var(--a-neutral-900);
+  --a-text-secondary: var(--a-neutral-600);
+  --a-text-muted:     var(--a-neutral-500);
+  --a-text-disabled:  var(--a-neutral-400);
+  --a-border-subtle:  #F1F0E8;
+  --a-border-default: var(--a-neutral-200);
+  --a-border-strong:  var(--a-neutral-300);
+
+  /* ── Acción = Dark (como claude.com) · enlaces = Blue · selección = tinte Blue ── */
+  --a-action-primary:       #141413;
+  --a-action-primary-hover: #333330;
+  --a-action-secondary:     var(--a-neutral-100);
+  --a-action-text:          #507294;
+  --a-state-hover:    #F1F0E8;
+  --a-state-selected: #ECF0F1;
+  --a-focus-ring: inset 0 0 0 1px #FAF9F5, 0 0 0 1px #6A9BCC, 0 0 6px 1px rgb(106 155 204 / .45);
+
+  /* ── Sombras casi invisibles ── */
+  --a-shadow-sm: 0 1px 2px 0 rgb(20 20 19 / .06), 0 2px 8px 0 rgb(20 20 19 / .08);
+  --a-shadow-md: 0 2px 4px 0 rgb(20 20 19 / .07), 0 6px 16px 0 rgb(20 20 19 / .08);
+  --a-shadow-lg: 0 4px 8px 0 rgb(20 20 19 / .08), 0 12px 28px -2px rgb(20 20 19 / .08);
+
+  /* ── Estados: éxito = GREEN oficial; error y aviso del sistema de Claude ── */
+  --a-status-success:         #64744E;
+  --a-status-success-surface: #E0E3D7;
+  --a-status-success-border:  #E0E3D7;
+  --a-status-warning:         #734500;
+  --a-status-warning-surface: #F9EEDA;
+  --a-status-warning-border:  #F9EEDA;
+  --a-status-danger:          #B93535;
+  --a-status-danger-surface:  #FBEBEB;
+  --a-status-danger-border:   #FBEBEB;
+  --a-red-600: #B93535;   --a-red-100: #FBEBEB;   --a-red-200: #FBEBEB;
+  --a-green-600: #64744E; --a-green-100: #E0E3D7; --a-green-200: #E0E3D7;
+  --a-amber-700: #734500; --a-amber-100: #F9EEDA; --a-amber-200: #F9EEDA;
+
+  /* ── Estados ISO 19650 ── */
+  --a-estado-wip:       var(--a-neutral-500);
+  --a-estado-shared:    #507294;   /* Blue */
+  --a-estado-published: #64744E;   /* Green */
+  --a-estado-archived:  var(--a-neutral-400);
+}
+
+/* Variables propias del portal (index.css) */
+:root:not([data-theme="dark"]) {
+  --bg-primary:    var(--a-neutral-50);
+  --bg-secondary:  #F1F0E8;
+  --bg-tertiary:   var(--a-neutral-100);
+  --bg-hover:      #F1F0E8;
+  --bg-active:     #ECF0F1;
+  --border:        var(--a-neutral-200);
+  --border-strong: var(--a-neutral-300);
+  --divider:       #F1F0E8;
+  --accent:        #141413;
+  --accent-hover:  #333330;
+  --bg-accent:     #ECF0F1;
+  --border-accent: #C8D8E7;
+  --link:          #507294;
+  --danger:  #B93535; --bg-danger:  #FBEBEB; --border-danger:  #FBEBEB;
+  --success: #64744E; --bg-success: #E0E3D7; --border-success: #E0E3D7;
+  --warning: #734500; --bg-warning: #F9EEDA; --border-warning: #F9EEDA;
+  /* familias de archivo: solo acentos y neutros oficiales donde no hay convención */
+  --archivo-otro: #72706B; --archivo-carpeta: #52524D;
+  --archivo-comprimido: #52524D; --archivo-video: #52524D; --archivo-imagen: #6A9BCC; --archivo-3d: #788C5D;
+}
+
+/* Indicador de pestaña activa y opción actual: el ORANGE oficial como marca */
+:root:not([data-theme="dark"]) .a-sup__herramienta.es-activa { box-shadow: inset 2px 0 0 #D97757; }
+
+/* ── Pantalla de acceso: su modo oscuro con la paleta oficial ──
+   Dark de fondo, Light de texto, Mid Gray de apoyo; botón principal en Light
+   con texto Dark (como claude.com en oscuro); foco en Blue. */
+:root:not([data-theme="dark"]) {
+  --cta-ink: #141413;
+  --cta-surface: #1D1D1C;
+  --cta-line: #302F2E;
+  --cta-line-fuerte: #52524D;
+  --cta-text: #FAF9F5;
+  --cta-muted: #B0AEA5;
+  --cta-primary: #FAF9F5;
+  --cta-primary-alto: #FFFFFF;
+}
+:root:not([data-theme="dark"]) .cta-enviar { color: #141413; }
+:root:not([data-theme="dark"]) .cta-enviar .cta-giro { border-color: rgb(20 20 19 / .25); border-top-color: #141413; }
+:root:not([data-theme="dark"]) .cta-campo input:focus { box-shadow: 0 0 0 1px #6A9BCC, 0 0 6px 1px rgb(106 155 204 / .45); }
+
+/* El gesto de ENVIAR lleva la marca: ORANGE oficial (como el botón de enviar de Claude). */
+:root:not([data-theme="dark"]) .boton-enviar,
+:root:not([data-theme="dark"]) .a-btn--primary.boton-enviar {
+  background: var(--a-marca) !important;
+  border-color: var(--a-marca) !important;
+  color: #fff !important;
+}
+:root:not([data-theme="dark"]) .boton-enviar:hover:not(:disabled) { background: var(--a-marca-hover) !important; border-color: var(--a-marca-hover) !important; }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   COMO EL EJEMPLO DE LA LÁMINA (docs/ux/maquetas/paleta_oficial_claude.html)
+   El propietario: «sería excelente si lo haces tal cual el ejemplo». Solo aspecto.
+   ═══════════════════════════════════════════════════════════════════════ */
+:root:not([data-theme="dark"]) {
+  --a-radius-sm: 4px;
+  --a-radius-md: 8px;    /* botones, campos y menús, como el ejemplo */
+  --a-radius-lg: 12px;   /* tarjetas y diálogos */
+}
+
+/* Botones de la barra: principal en Dark; secundarios blancos con borde suave */
+:root:not([data-theme="dark"]) .barra-btn { border-radius: 8px; }
+:root:not([data-theme="dark"]) .barra-btn--contorno {
+  background: #FFFFFF;
+  border-color: #CCCAC0;
+  color: #141413;
+}
+:root:not([data-theme="dark"]) .barra-btn--contorno:hover:not(:disabled) { background: #F1F0E8; box-shadow: none; }
+:root:not([data-theme="dark"]) .barra-btn--contorno:active:not(:disabled) { background: #E8E6DC; box-shadow: none; }
+
+/* Árbol: fondo Light Gray suave; la carpeta abierta con tinte Blue y negrita, sin barra de color */
+:root:not([data-theme="dark"]) .folder-tree-item {
+  margin: 1px 8px;
+  border-radius: 6px;
+  border-left-color: transparent !important;
+}
+:root:not([data-theme="dark"]) .folder-tree-item.child-active { background: transparent; }
+:root:not([data-theme="dark"]) .folder-tree-item:hover { background-color: #E8E6DC; }
+:root:not([data-theme="dark"]) .folder-tree-item.active,
+:root:not([data-theme="dark"]) .folder-tree-item.context-active {
+  background-color: #ECF0F1 !important;
+  color: #141413 !important;
+  font-weight: 600;
+}
+
+/* Tabla: tarjeta blanca con borde Light Gray y esquinas de 8 px sobre la página Light */
+:root:not([data-theme="dark"]) .table-wrap {
+  margin: 0 16px 16px;
+  height: calc(100% - 16px) !important;
+  border: 1px solid #E8E6DC;
+  border-radius: 8px;
+}
+/* Cabecera: fondo Light Gray suave, texto secundario, en minúscula de oración */
+:root:not([data-theme="dark"]) .data-header {
+  background: #F1F0E8 !important;
+  color: #52524D;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0;
+  border-bottom: 1px solid #E8E6DC;
+}
+:root:not([data-theme="dark"]) .data-row { border-bottom-color: #F1F0E8; }
+
+/* Enlaces dentro de un texto: Blue con subrayado suave, como el ejemplo */
+:root:not([data-theme="dark"]) p a, :root:not([data-theme="dark"]) .enlace-texto {
+  color: #507294;
+  text-decoration: underline;
+  text-decoration-color: rgb(80 114 148 / .4);
+  text-underline-offset: 3px;
+}
+
+/* Dentro de la tabla, la «página» es blanca: las filas quedan blancas sobre la
+   tarjeta y el hover y la selección siguen funcionando con sus propias variables. */
+:root:not([data-theme="dark"]) .table-wrap { --bg-primary: #FFFFFF; }
+
+/* ── BARRA SUPERIOR · DARK 12 (elegida por el propietario el 14-oct-2026) ──
+   Primero fue Mid Gray; el propietario: «el gris lo confundo mucho con lo que está en la
+   pantalla… Dark 12 #302f2e lo veo mejor, y resalta». Texto Light (12,7:1), selectores
+   hundidos en Dark 04 como los campos del acceso, logo y símbolo en Light.
+   La misma barra va en el inicio y en la lista de proyectos (pages/entradaGris.css). */
+:root:not([data-theme="dark"]) .a-sup { background: #302F2E; border-bottom-color: #302F2E; color: #FAF9F5; }
+:root:not([data-theme="dark"]) .a-sup__inicio:hover { background: #1D1D1C; }
+:root:not([data-theme="dark"]) .a-sup__producto { border-left-color: #72706B; }
+:root:not([data-theme="dark"]) .a-sup__selector { background: #1D1D1C; }
+:root:not([data-theme="dark"]) .a-sup__selector:hover,
+:root:not([data-theme="dark"]) .a-sup__selector.es-abierto { background: #141413; }
+:root:not([data-theme="dark"]) .a-sup__selector small { color: #B0AEA5; }
+:root:not([data-theme="dark"]) .a-sup__selector::after { border-top-color: #B0AEA5; }
+:root:not([data-theme="dark"]) .a-sup__buscar { background: #FAF9F5; box-shadow: none; }
+:root:not([data-theme="dark"]) .a-sup .header-avatar { background: #FAF9F5 !important; color: #141413 !important; }
+
+/* ── PULIDO DE IDENTIDAD (14-oct-2026) ──────────────────────────────────────
+   El propietario: «combínalos de la mejor manera, que se vea bien presentable,
+   porque esto quedará con nuestra identidad mucho tiempo». Solo aspecto: la
+   misma estructura, los mismos textos y las mismas funciones. Cuatro reglas que
+   se aplican igual en todas las pantallas:
+   1. Títulos de página a 24 px y peso 400 (antes 300: se leían desvaídos).
+   2. Lo activo se marca con una raya ORANGE de 2 px (pestañas y menú de
+      herramientas); el texto activo sigue en Dark y negrita.
+   3. Esquinas: 8 px en botones, campos, tarjetas y tablas; 4-6 px en chips y
+      filas. Nada en píldora.
+   4. Toda tabla es una tarjeta blanca con la cabecera en Light 50. */
+:root:not([data-theme="dark"]) { --a-indicador: #D97757; }
+
+/* Pestañas genéricas (index.css): la raya activa en Orange */
+:root:not([data-theme="dark"]) .tab.active { border-bottom-color: #D97757; }
+
+/* Archivos · barra de herramientas: index.css le fijaba 32 px de alto y, con el
+   relleno de 12 px, los botones se salían por arriba y tocaban el borde. */
+:root:not([data-theme="dark"]) .acc-toolbar { height: auto; margin-bottom: 0; }
+
+/* Columna fija (casilla + Nombre): una línea Light Gray en vez de la sombra, que
+   dibujaba dos rayas grises; y la cabecera fija con el mismo fondo que el resto. */
+:root:not([data-theme="dark"]) .td-frozen-left { box-shadow: none; border-right: 0; }
+:root:not([data-theme="dark"]) .td-frozen-left.name-cell { border-right: 1px solid #E8E6DC; }
+:root:not([data-theme="dark"]) .data-header .td-frozen-left,
+:root:not([data-theme="dark"]) .data-header .td-frozen-right { background-color: #F1F0E8 !important; }
+
+/* Botón de enviar: al pasar el ratón ya no se aclara a Orange con texto blanco
+   (3,0:1, ilegible); se queda en Orange 30D y gana un halo Orange tinte. */
+:root:not([data-theme="dark"]) .boton-enviar:hover:not(:disabled) {
+  background: #9E5943 !important;
+  border-color: #9E5943 !important;
+  box-shadow: 0 0 0 3px #F7ECE5;
+}
+
+/* Revisiones: filtros sin píldora, tabla en tarjeta blanca y el estado escrito
+   en el color de su barra (aviso, aprobado), como ya lo estaba el rechazado. */
+:root:not([data-theme="dark"]) .rev-titulo { font-weight: 400; }
+:root:not([data-theme="dark"]) .rev-filtro { border-radius: 8px; border-color: #CCCAC0; }
+:root:not([data-theme="dark"]) .rev-doc { border-radius: 6px; }
+:root:not([data-theme="dark"]) .rev-tabla {
+  border: 1px solid #E8E6DC;
+  border-radius: 8px;
+  background: #FFFFFF;
+}
+:root:not([data-theme="dark"]) .rev-tabla__cabeza {
+  background: #F1F0E8;
+  border-bottom-color: #E8E6DC;
+}
+:root:not([data-theme="dark"]) .rev-fila { background: #FFFFFF; border-bottom-color: #F1F0E8; }
+:root:not([data-theme="dark"]) .rev-fila:hover { background: #F1F0E8; }
+:root:not([data-theme="dark"]) .rev-estado--aviso .rev-estado__texto { color: #734500; }
+:root:not([data-theme="dark"]) .rev-estado--exito .rev-estado__texto { color: #64744E; }

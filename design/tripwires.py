@@ -99,7 +99,7 @@ def t3_cobertura_claro_oscuro():
     # terminan en «-rgb» y llevan guion dentro, asi que [a-z0-9-] y no \w.
     claro = {k for k in b.get(':root', {}) if not re.match(
         r'--a-(blue|steel|neutral|ink|green|red|amber)-\d+$|--a-[a-z0-9-]+-rgb$|'
-        r'--a-(space|radius|border-width|type|font|motion|ease|bp|layer)', k)}
+        r'--a-(space|radius|border-width|type|font|motion|ease|bp|layer|size|opacity)', k)}
     oscuro = set(b.get('[data-theme="dark"]', {}))
     falta = sorted(claro - oscuro)
     sobra = sorted(oscuro - claro)

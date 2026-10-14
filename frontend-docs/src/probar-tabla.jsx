@@ -55,14 +55,14 @@ function Banco() {
     const [editingNodeId, setEditingNodeId] = useState(null);
 
     return (
-        <div style={{ padding: 24, background: '#f5f5f5', minHeight: '100vh', fontFamily: 'Inter, system-ui, sans-serif' }}>
+        <div style={{ padding: 24, background: '#f1f0e8', minHeight: '100vh', fontFamily: 'Inter, system-ui, sans-serif' }}>
             <p style={{ margin: '0 0 8px', fontWeight: 600 }}>Tabla de ficheros · anchos de columna</p>
-            <ul style={{ margin: '0 0 16px', paddingLeft: 18, fontSize: 13, lineHeight: 1.8, color: '#444' }}>
+            <ul style={{ margin: '0 0 16px', paddingLeft: 18, fontSize: 13, lineHeight: 1.8, color: '#333330' }}>
                 <li>Acerca el ratón al borde derecho de CUALQUIER cabecera: el tirador se tiñe.</li>
                 <li>Arrastra: sólo esa columna cambia; la tabla crece y se desplaza en horizontal.</li>
                 <li>Nombre y la casilla siguen congeladas a la izquierda al desplazar.</li>
             </ul>
-            <div style={{ height: 420, border: '1px solid #ddd', background: '#fff' }}>
+            <div style={{ height: 420, border: '1px solid #e8e6dc', background: '#fff' }}>
                 <MatrixTable
                     folders={CARPETAS}
                     files={FICHEROS}
@@ -93,7 +93,7 @@ function Banco() {
                     onStatusChange={() => {}}
                 />
             </div>
-            <p id="medida" style={{ marginTop: 12, fontSize: 12, color: '#666', fontFamily: 'monospace' }}>
+            <p id="medida" style={{ marginTop: 12, fontSize: 12, color: '#72706b', fontFamily: 'monospace' }}>
                 {JSON.stringify(columnWidths)}
             </p>
         </div>

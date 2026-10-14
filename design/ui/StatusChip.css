@@ -1,0 +1,51 @@
+/* STATUS CHIP · el estado de algo, con los tokens de estado del sistema.
+   Antes cada pantalla pintaba sus chips con colores propios (Revisiones tenia
+   cuatro parejas de hex en `TONO_DE_LISTA`). Aqui el tono es un NOMBRE y el
+   color lo pone el canon, con su pareja para el tema oscuro. */
+
+.a-chip {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--a-space-4);
+  min-height: 22px;
+  padding: 0 var(--a-space-8);
+  border: var(--a-border-width-1) solid transparent;
+  border-radius: var(--a-radius-full);
+  font-family: var(--a-font-sans);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.a-chip--exito {
+  background: var(--a-status-success-surface);
+  border-color: var(--a-status-success-border);
+  color: var(--a-status-success);
+}
+
+.a-chip--peligro {
+  background: var(--a-status-danger-surface);
+  border-color: var(--a-status-danger-border);
+  color: var(--a-status-danger);
+}
+
+.a-chip--aviso {
+  background: var(--a-status-warning-surface);
+  border-color: var(--a-status-warning-border);
+  color: var(--a-status-warning);
+}
+
+/* Informativo: lo que pide atencion sin ser un problema («Te toca»). */
+.a-chip--info {
+  background: var(--a-state-selected);
+  border-color: var(--a-border-default);
+  color: var(--a-action-text);
+}
+
+.a-chip--neutro {
+  background: var(--a-surface-sunken);
+  border-color: var(--a-border-default);
+  color: var(--a-text-secondary);
+}

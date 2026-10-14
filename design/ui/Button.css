@@ -30,9 +30,10 @@
               border-color var(--a-motion-fast) var(--a-ease);
 }
 
-.a-btn--sm { padding: var(--a-space-4) var(--a-space-8);  min-height: 26px; }
-.a-btn--md { padding: var(--a-space-8) var(--a-space-12); min-height: 32px; }
-.a-btn--lg { padding: var(--a-space-12) var(--a-space-16); min-height: 40px; }
+/* Alturas desde los tokens (UI polish F2): md = 36 px, la de ACC. */
+.a-btn--sm { padding: var(--a-space-4) var(--a-space-8);  min-height: var(--a-size-control-sm); }
+.a-btn--md { padding: var(--a-space-8) var(--a-space-12); min-height: var(--a-size-control-md); }
+.a-btn--lg { padding: var(--a-space-12) var(--a-space-16); min-height: var(--a-size-control-lg); }
 
 .a-btn--primary {
   background: var(--a-action-primary);

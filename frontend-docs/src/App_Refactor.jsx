@@ -369,7 +369,7 @@ export default function App() {
     // con la sesión intacta en la base: abrir Docs con el backend frío bastaba.
     // Sobre la sesión solo tiene autoridad el servidor, y lo dice con un 401.
     // Es el mismo arreglo que el visor tiene desde f24e8f4.
-    apiFetch(`${API}/api/auth/me`)
+    apiFetch(`${API}/api/auth/me`, { onUnauthorized: () => {} })
       .then(r => {
         if (r.status === 401) return { sesionInvalida: true };
         if (!r.ok) return null;          // problema del servidor, no de tu sesión
@@ -377,7 +377,7 @@ export default function App() {
       })
       .then(res => {
         if (cancelado || !res) return;
-        if (res.sesionInvalida) { logout(); return; }
+        if (res.sesionInvalida) { logout({ notifyServer: false }); return; }
         const u = res.usuario;
         if (!u?.id) return;
         if (u.role !== user.role || u.email !== user.email) {
@@ -439,25 +439,25 @@ export default function App() {
   if (invitacionPendiente && invitacionPendiente.email !== user.email) {
     return (
       <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center',
-                    justifyContent: 'center', background: '#0B0E12', padding: 24 }}>
-        <div style={{ maxWidth: 470, background: '#11161d', color: '#e9ecf1',
+                    justifyContent: 'center', background: '#141413', padding: 24 }}>
+        <div style={{ maxWidth: 470, background: '#141413', color: '#f1f0e8',
                       border: '1px solid rgba(255,255,255,0.09)', borderRadius: 10,
                       padding: '26px 28px' }}>
           <h2 style={{ margin: '0 0 12px', fontSize: 18, fontWeight: 600 }}>
             Esta invitación no es para tu sesión
           </h2>
-          <p style={{ margin: '0 0 8px', fontSize: 13.5, lineHeight: 1.6, color: '#c3cad3' }}>
+          <p style={{ margin: '0 0 8px', fontSize: 13.5, lineHeight: 1.6, color: '#cccac0' }}>
             Estás dentro como <b>{user.email}</b>, y esta invitación es para{' '}
             <b>{invitacionPendiente.email}</b>.
           </p>
-          <p style={{ margin: '0 0 20px', fontSize: 13.5, lineHeight: 1.6, color: '#c3cad3' }}>
+          <p style={{ margin: '0 0 20px', fontSize: 13.5, lineHeight: 1.6, color: '#cccac0' }}>
             Para activarla hay que cerrar esta sesión. El enlace <b>no se gasta
             por abrirlo</b>: seguirá siendo válido.
           </p>
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
             <button onClick={logoutFull}
                     style={{ padding: '9px 16px', borderRadius: 6, border: 'none',
-                             background: '#3E6F91', color: '#fff', fontSize: 13,
+                             background: '#507294', color: '#fff', fontSize: 13,
                              cursor: 'pointer' }}>
               Cerrar sesión y activar la invitación
             </button>
@@ -467,7 +467,7 @@ export default function App() {
                     }}
                     style={{ padding: '9px 16px', borderRadius: 6, fontSize: 13,
                              border: '1px solid rgba(255,255,255,0.18)',
-                             background: 'transparent', color: '#c3cad3', cursor: 'pointer' }}>
+                             background: 'transparent', color: '#cccac0', cursor: 'pointer' }}>
               Seguir como {user.email}
             </button>
           </div>
@@ -481,7 +481,7 @@ export default function App() {
   if (enlace) {
     return (
       <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center',
-                    justifyContent: 'center', gap: 12, color: '#555', fontSize: 14 }}>
+                    justifyContent: 'center', gap: 12, color: '#52524d', fontSize: 14 }}>
         <div className="adsk-spinner" /> Abriendo la revisión…
       </div>
     );
@@ -490,7 +490,7 @@ export default function App() {
   if (enlaceArchivos) {
     return (
       <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center',
-                    justifyContent: 'center', gap: 12, color: '#555', fontSize: 14 }}>
+                    justifyContent: 'center', gap: 12, color: '#52524d', fontSize: 14 }}>
         <div className="adsk-spinner" /> Abriendo el enlace…
       </div>
     );
@@ -500,13 +500,13 @@ export default function App() {
   const conAviso = (pagina) => (!avisoDeEnlace ? pagina : (
     <>
       <div role="alert" style={{ position: 'fixed', top: 14, left: '50%', transform: 'translateX(-50%)',
-                                 zIndex: 30000, background: '#fff1f2', color: '#9f1239',
-                                 border: '1px solid #fecdd3', borderRadius: 8, padding: '10px 14px',
+                                 zIndex: 30000, background: '#fbebeb', color: '#993458',
+                                 border: '1px solid #fbebeb', borderRadius: 8, padding: '10px 14px',
                                  fontSize: 13, boxShadow: '0 8px 24px rgba(0,0,0,.15)',
                                  display: 'flex', gap: 10, alignItems: 'center' }}>
         {avisoDeEnlace}
         <button type="button" onClick={() => setAvisoDeEnlace(null)} aria-label="Cerrar aviso"
-                style={{ background: 'none', border: 'none', color: '#9f1239', fontSize: 16,
+                style={{ background: 'none', border: 'none', color: '#993458', fontSize: 16,
                          cursor: 'pointer' }}>×</button>
       </div>
       {pagina}

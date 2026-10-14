@@ -1,4 +1,5 @@
-/* ENTRADA EN GRIS MEDIO (21-sep-2026).
+/* ENTRADA EN GRIS MEDIO (21-sep-2026) · desde el 14-oct-2026 con la PALETA OFICIAL DE CLAUDE
+   (D-24): barra Dark 12, página Light, tarjetas blancas con borde Light Gray, acción Dark.
    El propietario: «no tan blanco sino como escala de grises», «que sea como la
    maqueta y solo a esas pantallas» (docs/ux/maquetas/pantallas_de_entrada_v4.html,
    tono «gris medio»). Solo lo usan el inicio (HubPage) y la lista de proyectos
@@ -6,31 +7,32 @@
    resto de Docs no cambian. Los colores se declaran aquí una vez; las reglas usan
    var(). El visor (View) repite la misma paleta en LandingPage.css. */
 .entrada-gris {
-    --eg-fondo: #E1E4E8;
-    --eg-sup: #EDEFF2;
-    --eg-cab: #3B4046;
-    --eg-cab-linea: #2F3439;
-    --eg-cab-texto: #C9CED4;
-    --eg-cab-activo: #FFFFFF;
-    --eg-linea: #C8CDD3;
-    --eg-linea-fuerte: #B3B9C0;
-    --eg-fila: #D8DCE0;
-    --eg-hover: #E5E8EB;
-    --eg-texto: #1C2024;
-    --eg-texto-2: #464C53;
-    --eg-texto-3: #62686F;
-    --eg-acento: #153754;
-    --eg-acento-hover: #0F2940;
-    --eg-enlace: #2F5F80;
-    --eg-foco: #3E6F91;
-    --eg-avatar: #3E6F91;
-    --eg-chip: #DCE0E4;
-    --eg-chip-texto: #3A4047;
-    --eg-acceso: #D6DEE6;
-    --eg-acceso-texto: #153754;
-    --eg-peligro: #B3261E;
-    --eg-peligro-fondo: #F0D9D8;
-    --eg-sombra: 0 1px 3px rgb(11 14 18 / .10);
+    --eg-fondo: #FAF9F5;
+    --eg-sup: #FFFFFF;
+    --eg-cab: #302F2E;          /* Dark 12: el propietario la prefiere a Mid Gray (14-oct-2026) */
+    --eg-cab-linea: #302F2E;
+    --eg-cab-texto: #E8E6DC;
+    --eg-cab-activo: #FAF9F5;
+    --eg-linea: #E8E6DC;
+    --eg-linea-fuerte: #B0AEA5;
+    --eg-fila: #F1F0E8;
+    --eg-hover: #F1F0E8;
+    --eg-texto: #141413;
+    --eg-texto-2: #52524D;
+    --eg-texto-3: #72706B;
+    --eg-acento: #141413;
+    --eg-acento-hover: #333330;
+    --eg-indicador: #D97757;   /* Orange: solo el indicador de lo activo (D-24, regla 3) */
+    --eg-enlace: #507294;
+    --eg-foco: #507294;
+    --eg-avatar: #FAF9F5;
+    --eg-chip: #F1F0E8;
+    --eg-chip-texto: #333330;
+    --eg-acceso: #ECF0F1;
+    --eg-acceso-texto: #507294;
+    --eg-peligro: #B93535;
+    --eg-peligro-fondo: #FBEBEB;
+    --eg-sombra: 0 1px 3px rgb(20 20 19 / .10);
     background: var(--eg-fondo);
     color: var(--eg-texto);
 }
@@ -62,6 +64,7 @@
     height: 28px;
     font-size: 11.5px;
     background: var(--eg-avatar);
+    color: #141413;
 }
 
 /* ── Inicio ──────────────────────────────────────────────────────────── */
@@ -91,13 +94,13 @@
 .entrada-gris .tab.active {
     color: var(--eg-texto);
     font-weight: 600;
-    border-bottom-color: var(--eg-acento);
+    border-bottom-color: var(--eg-indicador);
 }
 
 .entrada-gris .btn-create {
     height: 36px;
     padding: 0 14px;
-    border-radius: 4px;
+    border-radius: 8px;
     background: var(--eg-acento);
     color: #fff;
     font-size: 14px;
@@ -115,8 +118,8 @@
     gap: 8px;
     padding: 0 10px;
     background: var(--eg-sup);
-    border: 1px solid var(--eg-linea-fuerte);
-    border-radius: 4px;
+    border: 1px solid #CCCAC0;
+    border-radius: 8px;
     color: var(--eg-texto-3);
     transition: border-color .15s;
 }
@@ -145,7 +148,7 @@
     border-spacing: 0;
     background: var(--eg-sup);
     border: 1px solid var(--eg-linea);
-    border-radius: 4px;
+    border-radius: 8px;
     overflow: hidden;
 }
 
@@ -155,7 +158,7 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    background: var(--eg-sup);
+    background: var(--eg-fila);
     color: var(--eg-texto-2);
     font-size: 12px;
     font-weight: 600;
@@ -187,7 +190,7 @@
 
 .entrada-gris .eg-tabla .access-badge-docs {
     padding: 4px 8px;
-    border-radius: 2px;
+    border-radius: 4px;
     background: var(--eg-acceso);
     color: var(--eg-acceso-texto);
 }
@@ -196,13 +199,37 @@
 
 .entrada-gris .eg-tabla .btn-secondary {
     height: 28px;
-    border-radius: 4px;
+    border-radius: 6px;
     background: var(--eg-sup);
-    border: 1px solid var(--eg-linea-fuerte);
+    border: 1px solid #CCCAC0;
     color: var(--eg-texto);
     font-weight: 500;
 }
 
-.entrada-gris .eg-tabla .btn-secondary:hover { border-color: var(--eg-texto-3); }
+.entrada-gris .eg-tabla .btn-secondary:hover { border-color: #B0AEA5; background: var(--eg-hover); }
 
 .entrada-gris .empty-state .empty-icon { color: var(--eg-texto-3); }
+
+/* Mi trabajo: la fila que abre una revisión responde como las filas de la
+   tabla de proyectos (UI polish F4, 13-oct-2026). Era un botón en línea, sin
+   hover ni pulsado. El margen negativo deja que el fondo del hover llegue un
+   poco más allá del texto, sin mover el texto de su sitio. */
+.entrada-gris .mt-abrir {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    box-sizing: border-box;
+    width: calc(100% + 16px);
+    margin: 0 -8px;
+    padding: 10px 8px;
+    border: 0;
+    border-radius: 6px;
+    background: none;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.entrada-gris .mt-abrir:hover { background: var(--eg-hover); }
+.entrada-gris .mt-abrir:active { translate: 0 1px; }

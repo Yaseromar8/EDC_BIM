@@ -15,7 +15,7 @@ export default function ActionToolbar({ search, onSearchChange, onUploadClick, i
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 9l6 6 6-6"></path></svg>
               </button>
             </div>
-            <button className="btn btn-outline" style={{ display: 'flex', alignItems: 'center', gap: 8, height: 32, fontSize: 13, borderColor: '#dcdcdc', background: '#fff', color: '#333' }} onClick={onCreateFolder}>
+            <button className="btn btn-outline" style={{ display: 'flex', alignItems: 'center', gap: 8, height: 32, fontSize: 13, borderColor: '#e8e6dc', background: '#fff', color: '#333330' }} onClick={onCreateFolder}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 5v14M5 12h14"></path></svg>
               Carpeta
             </button>
@@ -25,7 +25,7 @@ export default function ActionToolbar({ search, onSearchChange, onUploadClick, i
 
       <div className="toolbar-right">
         <div className="search-box-pro">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#666" strokeWidth="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#72706b" strokeWidth="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
           <input 
             placeholder="Buscar por descripción en esta carpeta..." 
             value={search} 

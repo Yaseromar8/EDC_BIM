@@ -45,11 +45,11 @@ import { confirmAction } from '../utils/confirm';
 import AccesoAHerramientas from './AccesoAHerramientas';
 
 const COLOR_FUNCION = {
-  ENTIDAD:     { fondo: '#eef2ff', borde: '#c7d2fe', texto: '#3730a3' },
-  SUPERVISION: { fondo: '#ecfeff', borde: '#a5f3fc', texto: '#155e75' },
-  CONTRATISTA: { fondo: '#f0fdf4', borde: '#bbf7d0', texto: '#166534' },
-  PROYECTISTA: { fondo: '#fef3c7', borde: '#fde68a', texto: '#92400e' },
-  OTRO:        { fondo: '#f4f4f5', borde: '#e4e4e7', texto: '#52525b' },
+  ENTIDAD:     { fondo: '#ecf0f1', borde: '#c8d8e7', texto: '#507294' },
+  SUPERVISION: { fondo: '#f3fbf8', borde: '#bfebdb', texto: '#095040' },
+  CONTRATISTA: { fondo: '#e0e3d7', borde: '#e0e3d7', texto: '#64744e' },
+  PROYECTISTA: { fondo: '#f9eeda', borde: '#f9eeda', texto: '#9e5943' },
+  OTRO:        { fondo: '#f1f0e8', borde: '#e8e6dc', texto: '#52524d' },
 };
 
 const ETIQUETA_FUNCION = {
@@ -63,7 +63,7 @@ const ETIQUETA_ROL = {
 
 function ChipFuncion({ funcion }) {
   if (!funcion) {
-    return <span style={{ fontSize: 12, color: '#bbb' }}>sin función asignada</span>;
+    return <span style={{ fontSize: 12, color: '#cccac0' }}>sin función asignada</span>;
   }
   const c = COLOR_FUNCION[funcion] || COLOR_FUNCION.OTRO;
   return (
@@ -378,7 +378,7 @@ export default function ParticipantesModule({ project, isAdmin }) {
   }, [personas, empresas]);
 
   if (cargando) {
-    return <div style={{ padding: 48, textAlign: 'center', color: '#888' }}>
+    return <div style={{ padding: 48, textAlign: 'center', color: '#72706b' }}>
       Cargando participantes…</div>;
   }
 
@@ -386,38 +386,38 @@ export default function ParticipantesModule({ project, isAdmin }) {
     <div style={{ padding: 32, flex: 1, overflowY: 'auto' }}>
       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between',
                     marginBottom: 6 }}>
-        <div style={{ fontSize: 24, fontWeight: 300 }}>Participantes</div>
-        <div style={{ fontSize: 13, color: '#888' }}>
+        <div style={{ fontSize: 24, fontWeight: 400 }}>Participantes</div>
+        <div style={{ fontSize: 13, color: '#72706b' }}>
           {personas.length} persona{personas.length !== 1 ? 's' : ''}
           {' · '}{empresas.length} empresa{empresas.length !== 1 ? 's' : ''}
         </div>
       </div>
-      <div style={{ fontSize: 12.5, color: '#777', marginBottom: 26, maxWidth: 720 }}>
+      <div style={{ fontSize: 12.5, color: '#72706b', marginBottom: 26, maxWidth: 720 }}>
         Quién participa en <b>esta obra</b> y en qué calidad.
         {miFuncion && <> Tu empresa participa aquí como <ChipFuncion funcion={miFuncion} />.</>}
       </div>
 
       {/* ── EMPRESAS ────────────────────────────────────────────────────── */}
-      <div style={{ fontSize: 11, fontWeight: 700, color: '#5f6368', letterSpacing: '.4px',
+      <div style={{ fontSize: 11, fontWeight: 700, color: '#52524d', letterSpacing: '.4px',
                     textTransform: 'uppercase', marginBottom: 10 }}>
         Empresas y su función contractual
       </div>
-      <div style={{ fontSize: 12, color: '#888', marginBottom: 12, maxWidth: 720 }}>
+      <div style={{ fontSize: 12, color: '#72706b', marginBottom: 12, maxWidth: 720 }}>
         La función es <b>de la empresa en esta obra</b>: la misma empresa puede
         tener otra función en otro proyecto. <b>No otorga permisos</b> — lo que
         cada persona puede hacer lo decide su perfil del sistema.
       </div>
 
       {empresas.length === 0 ? (
-        <div style={{ padding: '14px 16px', background: '#fafbfc', border: '1px dashed #ddd',
-                      borderRadius: 8, fontSize: 13, color: '#777', marginBottom: 16 }}>
+        <div style={{ padding: '14px 16px', background: '#faf9f5', border: '1px dashed #e8e6dc',
+                      borderRadius: 8, fontSize: 13, color: '#72706b', marginBottom: 16 }}>
           Todavía no consta ninguna empresa en esta obra.
           {isAdmin ? ' Añádela abajo.' : ' Un administrador puede declararlas.'}
         </div>
       ) : (
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13,
                         marginBottom: 16 }}>
-          <thead><tr style={{ borderBottom: '2px solid #eee', color: '#888', fontWeight: 500 }}>
+          <thead><tr style={{ borderBottom: '2px solid #f1f0e8', color: '#72706b', fontWeight: 500 }}>
             <th style={{ padding: '9px 12px', textAlign: 'left' }}>Empresa</th>
             <th style={{ padding: '9px 12px', textAlign: 'left' }}>Función contractual</th>
             <th style={{ padding: '9px 12px', textAlign: 'left' }}>Personas</th>
@@ -427,12 +427,12 @@ export default function ParticipantesModule({ project, isAdmin }) {
             {empresas.map(e => {
               const suyas = personas.filter(p => p.company_id === e.company_id);
   return (
-                <tr key={e.company_id} style={{ borderBottom: '1px solid #f0f0f0' }}>
+                <tr key={e.company_id} style={{ borderBottom: '1px solid #f1f0e8' }}>
                   <td style={{ padding: '11px 12px', fontWeight: 500 }}>
                     {/* Un cuadrado, no un círculo: una empresa no es una persona. */}
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 9 }}>
                       <span style={{ width: 26, height: 26, borderRadius: 5,
-                                     background: '#eef1f4', color: '#5f6368',
+                                     background: '#f1f0e8', color: '#52524d',
                                      display: 'inline-flex', alignItems: 'center',
                                      justifyContent: 'center', fontSize: 13 }}>▪</span>
                       {e.nombre}
@@ -444,7 +444,7 @@ export default function ParticipantesModule({ project, isAdmin }) {
                         value={e.funcion}
                         disabled={guardando === 'empresa:' + e.company_id}
                         onChange={ev => declararEmpresa(e.company_id, ev.target.value)}
-                        style={{ padding: '4px 6px', border: '1px solid #ddd',
+                        style={{ padding: '4px 6px', border: '1px solid #e8e6dc',
                                  borderRadius: 4, fontSize: 12 }}>
                         {funciones.map(f => (
                           <option key={f} value={f}>{ETIQUETA_FUNCION[f] || f}</option>
@@ -452,7 +452,7 @@ export default function ParticipantesModule({ project, isAdmin }) {
                       </select>
                     ) : <ChipFuncion funcion={e.funcion} />}
                   </td>
-                  <td style={{ padding: '11px 12px', color: '#666' }}>
+                  <td style={{ padding: '11px 12px', color: '#72706b' }}>
                     {suyas.length || '—'}
                   </td>
                   {isAdmin && (
@@ -461,7 +461,7 @@ export default function ParticipantesModule({ project, isAdmin }) {
                               disabled={guardando === 'empresa:' + e.company_id}
                               title="Quitar del directorio de esta obra"
                               style={{ border: 'none', background: 'none', cursor: 'pointer',
-                                       color: '#c0392b', fontSize: 15 }}>×</button>
+                                       color: '#b93535', fontSize: 15 }}>×</button>
                     </td>
                   )}
                 </tr>
@@ -474,7 +474,7 @@ export default function ParticipantesModule({ project, isAdmin }) {
       {isAdmin && (
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 30 }}>
           <select value={nuevaEmpresa} onChange={e => setNuevaEmpresa(e.target.value)}
-                  style={{ padding: '6px 8px', border: '1px solid #ddd', borderRadius: 5,
+                  style={{ padding: '6px 8px', border: '1px solid #e8e6dc', borderRadius: 5,
                            fontSize: 13, minWidth: 200 }}>
             <option value="">Añadir empresa…</option>
             {catalogo
@@ -482,7 +482,7 @@ export default function ParticipantesModule({ project, isAdmin }) {
               .map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
           <select value={nuevaFuncion} onChange={e => setNuevaFuncion(e.target.value)}
-                  style={{ padding: '6px 8px', border: '1px solid #ddd', borderRadius: 5,
+                  style={{ padding: '6px 8px', border: '1px solid #e8e6dc', borderRadius: 5,
                            fontSize: 13 }}>
             {(funciones.length ? funciones : Object.keys(ETIQUETA_FUNCION)).map(f => (
               <option key={f} value={f}>{ETIQUETA_FUNCION[f] || f}</option>
@@ -493,8 +493,8 @@ export default function ParticipantesModule({ project, isAdmin }) {
             onClick={() => { declararEmpresa(Number(nuevaEmpresa), nuevaFuncion);
                              setNuevaEmpresa(''); }}
             style={{ padding: '6px 14px', border: '1px solid var(--accent)',
-                     background: nuevaEmpresa ? 'var(--accent)' : '#f4f4f5',
-                     color: nuevaEmpresa ? '#fff' : '#aaa', borderRadius: 5,
+                     background: nuevaEmpresa ? 'var(--accent)' : '#f1f0e8',
+                     color: nuevaEmpresa ? '#fff' : '#b0aea5', borderRadius: 5,
                      fontSize: 13, cursor: nuevaEmpresa ? 'pointer' : 'default' }}>
             Añadir
           </button>
@@ -504,7 +504,7 @@ export default function ParticipantesModule({ project, isAdmin }) {
       {/* ── PERSONAS ────────────────────────────────────────────────────── */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                     marginBottom: 10 }}>
-        <div style={{ fontSize: 11, fontWeight: 700, color: '#5f6368', letterSpacing: '.4px',
+        <div style={{ fontSize: 11, fontWeight: 700, color: '#52524d', letterSpacing: '.4px',
                       textTransform: 'uppercase' }}>
           Personas de la obra
         </div>
@@ -519,19 +519,19 @@ export default function ParticipantesModule({ project, isAdmin }) {
       </div>
 
       {isAdmin && addAbierto && (
-        <div style={{ border: '1px solid #e3e6ea', borderRadius: 8, padding: '14px 16px',
-                      marginBottom: 16, background: '#fafbfc', maxWidth: 760 }}>
+        <div style={{ border: '1px solid #e8e6dc', borderRadius: 8, padding: '14px 16px',
+                      marginBottom: 16, background: '#faf9f5', maxWidth: 760 }}>
           {/* LA CADENA, VISIBLE: persona → empresa → función → membresía →
               ¿administra? Cada dato se guarda donde vive; este panel solo
               evita cinco viajes por cinco pantallas. */}
-          <div style={{ fontSize: 12.5, fontWeight: 600, color: '#444', marginBottom: 10 }}>
+          <div style={{ fontSize: 12.5, fontWeight: 600, color: '#333330', marginBottom: 10 }}>
             Incorporar a una persona de la entidad
           </div>
 
           {candidatos === null ? (
-            <div style={{ fontSize: 12.5, color: '#888' }}>Cargando candidatos…</div>
+            <div style={{ fontSize: 12.5, color: '#72706b' }}>Cargando candidatos…</div>
           ) : candidatos.length === 0 ? (
-            <div style={{ fontSize: 12.5, color: '#777' }}>
+            <div style={{ fontSize: 12.5, color: '#72706b' }}>
               No hay nadie incorporable: toda la entidad ya participa aquí (o
               está pendiente de invitar en Usuarios).
             </div>
@@ -540,7 +540,7 @@ export default function ParticipantesModule({ project, isAdmin }) {
               <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                 <select value={addPersona}
                         onChange={e => { setAddPersona(e.target.value); setAddEmpresa(''); setAddFuncion(''); }}
-                        style={{ padding: '6px 8px', border: '1px solid #ddd', borderRadius: 5,
+                        style={{ padding: '6px 8px', border: '1px solid #e8e6dc', borderRadius: 5,
                                  fontSize: 13, minWidth: 230 }}>
                   <option value="">Elegir persona…</option>
                   {candidatos.map(x => (
@@ -555,7 +555,7 @@ export default function ParticipantesModule({ project, isAdmin }) {
                 {candidatoElegido && !candidatoElegido.company_id && (
                   <select value={addEmpresa} onChange={e => { setAddEmpresa(e.target.value); setAddFuncion(''); }}
                           title="La empresa es de la persona: quedará en su perfil, la misma en todas las obras"
-                          style={{ padding: '6px 8px', border: '1px solid #ddd', borderRadius: 5,
+                          style={{ padding: '6px 8px', border: '1px solid #e8e6dc', borderRadius: 5,
                                    fontSize: 13, minWidth: 170 }}>
                     <option value="">Su empresa… (opcional)</option>
                     {catalogo.map(cx => <option key={cx.id} value={cx.id}>{cx.name}</option>)}
@@ -565,7 +565,7 @@ export default function ParticipantesModule({ project, isAdmin }) {
                 {candidatoElegido && empresaSinFuncionAqui && (
                   <select value={addFuncion} onChange={e => setAddFuncion(e.target.value)}
                           title="La función es de la empresa EN ESTA OBRA — no concede permisos"
-                          style={{ padding: '6px 8px', border: '1px solid #ddd', borderRadius: 5,
+                          style={{ padding: '6px 8px', border: '1px solid #e8e6dc', borderRadius: 5,
                                    fontSize: 13 }}>
                     <option value="">Función de su empresa aquí… (opcional)</option>
                     {(funciones.length ? funciones : Object.keys(ETIQUETA_FUNCION)).map(f => (
@@ -578,7 +578,7 @@ export default function ParticipantesModule({ project, isAdmin }) {
                     todas las obras, y concedérsela aquí no le daría nada. */}
                 {candidatoElegido && candidatoElegido.role !== 'admin' && (
                   <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6,
-                                  fontSize: 12.5, color: '#555', cursor: 'pointer' }}>
+                                  fontSize: 12.5, color: '#52524d', cursor: 'pointer' }}>
                     <input type="checkbox" checked={addAdmin}
                            onChange={e => setAddAdmin(e.target.checked)} />
                     administra esta obra
@@ -590,24 +590,24 @@ export default function ParticipantesModule({ project, isAdmin }) {
                 <button disabled={!candidatoElegido || incorporando}
                         onClick={incorporar}
                         style={{ padding: '6px 16px', border: '1px solid var(--accent)',
-                                 background: candidatoElegido ? 'var(--accent)' : '#f4f4f5',
-                                 color: candidatoElegido ? '#fff' : '#aaa', borderRadius: 5,
+                                 background: candidatoElegido ? 'var(--accent)' : '#f1f0e8',
+                                 color: candidatoElegido ? '#fff' : '#b0aea5', borderRadius: 5,
                                  fontSize: 13, cursor: candidatoElegido ? 'pointer' : 'default' }}>
                   {incorporando ? 'Incorporando…' : 'Incorporar'}
                 </button>
                 <button onClick={() => { setAddAbierto(false); setCandidatos(null);
                                          setAddPersona(''); setAddEmpresa(''); setAddFuncion(''); setAddAdmin(false); }}
-                        style={{ padding: '6px 12px', border: '1px solid #ddd', background: '#fff',
-                                 color: '#666', borderRadius: 5, fontSize: 13, cursor: 'pointer' }}>
+                        style={{ padding: '6px 12px', border: '1px solid #e8e6dc', background: '#fff',
+                                 color: '#72706b', borderRadius: 5, fontSize: 13, cursor: 'pointer' }}>
                   Cancelar
                 </button>
                 {candidatoElegido && candidatoElegido.pendiente && (
-                  <span style={{ fontSize: 11.5, color: '#b45309' }}>
+                  <span style={{ fontSize: 11.5, color: '#9e5943' }}>
                     Invitación sin activar: verá la obra cuando active su cuenta.
                   </span>
                 )}
                 {candidatoElegido && candidatoElegido.role === 'admin' && (
-                  <span style={{ fontSize: 11.5, color: '#555' }}>
+                  <span style={{ fontSize: 11.5, color: '#52524d' }}>
                     Ya administra toda la entidad. Participar le permite revisar y recibir encargos en esta obra.
                   </span>
                 )}
@@ -618,8 +618,8 @@ export default function ParticipantesModule({ project, isAdmin }) {
       )}
 
       {(sinEmpresa > 0 || empresasNoDeclaradas.length > 0) && (
-        <div role="note" style={{ background: '#fffbeb', border: '1px solid #fde68a',
-                                  color: '#92400e', borderRadius: 6, padding: '9px 12px',
+        <div role="note" style={{ background: '#faf9f5', border: '1px solid #f9eeda',
+                                  color: '#9e5943', borderRadius: 6, padding: '9px 12px',
                                   fontSize: 12, marginBottom: 12, maxWidth: 720 }}>
           {sinEmpresa > 0 && (
             <div>
@@ -639,7 +639,7 @@ export default function ParticipantesModule({ project, isAdmin }) {
       )}
 
       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-        <thead><tr style={{ borderBottom: '2px solid #eee', color: '#888', fontWeight: 500 }}>
+        <thead><tr style={{ borderBottom: '2px solid #f1f0e8', color: '#72706b', fontWeight: 500 }}>
           <th style={{ padding: '9px 12px', textAlign: 'left' }}>Persona</th>
           <th style={{ padding: '9px 12px', textAlign: 'left' }}>Empresa</th>
           <th style={{ padding: '9px 12px', textAlign: 'left' }}>Función contractual</th>
@@ -652,7 +652,7 @@ export default function ParticipantesModule({ project, isAdmin }) {
         </tr></thead>
         <tbody>
           {personas.map(p => (
-            <tr key={p.id} style={{ borderBottom: '1px solid #f0f0f0' }}>
+            <tr key={p.id} style={{ borderBottom: '1px solid #f1f0e8' }}>
               <td style={{ padding: '11px 12px' }}>
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
                   <Iniciales texto={p.name || p.email} />
@@ -661,10 +661,10 @@ export default function ParticipantesModule({ project, isAdmin }) {
                       {p.pendiente && (
                         <span style={{ marginLeft: 7, padding: '1px 7px', borderRadius: 10,
                                        fontSize: 10.5, fontWeight: 600,
-                                       background: '#fff8e6', color: '#b45309' }}>PENDIENTE</span>
+                                       background: '#faf9f5', color: '#9e5943' }}>PENDIENTE</span>
                       )}
                     </div>
-                    <div style={{ fontSize: 11.5, color: '#999' }}>{p.email}</div>
+                    <div style={{ fontSize: 11.5, color: '#72706b' }}>{p.email}</div>
                   </span>
                 </span>
               </td>
@@ -675,13 +675,13 @@ export default function ParticipantesModule({ project, isAdmin }) {
                     disabled={guardando === 'persona:' + p.id}
                     onChange={ev => ponerEmpresaDe(p.id, ev.target.value)}
                     title="La empresa es de la persona: cambiarla afecta a todas las obras"
-                    style={{ padding: '4px 6px', border: '1px solid #ddd',
+                    style={{ padding: '4px 6px', border: '1px solid #e8e6dc',
                              borderRadius: 4, fontSize: 12, minWidth: 150 }}>
                     <option value="">— sin empresa —</option>
                     {catalogo.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                   </select>
                 ) : (
-                  <span style={{ color: p.empresa ? '#444' : '#bbb' }}>
+                  <span style={{ color: p.empresa ? '#333330' : '#cccac0' }}>
                     {p.empresa || 'sin empresa'}
                   </span>
                 )}
@@ -691,7 +691,7 @@ export default function ParticipantesModule({ project, isAdmin }) {
                     empresas de arriba, que es donde vive. */}
                 <ChipFuncion funcion={p.funcion || funcionDe[p.company_id]} />
               </td>
-              <td style={{ padding: '11px 12px', color: '#666' }}>
+              <td style={{ padding: '11px 12px', color: '#72706b' }}>
                 {ETIQUETA_ROL[p.role] || p.role || '—'}
               </td>
               <td style={{ padding: '11px 12px' }}>
@@ -700,13 +700,13 @@ export default function ParticipantesModule({ project, isAdmin }) {
                   // obra también. No hay nada que nombrar ni que retirar aquí,
                   // y fingir un interruptor que no hace nada sería peor.
                   <span title="Administra toda la entidad, no solo esta obra"
-                        style={{ fontSize: 11.5, color: '#8b5cf6', fontWeight: 500 }}>
+                        style={{ fontSize: 11.5, color: '#507294', fontWeight: 500 }}>
                     Administrador de la entidad
                   </span>
                 ) : isAdmin ? (
                   <label style={{ display: 'inline-flex', alignItems: 'center', gap: 7,
                                   cursor: guardando === 'admin:' + p.id ? 'wait' : 'pointer',
-                                  fontSize: 12, color: '#555' }}>
+                                  fontSize: 12, color: '#52524d' }}>
                     <input type="checkbox"
                            checked={!!p.es_admin_de_obra}
                            disabled={guardando === 'admin:' + p.id}
@@ -714,7 +714,7 @@ export default function ParticipantesModule({ project, isAdmin }) {
                     {p.es_admin_de_obra ? 'Sí' : 'No'}
                   </label>
                 ) : (
-                  <span style={{ color: p.es_admin_de_obra ? '#444' : '#bbb' }}>
+                  <span style={{ color: p.es_admin_de_obra ? '#333330' : '#cccac0' }}>
                     {p.es_admin_de_obra ? 'Sí' : '—'}
                   </span>
                 )}
@@ -725,9 +725,9 @@ export default function ParticipantesModule({ project, isAdmin }) {
                       de la administracion: son tres cosas distintas. */}
                   <button onClick={() => setHerramientasDe(p)}
                           title="A qué herramientas entra en esta obra"
-                          style={{ border: '1px solid #ddd', background: '#fff',
+                          style={{ border: '1px solid #e8e6dc', background: '#fff',
                                    borderRadius: 4, padding: '3px 9px', fontSize: 11.5,
-                                   color: '#4d6a8f', cursor: 'pointer', marginRight: 6 }}>
+                                   color: '#507294', cursor: 'pointer', marginRight: 6 }}>
                     Herramientas
                   </button>
                   {/* Todo el que sale en esta lista tiene fila de participación,
@@ -737,7 +737,7 @@ export default function ParticipantesModule({ project, isAdmin }) {
                           disabled={guardando === 'persona:' + p.id}
                           title="Retirar de esta obra (la cuenta y su historia se conservan)"
                           style={{ border: 'none', background: 'none', cursor: 'pointer',
-                                   color: '#c0392b', fontSize: 15 }}>×</button>
+                                   color: '#b93535', fontSize: 15 }}>×</button>
                 </td>
               )}
             </tr>
@@ -751,7 +751,7 @@ export default function ParticipantesModule({ project, isAdmin }) {
       )}
 
       {isAdmin && (
-        <div style={{ fontSize: 11.5, color: '#999', marginTop: 14, maxWidth: 720 }}>
+        <div style={{ fontSize: 11.5, color: '#72706b', marginTop: 14, maxWidth: 720 }}>
           La <b>empresa</b> es una propiedad de la persona: es la misma en todas
           las obras. La <b>función contractual</b> sí es de esta obra. Y ninguna
           de las dos concede permisos — eso es el perfil del sistema.

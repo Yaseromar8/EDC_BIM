@@ -13,16 +13,19 @@ import { confirmAction } from '../utils/confirm';
 import { etiquetaDeVersion } from '../utils/vistaPrevia';
 import DocQuickView from './DocQuickView';
 import useDocPreview from '../hooks/useDocPreview';
+import Button from '../../../design/ui/Button';
+import StatusChip from '../../../design/ui/StatusChip';
+import './ReviewsModule.css';
 import {
   chipDeEstado, papelDelPaso, ESTADO_DEL_PASO, botonAprobar, consecuenciaDeAprobar,
   CONSECUENCIA_DE_RECHAZAR, exitoDe, describirEvento, mensajeDeError, avisoDeOtrasRevisiones,
 } from '../utils/revisiones';
 
 const TONO = {
-  exito: { background: '#dcfce7', color: '#15803d' },
-  peligro: { background: '#fee2e2', color: '#b91c1c' },
-  aviso: { background: '#fff7e0', color: '#b26a00' },
-  neutro: { background: '#f3f4f6', color: '#4b5563' },
+  exito: { background: '#e0e3d7', color: '#64744e' },
+  peligro: { background: '#fbebeb', color: '#b93535' },
+  aviso: { background: '#f9eeda', color: '#734500' },
+  neutro: { background: '#f1f0e8', color: '#52524d' },
 };
 
 const TONO_DEL_PASO = {
@@ -40,13 +43,10 @@ function nombreDe(x) {
   return x.name || x.email || (x.user_id ? `usuario ${x.user_id}` : '—');
 }
 
+// Los chips son StatusChip (UI polish F3): el tono es un nombre y el color lo
+// pone el canon. TONO queda solo para los puntos del historial.
 function Chip({ tono = 'neutro', title, children }) {
-  return (
-    <span title={title} style={{ ...TONO[tono], fontSize: 11, fontWeight: 700, padding: '3px 10px',
-                                 borderRadius: 12, whiteSpace: 'nowrap' }}>
-      {children}
-    </span>
-  );
+  return <StatusChip tono={tono} title={title}>{children}</StatusChip>;
 }
 
 function Seccion({ titulo, children }) {
@@ -106,26 +106,26 @@ function SustituirRevisor({ rev, onCerrar, onHecho }) {
   };
 
   return (
-    <div className="modal-overlay" style={{ position: 'fixed', inset: 0, zIndex: 11000, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={onCerrar}>
-      <div onClick={e => e.stopPropagation()} style={{ width: 460, background: '#fff', borderRadius: 8, boxShadow: '0 10px 40px rgba(0,0,0,0.25)' }}>
-        <div style={{ padding: '14px 20px', borderBottom: '1px solid #eee', fontSize: 15, fontWeight: 600 }}>
+    <div className="modal-overlay" style={{ position: 'fixed', inset: 0, zIndex: 11000, background: 'var(--a-surface-overlay)', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={onCerrar}>
+      <div onClick={e => e.stopPropagation()} style={{ width: 460, background: '#fff', borderRadius: 'var(--a-radius-lg)', border: '1px solid var(--a-border-subtle)', boxShadow: 'var(--a-shadow-lg)' }}>
+        <div style={{ padding: '14px 20px', borderBottom: '1px solid #f1f0e8', fontSize: 15, fontWeight: 600 }}>
           Sustituir al revisor del paso {rev.current_step + 1}
         </div>
         <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14, fontSize: 13 }}>
-          <div style={{ background: '#fff1f2', border: '1px solid #fecdd3', borderRadius: 6, padding: '8px 10px', color: '#9f1239', fontSize: 12 }}>
+          <div style={{ background: '#fbebeb', border: '1px solid #fbebeb', borderRadius: 6, padding: '8px 10px', color: '#993458', fontSize: 12 }}>
             {rev.flujo_motivo || 'La revisión está bloqueada.'}
           </div>
           <div>
-            <label style={{ display: 'block', color: '#666', marginBottom: 6, fontWeight: 600 }}>
+            <label style={{ display: 'block', color: '#72706b', marginBottom: 6, fontWeight: 600 }}>
               Revisor actual
             </label>
-            <div style={{ color: '#555' }}>{paso.name || paso.email || `usuario ${paso.user_id}`}</div>
-            <div style={{ color: '#999', fontSize: 11, marginTop: 2 }}>Se conserva en el historial de la revisión.</div>
+            <div style={{ color: '#52524d' }}>{paso.name || paso.email || `usuario ${paso.user_id}`}</div>
+            <div style={{ color: '#72706b', fontSize: 11, marginTop: 2 }}>Se conserva en el historial de la revisión.</div>
           </div>
           <div>
-            <label style={{ display: 'block', color: '#666', marginBottom: 6, fontWeight: 600 }}>Nuevo revisor</label>
+            <label style={{ display: 'block', color: '#72706b', marginBottom: 6, fontWeight: 600 }}>Nuevo revisor</label>
             <select value={elegido} onChange={e => setElegido(e.target.value)}
-              style={{ width: '100%', padding: '7px 10px', border: '1px solid #ddd', borderRadius: 4, fontSize: 13 }}>
+              style={{ width: '100%', padding: '7px 10px', border: '1px solid #e8e6dc', borderRadius: 4, fontSize: 13 }}>
               <option value="">Elige a un miembro de la obra…</option>
               {users.filter(u => String(u.id) !== String(paso.user_id)).map(u => (
                 <option key={u.id} value={u.id}>{u.name || u.email}</option>
@@ -133,18 +133,17 @@ function SustituirRevisor({ rev, onCerrar, onHecho }) {
             </select>
           </div>
           <div>
-            <label style={{ display: 'block', color: '#666', marginBottom: 6, fontWeight: 600 }}>Motivo</label>
+            <label style={{ display: 'block', color: '#72706b', marginBottom: 6, fontWeight: 600 }}>Motivo</label>
             <textarea value={motivo} onChange={e => setMotivo(e.target.value)} rows={2}
               placeholder="Por ejemplo: dejó la obra el 15 de agosto"
-              style={{ width: '100%', padding: '7px 10px', border: '1px solid #ddd', borderRadius: 4, fontSize: 13, resize: 'vertical' }} />
+              style={{ width: '100%', padding: '7px 10px', border: '1px solid #e8e6dc', borderRadius: 4, fontSize: 13, resize: 'vertical' }} />
           </div>
         </div>
-        <div style={{ padding: '12px 20px', borderTop: '1px solid #eee', display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-          <button onClick={onCerrar} style={{ padding: '7px 14px', background: 'none', border: '1px solid #ddd', borderRadius: 4, fontSize: 13, cursor: 'pointer' }}>Cancelar</button>
-          <button onClick={enviar} disabled={guardando}
-            style={{ padding: '7px 16px', background: '#b91c1c', color: '#fff', border: 'none', borderRadius: 4, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+        <div style={{ padding: '12px 20px', borderTop: '1px solid #f1f0e8', display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+          <Button rango="secondary" onClick={onCerrar}>Cancelar</Button>
+          <Button rango="danger" cargando={guardando} onClick={enviar}>
             {guardando ? 'Sustituyendo…' : 'Sustituir'}
-          </button>
+          </Button>
         </div>
       </div>
     </div>
@@ -238,7 +237,7 @@ export default function RevisionDetalle({ rid, projectPrefix, onVolver, onCambio
 
   const { cargando, rev, error } = carga;
   const volver = (
-    <button type="button" onClick={onVolver} style={S.volver}>← Revisiones</button>
+    <Button rango="ghost" tamano="sm" onClick={onVolver} className="rev-volver">← Revisiones</Button>
   );
 
   if (!rev) {
@@ -283,9 +282,9 @@ export default function RevisionDetalle({ rid, projectPrefix, onVolver, onCambio
           <b>La revisión no puede avanzar.</b> {rev.flujo_motivo}
           {acciones.sustituir && (
             <div style={{ marginTop: 8 }}>
-              <button type="button" onClick={() => setSustituyendo(true)} style={S.botonPeligro}>
+              <Button rango="danger" onClick={() => setSustituyendo(true)}>
                 Sustituir revisor…
-              </button>
+              </Button>
             </div>
           )}
         </div>
@@ -306,19 +305,16 @@ export default function RevisionDetalle({ rid, projectPrefix, onVolver, onCambio
                     style={S.texto} />
           <div style={S.botonera}>
             {aprobar.tipo && (
-              <button type="button" onClick={() => actuar('approve')}
-                      disabled={!aprobar.disponible || enviando}
-                      style={{ ...S.botonPrincipal, opacity: !aprobar.disponible || enviando ? 0.5 : 1,
-                               cursor: !aprobar.disponible || enviando ? 'not-allowed' : 'pointer' }}>
+              <Button rango="primary" onClick={() => actuar('approve')}
+                      disabled={!aprobar.disponible} cargando={enviando}>
                 {enviando ? 'Enviando…' : botonAprobar(aprobar.tipo)}
-              </button>
+              </Button>
             )}
             {rechazar.disponible && (
-              <button type="button" onClick={() => actuar('reject')} disabled={enviando}
-                      title={CONSECUENCIA_DE_RECHAZAR}
-                      style={{ ...S.botonPeligro, opacity: enviando ? 0.5 : 1 }}>
+              <Button rango="danger" onClick={() => actuar('reject')} disabled={enviando}
+                      title={CONSECUENCIA_DE_RECHAZAR}>
                 Rechazar
-              </button>
+              </Button>
             )}
           </div>
         </Seccion>
@@ -339,7 +335,7 @@ export default function RevisionDetalle({ rid, projectPrefix, onVolver, onCambio
                   {it.name} · sin versión válida
                 </span>
               ) : (
-                <button type="button" onClick={() => openDoc(it)} style={S.docBoton}
+                <button type="button" onClick={() => openDoc(it)} className="rev-doc"
                         title="Abrir la versión que se revisa">
                   {it.name}
                 </button>
@@ -425,48 +421,40 @@ export default function RevisionDetalle({ rid, projectPrefix, onVolver, onCambio
 }
 
 const S = {
-  pagina: { padding: 32, flex: 1, overflowY: 'auto', fontSize: 13, color: '#333' },
-  volver: { background: 'none', border: 'none', color: 'var(--accent)', fontSize: 13, fontWeight: 600,
-            cursor: 'pointer', padding: 0, marginBottom: 12 },
+  pagina: { padding: 32, flex: 1, overflowY: 'auto', fontSize: 13, color: '#333330' },
   cabecera: { display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 4 },
-  codigo: { fontSize: 13, color: '#999', fontWeight: 700 },
-  titulo: { margin: 0, fontSize: 20, fontWeight: 600, color: '#222', flex: 1, minWidth: 200 },
-  meta: { fontSize: 12, color: '#888', marginBottom: 16 },
-  leve: { fontSize: 11, color: '#999' },
-  error: { marginTop: 12, padding: '12px 14px', borderRadius: 6, background: '#fff1f2',
-           border: '1px solid #fecdd3', color: '#9f1239' },
-  bloqueo: { marginBottom: 14, padding: '10px 12px', borderRadius: 6, background: '#fff1f2',
-             border: '1px solid #fecdd3', color: '#9f1239', fontSize: 12 },
-  nota: { marginBottom: 14, padding: '8px 12px', borderRadius: 6, background: '#f5f7fa',
-          border: '1px solid #e5e9f0', color: '#555', fontSize: 12 },
-  aviso: { marginBottom: 10, padding: '8px 10px', borderRadius: 6, background: '#fffaf0',
-           border: '1px solid #f0d9a0', color: '#8a5a12', fontSize: 12 },
-  seccion: { background: '#fff', border: '1px solid #e8e8e8', borderRadius: 8, marginBottom: 14 },
-  seccionTitulo: { margin: 0, padding: '10px 16px', fontSize: 13, fontWeight: 700, color: '#374151',
-                   borderBottom: '1px solid #f3f3f3' },
-  consecuencia: { margin: '0 0 10px', fontSize: 12, color: '#555', lineHeight: 1.5 },
-  etiqueta: { display: 'block', color: '#666', marginBottom: 6, fontWeight: 600, fontSize: 12 },
-  texto: { width: '100%', boxSizing: 'border-box', padding: '7px 10px', border: '1px solid #ddd',
+  codigo: { fontSize: 13, color: '#72706b', fontWeight: 700 },
+  titulo: { margin: 0, fontSize: 20, fontWeight: 600, color: '#141413', flex: 1, minWidth: 200 },
+  meta: { fontSize: 12, color: '#72706b', marginBottom: 16 },
+  leve: { fontSize: 11, color: '#72706b' },
+  error: { marginTop: 12, padding: '12px 14px', borderRadius: 6, background: '#fbebeb',
+           border: '1px solid #fbebeb', color: '#993458' },
+  bloqueo: { marginBottom: 14, padding: '10px 12px', borderRadius: 6, background: '#fbebeb',
+             border: '1px solid #fbebeb', color: '#993458', fontSize: 12 },
+  nota: { marginBottom: 14, padding: '8px 12px', borderRadius: 6, background: '#faf9f5',
+          border: '1px solid #f1f0e8', color: '#52524d', fontSize: 12 },
+  aviso: { marginBottom: 10, padding: '8px 10px', borderRadius: 6, background: '#faf9f5',
+           border: '1px solid #f9eeda', color: '#734500', fontSize: 12 },
+  seccion: { background: '#fff', border: '1px solid #e8e6dc', borderRadius: 8, marginBottom: 14 },
+  seccionTitulo: { margin: 0, padding: '10px 16px', fontSize: 13, fontWeight: 700, color: '#333330',
+                   borderBottom: '1px solid #f1f0e8' },
+  consecuencia: { margin: '0 0 10px', fontSize: 12, color: '#52524d', lineHeight: 1.5 },
+  etiqueta: { display: 'block', color: '#72706b', marginBottom: 6, fontWeight: 600, fontSize: 12 },
+  texto: { width: '100%', boxSizing: 'border-box', padding: '7px 10px', border: '1px solid #e8e6dc',
            borderRadius: 4, fontSize: 13, resize: 'vertical' },
   botonera: { display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' },
-  botonPrincipal: { padding: '8px 18px', background: '#16a34a', color: '#fff', border: 'none',
-                    borderRadius: 4, fontSize: 13, fontWeight: 700 },
-  botonPeligro: { padding: '8px 18px', background: '#dc2626', color: '#fff', border: 'none',
-                  borderRadius: 4, fontSize: 13, fontWeight: 700, cursor: 'pointer' },
   lista: { listStyle: 'none', margin: 0, padding: 0 },
   fila: { display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', padding: '5px 0' },
-  docBoton: { background: '#f0f7fc', border: '1px solid #cfe7f5', color: 'var(--accent)',
-              padding: '3px 10px', borderRadius: 12, fontSize: 12, fontWeight: 600, cursor: 'pointer' },
-  docInvalido: { background: '#fff1f2', border: '1px solid #fecdd3', color: '#9f1239',
+  docInvalido: { background: '#fbebeb', border: '1px solid #fbebeb', color: '#993458',
                  padding: '3px 10px', borderRadius: 12, fontSize: 12, fontWeight: 600 },
-  otraRevision: { background: '#fffaf0', border: '1px solid #f0d9a0', color: '#8a5a12',
+  otraRevision: { background: '#faf9f5', border: '1px solid #f9eeda', color: '#734500',
                   padding: '1px 8px', borderRadius: 10, fontSize: 11 },
-  paso: { padding: '6px 0', borderBottom: '1px solid #f5f5f5' },
-  numero: { width: 22, height: 22, borderRadius: '50%', background: '#eef2f7', color: '#1a56a8',
+  paso: { padding: '6px 0', borderBottom: '1px solid #f1f0e8' },
+  numero: { width: 22, height: 22, borderRadius: '50%', background: '#f1f0e8', color: '#507294',
             display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 11,
             fontWeight: 700 },
-  pasoDetalle: { marginLeft: 30, fontSize: 12, color: '#666', display: 'flex', flexDirection: 'column', gap: 2 },
-  evento: { display: 'flex', gap: 10, padding: '6px 0', borderBottom: '1px solid #f7f7f7' },
+  pasoDetalle: { marginLeft: 30, fontSize: 12, color: '#72706b', display: 'flex', flexDirection: 'column', gap: 2 },
+  evento: { display: 'flex', gap: 10, padding: '6px 0', borderBottom: '1px solid #f1f0e8' },
   punto: { width: 10, height: 10, borderRadius: '50%', marginTop: 4, flex: '0 0 auto' },
-  cita: { marginTop: 2, fontSize: 12, color: '#555', fontStyle: 'italic' },
+  cita: { marginTop: 2, fontSize: 12, color: '#52524d', fontStyle: 'italic' },
 };

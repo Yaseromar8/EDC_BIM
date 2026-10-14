@@ -1,0 +1,40 @@
+/* TOOLTIP · uno solo para todo el producto (UI polish F5, 13-oct-2026).
+   Lo monta `tooltips.js`; aqui solo se pinta. Va en la CAPA SUPERIOR del
+   navegador (atributo popover), asi que no compite por z-index con las
+   superposiciones heredadas (10000, 30000...) mientras UX-05 no las migre. */
+
+.a-tip {
+  box-sizing: border-box;
+  /* El navegador da a [popover] margen automatico, borde, relleno y fondo
+     propios: se anulan todos para que lo pinte esta regla y nada mas. */
+  position: fixed;
+  inset: auto;
+  margin: 0;
+  border: 0;
+  overflow: visible;
+  max-width: 280px;
+  padding: var(--a-space-4) var(--a-space-8);
+  border-radius: var(--a-radius-md);
+  background: var(--a-neutral-800);
+  color: var(--a-neutral-0);
+  font-family: var(--a-font-sans);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.4;
+  white-space: pre-line;
+  pointer-events: none;
+  box-shadow: var(--a-shadow-md);
+  z-index: var(--a-layer-tooltip);
+  opacity: 0;
+  transition: opacity var(--a-motion-fast) var(--a-ease);
+}
+
+.a-tip.a-tip--visible { opacity: 1; }
+
+/* Sin popover (navegadores viejos) el tooltip no esta en la capa superior;
+   oculto de verdad para que no tape nada. */
+.a-tip:not(.a-tip--visible):not([popover]) { visibility: hidden; }
+
+@media (prefers-reduced-motion: reduce) {
+  .a-tip { transition: none; }
+}

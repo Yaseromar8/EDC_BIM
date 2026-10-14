@@ -43,7 +43,7 @@ function SelectFolderNode({ folder, defaultExpanded = false, selectedPath, onSel
   return (
     <div style={{ marginLeft: 16 }}>
       <div
-        style={{ display: 'flex', alignItems: 'center', padding: '4px 8px', cursor: 'pointer', background: isSelected ? '#e6f3fa' : 'transparent', color: isSelected ? 'var(--accent)' : '#333', borderRadius: 4 }}
+        style={{ display: 'flex', alignItems: 'center', padding: '4px 8px', cursor: 'pointer', background: isSelected ? '#ecf0f1' : 'transparent', color: isSelected ? 'var(--accent)' : '#333330', borderRadius: 4 }}
         onClick={() => onSelect(folder.fullName, folder.id)}
       >
         <div style={{ width: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', marginRight: 4, cursor: 'pointer' }} onClick={handleToggle}>
@@ -75,14 +75,14 @@ export default function MoveModal({ moveState, setMoveState, projectPrefix, proj
 
   return (
     <div className="modal-overlay" onClick={close}>
-      <div className="acc-modal-box" onClick={e => e.stopPropagation()} style={{ width: 500, borderRadius: 2, padding: 0 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 24px', borderBottom: '1px solid #eee' }}>
-          <h3 style={{ margin: 0, fontSize: 18, fontWeight: 300 }}>
+      <div className="acc-modal-box" onClick={e => e.stopPropagation()} style={{ width: 500, padding: 0 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 24px', borderBottom: '1px solid #f1f0e8' }}>
+          <h3 style={{ margin: 0, fontSize: 18, fontWeight: 400 }}>
             {moveState.items.length > 1
               ? `Mover ${moveState.items.length} elementos a…`
               : 'Mover a…'}
           </h3>
-          <button onClick={close} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: '#999' }}>✕</button>
+          <button onClick={close} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: '#72706b' }}>✕</button>
         </div>
 
         <div style={{ padding: '24px', minHeight: 300 }}>
@@ -92,15 +92,15 @@ export default function MoveModal({ moveState, setMoveState, projectPrefix, proj
               La advertencia NO se pierde -- vive aquí, junto al árbol, que es
               donde significa algo: se lee mientras se elige la carpeta. */}
           <div style={{ display: 'flex', gap: 8, marginBottom: 14, padding: '10px 12px',
-                        background: 'var(--neutral-100, #eef2f7)', borderRadius: 4,
-                        fontSize: 12.5, color: 'var(--text-secondary, #555)', lineHeight: 1.5 }}>
+                        background: 'var(--neutral-100, #f1f0e8)', borderRadius: 4,
+                        fontSize: 12.5, color: 'var(--text-secondary, #52524d)', lineHeight: 1.5 }}>
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ flexShrink: 0, marginTop: 1 }}>
               <circle cx="12" cy="12" r="10" /><path d="M12 16v-4" /><path d="M12 8h.01" />
             </svg>
             <span>Lo que muevas heredará los permisos y los suscriptores de la carpeta de destino. Los suscriptores de la carpeta actual no se conservan.</span>
           </div>
           {(
-            <div className="acc-move-tree-container" style={{ maxHeight: 340, overflowY: 'auto', border: '1px solid #eee', padding: '12px', borderRadius: 2 }}>
+            <div className="acc-move-tree-container" style={{ maxHeight: 340, overflowY: 'auto', border: '1px solid #f1f0e8', padding: '12px', borderRadius: 2 }}>
               <SelectFolderNode 
                 folder={{ name: 'Archivos de proyecto', fullName: projectPrefix, id: projectRootId }} 
                 defaultExpanded={true} 
@@ -112,7 +112,7 @@ export default function MoveModal({ moveState, setMoveState, projectPrefix, proj
           )}
         </div>
 
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, padding: '16px 24px', borderTop: '1px solid #eee', background: '#fafafa' }}>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, padding: '16px 24px', borderTop: '1px solid #f1f0e8', background: '#faf9f5' }}>
           {(
             <div style={{ marginRight: 'auto', display: 'flex', alignItems: 'center', gap: 8, color: 'var(--accent)', fontSize: 12 }}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" strokeWidth="2"/><path d="M12 16v-4m0-4h.01"/></svg>
@@ -135,8 +135,8 @@ export default function MoveModal({ moveState, setMoveState, projectPrefix, proj
             onClick={() => { if (moveState.destPath) onExecuteMove(); }}
             style={{ 
               padding: '8px 24px', 
-              background: !moveState.destPath ? '#eeeeee' : 'var(--accent)', 
-              color: !moveState.destPath ? '#999' : '#fff', 
+              background: !moveState.destPath ? '#f1f0e8' : 'var(--accent)', 
+              color: !moveState.destPath ? '#72706b' : '#fff', 
               border: 'none', borderRadius: 4, fontWeight: 600, 
               cursor: !moveState.destPath ? 'default' : 'pointer' 
             }}

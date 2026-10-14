@@ -122,11 +122,11 @@ export default function PerfilesDeAcceso() {
   }));
 
   return (
-    <div style={{ background: '#fff', border: '1px solid #e5e5e5', borderRadius: 8,
+    <div style={{ background: '#fff', border: '1px solid #e8e6dc', borderRadius: 8,
                   padding: 24, marginBottom: 20 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                     marginBottom: 6 }}>
-        <div style={{ fontSize: 14, fontWeight: 600, color: '#333' }}>
+        <div style={{ fontSize: 14, fontWeight: 600, color: '#333330' }}>
           Perfiles de acceso
         </div>
         <button className="btn btn-primary" style={{ padding: '5px 12px', fontSize: 12.5 }}
@@ -134,7 +134,7 @@ export default function PerfilesDeAcceso() {
           + Nuevo perfil
         </button>
       </div>
-      <p style={{ fontSize: 12.5, color: '#777', margin: '0 0 16px', maxWidth: 720,
+      <p style={{ fontSize: 12.5, color: '#72706b', margin: '0 0 16px', maxWidth: 720,
                   lineHeight: 1.55 }}>
         Configuraciones de acceso reutilizables: «cuando incorpores a alguien así,
         deja esto puesto». <b>No son la función contractual de nadie</b> —eso describe
@@ -145,16 +145,16 @@ export default function PerfilesDeAcceso() {
 
       {error && (
         <div role="alert" style={{ marginBottom: 12, padding: '9px 11px', borderRadius: 6,
-                                   background: '#fef2f2', border: '1px solid #fecaca',
-                                   color: '#991b1b', fontSize: 12.5 }}>
+                                   background: '#fbebeb', border: '1px solid #fbebeb',
+                                   color: '#b93535', fontSize: 12.5 }}>
           {error} <b>La lista está incompleta</b>, no vacía.
         </div>
       )}
 
       {perfiles === null ? (
-        <div style={{ fontSize: 13, color: '#888' }}>Cargando…</div>
+        <div style={{ fontSize: 13, color: '#72706b' }}>Cargando…</div>
       ) : perfiles.length === 0 ? (
-        <div style={{ fontSize: 13, color: '#888', padding: '10px 2px' }}>
+        <div style={{ fontSize: 13, color: '#72706b', padding: '10px 2px' }}>
           Todavía no hay perfiles. Se crean cuando repetir la misma configuración
           a mano empieza a producir resultados distintos.
         </div>
@@ -166,31 +166,31 @@ export default function PerfilesDeAcceso() {
                 <td style={{ padding: '10px 8px' }}>
                   <div style={{ fontWeight: 500 }}>{p.nombre}</div>
                   {p.descripcion && (
-                    <div style={{ fontSize: 11.5, color: '#98a1ab', marginTop: 2 }}>
+                    <div style={{ fontSize: 11.5, color: '#72706b', marginTop: 2 }}>
                       {p.descripcion}
                     </div>
                   )}
-                  <div style={{ fontSize: 11.5, color: '#98a1ab', marginTop: 3 }}>
+                  <div style={{ fontSize: 11.5, color: '#72706b', marginTop: 3 }}>
                     {HERRAMIENTAS.filter(h => p.herramientas?.[h.codigo]).map(h => h.etiqueta).join(' · ')
                       || 'sin herramientas concedidas'}
                   </div>
                 </td>
                 <td style={{ padding: '10px 8px', whiteSpace: 'nowrap', textAlign: 'right' }}>
                   <button onClick={() => verAfectados(p)}
-                          style={{ border: '1px solid #ddd', background: '#fff', borderRadius: 4,
-                                   padding: '3px 9px', fontSize: 11.5, color: '#4d6a8f',
+                          style={{ border: '1px solid #e8e6dc', background: '#fff', borderRadius: 4,
+                                   padding: '3px 9px', fontSize: 11.5, color: '#507294',
                                    cursor: 'pointer', marginRight: 6 }}>
                     {p.miembros_con_este_perfil} lo lleva{p.miembros_con_este_perfil !== 1 ? 'n' : ''}
                   </button>
                   <button onClick={() => setEditando({ ...p })}
-                          style={{ border: '1px solid #ddd', background: '#fff', borderRadius: 4,
-                                   padding: '3px 9px', fontSize: 11.5, color: '#4d6a8f',
+                          style={{ border: '1px solid #e8e6dc', background: '#fff', borderRadius: 4,
+                                   padding: '3px 9px', fontSize: 11.5, color: '#507294',
                                    cursor: 'pointer', marginRight: 6 }}>
                     Editar
                   </button>
                   <button onClick={() => borrar(p)}
                           style={{ border: 'none', background: 'none', cursor: 'pointer',
-                                   color: '#c0392b', fontSize: 15 }} title="Borrar perfil">×</button>
+                                   color: '#b93535', fontSize: 15 }} title="Borrar perfil">×</button>
                 </td>
               </tr>
             ))}
@@ -212,7 +212,7 @@ export default function PerfilesDeAcceso() {
                      style={{ width: '100%', marginBottom: 14 }}
                      value={editando.descripcion || ''}
                      onChange={e => setEditando(p => ({ ...p, descripcion: e.target.value }))} />
-              <div style={{ fontSize: 11.5, fontWeight: 600, color: '#888',
+              <div style={{ fontSize: 11.5, fontWeight: 600, color: '#72706b',
                             letterSpacing: '.04em', marginBottom: 8 }}>
                 HERRAMIENTAS QUE DEJA CONCEDIDAS
               </div>
@@ -227,8 +227,8 @@ export default function PerfilesDeAcceso() {
               ))}
             </div>
             {editando.id > 0 && editando.miembros_con_este_perfil > 0 && (
-              <div role="note" style={{ marginTop: 14, background: '#fffbeb',
-                                        border: '1px solid #fde68a', color: '#92400e',
+              <div role="note" style={{ marginTop: 14, background: '#faf9f5',
+                                        border: '1px solid #f9eeda', color: '#9e5943',
                                         borderRadius: 6, padding: '9px 11px', fontSize: 12,
                                         lineHeight: 1.5 }}>
                 <b>{editando.miembros_con_este_perfil} persona
@@ -253,21 +253,21 @@ export default function PerfilesDeAcceso() {
         <div className="modal-overlay" onClick={() => setAfectados(null)}>
           <div className="modal-box" onClick={e => e.stopPropagation()} style={{ maxWidth: 520 }}>
             <h3 style={{ margin: 0 }}>Quién lleva «{afectados.perfil.nombre}»</h3>
-            <p style={{ fontSize: 12.3, color: '#777', margin: '8px 0 14px', lineHeight: 1.5 }}>
+            <p style={{ fontSize: 12.3, color: '#72706b', margin: '8px 0 14px', lineHeight: 1.5 }}>
               Es la <b>procedencia</b> de su configuración, no una regla viva: lo que
               cada uno puede hacer está escrito en su acceso de cada obra y no
               cambia si editas el perfil.
             </p>
             {afectados.miembros.length === 0 ? (
-              <div style={{ fontSize: 13, color: '#888' }}>Nadie lo lleva puesto todavía.</div>
+              <div style={{ fontSize: 13, color: '#72706b' }}>Nadie lo lleva puesto todavía.</div>
             ) : (
               <table style={{ width: '100%', fontSize: 13, borderCollapse: 'collapse' }}>
                 <tbody>
                   {afectados.miembros.map(m => (
                     <tr key={`${m.project_id}-${m.user_id}`}
-                        style={{ borderBottom: '1px solid #f0f0f0' }}>
+                        style={{ borderBottom: '1px solid #f1f0e8' }}>
                       <td style={{ padding: '8px 4px' }}>{m.nombre || m.email}</td>
-                      <td style={{ padding: '8px 4px', color: '#98a1ab' }}>{m.obra}</td>
+                      <td style={{ padding: '8px 4px', color: '#72706b' }}>{m.obra}</td>
                     </tr>
                   ))}
                 </tbody>

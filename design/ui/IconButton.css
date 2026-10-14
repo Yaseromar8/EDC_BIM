@@ -1,0 +1,47 @@
+/* ICON BUTTON · botones de solo icono (cerrar, mas acciones, quitar...).
+   Hoy se pintan en linea, sin hover ni pulsado, y muchos sin nombre: un
+   lector de pantalla los anuncia como «boton». Aqui el nombre es obligatorio
+   (IconButton.jsx) y los estados son los del resto del sistema. */
+
+.a-icon-btn {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  padding: 0;
+  border: var(--a-border-width-1) solid transparent;
+  border-radius: var(--a-radius-md);
+  background: transparent;
+  color: var(--a-text-secondary);
+  font: inherit;
+  line-height: 1;
+  cursor: pointer;
+  transition: background-color var(--a-motion-fast) var(--a-ease),
+              color var(--a-motion-fast) var(--a-ease);
+}
+
+.a-icon-btn--sm { width: var(--a-size-control-sm); height: var(--a-size-control-sm); }
+.a-icon-btn--md { width: var(--a-size-control-md); height: var(--a-size-control-md); }
+
+.a-icon-btn:hover:not(:disabled) {
+  background: var(--a-state-hover);
+  color: var(--a-text-primary);
+}
+
+.a-icon-btn--peligro:hover:not(:disabled) {
+  background: var(--a-status-danger-surface);
+  color: var(--a-status-danger);
+}
+
+/* Pulsar se nota: el mismo mecanismo que Button. */
+.a-icon-btn:active:not(:disabled) { translate: 0 1px; }
+
+.a-icon-btn:focus-visible { outline: none; box-shadow: var(--a-focus-ring); }
+
+.a-icon-btn:disabled {
+  opacity: var(--a-opacity-disabled);
+  cursor: default;
+}
+
+.a-icon-btn svg { display: block; }

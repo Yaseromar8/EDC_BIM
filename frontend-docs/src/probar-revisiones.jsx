@@ -303,7 +303,7 @@ function AltaDeBanco() {
 
 createRoot(document.getElementById('root')).render(
   <>
-    <div style={{ padding: '6px 32px', background: '#fffbe6', fontSize: 12, borderBottom: '1px solid #f0e2a0' }}>
+    <div style={{ padding: '6px 32px', background: '#faf9f5', fontSize: 12, borderBottom: '1px solid #f9eeda' }}>
       BANCO · viendo como <b>{quien().name}</b> — cambia con <code>__como(1|2|3)</code>
       <AltaDeBanco />
     </div>

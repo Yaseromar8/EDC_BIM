@@ -76,7 +76,7 @@ export default function SelectorDeDocumento({ API, project, titulo, ayuda,
 
   return (
     <div onClick={onCerrar}
-         style={{ position: 'fixed', inset: 0, background: 'rgba(15,20,26,.45)',
+         style={{ position: 'fixed', inset: 0, background: 'rgba(20,20,19,.45)',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   zIndex: 1100 }}>
       <div onClick={e => e.stopPropagation()}
@@ -86,7 +86,7 @@ export default function SelectorDeDocumento({ API, project, titulo, ayuda,
         <h3 style={{ margin: '0 0 4px', fontSize: 16, fontWeight: 650 }}>
           {titulo || 'Elegir documento del expediente'}
         </h3>
-        <p style={{ margin: '0 0 12px', fontSize: 12.5, color: '#78838f', lineHeight: 1.5 }}>
+        <p style={{ margin: '0 0 12px', fontSize: 12.5, color: '#72706b', lineHeight: 1.5 }}>
           {ayuda || 'No se sube nada: se apunta al documento que ya está en el '
                   + 'expediente, y se fija la versión concreta.'}
         </p>
@@ -95,10 +95,10 @@ export default function SelectorDeDocumento({ API, project, titulo, ayuda,
                       fontSize: 12, marginBottom: 10 }}>
           {ruta.map((c, i) => (
             <React.Fragment key={i}>
-              {i > 0 && <span style={{ color: '#c3c9d0' }}>/</span>}
+              {i > 0 && <span style={{ color: '#cccac0' }}>/</span>}
               <button type="button" onClick={() => volverA(i)}
                       style={{ border: 'none', background: 'none', cursor: 'pointer',
-                               color: i === ruta.length - 1 ? '#1f2933' : '#3E6F91',
+                               color: i === ruta.length - 1 ? '#141413' : '#507294',
                                fontWeight: i === ruta.length - 1 ? 600 : 400,
                                padding: '2px 3px', fontSize: 12 }}>
                 {c.name}
@@ -107,31 +107,31 @@ export default function SelectorDeDocumento({ API, project, titulo, ayuda,
           ))}
         </div>
 
-        <div style={{ flex: 1, overflowY: 'auto', border: '1px solid #eceff2',
+        <div style={{ flex: 1, overflowY: 'auto', border: '1px solid #f1f0e8',
                       borderRadius: 7, minHeight: 200 }}>
           {cargando && (
-            <div style={{ padding: 26, textAlign: 'center', color: '#98a1ab', fontSize: 13 }}>
+            <div style={{ padding: 26, textAlign: 'center', color: '#72706b', fontSize: 13 }}>
               Cargando…
             </div>
           )}
           {!cargando && nodos.length === 0 && (
-            <div style={{ padding: 26, textAlign: 'center', color: '#98a1ab', fontSize: 13 }}>
+            <div style={{ padding: 26, textAlign: 'center', color: '#72706b', fontSize: 13 }}>
               Esta carpeta está vacía.
             </div>
           )}
           {!cargando && nodos.map(n => (
             <button key={n.id} type="button" onClick={() => entrar(n)}
                     style={{ width: '100%', textAlign: 'left', border: 'none',
-                             borderBottom: '1px solid #f4f6f8', background: '#fff',
+                             borderBottom: '1px solid #f1f0e8', background: '#fff',
                              padding: '9px 12px', cursor: 'pointer', display: 'flex',
                              alignItems: 'center', gap: 9, fontSize: 13 }}>
               <span style={{ fontSize: 14 }}>{n._carpeta ? '📁' : '📄'}</span>
-              <span style={{ flex: 1, color: '#1f2933', overflow: 'hidden',
+              <span style={{ flex: 1, color: '#141413', overflow: 'hidden',
                              textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {n.name}
               </span>
               {!n._carpeta && n.version_number && (
-                <span style={{ fontSize: 11, color: '#8a9199' }}>v{n.version_number}</span>
+                <span style={{ fontSize: 11, color: '#72706b' }}>v{n.version_number}</span>
               )}
             </button>
           ))}
@@ -139,7 +139,7 @@ export default function SelectorDeDocumento({ API, project, titulo, ayuda,
 
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 12 }}>
           <button type="button" onClick={onCerrar}
-                  style={{ padding: '8px 14px', borderRadius: 6, border: '1px solid #dfe3e8',
+                  style={{ padding: '8px 14px', borderRadius: 6, border: '1px solid #e8e6dc',
                            background: '#fff', fontSize: 13, cursor: 'pointer' }}>
             Cancelar
           </button>

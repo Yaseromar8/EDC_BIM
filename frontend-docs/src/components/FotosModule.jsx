@@ -22,7 +22,7 @@ const NIVELES = [
   ['N2', 'N2 · restringido'],
   ['N3', 'N3 · crítico'],
 ];
-const COLOR_NIVEL = { N0: '#1f6b3a', N1: '#5a6b7d', N2: '#8a5a00', N3: '#8a2020' };
+const COLOR_NIVEL = { N0: '#64744e', N1: '#52524d', N2: '#734500', N3: '#b93535' };
 
 function Miniatura({ API, foto, onAbrir }) {
   const [src, setSrc] = useState(null);
@@ -37,20 +37,20 @@ function Miniatura({ API, foto, onAbrir }) {
   return (
     <div onClick={() => onAbrir(foto)}
          style={{ cursor: 'pointer', borderRadius: 8, overflow: 'hidden',
-                  background: '#eef2f7', position: 'relative', aspectRatio: '4/3' }}>
+                  background: '#f1f0e8', position: 'relative', aspectRatio: '4/3' }}>
       {src
         ? <img src={src} alt={foto.nombre || 'foto'}
                style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
         : <div style={{ display: 'grid', placeItems: 'center', height: '100%',
-                        color: '#9aa7b4', fontSize: 12 }}>cargando…</div>}
+                        color: '#72706b', fontSize: 12 }}>cargando…</div>}
       <span style={{ position: 'absolute', top: 6, left: 6, fontSize: 10, fontWeight: 700,
-                     color: '#fff', background: COLOR_NIVEL[foto.sensibilidad] || '#5a6b7d',
+                     color: '#fff', background: COLOR_NIVEL[foto.sensibilidad] || '#52524d',
                      padding: '1px 6px', borderRadius: 4 }}>
         {foto.sensibilidad}
       </span>
       {(foto.citada_por || []).length > 0 && (
         <span style={{ position: 'absolute', bottom: 6, left: 6, fontSize: 10,
-                       background: 'rgba(22,32,43,.85)', color: '#fff',
+                       background: 'rgba(20,20,19,.85)', color: '#fff',
                        padding: '1px 6px', borderRadius: 4 }}
               title={'Citada por ' + foto.citada_por.join(', ')}>
           {foto.citada_por.join(' · ')}
@@ -58,7 +58,7 @@ function Miniatura({ API, foto, onAbrir }) {
       )}
       {(foto.progresiva || foto.ubicacion) && (
         <span style={{ position: 'absolute', bottom: 6, right: 6, fontSize: 10,
-                       background: 'rgba(255,255,255,.9)', color: '#33475b',
+                       background: 'rgba(255,255,255,.9)', color: '#333330',
                        padding: '1px 6px', borderRadius: 4 }}>
           {foto.progresiva || foto.ubicacion}
         </span>
@@ -129,7 +129,7 @@ function Visor({ API, foto, onCerrar, onCambio }) {
 
   return (
     <div onClick={onCerrar}
-         style={{ position: 'fixed', inset: 0, background: 'rgba(10,14,19,.82)',
+         style={{ position: 'fixed', inset: 0, background: 'rgba(20,20,19,.82)',
                   zIndex: 1200, display: 'flex', alignItems: 'center',
                   justifyContent: 'center', padding: 18 }}>
       <div onClick={e => e.stopPropagation()}
@@ -141,7 +141,7 @@ function Visor({ API, foto, onCerrar, onCambio }) {
             <b>{foto.nombre || 'foto'}</b>
             <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 700,
                            color: COLOR_NIVEL[foto.sensibilidad] }}>{foto.sensibilidad}</span>
-            <div style={{ fontSize: 12, color: '#5a6b7d' }}>
+            <div style={{ fontSize: 12, color: '#52524d' }}>
               {foto.capturado_en
                 ? <>el dispositivo declaró {new Date(foto.capturado_en).toLocaleString('es-PE')}</>
                 : <>subida {foto.subido_en && new Date(foto.subido_en).toLocaleString('es-PE')}</>}
@@ -153,28 +153,28 @@ function Visor({ API, foto, onCerrar, onCambio }) {
           <div style={{ display: 'flex', gap: 8 }}>
             <button onClick={() => setModo(m => m === 'circulo' ? null : 'circulo')}
                     style={{ padding: '5px 10px', borderRadius: 6, fontSize: 12,
-                             border: '1px solid #c8d4e3',
-                             background: modo === 'circulo' ? '#16202b' : '#fff',
-                             color: modo === 'circulo' ? '#fff' : '#16202b' }}>
+                             border: '1px solid #cccac0',
+                             background: modo === 'circulo' ? '#141413' : '#fff',
+                             color: modo === 'circulo' ? '#fff' : '#141413' }}>
               ◯ marcar
             </button>
             <button onClick={() => setModo(m => m === 'texto' ? null : 'texto')}
                     style={{ padding: '5px 10px', borderRadius: 6, fontSize: 12,
-                             border: '1px solid #c8d4e3',
-                             background: modo === 'texto' ? '#16202b' : '#fff',
-                             color: modo === 'texto' ? '#fff' : '#16202b' }}>
+                             border: '1px solid #cccac0',
+                             background: modo === 'texto' ? '#141413' : '#fff',
+                             color: modo === 'texto' ? '#fff' : '#141413' }}>
               T texto
             </button>
             {pendiente.length > 0 && (
               <button onClick={guardarMarca}
                       style={{ padding: '5px 10px', borderRadius: 6, fontSize: 12,
-                               border: 'none', background: '#1f6b3a', color: '#fff' }}>
+                               border: 'none', background: '#64744e', color: '#fff' }}>
                 Guardar marca ({pendiente.length})
               </button>
             )}
             <button onClick={onCerrar}
                     style={{ padding: '5px 10px', borderRadius: 6, fontSize: 12,
-                             border: '1px solid #c8d4e3', background: '#fff' }}>
+                             border: '1px solid #cccac0', background: '#fff' }}>
               Cerrar
             </button>
           </div>
@@ -185,13 +185,13 @@ function Visor({ API, foto, onCerrar, onCambio }) {
                       cursor: modo ? 'crosshair' : 'default' }}>
           {src ? <img src={src} alt="" style={{ width: '100%', display: 'block',
                                                 borderRadius: 6 }} />
-               : <div style={{ padding: 60, textAlign: 'center', color: '#9aa7b4' }}>cargando…</div>}
+               : <div style={{ padding: 60, textAlign: 'center', color: '#72706b' }}>cargando…</div>}
           <svg style={{ position: 'absolute', inset: 0, width: '100%', height: '100%',
                         pointerEvents: 'none' }}>
             {figuras.map((f, i) => {
               const p = f.puntos[0];
-              const color = f.marca.pendiente ? '#b4501a'
-                          : f.marca.publicada ? '#c62828' : '#8a5a00';
+              const color = f.marca.pendiente ? '#9e5943'
+                          : f.marca.publicada ? '#b93535' : '#734500';
               if (f.tipo === 'circulo') {
                 return <circle key={i} cx={`${p.x * 100}%`} cy={`${p.y * 100}%`} r="26"
                                fill="none" stroke={color} strokeWidth="3"
@@ -213,13 +213,13 @@ function Visor({ API, foto, onCerrar, onCambio }) {
           <div style={{ marginTop: 10, display: 'flex', flexWrap: 'wrap', gap: 8 }}>
             {foto.marcas.map(m => (
               <span key={m.id} style={{ fontSize: 11.5, padding: '3px 8px', borderRadius: 6,
-                                        background: m.publicada ? '#fdeeee' : '#fbf1de',
-                                        color: m.publicada ? '#8a2020' : '#8a5a00' }}>
+                                        background: m.publicada ? '#fbebeb' : '#f9eeda',
+                                        color: m.publicada ? '#b93535' : '#734500' }}>
                 {m.publicada ? 'publicada' : 'PRIVADA — solo tú la ves'} · {m.por}
                 {!m.publicada && (
                   <button onClick={() => publicar(m.id)}
                           style={{ marginLeft: 6, fontSize: 11, border: 'none',
-                                   background: 'transparent', color: '#2c5d8a',
+                                   background: 'transparent', color: '#507294',
                                    cursor: 'pointer', textDecoration: 'underline' }}>
                     publicar
                   </button>
@@ -281,17 +281,17 @@ function ModalSubir({ API, urn, user, project, onCerrar, onSubida }) {
     if (enLinea || enCola) { onSubida(); onCerrar(); }
   };
 
-  const CAJA = { border: '1px solid #d5dde6', borderRadius: 6, padding: '7px 9px',
+  const CAJA = { border: '1px solid #e8e6dc', borderRadius: 6, padding: '7px 9px',
                  fontSize: 13, width: '100%' };
   return (
     <div onClick={onCerrar} style={{ position: 'fixed', inset: 0,
-         background: 'rgba(15,20,26,.45)', display: 'flex', alignItems: 'center',
+         background: 'rgba(20,20,19,.45)', display: 'flex', alignItems: 'center',
          justifyContent: 'center', zIndex: 1000 }}>
       <div onClick={e => e.stopPropagation()}
            style={{ background: '#fff', borderRadius: 10, padding: 22, width: 460,
                     maxWidth: '92vw' }}>
         <h3 style={{ margin: '0 0 4px', fontSize: 16 }}>Subir fotos de campo</h3>
-        <p style={{ margin: '0 0 14px', fontSize: 12.5, color: '#78838f' }}>
+        <p style={{ margin: '0 0 14px', fontSize: 12.5, color: '#72706b' }}>
           El GPS del fichero se elimina antes de guardar — la ubicación de obra
           es la progresiva. Sin cobertura, quedan en este dispositivo y suben solas.
         </p>
@@ -312,10 +312,10 @@ function ModalSubir({ API, urn, user, project, onCerrar, onSubida }) {
         </select>
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
           <button onClick={onCerrar} style={{ padding: '7px 14px', borderRadius: 6,
-                  border: '1px solid #d5dde6', background: '#fff' }}>Cancelar</button>
+                  border: '1px solid #e8e6dc', background: '#fff' }}>Cancelar</button>
           <button onClick={subir} disabled={ocupado}
                   style={{ padding: '7px 14px', borderRadius: 6, border: 'none',
-                           background: '#16202b', color: '#fff', fontWeight: 600 }}>
+                           background: '#141413', color: '#fff', fontWeight: 600 }}>
             {ocupado ? 'Guardando…' : 'Subir'}
           </button>
         </div>
@@ -377,7 +377,7 @@ export default function FotosModule({ project, API, user, MultimediaLegacy }) {
                     flexWrap: 'wrap', alignItems: 'center', margin: '10px 0 14px' }}>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <select value={album} onChange={e => setAlbum(e.target.value)}
-                  style={{ border: '1px solid #d5dde6', borderRadius: 6,
+                  style={{ border: '1px solid #e8e6dc', borderRadius: 6,
                            padding: '6px 9px', fontSize: 13 }}>
             <option value="">Todas las fotos</option>
             {albumes.map(a => (
@@ -385,21 +385,21 @@ export default function FotosModule({ project, API, user, MultimediaLegacy }) {
             ))}
           </select>
           <button onClick={crearAlbum} style={{ fontSize: 12.5, padding: '6px 10px',
-                  borderRadius: 6, border: '1px solid #c8d4e3', background: '#fff' }}>
+                  borderRadius: 6, border: '1px solid #cccac0', background: '#fff' }}>
             + Álbum
           </button>
         </div>
         <button onClick={() => setSubiendo(true)}
                 style={{ padding: '8px 14px', borderRadius: 8, border: 'none',
-                         background: '#16202b', color: '#fff', fontWeight: 600 }}>
+                         background: '#141413', color: '#fff', fontWeight: 600 }}>
           Subir fotos
         </button>
       </div>
 
       {fotos === null && <div style={{ padding: 40, textAlign: 'center',
-                                       color: '#9aa7b4' }}>Cargando…</div>}
+                                       color: '#72706b' }}>Cargando…</div>}
       {fotos && fotos.length === 0 && (
-        <div style={{ padding: 40, textAlign: 'center', color: '#5a6b7d' }}>
+        <div style={{ padding: 40, textAlign: 'center', color: '#52524d' }}>
           Todavía no hay fotos{album ? ' en este álbum' : ' en esta obra'}.
         </div>
       )}
@@ -426,8 +426,8 @@ export default function FotosModule({ project, API, user, MultimediaLegacy }) {
 function Pestanas({ pestana, setPestana }) {
   const estilo = (activa) => ({
     padding: '6px 14px', borderRadius: 8, fontSize: 13, cursor: 'pointer',
-    border: '1px solid #c8d4e3',
-    background: activa ? '#16202b' : '#fff', color: activa ? '#fff' : '#16202b',
+    border: '1px solid #cccac0',
+    background: activa ? '#141413' : '#fff', color: activa ? '#fff' : '#141413',
   });
   return (
     <div style={{ display: 'flex', gap: 8 }}>

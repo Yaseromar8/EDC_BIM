@@ -32,21 +32,21 @@ import * as campo from '../offline/captura';
 import { confirmAction } from '../utils/confirm';
 
 const COLOR_ESTADO = {
-  'Abierto':    { fondo: '#fdecec', texto: '#a12f2f' },
-  'Corregido':  { fondo: '#fff4e0', texto: '#8a5a12' },
-  'Verificado': { fondo: '#e8f5ec', texto: '#1e6b3a' },
-  'Reabierto':  { fondo: '#fdecec', texto: '#8c1d1d' },
-  'Anulado':    { fondo: '#f3f4f6', texto: '#8a9199' },
+  'Abierto':    { fondo: '#fbebeb', texto: '#b93535' },
+  'Corregido':  { fondo: '#f9eeda', texto: '#734500' },
+  'Verificado': { fondo: '#e0e3d7', texto: '#64744e' },
+  'Reabierto':  { fondo: '#fbebeb', texto: '#b93535' },
+  'Anulado':    { fondo: '#f1f0e8', texto: '#72706b' },
 };
 
 const COLOR_TIPO = {
-  PUNCH:          { fondo: '#eef2f7', texto: '#2c5d8a' },
-  NO_CONFORMIDAD: { fondo: '#fdecec', texto: '#a12f2f' },
-  CALIDAD:        { fondo: '#f2eefa', texto: '#5b4a8a' },
-  SEGURIDAD:      { fondo: '#fff1e6', texto: '#9a4a12' },
+  PUNCH:          { fondo: '#f1f0e8', texto: '#507294' },
+  NO_CONFORMIDAD: { fondo: '#fbebeb', texto: '#b93535' },
+  CALIDAD:        { fondo: '#ecf0f1', texto: '#507294' },
+  SEGURIDAD:      { fondo: '#f7ece5', texto: '#9e5943' },
 };
 
-const CAJA = { border: '1px solid #dfe3e8', borderRadius: 6, boxSizing: 'border-box' };
+const CAJA = { border: '1px solid #e8e6dc', borderRadius: 6, boxSizing: 'border-box' };
 
 // El historial se guarda con los nombres del motor (`flujo_de_registro.entrada`),
 // que son los mismos para todos los registros del producto. Traducirlos AL LEER
@@ -62,7 +62,7 @@ const EVENTO = {
 };
 
 function Chip({ mapa, valor, texto }) {
-  const c = mapa[valor] || { fondo: '#f3f4f6', texto: '#6b7280' };
+  const c = mapa[valor] || { fondo: '#f1f0e8', texto: '#72706b' };
   return (
     <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 10,
                    background: c.fondo, color: c.texto, whiteSpace: 'nowrap' }}>
@@ -79,10 +79,10 @@ function Papel({ rotulo, uid, nombres, esElTurno, ausenteGrave }) {
   return (
     <div style={{ minWidth: 0 }}>
       <div style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '.05em',
-                    color: esElTurno ? '#a12f2f' : '#9aa3ad' }}>
+                    color: esElTurno ? '#b93535' : '#b0aea5' }}>
         {rotulo}{esElTurno ? ' · LE TOCA' : ''}
       </div>
-      <div style={{ fontSize: 12, color: nombre ? '#1f2933' : (ausenteGrave ? '#a12f2f' : '#98a1ab'),
+      <div style={{ fontSize: 12, color: nombre ? '#141413' : (ausenteGrave ? '#b93535' : '#b0aea5'),
                     fontWeight: esElTurno ? 650 : 400, whiteSpace: 'nowrap',
                     overflow: 'hidden', textOverflow: 'ellipsis' }}>
         {nombre || 'sin designar'}
@@ -200,16 +200,16 @@ export default function PunchModule({ project, API, user, isAdmin }) {
   return (
     <div style={{ padding: '18px 22px', height: '100%', overflowY: 'auto' }}>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
-        <h2 style={{ margin: 0, fontSize: 19, fontWeight: 650, color: '#1f2933' }}>
+        <h2 style={{ margin: 0, fontSize: 19, fontWeight: 650, color: '#141413' }}>
           Issues y punch
         </h2>
-        <span style={{ fontSize: 12.5, color: '#78838f' }}>
+        <span style={{ fontSize: 12.5, color: '#72706b' }}>
           Un defecto se cierra cuando <b>otro</b> verifica que se corrigió.
         </span>
         <div style={{ flex: 1 }} />
         <button type="button" onClick={() => setCreando(true)}
                 style={{ padding: '8px 15px', borderRadius: 6, border: 'none',
-                         background: 'var(--accent, #3E6F91)', color: '#fff',
+                         background: 'var(--accent, #507294)', color: '#fff',
                          fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
           Levantar issue
         </button>
@@ -221,21 +221,21 @@ export default function PunchModule({ project, API, user, isAdmin }) {
           <button key={e} type="button"
                   onClick={() => setFiltro(f => ({ ...f, estado: f.estado === e ? '' : e }))}
                   style={{ ...CAJA, padding: '6px 12px', cursor: 'pointer',
-                           background: filtro.estado === e ? '#eef2f7' : '#fff',
-                           borderColor: filtro.estado === e ? '#3E6F91' : '#dfe3e8' }}>
+                           background: filtro.estado === e ? '#f1f0e8' : '#fff',
+                           borderColor: filtro.estado === e ? '#507294' : '#e8e6dc' }}>
             <span style={{ fontSize: 16, fontWeight: 700,
-                           color: (COLOR_ESTADO[e] || {}).texto || '#1f2933' }}>
+                           color: (COLOR_ESTADO[e] || {}).texto || '#141413' }}>
               {totalPor(e)}
             </span>
-            <span style={{ fontSize: 11.5, color: '#78838f', marginLeft: 6 }}>{e}</span>
+            <span style={{ fontSize: 11.5, color: '#72706b', marginLeft: 6 }}>{e}</span>
           </button>
         ))}
         <button type="button" onClick={() => setFiltro(f => ({ ...f, mios: !f.mios }))}
                 style={{ ...CAJA, padding: '6px 12px', cursor: 'pointer',
-                         background: filtro.mios ? '#fff4e0' : '#fff',
-                         borderColor: filtro.mios ? '#c98a2a' : '#dfe3e8' }}>
-          <span style={{ fontSize: 16, fontWeight: 700, color: '#8a5a12' }}>{meToca}</span>
-          <span style={{ fontSize: 11.5, color: '#78838f', marginLeft: 6 }}>me toca a mí</span>
+                         background: filtro.mios ? '#f9eeda' : '#fff',
+                         borderColor: filtro.mios ? '#734500' : '#e8e6dc' }}>
+          <span style={{ fontSize: 16, fontWeight: 700, color: '#734500' }}>{meToca}</span>
+          <span style={{ fontSize: 11.5, color: '#72706b', marginLeft: 6 }}>me toca a mí</span>
         </button>
         <select value={filtro.tipo} onChange={e => setFiltro(f => ({ ...f, tipo: e.target.value }))}
                 style={{ ...CAJA, height: 34, padding: '0 8px', fontSize: 12.5, background: '#fff' }}>
@@ -247,9 +247,9 @@ export default function PunchModule({ project, API, user, isAdmin }) {
       </div>
 
       {sinVerificador > 0 && (
-        <div style={{ ...CAJA, borderColor: '#f0c9a0', background: '#fff8f0',
+        <div style={{ ...CAJA, borderColor: '#f7ece5', background: '#f7ece5',
                       padding: '9px 13px', marginBottom: 12, fontSize: 12.5,
-                      color: '#8a5a12' }}>
+                      color: '#734500' }}>
           <b>{sinVerificador}</b> issue(s) corregidos sin verificador designado: nadie
           tiene la pelota. Hasta que se les asigne uno, solo un administrador de la
           obra puede cerrarlos.
@@ -257,20 +257,20 @@ export default function PunchModule({ project, API, user, isAdmin }) {
       )}
 
       {error && (
-        <div style={{ ...CAJA, borderColor: '#f5c9c9', background: '#fdecec',
+        <div style={{ ...CAJA, borderColor: '#fbebeb', background: '#fbebeb',
                       padding: '9px 13px', marginBottom: 12, fontSize: 12.5,
-                      color: '#a12f2f' }}>{error}</div>
+                      color: '#b93535' }}>{error}</div>
       )}
 
       {issues === null && (
-        <div style={{ padding: 30, textAlign: 'center', color: '#98a1ab', fontSize: 13 }}>
+        <div style={{ padding: 30, textAlign: 'center', color: '#72706b', fontSize: 13 }}>
           Cargando…
         </div>
       )}
 
       {issues !== null && visibles.length === 0 && (
-        <div style={{ padding: '26px 20px', textAlign: 'center', color: '#98a1ab',
-                      fontSize: 13, border: '1px dashed #dfe3e8', borderRadius: 8 }}>
+        <div style={{ padding: '26px 20px', textAlign: 'center', color: '#72706b',
+                      fontSize: 13, border: '1px dashed #e8e6dc', borderRadius: 8 }}>
           {filtro.mios ? 'No tienes ningún issue esperándote.' : 'Sin issues con este filtro.'}
         </div>
       )}
@@ -303,29 +303,29 @@ function FilaIssue({ d, nombres, yo, onAbrir, abierta }) {
   return (
     <div onClick={onAbrir}
          style={{ ...CAJA, background: '#fff', padding: '11px 14px', cursor: 'pointer',
-                  borderColor: abierta ? '#3E6F91' : (esMio ? '#e6c79a' : '#e5e8eb'),
-                  borderLeft: esMio ? '3px solid #c98a2a' : undefined }}>
+                  borderColor: abierta ? '#507294' : (esMio ? '#f9eeda' : '#e8e6dc'),
+                  borderLeft: esMio ? '3px solid #734500' : undefined }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
         <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: 12.5,
-                       fontWeight: 700, color: '#3E6F91' }}>{d.codigo}</span>
+                       fontWeight: 700, color: '#507294' }}>{d.codigo}</span>
         <Chip mapa={COLOR_TIPO} valor={d.tipo} texto={d.tipo_etiqueta} />
-        <span style={{ fontSize: 13.5, color: '#1f2933', flex: 1, minWidth: 160 }}>
+        <span style={{ fontSize: 13.5, color: '#141413', flex: 1, minWidth: 160 }}>
           {d.titulo}
         </span>
         {d.autoverificacion && (
           <span title={d.autoverificacion_motivo || ''}
                 style={{ fontSize: 10.5, fontWeight: 700, padding: '2px 7px', borderRadius: 10,
-                         background: '#f2eefa', color: '#5b4a8a' }}>
+                         background: '#ecf0f1', color: '#507294' }}>
             AUTOVERIFICACIÓN AUTORIZADA
           </span>
         )}
         <Chip mapa={COLOR_ESTADO} valor={d.estado} />
       </div>
-      <div style={{ marginTop: 9, paddingTop: 9, borderTop: '1px solid #f1f3f5' }}>
+      <div style={{ marginTop: 9, paddingTop: 9, borderTop: '1px solid #f1f0e8' }}>
         <Identidades d={d} nombres={nombres} />
       </div>
       {(d.ubicacion || d.progresiva || d.origen_tipo) && (
-        <div style={{ marginTop: 7, fontSize: 11.5, color: '#8a9199' }}>
+        <div style={{ marginTop: 7, fontSize: 11.5, color: '#72706b' }}>
           {[d.ubicacion, d.progresiva].filter(Boolean).join(' · ')}
           {d.origen_tipo && (
             <span style={{ marginLeft: 8 }}>
@@ -390,7 +390,7 @@ function PanelIssue({ d, API, user, isAdmin, nombres, onCerrar, onCambio }) {
 
   return (
     <div onClick={onCerrar}
-         style={{ position: 'fixed', inset: 0, background: 'rgba(15,20,26,.45)',
+         style={{ position: 'fixed', inset: 0, background: 'rgba(20,20,19,.45)',
                   display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
       <div onClick={e => e.stopPropagation()}
            style={{ background: '#fff', borderRadius: 10, padding: 24, width: 640,
@@ -398,25 +398,25 @@ function PanelIssue({ d, API, user, isAdmin, nombres, onCerrar, onCambio }) {
                     boxShadow: '0 12px 40px rgba(0,0,0,.22)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
           <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: 13,
-                         fontWeight: 700, color: '#3E6F91' }}>{d.codigo}</span>
+                         fontWeight: 700, color: '#507294' }}>{d.codigo}</span>
           <Chip mapa={COLOR_TIPO} valor={d.tipo} texto={d.tipo_etiqueta} />
           <Chip mapa={COLOR_ESTADO} valor={d.estado} />
           <div style={{ flex: 1 }} />
           <button type="button" onClick={onCerrar}
                   style={{ border: 'none', background: 'none', fontSize: 20,
-                           color: '#98a1ab', cursor: 'pointer', lineHeight: 1 }}>×</button>
+                           color: '#72706b', cursor: 'pointer', lineHeight: 1 }}>×</button>
         </div>
         <h3 style={{ margin: '10px 0 4px', fontSize: 16.5, fontWeight: 650 }}>{d.titulo}</h3>
         {d.descripcion && (
-          <p style={{ margin: '0 0 12px', fontSize: 13, color: '#5f6b76', lineHeight: 1.55 }}>
+          <p style={{ margin: '0 0 12px', fontSize: 13, color: '#52524d', lineHeight: 1.55 }}>
             {d.descripcion}
           </p>
         )}
 
-        <div style={{ ...CAJA, padding: '11px 13px', background: '#fafbfc', margin: '12px 0' }}>
+        <div style={{ ...CAJA, padding: '11px 13px', background: '#faf9f5', margin: '12px 0' }}>
           <Identidades d={d} nombres={nombres} />
           {d.verificado_por && d.verificado_por !== d.verificador_id && (
-            <div style={{ marginTop: 9, fontSize: 11.5, color: '#8a5a12' }}>
+            <div style={{ marginTop: 9, fontSize: 11.5, color: '#734500' }}>
               Lo verificó <b>{nombres[d.verificado_por] || d.verificado_por}</b>, que no
               era el verificador designado. Quedan registradas las dos cosas.
             </div>
@@ -424,9 +424,9 @@ function PanelIssue({ d, API, user, isAdmin, nombres, onCerrar, onCambio }) {
         </div>
 
         {d.autoverificacion && (
-          <div style={{ ...CAJA, borderColor: '#ddd0f0', background: '#f7f4fd',
+          <div style={{ ...CAJA, borderColor: '#c8d8e7', background: '#ecf0f1',
                         padding: '9px 13px', marginBottom: 12, fontSize: 12.5,
-                        color: '#5b4a8a' }}>
+                        color: '#507294' }}>
             <b>Autoverificación autorizada.</b> Quien corrige puede cerrar este issue.
             {d.autoverificacion_motivo && <> Motivo: «{d.autoverificacion_motivo}»</>}
           </div>
@@ -434,13 +434,13 @@ function PanelIssue({ d, API, user, isAdmin, nombres, onCerrar, onCambio }) {
 
         {(d.evidencia_correccion || []).length > 0 && (
           <div style={{ marginBottom: 12 }}>
-            <div style={{ fontSize: 10.5, fontWeight: 700, color: '#8a9199',
+            <div style={{ fontSize: 10.5, fontWeight: 700, color: '#72706b',
                           letterSpacing: '.05em', marginBottom: 5 }}>
               EVIDENCIA DE LA CORRECCIÓN
             </div>
             {d.evidencia_correccion.map((e, n) => (
-              <div key={n} style={{ fontSize: 12, color: '#5f6b76' }}>
-                · {e.nombre || 'evidencia'} <span style={{ color: '#98a1ab' }}>— {e.por}</span>
+              <div key={n} style={{ fontSize: 12, color: '#52524d' }}>
+                · {e.nombre || 'evidencia'} <span style={{ color: '#72706b' }}>— {e.por}</span>
               </div>
             ))}
           </div>
@@ -452,17 +452,17 @@ function PanelIssue({ d, API, user, isAdmin, nombres, onCerrar, onCambio }) {
             <div style={{ fontSize: 12.5, fontWeight: 650, marginBottom: 7 }}>
               Declarar corregido
             </div>
-            <p style={{ margin: '0 0 8px', fontSize: 12, color: '#78838f', lineHeight: 1.5 }}>
+            <p style={{ margin: '0 0 8px', fontSize: 12, color: '#72706b', lineHeight: 1.5 }}>
               Exige evidencia: sin ella, quien verifica tiene que volver a la obra —
               y cuando ya se ha construido encima, a veces no se puede.
             </p>
-            <div style={{ fontSize: 12, color: evidencias.length ? '#1e6b3a' : '#a12f2f',
+            <div style={{ fontSize: 12, color: evidencias.length ? '#64744e' : '#b93535',
                           marginBottom: 8 }}>
               {evidencias.length ? `✓ ${evidencias.length} evidencia(s)` : '✕ Sin evidencia'}
               <button type="button"
                       onClick={() => setEvidencias(a => [...a, { nombre: `correccion-${a.length + 1}.jpg` }])}
                       style={{ marginLeft: 8, padding: '2px 9px', fontSize: 11.5,
-                               borderRadius: 4, border: '1px solid #cfd6dd',
+                               borderRadius: 4, border: '1px solid #cccac0',
                                background: '#fff', cursor: 'pointer' }}>
                 Adjuntar
               </button>
@@ -476,7 +476,7 @@ function PanelIssue({ d, API, user, isAdmin, nombres, onCerrar, onCambio }) {
                                           { evidencia: evidencias, comentario: texto.trim() },
                                           'Corregido: la pelota pasa a quien verifica')}
                     style={{ padding: '8px 15px', borderRadius: 6, border: 'none',
-                             background: evidencias.length ? 'var(--accent, #3E6F91)' : '#cfd6dd',
+                             background: evidencias.length ? 'var(--accent, #507294)' : '#cccac0',
                              color: '#fff', fontSize: 13, fontWeight: 600,
                              cursor: evidencias.length ? 'pointer' : 'not-allowed' }}>
               {ocupado ? 'Guardando…' : 'Declarar corregido'}
@@ -496,14 +496,14 @@ function PanelIssue({ d, API, user, isAdmin, nombres, onCerrar, onCambio }) {
             <div style={{ display: 'flex', gap: 8 }}>
               <button type="button" disabled={ocupado} onClick={() => verificar(true)}
                       style={{ padding: '8px 15px', borderRadius: 6, border: 'none',
-                               background: '#1e6b3a', color: '#fff', fontSize: 13,
+                               background: '#64744e', color: '#fff', fontSize: 13,
                                fontWeight: 600, cursor: 'pointer' }}>
                 Verificar y cerrar
               </button>
               <button type="button" disabled={ocupado} onClick={() => verificar(false)}
                       style={{ padding: '8px 15px', borderRadius: 6,
-                               border: '1px solid #f0b8b8', background: '#fff',
-                               color: '#a12f2f', fontSize: 13, fontWeight: 600,
+                               border: '1px solid #fbebeb', background: '#fff',
+                               color: '#b93535', fontSize: 13, fontWeight: 600,
                                cursor: 'pointer' }}>
                 Rechazar y reabrir
               </button>
@@ -515,7 +515,7 @@ function PanelIssue({ d, API, user, isAdmin, nombres, onCerrar, onCambio }) {
             botón ausente sin explicación se lee como un fallo de la pantalla. */}
         {d.estado === 'Corregido' && !puedeVerificar && (
           <div style={{ ...CAJA, padding: '10px 13px', marginBottom: 10, fontSize: 12.5,
-                        color: '#78838f', background: '#fafbfc' }}>
+                        color: '#72706b', background: '#faf9f5' }}>
             {soyResponsable
               ? 'Corregiste tú: quien corrige no verifica su propia corrección. '
                 + 'Un administrador de la obra puede autorizar la autoverificación, y quedará escrita.'
@@ -528,12 +528,12 @@ function PanelIssue({ d, API, user, isAdmin, nombres, onCerrar, onCambio }) {
 
         {isAdmin && d.estado === 'Corregido' && !d.autoverificacion
           && d.responsable_id && !d.verificador_id && (
-          <div style={{ ...CAJA, padding: 13, marginBottom: 10, borderColor: '#ddd0f0',
-                        background: '#faf8fe' }}>
+          <div style={{ ...CAJA, padding: 13, marginBottom: 10, borderColor: '#c8d8e7',
+                        background: '#faf9f5' }}>
             <div style={{ fontSize: 12.5, fontWeight: 650, marginBottom: 5 }}>
               Autorizar autoverificación
             </div>
-            <p style={{ margin: '0 0 8px', fontSize: 12, color: '#78838f', lineHeight: 1.5 }}>
+            <p style={{ margin: '0 0 8px', fontSize: 12, color: '#72706b', lineHeight: 1.5 }}>
               Excepción: permite que <b>quien corrigió</b> cierre este issue. Exige motivo
               escrito y queda en el historial. Una excepción que se puede leer es gobierno;
               una que se concede en silencio es un agujero.
@@ -546,7 +546,7 @@ function PanelIssue({ d, API, user, isAdmin, nombres, onCerrar, onCambio }) {
                     onClick={() => llamar('autoverificacion', { motivo: texto.trim() },
                                           'Autoverificación autorizada')}
                     style={{ padding: '7px 14px', borderRadius: 6, border: 'none',
-                             background: texto.trim() ? '#5b4a8a' : '#cfd6dd', color: '#fff',
+                             background: texto.trim() ? '#507294' : '#cccac0', color: '#fff',
                              fontSize: 12.5, fontWeight: 600,
                              cursor: texto.trim() ? 'pointer' : 'not-allowed' }}>
               Autorizar
@@ -555,22 +555,22 @@ function PanelIssue({ d, API, user, isAdmin, nombres, onCerrar, onCambio }) {
         )}
 
         {/* ── EL HISTORIAL: quién hizo cada acto ────────────────────────── */}
-        <div style={{ fontSize: 10.5, fontWeight: 700, color: '#8a9199',
+        <div style={{ fontSize: 10.5, fontWeight: 700, color: '#72706b',
                       letterSpacing: '.05em', margin: '14px 0 6px' }}>
           HISTORIAL
         </div>
-        <div style={{ borderLeft: '2px solid #eceff2', paddingLeft: 11 }}>
+        <div style={{ borderLeft: '2px solid #f1f0e8', paddingLeft: 11 }}>
           {(d.history || []).map((h, n) => (
             <div key={n} style={{ marginBottom: 7, fontSize: 12 }}>
-              <b style={{ color: '#1f2933' }}>{EVENTO[h.event] || h.event}</b>
-              <span style={{ color: '#78838f' }}> — {h.by}</span>
+              <b style={{ color: '#141413' }}>{EVENTO[h.event] || h.event}</b>
+              <span style={{ color: '#72706b' }}> — {h.by}</span>
               {h.at && (
-                <span style={{ color: '#98a1ab' }}>
+                <span style={{ color: '#72706b' }}>
                   {' · '}{String(h.at).slice(0, 16).replace('T', ' ')}
                 </span>
               )}
               {(h.motivo || h.comentario) && (
-                <div style={{ color: '#5f6b76', marginTop: 2 }}>«{h.motivo || h.comentario}»</div>
+                <div style={{ color: '#52524d', marginTop: 2 }}>«{h.motivo || h.comentario}»</div>
               )}
             </div>
           ))}
@@ -680,14 +680,14 @@ function ModalLevantar({ API, urn, catalogo, miembros, planos, yo,
 
   return (
     <div onClick={onCerrar}
-         style={{ position: 'fixed', inset: 0, background: 'rgba(15,20,26,.45)',
+         style={{ position: 'fixed', inset: 0, background: 'rgba(20,20,19,.45)',
                   display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
       <div onClick={e => e.stopPropagation()}
            style={{ background: '#fff', borderRadius: 10, padding: 24, width: 560,
                     maxWidth: '94vw', maxHeight: '90vh', overflowY: 'auto',
                     boxShadow: '0 12px 40px rgba(0,0,0,.22)' }}>
         <h3 style={{ margin: '0 0 4px', fontSize: 16, fontWeight: 650 }}>Levantar issue</h3>
-        <p style={{ margin: '0 0 16px', fontSize: 12.5, color: '#78838f', lineHeight: 1.5 }}>
+        <p style={{ margin: '0 0 16px', fontSize: 12.5, color: '#72706b', lineHeight: 1.5 }}>
           Tú quedas como <b>quien lo detectó</b>. Eso no se elige y no te convierte en
           quien lo cierra: el cierre lo aprueba el verificador designado.
         </p>
@@ -714,28 +714,28 @@ function ModalLevantar({ API, urn, catalogo, miembros, planos, yo,
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10,
                       marginBottom: 4 }}>
           <div>
-            <label style={{ fontSize: 10.5, fontWeight: 700, color: '#8a9199',
+            <label style={{ fontSize: 10.5, fontWeight: 700, color: '#72706b',
                             letterSpacing: '.05em' }}>
               CORRIGE{tipo.exige_responsable ? ' *' : ''}
             </label>
             {selPersona('responsable_id', f.verificador_id)}
           </div>
           <div>
-            <label style={{ fontSize: 10.5, fontWeight: 700, color: '#8a9199',
+            <label style={{ fontSize: 10.5, fontWeight: 700, color: '#72706b',
                             letterSpacing: '.05em' }}>
               VERIFICA{tipo.exige_verificador ? ' *' : ''}
             </label>
             {selPersona('verificador_id', f.responsable_id)}
           </div>
         </div>
-        <p style={{ margin: '6px 0 14px', fontSize: 11.5, color: '#8a9199', lineHeight: 1.5 }}>
+        <p style={{ margin: '6px 0 14px', fontSize: 11.5, color: '#72706b', lineHeight: 1.5 }}>
           Tienen que ser personas distintas. Si se deja sin designar quien verifica,
           al corregirse el issue no habrá a quién pasarle la pelota.
         </p>
 
         {tipo.exige_ubicacion && (
           <div style={{ marginBottom: 12 }}>
-            <label style={{ fontSize: 10.5, fontWeight: 700, color: '#8a9199',
+            <label style={{ fontSize: 10.5, fontWeight: 700, color: '#72706b',
                             letterSpacing: '.05em' }}>LÁMINA *</label>
             <select value={f.revision_id}
                     onChange={e => setF(p => ({ ...p, revision_id: e.target.value }))}
@@ -749,7 +749,7 @@ function ModalLevantar({ API, urn, catalogo, miembros, planos, yo,
               ))}
             </select>
             {conVigente.length === 0 && (
-              <div style={{ fontSize: 11.5, color: '#a12f2f', marginTop: 5 }}>
+              <div style={{ fontSize: 11.5, color: '#b93535', marginTop: 5 }}>
                 No hay planos con revisión vigente en esta obra: un punch no puede
                 levantarse sin decir dónde.
               </div>
@@ -775,7 +775,7 @@ function ModalLevantar({ API, urn, catalogo, miembros, planos, yo,
                            fontSize: 13, cursor: 'pointer' }}>Cancelar</button>
           <button type="button" onClick={crear} disabled={guardando}
                   style={{ padding: '8px 16px', borderRadius: 6, border: 'none',
-                           background: 'var(--accent, #3E6F91)', color: '#fff', fontSize: 13,
+                           background: 'var(--accent, #507294)', color: '#fff', fontSize: 13,
                            fontWeight: 600, cursor: guardando ? 'wait' : 'pointer' }}>
             {guardando ? 'Levantando…' : 'Levantar'}
           </button>

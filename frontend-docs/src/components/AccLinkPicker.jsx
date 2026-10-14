@@ -3,11 +3,11 @@ import { apiJson } from '../utils/apiFetch';
 import { accPreviewKey, accReadOnlyPath, makeAccPreviewLink,
   removeAccPreview, saveAccPreview } from '../utils/accPreviewLocal';
 
-const panel = { background: '#fff', color: '#172334', borderRadius: 8, width: 680,
+const panel = { background: '#fff', color: '#141413', borderRadius: 8, width: 680,
   maxWidth: '96vw', maxHeight: '90vh', display: 'flex', flexDirection: 'column',
   boxShadow: '0 20px 65px #0005' };
 const row = { display: 'block', width: '100%', textAlign: 'left', padding: '9px 12px',
-  background: '#fff', color: '#172334', border: 0, borderBottom: '1px solid #e8edf2',
+  background: '#fff', color: '#141413', border: 0, borderBottom: '1px solid #f1f0e8',
   cursor: 'pointer', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' };
 const label = entry => entry?.attributes?.displayName || entry?.attributes?.name || entry?.id || 'Sin nombre';
 
@@ -156,19 +156,19 @@ export default function AccLinkPicker({ API, file, docsVersionId, docsGcsUrn,
     <div role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) onClose(); }}
       style={{ position: 'fixed', inset: 0, zIndex: 11000, background: '#0f172acc', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <div role="dialog" aria-modal="true" aria-label="Vincular archivo de Autodesk Docs" style={panel}>
-        <div style={{ padding: '16px 20px', borderBottom: '1px solid #e8edf2', display: 'flex', justifyContent: 'space-between' }}>
+        <div style={{ padding: '16px 20px', borderBottom: '1px solid #f1f0e8', display: 'flex', justifyContent: 'space-between' }}>
           <strong>Vincular vista de Autodesk Docs</strong>
           <button type="button" onClick={onClose} aria-label="Cerrar">✕</button>
         </div>
         <div style={{ padding: '12px 20px', fontSize: 13, lineHeight: 1.5 }}>
           Documento: <strong>{file.name}</strong>. Elige el mismo archivo ya preparado en ACC y su versión.
           El original de ALEPHIA Docs permanecerá en su carpeta y se podrá descargar.
-          {previewOnly && <p style={{ margin: '8px 0 0', color: '#8a5214' }}>
+          {previewOnly && <p style={{ margin: '8px 0 0', color: '#9e5943' }}>
             Ensayo local: esta vista se guarda sólo en esta pestaña. No modifica Docs ni ACC y no será visible para otros usuarios.
           </p>}
           {currentLink && <p style={{ margin: '8px 0 0' }}>Vista actual: {currentLink.name} · ACC V{currentLink.version_number || '?'}</p>}
         </div>
-        <div style={{ padding: '8px 20px', borderTop: '1px solid #e8edf2', borderBottom: '1px solid #e8edf2', display: 'flex', gap: 8, alignItems: 'center', fontSize: 13 }}>
+        <div style={{ padding: '8px 20px', borderTop: '1px solid #f1f0e8', borderBottom: '1px solid #f1f0e8', display: 'flex', gap: 8, alignItems: 'center', fontSize: 13 }}>
           {(hub || project || folders.length || item) && <button type="button" onClick={back} disabled={loading}>← Volver</button>}
           <span>{[label(hub), label(project), ...folders.map(label), label(item)].filter(value => value !== 'Sin nombre').join(' / ') || 'Centros de Autodesk'}</span>
         </div>
@@ -180,7 +180,7 @@ export default function AccLinkPicker({ API, file, docsVersionId, docsGcsUrn,
             const isItem = kind === 'items';
             const isVersion = kind === 'versions';
             return <button type="button" key={entry.id} style={{ ...row,
-              background: version?.id === entry.id ? '#e8f2fc' : '#fff' }}
+              background: version?.id === entry.id ? '#ecf0f1' : '#fff' }}
               onClick={() => {
                 if (!hub) chooseHub(entry);
                 else if (!project) chooseProject(entry);
@@ -195,10 +195,10 @@ export default function AccLinkPicker({ API, file, docsVersionId, docsGcsUrn,
           {!loading && !entries.length && !error && <div style={{ padding: 16 }}>No hay elementos en esta ubicación.</div>}
           {more && <button type="button" style={row} onClick={loadMore} disabled={loading}>Cargar más resultados de ACC…</button>}
         </div>
-        <div style={{ padding: '8px 20px', minHeight: 25, fontSize: 12, color: '#a33' }} role="alert">
+        <div style={{ padding: '8px 20px', minHeight: 25, fontSize: 12, color: '#b93535' }} role="alert">
           {error || (item && !sameName ? 'El nombre del archivo ACC debe coincidir con el de Docs.' : '')}
         </div>
-        <div style={{ padding: '12px 20px', borderTop: '1px solid #e8edf2', display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+        <div style={{ padding: '12px 20px', borderTop: '1px solid #f1f0e8', display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
           {currentLink && <button type="button" onClick={unlink} disabled={saving} style={{ marginRight: 'auto' }}>
             {previewOnly ? 'Quitar prueba local' : 'Retirar vista ACC'}
           </button>}

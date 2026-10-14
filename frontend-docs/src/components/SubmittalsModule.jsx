@@ -19,12 +19,12 @@ import { apiFetch } from '../utils/apiFetch';
 import { confirmAction } from '../utils/confirm';
 
 const COLOR_ESTADO = {
-  'Borrador':    { fondo: '#f1f3f5', texto: '#5f6b76' },
-  'Enviado':     { fondo: '#e7f0f9', texto: '#2c5d8a' },
-  'En revision': { fondo: '#fff4e0', texto: '#8a5a12' },
-  'Respondido':  { fondo: '#e9f2ff', texto: '#1f4e8c' },
-  'Cerrado':     { fondo: '#e8f5ec', texto: '#1e6b3a' },
-  'Anulado':     { fondo: '#f3f4f6', texto: '#8a9199' },
+  'Borrador':    { fondo: '#f1f0e8', texto: '#52524d' },
+  'Enviado':     { fondo: '#ecf0f1', texto: '#507294' },
+  'En revision': { fondo: '#f9eeda', texto: '#734500' },
+  'Respondido':  { fondo: '#ecf0f1', texto: '#507294' },
+  'Cerrado':     { fondo: '#e0e3d7', texto: '#64744e' },
+  'Anulado':     { fondo: '#f1f0e8', texto: '#72706b' },
 };
 
 function Chip({ children, fondo, texto, titulo }) {
@@ -114,20 +114,20 @@ export default function SubmittalsModule({ project, API, user, isAdmin }) {
   };
 
   if (lista === null) {
-    return <div style={{ padding: 24, fontSize: 13, color: '#888' }}>Cargando submittals…</div>;
+    return <div style={{ padding: 24, fontSize: 13, color: '#72706b' }}>Cargando submittals…</div>;
   }
 
   return (
     <div style={{ padding: '18px 22px', overflowY: 'auto', height: '100%' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 4 }}>
-        <h2 style={{ margin: 0, fontSize: 17, fontWeight: 650, color: '#1f2933' }}>
+        <h2 style={{ margin: 0, fontSize: 17, fontWeight: 650, color: '#141413' }}>
           Submittals
         </h2>
         {agrup.spec_secciones.length > 0 && (
           <select value={filtro.spec_seccion}
                   onChange={e => setFiltro(f => ({ ...f, spec_seccion: e.target.value }))}
-                  style={{ padding: '5px 8px', border: '1px solid #dfe3e8',
-                           borderRadius: 5, fontSize: 12.5, color: '#5f6b76' }}>
+                  style={{ padding: '5px 8px', border: '1px solid #e8e6dc',
+                           borderRadius: 5, fontSize: 12.5, color: '#52524d' }}>
             <option value="">Toda especificación</option>
             {agrup.spec_secciones.map(x => (
               <option key={x.codigo} value={x.codigo}>{x.codigo} ({x.cuantos})</option>
@@ -137,8 +137,8 @@ export default function SubmittalsModule({ project, API, user, isAdmin }) {
         {agrup.paquetes.length > 0 && (
           <select value={filtro.paquete}
                   onChange={e => setFiltro(f => ({ ...f, paquete: e.target.value }))}
-                  style={{ padding: '5px 8px', border: '1px solid #dfe3e8',
-                           borderRadius: 5, fontSize: 12.5, color: '#5f6b76' }}>
+                  style={{ padding: '5px 8px', border: '1px solid #e8e6dc',
+                           borderRadius: 5, fontSize: 12.5, color: '#52524d' }}>
             <option value="">Todo paquete</option>
             {agrup.paquetes.map(x => (
               <option key={x.nombre} value={x.nombre}>{x.nombre} ({x.cuantos})</option>
@@ -148,12 +148,12 @@ export default function SubmittalsModule({ project, API, user, isAdmin }) {
         <button type="button" disabled={ocupado}
                 onClick={() => setCreando(true)}
                 style={{ marginLeft: 'auto', padding: '7px 14px', borderRadius: 6,
-                         border: 'none', background: 'var(--accent, #3E6F91)',
+                         border: 'none', background: 'var(--accent, #507294)',
                          color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
           Nuevo submittal
         </button>
       </div>
-      <p style={{ margin: '0 0 16px', fontSize: 12.5, color: '#78838f',
+      <p style={{ margin: '0 0 16px', fontSize: 12.5, color: '#72706b',
                   maxWidth: 700, lineHeight: 1.55 }}>
         Aprobación de <b>materiales, equipos y planos de taller</b> contra la
         especificación, antes de incorporarlos a la obra. El veredicto lo dictan
@@ -162,15 +162,15 @@ export default function SubmittalsModule({ project, API, user, isAdmin }) {
 
       {error && (
         <div role="alert" style={{ marginBottom: 14, padding: '9px 12px', borderRadius: 6,
-                                   background: '#fef2f2', border: '1px solid #fecaca',
-                                   color: '#991b1b', fontSize: 12.5 }}>
+                                   background: '#fbebeb', border: '1px solid #fbebeb',
+                                   color: '#b93535', fontSize: 12.5 }}>
           {error} <b>La lista está incompleta</b>, no vacía.
         </div>
       )}
 
       {lista.length === 0 && !error && (
-        <div style={{ padding: '28px 20px', textAlign: 'center', color: '#98a1ab',
-                      fontSize: 13, border: '1px dashed #dfe3e8', borderRadius: 8 }}>
+        <div style={{ padding: '28px 20px', textAlign: 'center', color: '#72706b',
+                      fontSize: 13, border: '1px dashed #e8e6dc', borderRadius: 8 }}>
           Todavía no hay submittals en esta obra.
         </div>
       )}
@@ -181,18 +181,18 @@ export default function SubmittalsModule({ project, API, user, isAdmin }) {
           return (
             <div key={s.id}
                  onClick={() => setAbierto(abierto?.id === s.id ? null : s)}
-                 style={{ border: '1px solid #e5e8eb', borderRadius: 8, padding: '12px 14px',
+                 style={{ border: '1px solid #e8e6dc', borderRadius: 8, padding: '12px 14px',
                           background: '#fff', cursor: 'pointer' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
                 <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: 12.5,
-                               fontWeight: 700, color: '#3E6F91' }}>
-                  {s.codigo}{s.revision > 0 && <span style={{ color: '#8a9199' }}> rev.{s.revision}</span>}
+                               fontWeight: 700, color: '#507294' }}>
+                  {s.codigo}{s.revision > 0 && <span style={{ color: '#72706b' }}> rev.{s.revision}</span>}
                 </span>
-                <span style={{ fontSize: 13.5, color: '#1f2933', fontWeight: 500 }}>{s.titulo}</span>
+                <span style={{ fontSize: 13.5, color: '#141413', fontWeight: 500 }}>{s.titulo}</span>
                 <Chip fondo={c.fondo} texto={c.texto}>{s.estado}</Chip>
                 {s.veredicto && (
-                  <Chip fondo={s.habilita_instalacion ? '#e8f5ec' : '#fdecec'}
-                        texto={s.habilita_instalacion ? '#1e6b3a' : '#a12f2f'}
+                  <Chip fondo={s.habilita_instalacion ? '#e0e3d7' : '#fbebeb'}
+                        texto={s.habilita_instalacion ? '#64744e' : '#b93535'}
                         titulo={s.habilita_instalacion
                           ? 'Este veredicto habilita instalar el producto en obra'
                           : 'Este veredicto NO habilita instalar el producto'}>
@@ -200,24 +200,24 @@ export default function SubmittalsModule({ project, API, user, isAdmin }) {
                   </Chip>
                 )}
                 {s.spec_seccion && (
-                  <span style={{ fontSize: 11.5, color: '#8a9199' }}>
+                  <span style={{ fontSize: 11.5, color: '#72706b' }}>
                     Espec. {s.spec_seccion}
                   </span>
                 )}
               </div>
 
               {abierto?.id === s.id && (
-                <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid #f0f2f4' }}
+                <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid #f1f0e8' }}
                      onClick={e => e.stopPropagation()}>
                   {s.descripcion && (
-                    <p style={{ margin: '0 0 10px', fontSize: 12.5, color: '#5f6b76',
+                    <p style={{ margin: '0 0 10px', fontSize: 12.5, color: '#52524d',
                                 lineHeight: 1.5 }}>{s.descripcion}</p>
                   )}
 
                   {/* LA CADENA DE REVISIÓN, con el turno actual señalado. */}
                   {(s.steps || []).length > 0 && (
                     <div style={{ marginBottom: 12 }}>
-                      <div style={{ fontSize: 11, fontWeight: 700, color: '#8a9199',
+                      <div style={{ fontSize: 11, fontWeight: 700, color: '#72706b',
                                     letterSpacing: '.04em', marginBottom: 5 }}>
                         CADENA DE REVISIÓN
                       </div>
@@ -228,9 +228,9 @@ export default function SubmittalsModule({ project, API, user, isAdmin }) {
                           return (
                             <span key={i} style={{
                               padding: '3px 9px', borderRadius: 5, fontSize: 11.5,
-                              border: `1px solid ${actual ? '#3E6F91' : '#e5e8eb'}`,
-                              background: actual ? '#eef4f9' : hecho ? '#f6f8f9' : '#fff',
-                              color: actual ? '#2c5d8a' : hecho ? '#8a9199' : '#5f6b76',
+                              border: `1px solid ${actual ? '#507294' : '#e8e6dc'}`,
+                              background: actual ? '#f1f0e8' : hecho ? '#faf9f5' : '#fff',
+                              color: actual ? '#507294' : hecho ? '#72706b' : '#52524d',
                               fontWeight: actual ? 600 : 400,
                             }}>
                               {i + 1}. {p.name || p.email || `usuario ${p.user_id}`}
@@ -283,7 +283,7 @@ export default function SubmittalsModule({ project, API, user, isAdmin }) {
 
                   {s.estado === 'Cerrado' && (
                     <p style={{ margin: '10px 0 0', fontSize: 12, lineHeight: 1.5,
-                                color: s.habilita_instalacion ? '#1e6b3a' : '#a12f2f' }}>
+                                color: s.habilita_instalacion ? '#64744e' : '#b93535' }}>
                       {s.habilita_instalacion
                         ? '✓ El producto queda apto para incorporarse a la obra.'
                         : '✕ El producto NO queda habilitado para instalarse.'}
@@ -307,9 +307,9 @@ export default function SubmittalsModule({ project, API, user, isAdmin }) {
 function BotonActo({ children, ...props }) {
   return (
     <button type="button" {...props}
-            style={{ padding: '6px 13px', borderRadius: 6, border: '1px solid #cfd6dd',
+            style={{ padding: '6px 13px', borderRadius: 6, border: '1px solid #cccac0',
                      background: '#fff', fontSize: 12.5, fontWeight: 600,
-                     color: '#2c5d8a', cursor: props.disabled ? 'wait' : 'pointer' }}>
+                     color: '#507294', cursor: props.disabled ? 'wait' : 'pointer' }}>
       {children}
     </button>
   );
@@ -320,21 +320,21 @@ function PanelVeredicto({ veredictos, onResponder, disabled }) {
   const [com, setCom] = useState('');
   const elegido = veredictos.find(x => x.codigo === v);
   return (
-    <div style={{ width: '100%', border: '1px solid #e5e8eb', borderRadius: 7,
-                  padding: 12, background: '#fbfcfd' }}>
-      <div style={{ fontSize: 11, fontWeight: 700, color: '#8a9199',
+    <div style={{ width: '100%', border: '1px solid #e8e6dc', borderRadius: 7,
+                  padding: 12, background: '#faf9f5' }}>
+      <div style={{ fontSize: 11, fontWeight: 700, color: '#72706b',
                     letterSpacing: '.04em', marginBottom: 7 }}>
         TU VEREDICTO — te toca a ti
       </div>
       <select value={v} onChange={e => setV(e.target.value)} disabled={disabled}
               style={{ width: '100%', maxWidth: 360, padding: '6px 8px', fontSize: 13,
-                       border: '1px solid #ddd', borderRadius: 5, marginBottom: 8 }}>
+                       border: '1px solid #e8e6dc', borderRadius: 5, marginBottom: 8 }}>
         <option value="">Elegir veredicto…</option>
         {veredictos.map(x => <option key={x.codigo} value={x.codigo}>{x.codigo}</option>)}
       </select>
       {elegido && (
         <p style={{ margin: '0 0 8px', fontSize: 11.5, lineHeight: 1.5,
-                    color: elegido.habilita_instalacion ? '#1e6b3a' : '#a12f2f' }}>
+                    color: elegido.habilita_instalacion ? '#64744e' : '#b93535' }}>
           {elegido.habilita_instalacion
             ? 'Habilita instalar el producto en la obra.'
             : elegido.exige_revision
@@ -345,12 +345,12 @@ function PanelVeredicto({ veredictos, onResponder, disabled }) {
       <textarea value={com} onChange={e => setCom(e.target.value)} rows={2}
                 placeholder="Comentario (queda en el historial)"
                 style={{ width: '100%', padding: '6px 8px', fontSize: 12.5,
-                         border: '1px solid #ddd', borderRadius: 5, resize: 'vertical',
+                         border: '1px solid #e8e6dc', borderRadius: 5, resize: 'vertical',
                          fontFamily: 'inherit', boxSizing: 'border-box' }} />
       <button type="button" disabled={!v || disabled}
               onClick={() => onResponder(v, com)}
               style={{ marginTop: 8, padding: '6px 14px', borderRadius: 6, border: 'none',
-                       background: v ? 'var(--accent, #3E6F91)' : '#cfd6dd', color: '#fff',
+                       background: v ? 'var(--accent, #507294)' : '#cccac0', color: '#fff',
                        fontSize: 12.5, fontWeight: 600,
                        cursor: v && !disabled ? 'pointer' : 'not-allowed' }}>
         Registrar veredicto
@@ -384,14 +384,14 @@ function ModalNuevo({ API, urn, onCerrar, onCreado }) {
   };
 
   return (
-    <div onClick={onCerrar} style={{ position: 'fixed', inset: 0, background: 'rgba(15,20,26,.45)',
+    <div onClick={onCerrar} style={{ position: 'fixed', inset: 0, background: 'rgba(20,20,19,.45)',
                                      display: 'flex', alignItems: 'center',
                                      justifyContent: 'center', zIndex: 1000 }}>
       <div onClick={e => e.stopPropagation()}
            style={{ background: '#fff', borderRadius: 10, padding: 24, width: 480,
                     maxWidth: '92vw', boxShadow: '0 12px 40px rgba(0,0,0,.22)' }}>
         <h3 style={{ margin: '0 0 4px', fontSize: 16, fontWeight: 650 }}>Nuevo submittal</h3>
-        <p style={{ margin: '0 0 16px', fontSize: 12.5, color: '#78838f', lineHeight: 1.5 }}>
+        <p style={{ margin: '0 0 16px', fontSize: 12.5, color: '#72706b', lineHeight: 1.5 }}>
           Nace en <b>borrador</b>: puedes editarlo hasta que lo envíes. Al enviarlo
           queda fijo, porque el veredicto tiene que recaer sobre exactamente lo
           que se leyó.
@@ -401,31 +401,31 @@ function ModalNuevo({ API, urn, onCerrar, onCreado }) {
           ['paquete', 'Paquete', 'Estructuras metálicas — Frente 2']].map(([k, lbl, ph]) => (
           <div key={k} style={{ marginBottom: 12 }}>
             <label style={{ display: 'block', fontSize: 12, fontWeight: 500,
-                            color: '#5f6b76', marginBottom: 5 }}>{lbl}</label>
+                            color: '#52524d', marginBottom: 5 }}>{lbl}</label>
             <input value={f[k]} onChange={e => set(k, e.target.value)} placeholder={ph}
                    style={{ width: '100%', height: 38, padding: '0 10px', fontSize: 13,
-                            border: '1px solid #dfe3e8', borderRadius: 6,
+                            border: '1px solid #e8e6dc', borderRadius: 6,
                             boxSizing: 'border-box' }} />
           </div>
         ))}
         <div style={{ marginBottom: 16 }}>
           <label style={{ display: 'block', fontSize: 12, fontWeight: 500,
-                          color: '#5f6b76', marginBottom: 5 }}>Descripción</label>
+                          color: '#52524d', marginBottom: 5 }}>Descripción</label>
           <textarea value={f.descripcion} onChange={e => set('descripcion', e.target.value)}
                     rows={3} style={{ width: '100%', padding: '8px 10px', fontSize: 13,
-                                      border: '1px solid #dfe3e8', borderRadius: 6,
+                                      border: '1px solid #e8e6dc', borderRadius: 6,
                                       resize: 'vertical', fontFamily: 'inherit',
                                       boxSizing: 'border-box' }} />
         </div>
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
           <button type="button" onClick={onCerrar} disabled={guardando}
-                  style={{ padding: '8px 14px', borderRadius: 6, border: '1px solid #dfe3e8',
+                  style={{ padding: '8px 14px', borderRadius: 6, border: '1px solid #e8e6dc',
                            background: '#fff', fontSize: 13, cursor: 'pointer' }}>
             Cancelar
           </button>
           <button type="button" onClick={crear} disabled={guardando}
                   style={{ padding: '8px 16px', borderRadius: 6, border: 'none',
-                           background: 'var(--accent, #3E6F91)', color: '#fff',
+                           background: 'var(--accent, #507294)', color: '#fff',
                            fontSize: 13, fontWeight: 600,
                            cursor: guardando ? 'wait' : 'pointer' }}>
             {guardando ? 'Creando…' : 'Crear en borrador'}

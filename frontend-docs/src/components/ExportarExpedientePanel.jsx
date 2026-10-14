@@ -84,9 +84,9 @@ export function ExportarExpedientePanel({ project, projectPrefix }) {
   const boton = (activo, texto, textoActivo, onClick, primario) => (
     <button onClick={onClick} disabled={activo}
             style={{
-              background: primario ? 'var(--accent, #1a73e8)' : '#fff',
-              color: primario ? '#fff' : 'var(--accent, #1a73e8)',
-              border: primario ? 'none' : '1px solid var(--accent, #1a73e8)',
+              background: primario ? 'var(--accent, #507294)' : '#fff',
+              color: primario ? '#fff' : 'var(--accent, #507294)',
+              border: primario ? 'none' : '1px solid var(--accent, #507294)',
               borderRadius: 7, padding: '9px 18px', fontSize: 12.5, fontWeight: 600,
               cursor: activo ? 'default' : 'pointer', opacity: activo ? 0.6 : 1,
             }}>
@@ -95,12 +95,12 @@ export function ExportarExpedientePanel({ project, projectPrefix }) {
   );
 
   return (
-    <div style={{ background: '#fff', border: '1px solid #e5e5e5', borderRadius: 8,
+    <div style={{ background: '#fff', border: '1px solid #e8e6dc', borderRadius: 8,
                   padding: 24, marginBottom: 20 }}>
-      <div style={{ fontSize: 14, fontWeight: 600, color: '#333', marginBottom: 6 }}>
+      <div style={{ fontSize: 14, fontWeight: 600, color: '#333330', marginBottom: 6 }}>
         Exportar el expediente
       </div>
-      <p style={{ margin: '0 0 14px', fontSize: 12.5, color: '#666', lineHeight: 1.6, maxWidth: 640 }}>
+      <p style={{ margin: '0 0 14px', fontSize: 12.5, color: '#72706b', lineHeight: 1.6, maxWidth: 640 }}>
         El expediente es de la obra, no de esta plataforma. Desde aquí se lo
         lleva entero: el <strong>índice</strong> (la relación de lo entregado, con
         estado, idoneidad, revisión y huella de cada documento — se abre en
@@ -111,7 +111,7 @@ export function ExportarExpedientePanel({ project, projectPrefix }) {
         {boton(bajandoIndice, 'Descargar el índice (xlsx)', 'Generando índice…', bajarIndice, false)}
         {boton(bajandoDocs, 'Descargar los documentos (zip)', 'Preparando el zip… puede tardar', bajarDocumentos, true)}
       </div>
-      <p style={{ margin: '10px 0 0', fontSize: 11.5, color: '#999', maxWidth: 640, lineHeight: 1.6 }}>
+      <p style={{ margin: '10px 0 0', fontSize: 11.5, color: '#72706b', maxWidth: 640, lineHeight: 1.6 }}>
         En una obra con miles de documentos el zip tarda varios minutos: se arma
         en tu navegador a partir de descargas firmadas, sin pasar por el servidor.
         No cierres la pestaña mientras se prepara.

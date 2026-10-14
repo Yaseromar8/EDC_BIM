@@ -4,6 +4,7 @@
  * Extraído de App.jsx líneas 618-926
  */
 import React, { useState, useEffect, useRef } from 'react';
+import IconoModulo from './IconoModulo';
 import { apiFetch } from '../utils/apiFetch';
 import { API, getAuthHeaders } from '../utils/helpers';
 import toast from 'react-hot-toast';
@@ -198,9 +199,7 @@ export default function FolderNode({
           )}
         </div>
         <div className="tree-icon" style={{ display: 'flex', alignItems: 'center', marginLeft: 4, marginRight: 8, opacity: folder._syncing ? 0.5 : 1 }}>
-          <svg fill="currentColor" viewBox="0 0 24 24" width="24" height="24">
-            <path d="M18,20.45H6a3.6,3.6,0,0,1-3.6-3.6V7.15A3.6,3.6,0,0,1,6,3.55h4.84a.71.71,0,0,1,.53.22l2.12,2.1H18a3.61,3.61,0,0,1,3.6,3.61v7.37A3.6,3.6,0,0,1,18,20.45ZM3.89,9.48v7.37A2.1,2.1,0,0,0,6,19H18a2.1,2.1,0,0,0,2.1-2.1V9.48A2.1,2.1,0,0,0,18,7.37H13.17a.75.75,0,0,1-.53-.22l-2.12-2.1H6a2.1,2.1,0,0,0-2.1,2.1Z"></path>
-          </svg>
+          <IconoModulo nombre="archivos" tamano={20} style={{ color: 'var(--archivo-carpeta)' }} />
         </div>
         {isRenaming ? (
           <div className="inline-edit-box" style={{ margin: '0 8px', height: 28 }} onClick={e => e.stopPropagation()}>
@@ -209,7 +208,27 @@ export default function FolderNode({
             <button className="btn-submit" style={{ width: 22, height: 22, marginLeft: 2 }} onMouseDown={(e) => e.preventDefault()} onClick={(e) => { e.stopPropagation(); submitRename(); }}><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg></button>
           </div>
         ) : (
-          <div className="tree-text">{folder.name.replace(/\/$/, '')}</div>
+          <>
+            {/* Nombre largo: termina en «…» y el nombre entero sale en el
+                tooltip, como en ACC. Antes empujaba el panel y lo obligaba a
+                desplazarse en horizontal. */}
+            <div className="tree-text" title={folder.name.replace(/\/$/, '')} data-tip-recortado="">{folder.name.replace(/\/$/, '')}</div>
+            {/* ⋮ DE LA CARPETA (UI polish, 13-oct-2026, medido en ACC): aparece
+                al pasar el puntero y en la carpeta abierta, y abre el MISMO menú
+                que el botón derecho, pegado al botón. Antes las acciones de una
+                carpeta del árbol solo se encontraban con el botón derecho. */}
+            <button type="button" className="tree-menu-btn"
+              aria-label={`Acciones de la carpeta ${folder.name.replace(/\/$/, '')}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                const r = e.currentTarget.getBoundingClientRect();
+                onRowMenu({ ...folder, type: 'folder', id: nodeId }, { clientX: r.left, clientY: r.bottom + 4 });
+              }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                <path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z" />
+              </svg>
+            </button>
+          </>
         )}
       </div>
       {expanded && (
@@ -217,7 +236,7 @@ export default function FolderNode({
           {isCreatingChild && (
             <div className="folder-tree-item child-creating" style={{ paddingLeft: `${8 + ((level + 1) * 28)}px` }}>
               <div className="tree-icon" style={{ display: 'flex', alignItems: 'center', marginLeft: 28, marginRight: 8 }}>
-                 <svg fill="#e0e0e0" viewBox="0 0 24 24" width="24" height="24"><path d="M18,20.45H6a3.6,3.6,0,0,1-3.6-3.6V7.15A3.6,3.6,0,0,1,6,3.55h4.84a.71.71,0,0,1,.53.22l2.12,2.1H18a3.61,3.61,0,0,1,3.6,3.61v7.37A3.6,3.6,0,0,1,18,20.45ZM3.89,9.48v7.37A2.1,2.1,0,0,0,6,19H18a2.1,2.1,0,0,0,2.1-2.1V9.48A2.1,2.1,0,0,0,18,7.37H13.17a.75.75,0,0,1-.53-.22l-2.12-2.1H6a2.1,2.1,0,0,0-2.1,2.1Z"></path></svg>
+                 <svg fill="#e8e6dc" viewBox="0 0 24 24" width="24" height="24"><path d="M18,20.45H6a3.6,3.6,0,0,1-3.6-3.6V7.15A3.6,3.6,0,0,1,6,3.55h4.84a.71.71,0,0,1,.53.22l2.12,2.1H18a3.61,3.61,0,0,1,3.6,3.61v7.37A3.6,3.6,0,0,1,18,20.45ZM3.89,9.48v7.37A2.1,2.1,0,0,0,6,19H18a2.1,2.1,0,0,0,2.1-2.1V9.48A2.1,2.1,0,0,0,18,7.37H13.17a.75.75,0,0,1-.53-.22l-2.12-2.1H6a2.1,2.1,0,0,0-2.1,2.1Z"></path></svg>
               </div>
               <div className="inline-edit-box" style={{ flex: 1, margin: '0 8px', height: 28 }}>
                 <input autoFocus value={newChildName} onChange={e => setNewChildName(e.target.value)} onBlur={(e) => { if (e.relatedTarget && e.relatedTarget.closest('.inline-edit-box')) return; submitCreateChild(); }} onKeyDown={e => { if (e.key === 'Enter') submitCreateChild(); if (e.key === 'Escape') setIsCreatingChild(false); }} style={{ padding: '0 4px', fontSize: 13, width: '100%' }} placeholder="Nombre de carpeta..." />

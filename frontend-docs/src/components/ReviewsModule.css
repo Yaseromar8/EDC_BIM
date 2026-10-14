@@ -1,0 +1,258 @@
+/* REVISIONES · lista (UI polish F3, 13-oct-2026).
+   Antes todo iba en estilo en linea, y un estilo en linea no puede tener
+   :hover ni :active: las filas, los filtros y «Cargar mas» no respondian al
+   puntero ni al pulsar. Aqui los estados son los del sistema (tokens) y los
+   mismos que en Archivos. */
+
+.rev-pagina {
+  padding: 32px;
+  flex: 1;
+  overflow-y: auto;
+}
+
+.rev-titulo {
+  font-size: 24px;
+  font-weight: 300;
+  margin-bottom: 4px;
+  color: var(--a-text-primary);
+}
+
+.rev-subtitulo {
+  font-size: 13px;
+  color: var(--a-text-muted);
+  margin-bottom: 16px;
+}
+
+/* ── Filtros ── */
+.rev-filtros {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+
+.rev-filtro {
+  box-sizing: border-box;
+  min-height: var(--a-size-control-sm);
+  padding: 0 12px;
+  border: 1px solid var(--a-border-default);
+  border-radius: var(--a-radius-full);
+  background: var(--a-surface-base);
+  color: var(--a-text-secondary);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color var(--a-motion-fast) var(--a-ease),
+              border-color var(--a-motion-fast) var(--a-ease),
+              color var(--a-motion-fast) var(--a-ease);
+}
+
+.rev-filtro:hover {
+  background: var(--bg-hover);
+  border-color: var(--a-border-strong);
+  color: var(--a-text-primary);
+}
+
+.rev-filtro[aria-pressed="true"] {
+  background: var(--a-action-primary);
+  border-color: var(--a-action-primary);
+  color: var(--a-text-on-action);
+}
+
+.rev-filtro:active { translate: 0 1px; }
+
+/* ── Avisos ── */
+.rev-alerta {
+  margin-bottom: 12px;
+  padding: 9px 12px;
+  border: 1px solid var(--a-status-danger-border);
+  border-radius: var(--a-radius-md);
+  background: var(--a-status-danger-surface);
+  color: var(--a-status-danger);
+  font-size: 12px;
+}
+
+.rev-vacio {
+  text-align: center;
+  padding: 48px;
+  color: var(--a-text-muted);
+  font-size: 13px;
+}
+
+/* ── Tabla (como la Revisiones de ACC, 13-oct-2026) ──
+   Cabecera y filas comparten la MISMA rejilla de columnas. Si la ventana es
+   estrecha, la tabla se desplaza en horizontal dentro de su caja, como ACC. */
+.rev-tabla {
+  --rev-columnas: 140px 72px minmax(220px, 2fr) minmax(140px, 1fr) minmax(200px, 1.2fr)
+                  170px 170px 170px 170px 96px;
+  overflow-x: auto;
+  border-top: 1px solid var(--a-border-default);
+}
+
+.rev-tabla__cabeza,
+.rev-fila {
+  display: grid;
+  grid-template-columns: var(--rev-columnas);
+  align-items: center;
+  column-gap: 12px;
+  min-width: 1500px;
+  padding: 0 12px;
+  box-sizing: border-box;
+}
+
+.rev-tabla__cabeza {
+  min-height: 40px;
+  border-bottom: 1px solid var(--a-border-strong);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--a-text-secondary);
+}
+
+.rev-lista {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.rev-fila {
+  width: 100%;
+  min-height: var(--a-size-row);
+  border: 0;
+  border-bottom: 1px solid var(--a-border-default);
+  background: var(--a-surface-base);
+  color: var(--a-text-primary);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+/* Hover instantaneo, como las filas de Archivos y las de ACC. */
+.rev-fila:hover { background: var(--bg-hover); }
+
+.rev-fila > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Estado: texto en mayusculas con una barra de su color a la izquierda. */
+.rev-estado {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-self: stretch;
+  padding-left: 10px;
+  border-left: 3px solid var(--a-text-muted);
+}
+
+.rev-estado__texto {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: .03em;
+  text-transform: uppercase;
+}
+
+.rev-estado__nota {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--a-action-text);
+}
+
+.rev-estado--aviso   { border-left-color: var(--a-status-warning); }
+.rev-estado--exito   { border-left-color: var(--a-status-success); }
+.rev-estado--peligro { border-left-color: var(--a-status-danger); }
+.rev-estado--peligro .rev-estado__texto { color: var(--a-status-danger); }
+
+.rev-fila__codigo {
+  font-weight: 600;
+  color: var(--a-text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.rev-fila__titulo { font-weight: 600; }
+
+.rev-celda {
+  color: var(--a-text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.rev-celda--vencida {
+  color: var(--a-status-danger);
+  font-weight: 600;
+}
+
+.rev-celda--numero { text-align: right; }
+
+.rev-mas {
+  text-align: center;
+  margin-top: 12px;
+}
+
+/* ── Modal «Enviar a revisión»: la lista de participantes ── */
+/* Era un <div> con clic: no se podía alcanzar con el teclado. Ahora es un
+   botón con el aspecto de fila que tenía. */
+.rev-persona {
+  box-sizing: border-box;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
+  border: 0;
+  border-bottom: 1px solid var(--a-border-subtle);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.rev-persona:hover { background: var(--bg-hover); }
+
+/* El × de cada paso, dentro de su píldora. */
+.rev-quitar-paso {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--a-radius-full);
+  background: transparent;
+  color: inherit;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.rev-quitar-paso:hover {
+  background: var(--a-status-danger-surface);
+  color: var(--a-status-danger);
+}
+
+/* ── Detalle de una revisión ── */
+.rev-volver { margin: 0 0 12px -12px; }
+
+/* El documento que se revisa: una píldora que se abre. */
+.rev-doc {
+  padding: 3px 10px;
+  border: 1px solid var(--a-border-default);
+  border-radius: var(--a-radius-full);
+  background: var(--a-state-selected);
+  color: var(--a-action-text);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.rev-doc:hover {
+  border-color: var(--a-action-text);
+  text-decoration: underline;
+}
+
+.rev-doc:active { translate: 0 1px; }

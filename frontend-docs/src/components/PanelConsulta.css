@@ -1,0 +1,172 @@
+/* PanelConsulta — paso 1 de la consulta del documento (maqueta v8).
+   Solo colores de la lista cerrada (docs/ux/PALETA_OFICIAL_CLAUDE_DEFINICION.md):
+   tarjeta blanca con borde Light Gray, como la tabla a la que acompaña. */
+
+.consulta {
+  width: 360px;
+  flex-shrink: 0;
+  margin: 0 16px 16px 0;
+  background: #FFFFFF;
+  border: 1px solid #E8E6DC;
+  border-radius: 8px;
+  overflow-y: auto;
+  color: #141413;
+  font-size: 13px;
+}
+
+.consulta__cab {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 14px 14px 0 16px;
+}
+.consulta__titulo { flex: 1; min-width: 0; }
+.consulta__titulo b {
+  display: block;
+  font-weight: 600;
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+.consulta__titulo span { color: #72706B; font-size: 12px; }
+
+.consulta__cerrar {
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: #52524D;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+}
+.consulta__cerrar:hover { background: #F1F0E8; }
+
+.consulta__acciones {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding: 12px 16px 14px;
+}
+.consulta__acciones .barra-btn { display: inline-flex; align-items: center; gap: 6px; }
+.consulta__estado { margin-left: auto; }
+
+.consulta__sec {
+  padding: 14px 16px;
+  border-top: 1px solid #E8E6DC;
+}
+.consulta__sec h3 {
+  margin: 0 0 10px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: #52524D;
+}
+
+.consulta__nota { margin: 8px 0 0; color: #72706B; font-size: 12px; }
+.consulta__nota b { color: #141413; }
+.consulta__error {
+  margin: 0;
+  padding: 10px 16px;
+  border-top: 1px solid #E8E6DC;
+  background: #FBEBEB;
+  color: #B93535;
+  font-size: 12px;
+}
+
+.consulta__enlace {
+  border: 0;
+  padding: 0;
+  background: none;
+  color: #507294;
+  font: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-color: rgb(80 114 148 / .4);
+}
+
+/* Recorrido ISO 19650: Dark para lo hecho, anillo para el paso actual. */
+.recorrido {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  text-align: center;
+}
+.recorrido::before,
+.recorrido::after {
+  content: '';
+  position: absolute;
+  left: 12.5%;
+  top: 7px;
+  height: 2px;
+}
+.recorrido::before { right: 12.5%; background: #E8E6DC; }
+.recorrido::after { width: var(--avance, 0%); background: #141413; }
+.recorrido > div { position: relative; z-index: 1; }
+.recorrido i {
+  display: block;
+  width: 16px;
+  height: 16px;
+  margin: 0 auto 5px;
+  border-radius: 50%;
+  background: #FFFFFF;
+  border: 2px solid #CCCAC0;
+}
+.recorrido .hecho i { background: #141413; border-color: #141413; }
+.recorrido .aqui i { border-color: #141413; box-shadow: 0 0 0 3px #F7ECE5; }
+.recorrido b { display: block; font-size: 12px; font-weight: 600; }
+.recorrido small { display: block; color: #72706B; font-size: 11px; }
+
+/* Integridad: Green tinte cuando hay huella; neutra cuando falta. */
+.integridad {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #F1F0E8;
+  color: #52524D;
+}
+.integridad--ok { background: #E0E3D7; color: #64744E; }
+.integridad b { display: block; color: #141413; font-weight: 600; }
+.integridad span { display: block; font-size: 12px; color: #52524D; }
+.integridad code {
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 11.5px;
+  background: rgb(255 255 255 / .6);
+  padding: 0 4px;
+  border-radius: 4px;
+}
+
+.codigo-leido {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  border: 1px solid #E8E6DC;
+  border-radius: 8px;
+  overflow: hidden;
+}
+.codigo-leido div {
+  padding: 7px 4px;
+  text-align: center;
+  border-right: 1px solid #E8E6DC;
+  border-bottom: 1px solid #E8E6DC;
+  min-width: 0;
+}
+.codigo-leido b { display: block; font-size: 12px; overflow-wrap: anywhere; }
+.codigo-leido small { color: #72706B; font-size: 10px; text-transform: uppercase; }
+
+.movimientos { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 9px; }
+.movimientos li { display: flex; flex-direction: column; }
+.movimientos__que { color: #141413; }
+.movimientos__quien { color: #72706B; font-size: 12px; }
+
+/* La fila consultada, como la carpeta abierta del árbol: tinte Blue. */
+.data-row.consultada,
+.data-row.consultada .td-frozen-left,
+.data-row.consultada .td-frozen-right { background-color: #ECF0F1 !important; }
+
+@media (max-width: 1200px) {
+  .consulta { width: 300px; }
+}

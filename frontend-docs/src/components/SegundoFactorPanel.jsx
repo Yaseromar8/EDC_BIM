@@ -16,16 +16,16 @@ import { API } from '../utils/helpers';
 import { apiFetch } from '../utils/apiFetch';
 
 const CAJA = {
-  background: '#111318', border: '1px solid rgba(255,255,255,0.09)',
-  borderRadius: 12, padding: 22, color: '#e9ecf1', width: 460, maxWidth: '92vw',
+  background: '#141413', border: '1px solid rgba(255,255,255,0.09)',
+  borderRadius: 12, padding: 22, color: '#f1f0e8', width: 460, maxWidth: '92vw',
 };
 const BOTON = {
   background: 'var(--accent)', border: 'none', borderRadius: 7, color: '#fff',
   padding: '9px 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer',
 };
-const BOTON_SUAVE = { ...BOTON, background: 'rgba(255,255,255,0.07)', color: '#cfd6e0', fontWeight: 500 };
+const BOTON_SUAVE = { ...BOTON, background: 'rgba(255,255,255,0.07)', color: '#cccac0', fontWeight: 500 };
 const CAMPO = {
-  width: '100%', boxSizing: 'border-box', background: '#0b0d10', color: '#e9ecf1',
+  width: '100%', boxSizing: 'border-box', background: '#141413', color: '#f1f0e8',
   border: '1px solid rgba(255,255,255,0.14)', borderRadius: 7, padding: '9px 11px', fontSize: 14,
 };
 
@@ -110,19 +110,19 @@ export default function SegundoFactorPanel({ onClose }) {
 
         {error && (
           <p style={{ margin: '14px 0 0', padding: '9px 11px', borderRadius: 7, fontSize: 13,
-                      background: 'rgba(255,107,107,0.12)', border: '1px solid rgba(255,107,107,0.35)',
-                      color: '#FFC4C4' }}>{error}</p>
+                      background: 'rgba(185,53,53,0.12)', border: '1px solid rgba(185,53,53,0.35)',
+                      color: '#FBEBEB' }}>{error}</p>
         )}
 
         {/* ── Códigos de recuperación recién generados ── */}
         {recuperacion ? (
           <>
-            <p style={{ fontSize: 13, lineHeight: 1.5, color: '#cfd6e0' }}>
+            <p style={{ fontSize: 13, lineHeight: 1.5, color: '#cccac0' }}>
               Ya está activa. Guarda estos códigos: cada uno sirve <b>una sola vez</b> y
               son la única forma de entrar si pierdes el teléfono. No se vuelven a mostrar.
             </p>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6,
-                          background: '#0b0d10', border: '1px solid rgba(255,255,255,0.09)',
+                          background: '#141413', border: '1px solid rgba(255,255,255,0.09)',
                           borderRadius: 7, padding: 12, fontFamily: 'monospace', fontSize: 13 }}>
               {recuperacion.map((c) => <span key={c}>{c}</span>)}
             </div>
@@ -134,12 +134,12 @@ export default function SegundoFactorPanel({ onClose }) {
         ) : alta ? (
           /* ── Alta en curso: clave + comprobación ── */
           <>
-            <p style={{ fontSize: 13, lineHeight: 1.5, color: '#cfd6e0' }}>
+            <p style={{ fontSize: 13, lineHeight: 1.5, color: '#cccac0' }}>
               Añade esta clave en tu aplicación de autenticación (Google Authenticator,
               Aegis, 1Password…) con la opción de <i>introducir clave manualmente</i>, o
               abre el enlace desde el móvil.
             </p>
-            <code style={{ display: 'block', background: '#0b0d10', padding: '11px 12px',
+            <code style={{ display: 'block', background: '#141413', padding: '11px 12px',
                            borderRadius: 7, border: '1px solid rgba(255,255,255,0.09)',
                            fontSize: 14, letterSpacing: 1, wordBreak: 'break-all' }}>
               {enGrupos(alta.secreto)}
@@ -151,7 +151,7 @@ export default function SegundoFactorPanel({ onClose }) {
                 Abrir en la aplicación
               </a>
             </div>
-            <label style={{ fontSize: 12, color: '#8b94a1' }}>Código de 6 cifras</label>
+            <label style={{ fontSize: 12, color: '#72706b' }}>Código de 6 cifras</label>
             <input
               value={codigo} onChange={(e) => setCodigo(e.target.value)}
               inputMode="numeric" autoComplete="one-time-code" autoFocus
@@ -165,11 +165,11 @@ export default function SegundoFactorPanel({ onClose }) {
         ) : estado?.activo ? (
           /* ── Ya activa ── */
           <>
-            <p style={{ fontSize: 13, lineHeight: 1.5, color: '#cfd6e0' }}>
+            <p style={{ fontSize: 13, lineHeight: 1.5, color: '#cccac0' }}>
               Activa{estado.activado_en ? ` desde el ${new Date(estado.activado_en).toLocaleDateString('es-PE')}` : ''}.
               Te quedan {estado.codigos_de_recuperacion_sin_usar} códigos de recuperación sin usar.
             </p>
-            <p style={{ fontSize: 12, color: '#8b94a1', lineHeight: 1.5 }}>
+            <p style={{ fontSize: 12, color: '#72706b', lineHeight: 1.5 }}>
               Para desactivarla hace falta un código: tener la sesión abierta no basta.
             </p>
             <input
@@ -178,14 +178,14 @@ export default function SegundoFactorPanel({ onClose }) {
               style={CAMPO}
             />
             <button onClick={desactivar} disabled={ocupado || !codigo.trim()}
-                    style={{ ...BOTON_SUAVE, marginTop: 12, color: '#FFC4C4' }}>
+                    style={{ ...BOTON_SUAVE, marginTop: 12, color: '#FBEBEB' }}>
               Desactivar
             </button>
           </>
         ) : (
           /* ── Sin activar ── */
           <>
-            <p style={{ fontSize: 13, lineHeight: 1.5, color: '#cfd6e0' }}>
+            <p style={{ fontSize: 13, lineHeight: 1.5, color: '#cccac0' }}>
               Añade un código temporal de tu teléfono a la contraseña. Si alguien te la
               roba, seguirá sin poder entrar.
               {estado?.exigido && <b> A tu cuenta se le exige por el rol que tiene.</b>}

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import './LoginScreen.css';
 import { Capacitor } from '@capacitor/core';
+import { permiteAccesoLocal } from './utils/accesoLocal';
 
 // EN LA WEB SE CAE A RUTA RELATIVA, NUNCA AL BACKEND DEL PROVEEDOR.
 //
@@ -180,6 +181,8 @@ const LoginScreen = ({ onLogin }) => {
         ? new URLSearchParams(window.location.search) : new URLSearchParams();
     const invitacion = params.get('invite') || '';
     const tokenReset = params.get('reset') || '';
+    const ticket = params.get('sso_ticket') || '';
+    const forzarLogin = params.get('login') === '1';
 
     // 4 modos excluyentes: acceso · alta por invitación · pedir enlace ·
     // elegir contraseña nueva. Los dos últimos existen porque hasta ahora, si
@@ -225,6 +228,33 @@ const LoginScreen = ({ onLogin }) => {
     // El <html lang> tiene que seguir al idioma o el lector de pantalla
     // pronuncia el español con fonética inglesa.
     useEffect(() => { document.documentElement.lang = lang; }, [lang]);
+
+    useEffect(() => {
+        // Mismo acceso de ensayo que View: sólo Vite DEV en esta laptop y
+        // sólo si el backend también es local. La publicación conserva login.
+        if (!permiteAccesoLocal({
+            desarrollo: import.meta.env.DEV,
+            nativo: Capacitor.isNativePlatform(),
+            hostname: window.location.hostname,
+            backendUrl: BACKEND_URL,
+            backendReal: import.meta.env.VITE_DOCS_REAL_DATA === 'true',
+            invitacion, reset: tokenReset, ticket, forzarLogin,
+        })) return;
+
+        const control = new AbortController();
+        fetch(`${BACKEND_URL}/api/auth/me`, {
+            headers: { Authorization: 'Bearer DEMO_TOKEN' },
+            signal: control.signal,
+        })
+            .then(res => res.ok ? res.json() : null)
+            .then(usuario => {
+                if (!control.signal.aborted && usuario?.id === 'demo') {
+                    onLogin({ ...usuario, session_token: 'DEMO_TOKEN' });
+                }
+            })
+            .catch(() => { /* backend apagado: queda el formulario normal */ });
+        return () => control.abort();
+    }, [invitacion, tokenReset, ticket, forzarLogin, onLogin]);
 
     const pedir = useCallback(async (ruta, cuerpo) => {
         setEnviando(true);
@@ -568,10 +598,10 @@ const LoginScreen = ({ onLogin }) => {
                                 disabled={enviando}
                             >
                                 <svg width="17" height="17" viewBox="0 0 48 48" aria-hidden="true">
-                                    <path fill="#4285F4" d="M45.1 24.5c0-1.6-.1-2.8-.4-4H24v7.3h12.1c-.2 2-1.6 5-4.5 7l6.9 5.4c4.1-3.8 6.6-9.4 6.6-15.7z" />
-                                    <path fill="#34A853" d="M24 46c5.9 0 10.9-2 14.5-5.3l-6.9-5.4c-1.9 1.3-4.4 2.2-7.6 2.2-5.8 0-10.7-3.8-12.5-9.1l-7.1 5.5C8.1 41.1 15.4 46 24 46z" />
-                                    <path fill="#FBBC05" d="M11.5 28.4c-.5-1.4-.7-2.9-.7-4.4s.3-3 .7-4.4l-7.1-5.5C2.9 17 2 20.4 2 24s.9 7 2.4 9.9l7.1-5.5z" />
-                                    <path fill="#EA4335" d="M24 10.5c4.1 0 6.9 1.8 8.5 3.3l6.2-6C34.9 4.4 29.9 2 24 2 15.4 2 8.1 6.9 4.4 14.1l7.1 5.5c1.8-5.3 6.7-9.1 12.5-9.1z" />
+                                    <path fill="#507294" d="M45.1 24.5c0-1.6-.1-2.8-.4-4H24v7.3h12.1c-.2 2-1.6 5-4.5 7l6.9 5.4c4.1-3.8 6.6-9.4 6.6-15.7z" />
+                                    <path fill="#788C5D" d="M24 46c5.9 0 10.9-2 14.5-5.3l-6.9-5.4c-1.9 1.3-4.4 2.2-7.6 2.2-5.8 0-10.7-3.8-12.5-9.1l-7.1 5.5C8.1 41.1 15.4 46 24 46z" />
+                                    <path fill="#F9EEDA" d="M11.5 28.4c-.5-1.4-.7-2.9-.7-4.4s.3-3 .7-4.4l-7.1-5.5C2.9 17 2 20.4 2 24s.9 7 2.4 9.9l7.1-5.5z" />
+                                    <path fill="#B93535" d="M24 10.5c4.1 0 6.9 1.8 8.5 3.3l6.2-6C34.9 4.4 29.9 2 24 2 15.4 2 8.1 6.9 4.4 14.1l7.1 5.5c1.8-5.3 6.7-9.1 12.5-9.1z" />
                                 </svg>
                                 {t.google}
                             </button>

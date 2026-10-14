@@ -4,6 +4,12 @@ import './index.css'
 import App from './App_Refactor.jsx'
 import { ConfirmHost } from './utils/confirm.jsx'
 import { IdoneidadHost } from './utils/idoneidad.jsx'
+import { instalarTooltips } from '../../design/ui/tooltips.js'
+import { AvisosHost } from './utils/avisos.jsx'
+
+// Tooltips propios para todo `title` del portal (UI polish F5): mismo
+// retardo, mismo estilo y también con el teclado. Ver design/ui/tooltips.js.
+instalarTooltips()
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
@@ -15,6 +21,9 @@ createRoot(document.getElementById('root')).render(
         documento, así que el diálogo tiene que existir dondequiera que se pueda
         publicar. */}
     <IdoneidadHost />
+    {/* Y el de los avisos (toasts): antes solo existía dentro de Archivos, y
+        los avisos de otras pantallas no se veían. Ver utils/avisos.jsx. */}
+    <AvisosHost />
   </StrictMode>,
 )
 
@@ -29,7 +38,9 @@ createRoot(document.getElementById('root')).render(
  * `sw-campo.js` NO cachea `/api/*`. El motivo esta escrito alli, y es el punto
  * que impide que una respuesta vieja se lea como el estado de la obra.
  */
-if ('serviceWorker' in navigator) {
+// En Vite DEV las rutas /src/* no tienen hash: el SW de producción las
+// guardaría para siempre y mezclaría código antiguo con el backend nuevo.
+if (import.meta.env.PROD && 'serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('/sw-campo.js').catch(() => {});
   });

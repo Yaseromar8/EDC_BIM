@@ -40,7 +40,7 @@ export const ESTADOS = {
     corto: 'SHARED',
     fondo: 'var(--bg-accent)',
     borde: 'var(--border-accent)',
-    texto: 'var(--accent)',
+    texto: 'var(--link)',
     ayuda: 'Emitido para revisión y coordinación. Con esto NO se construye.',
   },
   PUBLISHED: {
@@ -97,7 +97,7 @@ export function Ficha({ estado, tamano = 'normal', titulo }) {
       style={{
         display: 'inline-block',
         padding: pequena ? '1px 7px' : '2px 9px',
-        borderRadius: 999,
+        borderRadius: 4,
         fontSize: pequena ? 10.5 : 11.5,
         fontWeight: 600,
         background: c.fondo,

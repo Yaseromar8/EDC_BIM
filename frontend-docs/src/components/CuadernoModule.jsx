@@ -39,23 +39,23 @@ export const TIPOS_DE_ASIENTO = [
 const ETIQUETA_TIPO = Object.fromEntries(TIPOS_DE_ASIENTO);
 
 const COLOR_ESTADO = {
-  ABIERTO: '#1f6b3a', CERRADO: '#5a6b7d',
-  REGISTRADO: '#1f6b3a', EN_APROBACION: '#8a5a00', APROBADO: '#1f6b3a',
-  DEVUELTO: '#8a2020',
-  EMITIDA: '#8a5a00', ACUSADA: '#2c5d8a', ATENDIDA: '#1f6b3a',
-  CERRADA: '#5a6b7d', RECTIFICADA: '#8a2020',
+  ABIERTO: '#64744e', CERRADO: '#52524d',
+  REGISTRADO: '#64744e', EN_APROBACION: '#734500', APROBADO: '#64744e',
+  DEVUELTO: '#b93535',
+  EMITIDA: '#734500', ACUSADA: '#507294', ATENDIDA: '#64744e',
+  CERRADA: '#52524d', RECTIFICADA: '#b93535',
 };
 
-const CAJA = { border: '1px solid #d5dde6', borderRadius: 6, padding: '7px 9px',
+const CAJA = { border: '1px solid #e8e6dc', borderRadius: 6, padding: '7px 9px',
                fontSize: 13, width: '100%' };
 const BTN = { padding: '6px 12px', borderRadius: 6, fontSize: 12.5,
-              border: '1px solid #c8d4e3', background: '#fff', cursor: 'pointer' };
-const BTN_OSCURO = { ...BTN, border: 'none', background: '#16202b', color: '#fff',
+              border: '1px solid #cccac0', background: '#fff', cursor: 'pointer' };
+const BTN_OSCURO = { ...BTN, border: 'none', background: '#141413', color: '#fff',
                      fontWeight: 600 };
 
 function Chip({ texto, color }) {
   return <span style={{ fontSize: 10.5, fontWeight: 700, color: '#fff',
-                        background: color || '#5a6b7d', padding: '2px 7px',
+                        background: color || '#52524d', padding: '2px 7px',
                         borderRadius: 4 }}>{texto}</span>;
 }
 
@@ -191,8 +191,8 @@ function FormAsiento({ API, urn, parte, fotos, instrucciones, user, project,
 
   const num = (v) => (v === '' ? '' : v);
   return (
-    <div style={{ border: '1px solid #d5dde6', borderRadius: 10, padding: 14,
-                  margin: '10px 0', background: '#fafcfe' }}>
+    <div style={{ border: '1px solid #e8e6dc', borderRadius: 10, padding: 14,
+                  margin: '10px 0', background: '#faf9f5' }}>
       <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
         <select value={tipo} style={CAJA}
                 onChange={e => { setTipo(e.target.value); setEst({}); setRefs({}); setFilas([]); }}>
@@ -238,10 +238,10 @@ function FormAsiento({ API, urn, parte, fotos, instrucciones, user, project,
             Traer clima de la obra (Open-Meteo)
           </button>
           {clima && (
-            <div style={{ fontSize: 12.5, marginTop: 8, color: '#33475b' }}>
+            <div style={{ fontSize: 12.5, marginTop: 8, color: '#333330' }}>
               <b>{clima.dato.cielo}</b> · {clima.dato.temperatura_min}–{clima.dato.temperatura_max} °C ·
               precip. {clima.dato.precipitacion_mm} mm · viento {clima.dato.viento_kmh} km/h
-              <div style={{ color: '#78838f', marginTop: 2 }}>
+              <div style={{ color: '#72706b', marginTop: 2 }}>
                 origen: {clima.proveedor} · consultado {new Date(clima.consultado_en).toLocaleString('es-PE')} ·
                 coordenadas DE LA OBRA ({clima.lat?.toFixed?.(4)}, {clima.lon?.toFixed?.(4)})
               </div>
@@ -253,7 +253,7 @@ function FormAsiento({ API, urn, parte, fotos, instrucciones, user, project,
                        value={correccion.cielo || ''}
                        onChange={e => setCorreccion(p => ({ ...p, cielo: e.target.value }))} />
               </div>
-              <div style={{ fontSize: 11.5, color: '#8a5a00', marginTop: 2 }}>
+              <div style={{ fontSize: 11.5, color: '#734500', marginTop: 2 }}>
                 La corrección NO reemplaza el dato recibido: quedan los dos, con quién corrigió.
               </div>
             </div>
@@ -320,19 +320,19 @@ function FormAsiento({ API, urn, parte, fotos, instrucciones, user, project,
 function TarjetaAsiento({ asiento, onAprobar, onDevolver }) {
   const a = asiento;
   return (
-    <div style={{ border: '1px solid #e2e8f0', borderRadius: 8, padding: '10px 12px',
+    <div style={{ border: '1px solid #e8e6dc', borderRadius: 8, padding: '10px 12px',
                   marginBottom: 8, background: '#fff' }}>
       <div style={{ display: 'flex', gap: 8, alignItems: 'baseline', flexWrap: 'wrap' }}>
         <b style={{ fontSize: 13 }}>N.º {a.numero}</b>
-        <span style={{ fontSize: 12, color: '#5a6b7d' }}>{ETIQUETA_TIPO[a.tipo] || a.tipo}</span>
+        <span style={{ fontSize: 12, color: '#52524d' }}>{ETIQUETA_TIPO[a.tipo] || a.tipo}</span>
         <Chip texto={a.estado} color={COLOR_ESTADO[a.estado]} />
-        <span style={{ fontSize: 11, color: '#9aa7b4', marginLeft: 'auto' }}>
+        <span style={{ fontSize: 11, color: '#72706b', marginLeft: 'auto' }}>
           {a.created_by} {a.autor_funcion ? `· ${a.autor_funcion}` : '· sin función'} · id {a.id}
         </span>
       </div>
       {a.texto && <div style={{ fontSize: 13, marginTop: 6 }}>{a.texto}</div>}
       {a.contenido && a.contenido.dato && (
-        <div style={{ fontSize: 12, color: '#33475b', marginTop: 4 }}>
+        <div style={{ fontSize: 12, color: '#333330', marginTop: 4 }}>
           {a.contenido.dato.cielo} {a.contenido.origen === 'proveedor'
             ? `· ${a.contenido.proveedor} (obra: ${a.contenido.lat?.toFixed?.(3)}, ${a.contenido.lon?.toFixed?.(3)})`
             : '· registro manual'}
@@ -340,32 +340,32 @@ function TarjetaAsiento({ asiento, onAprobar, onDevolver }) {
         </div>
       )}
       {a.contenido && a.contenido.filas && a.contenido.filas.length > 0 && (
-        <div style={{ fontSize: 12, color: '#33475b', marginTop: 4 }}>
+        <div style={{ fontSize: 12, color: '#333330', marginTop: 4 }}>
           {a.contenido.filas.map((f, i) => <div key={i}>· {Object.values(f).join(' — ')}</div>)}
         </div>
       )}
       {a.contenido && (a.contenido.progresiva || a.contenido.frente) && (
-        <div style={{ fontSize: 12, color: '#5a6b7d', marginTop: 4 }}>
+        <div style={{ fontSize: 12, color: '#52524d', marginTop: 4 }}>
           {a.contenido.progresiva && <>prog. {a.contenido.progresiva} </>}
           {a.contenido.frente && <>· frente {a.contenido.frente} </>}
           {a.contenido.partida && <>· partida {a.contenido.partida}</>}
         </div>
       )}
       {Object.keys(a.referencias || {}).length > 0 && (
-        <div style={{ fontSize: 11.5, color: '#2c5d8a', marginTop: 4 }}>
+        <div style={{ fontSize: 11.5, color: '#507294', marginTop: 4 }}>
           cita: {Object.entries(a.referencias).map(([k, v]) => `${k}=${v}`).join(' · ')}
         </div>
       )}
       {a.estado === 'DEVUELTO' && (
-        <div style={{ fontSize: 12, color: '#8a2020', marginTop: 4 }}>
+        <div style={{ fontSize: 12, color: '#b93535', marginTop: 4 }}>
           Devuelto: {a.motivo_devolucion} — se corrige RE-REGISTRANDO otro asiento
           que lo referencia (id {a.id}); este queda tal cual.
         </div>
       )}
       {a.estado === 'EN_APROBACION' && (
         <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
-          <button style={{ ...BTN, color: '#1f6b3a' }} onClick={() => onAprobar(a)}>Aprobar</button>
-          <button style={{ ...BTN, color: '#8a2020' }} onClick={() => onDevolver(a)}>Devolver</button>
+          <button style={{ ...BTN, color: '#64744e' }} onClick={() => onAprobar(a)}>Aprobar</button>
+          <button style={{ ...BTN, color: '#b93535' }} onClick={() => onDevolver(a)}>Devolver</button>
         </div>
       )}
     </div>
@@ -412,8 +412,8 @@ function FormInstruccion({ API, urn, obraId, rectifica, onEmitida, onCancelar })
   };
 
   return (
-    <div style={{ border: '1px solid #d5dde6', borderRadius: 10, padding: 14,
-                  margin: '10px 0', background: '#fafcfe' }}>
+    <div style={{ border: '1px solid #e8e6dc', borderRadius: 10, padding: 14,
+                  margin: '10px 0', background: '#faf9f5' }}>
       <h4 style={{ margin: '0 0 8px', fontSize: 14 }}>
         {rectifica ? `Rectificar ${rectifica.codigo} (emite una instrucción NUEVA; la anterior queda visible)` : 'Emitir instrucción de obra'}
       </h4>
@@ -450,21 +450,21 @@ function TarjetaInstruccion({ instr, onAccion, onRectificar }) {
   const d = instr;
   const dest = d.destinatario || {};
   return (
-    <div style={{ border: '1px solid #e2e8f0', borderRadius: 8, padding: '10px 12px',
+    <div style={{ border: '1px solid #e8e6dc', borderRadius: 8, padding: '10px 12px',
                   marginBottom: 8, background: '#fff' }}>
       <div style={{ display: 'flex', gap: 8, alignItems: 'baseline', flexWrap: 'wrap' }}>
         <b style={{ fontSize: 13 }}>{d.codigo}</b>
         <Chip texto={d.estado} color={COLOR_ESTADO[d.estado]} />
-        {d.rectifica_a && <span style={{ fontSize: 11, color: '#8a2020' }}>rectifica a #{d.rectifica_a}</span>}
-        <span style={{ fontSize: 11, color: '#9aa7b4', marginLeft: 'auto' }}>
+        {d.rectifica_a && <span style={{ fontSize: 11, color: '#b93535' }}>rectifica a #{d.rectifica_a}</span>}
+        <span style={{ fontSize: 11, color: '#72706b', marginLeft: 'auto' }}>
           {d.emisor_funcion} → {dest.tipo === 'empresa'
             ? `${dest.empresa} (empresa · ${dest.funcion || 's/f'})`
             : `${dest.nombre || dest.email || dest.usuario_id} (${dest.empresa || 's/e'})`}
         </span>
       </div>
       <div style={{ fontSize: 13, marginTop: 4 }}><b>{d.asunto}</b></div>
-      <div style={{ fontSize: 12.5, color: '#33475b', marginTop: 2, whiteSpace: 'pre-wrap' }}>{d.contenido}</div>
-      <div style={{ fontSize: 11.5, color: '#5a6b7d', marginTop: 4 }}>
+      <div style={{ fontSize: 12.5, color: '#333330', marginTop: 2, whiteSpace: 'pre-wrap' }}>{d.contenido}</div>
+      <div style={{ fontSize: 11.5, color: '#52524d', marginTop: 4 }}>
         {(d.acuses || []).length
           ? `Acuses (${d.acuses.length}): ${d.acuses.map(a => a.por).join(', ')}`
           : 'Sin acuse todavía'}
@@ -481,7 +481,7 @@ function TarjetaInstruccion({ instr, onAccion, onRectificar }) {
           <button style={BTN} onClick={() => onAccion(d, 'cerrar')}>Verificar y cerrar</button>
         )}
         {['EMITIDA', 'ACUSADA', 'ATENDIDA'].includes(d.estado) && (
-          <button style={{ ...BTN, color: '#8a2020' }} onClick={() => onRectificar(d)}>Rectificar</button>
+          <button style={{ ...BTN, color: '#b93535' }} onClick={() => onRectificar(d)}>Rectificar</button>
         )}
       </div>
     </div>
@@ -622,8 +622,8 @@ export default function CuadernoModule({ project, API, user }) {
 
   const estilo = (activa) => ({
     padding: '6px 14px', borderRadius: 8, fontSize: 13, cursor: 'pointer',
-    border: '1px solid #c8d4e3',
-    background: activa ? '#16202b' : '#fff', color: activa ? '#fff' : '#16202b',
+    border: '1px solid #cccac0',
+    background: activa ? '#141413' : '#fff', color: activa ? '#fff' : '#141413',
   });
 
   return (
@@ -640,7 +640,7 @@ export default function CuadernoModule({ project, API, user }) {
         <>
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10,
                         alignItems: 'center', marginBottom: 12, flexWrap: 'wrap' }}>
-            <div style={{ fontSize: 12.5, color: '#78838f' }}>
+            <div style={{ fontSize: 12.5, color: '#72706b' }}>
               La jornada es única por obra y fecha operativa — la fecha DECLARADA
               del día de obra, no la del reloj del servidor.
             </div>
@@ -653,24 +653,24 @@ export default function CuadernoModule({ project, API, user }) {
               </button>
             </div>
           </div>
-          {partes === null && <div style={{ padding: 40, textAlign: 'center', color: '#9aa7b4' }}>Cargando…</div>}
+          {partes === null && <div style={{ padding: 40, textAlign: 'center', color: '#72706b' }}>Cargando…</div>}
           {partes && partes.length === 0 && (
-            <div style={{ padding: 40, textAlign: 'center', color: '#5a6b7d' }}>
+            <div style={{ padding: 40, textAlign: 'center', color: '#52524d' }}>
               Todavía no hay partes en esta obra.
             </div>
           )}
           {partes && partes.map(p => (
             <div key={p.id} onClick={() => abrirDetalle(p)}
-                 style={{ border: '1px solid #e2e8f0', borderRadius: 8, padding: '10px 14px',
+                 style={{ border: '1px solid #e8e6dc', borderRadius: 8, padding: '10px 14px',
                           marginBottom: 8, background: '#fff', cursor: 'pointer',
                           display: 'flex', gap: 10, alignItems: 'baseline', flexWrap: 'wrap' }}>
               <b style={{ fontSize: 14 }}>{p.fecha_operativa}</b>
               <Chip texto={p.estado} color={COLOR_ESTADO[p.estado]} />
-              <span style={{ fontSize: 12, color: '#5a6b7d' }}>{p.asientos} asiento(s)</span>
+              <span style={{ fontSize: 12, color: '#52524d' }}>{p.asientos} asiento(s)</span>
               {p.en_aprobacion > 0 && (
-                <span style={{ fontSize: 11.5, color: '#8a5a00' }}>{p.en_aprobacion} por aprobar</span>
+                <span style={{ fontSize: 11.5, color: '#734500' }}>{p.en_aprobacion} por aprobar</span>
               )}
-              <span style={{ fontSize: 11.5, color: '#9aa7b4', marginLeft: 'auto' }}>{p.created_by}</span>
+              <span style={{ fontSize: 11.5, color: '#72706b', marginLeft: 'auto' }}>{p.created_by}</span>
             </div>
           ))}
         </>
@@ -684,12 +684,12 @@ export default function CuadernoModule({ project, API, user }) {
             <b style={{ fontSize: 15 }}>Parte del {parte.fecha_operativa}</b>
             <Chip texto={parte.estado} color={COLOR_ESTADO[parte.estado]} />
             {parte.sinServidor && (
-              <span style={{ fontSize: 11.5, color: '#8a5a00' }}>
+              <span style={{ fontSize: 11.5, color: '#734500' }}>
                 guardado EN ESTE DISPOSITIVO — subirá con cobertura
               </span>
             )}
             {parte.aprobador_contractual === false && (
-              <span style={{ fontSize: 11.5, color: '#8a2020' }}>
+              <span style={{ fontSize: 11.5, color: '#b93535' }}>
                 SIN_APROBADOR_CONTRACTUAL: nadie ejerce SUPERVISION/ENTIDAD aquí —
                 la administración no la sustituye
               </span>
@@ -712,7 +712,7 @@ export default function CuadernoModule({ project, API, user }) {
           )}
           <div style={{ marginTop: 12 }}>
             {(parte.asientos || []).length === 0 && (
-              <div style={{ padding: 24, textAlign: 'center', color: '#9aa7b4', fontSize: 13 }}>
+              <div style={{ padding: 24, textAlign: 'center', color: '#72706b', fontSize: 13 }}>
                 La jornada no tiene asientos todavía.
               </div>
             )}
@@ -729,7 +729,7 @@ export default function CuadernoModule({ project, API, user }) {
         <>
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10,
                         alignItems: 'center', marginBottom: 12, flexWrap: 'wrap' }}>
-            <div style={{ fontSize: 12.5, color: '#78838f' }}>
+            <div style={{ fontSize: 12.5, color: '#72706b' }}>
               Una instrucción emitida es INMUTABLE: se corrige emitiendo una
               rectificación que la referencia. Emiten SUPERVISION y ENTIDAD.
             </div>
@@ -742,9 +742,9 @@ export default function CuadernoModule({ project, API, user }) {
                              onEmitida={() => { setEmitiendo(false); setRectifica(null); cargar(); }}
                              onCancelar={() => { setEmitiendo(false); setRectifica(null); }} />
           )}
-          {instrucciones === null && <div style={{ padding: 40, textAlign: 'center', color: '#9aa7b4' }}>Cargando…</div>}
+          {instrucciones === null && <div style={{ padding: 40, textAlign: 'center', color: '#72706b' }}>Cargando…</div>}
           {instrucciones && instrucciones.length === 0 && (
-            <div style={{ padding: 40, textAlign: 'center', color: '#5a6b7d' }}>
+            <div style={{ padding: 40, textAlign: 'center', color: '#52524d' }}>
               No hay instrucciones en esta obra.
             </div>
           )}

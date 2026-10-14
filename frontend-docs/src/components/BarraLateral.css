@@ -10,7 +10,11 @@
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
-  background: var(--a-surface-base);
+  /* GRIS, como la de ACC (UI polish, 13-oct-2026): la barra es el marco y el
+     contenido es lo blanco; la entrada activa, en blanco, se lee como «estoy
+     aquí». Antes todo era blanco y la activa una píldora azul. Es el gris de
+     hover de las filas (neutral-100, Mist). */
+  background: var(--bg-hover);
   border-right: 1px solid var(--a-border-default);
 }
 
@@ -62,7 +66,7 @@
 }
 
 .a-barra__entradas > li + li {
-  margin-top: 2px;
+  margin-top: 0;
 }
 
 /* ENTRADA. Separada de los bordes de la lista porque el anillo de foco se
@@ -70,17 +74,20 @@
    lado izquierdo (medido desde F0). Hover al instante, como la fila de la
    tabla. La activa conserva su fondo con el puntero encima. */
 .a-barra__entrada {
+  /* Filas a todo lo ancho, de 36 px y letra de 14, como ACC. Antes eran
+     píldoras con margen, de 13 px. */
   display: flex;
   align-items: center;
   gap: 12px;
-  width: calc(100% - 16px);
-  margin: 0 8px;
-  padding: 8px 12px;
+  width: 100%;
+  min-height: var(--a-size-menu-item);
+  margin: 0;
+  padding: 0 16px 0 20px;
   border: none;
-  border-radius: var(--a-radius-lg);
+  border-radius: 0;
   background: none;
   color: var(--a-text-secondary);
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 400;
   text-align: left;
   cursor: pointer;
@@ -90,9 +97,14 @@
   color: var(--a-text-primary);
 }
 .a-barra__entrada.es-activa {
-  background: var(--a-state-selected);
+  background: var(--a-surface-base);
   color: var(--a-action-primary);
   font-weight: 500;
+}
+/* El anillo de foco va por dentro: la fila ocupa todo el ancho y la lista
+   recortaría el de fuera. */
+.a-barra__entrada:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--a-action-text) !important;
 }
 
 /* COLUMNA DE ICONOS. Con los dos huecos de la barra fina quedan 39 px: la
@@ -100,14 +112,30 @@
 .a-barra--iconos .a-barra__entrada {
   justify-content: center;
   gap: 0;
-  width: calc(100% - 8px);
-  margin: 0 4px;
+  width: 100%;
+  margin: 0;
   padding: 8px 0;
 }
 .a-barra__icono {
   display: flex;
   flex-shrink: 0;
   line-height: 0;
+}
+/* ICONOS SÓLIDOS DE ALEPHIA (estilo B, elegido por el propietario el
+   13-oct-2026; ver components/IconoModulo.jsx). Un solo color, el del texto:
+   gris en reposo y Navy en la sección activa. */
+.a-barra__icono { color: var(--a-text-muted); }
+.a-barra__icono svg {
+  width: 20px;
+  height: 20px;
+}
+.a-barra__entrada:hover .a-barra__icono { color: var(--a-text-secondary); }
+.a-barra__entrada.es-activa .a-barra__icono { color: var(--a-action-primary); }
+
+/* ADMINISTRACIÓN, AL PIE (como ACC): separada del resto por una línea. */
+.a-barra__abajo {
+  flex-shrink: 0;
+  border-top: 1px solid var(--a-border-default);
 }
 .a-barra__texto {
   white-space: nowrap;
