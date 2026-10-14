@@ -796,6 +796,11 @@ def proxy_document():
                 resp.headers['Cache-Control'] = 'public, max-age=604800'  # 7 días en el navegador
                 return resp
             # si falla, caemos a la imagen completa abajo
+        if gcs_urn.lower().endswith(('.pdf', '.pdfx')):
+            # Un PDF sin miniatura NO se manda entero como si fuera la imagen:
+            # eran hasta 72 MB en la memoria del proceso por cada hueco de la
+            # tira (14-oct-2026), y una etiqueta <img> no lo puede pintar.
+            return Response(status=404)
         content, content_type = get_blob_data(gcs_urn)
         if content:
             resp = Response(content, mimetype=content_type or 'image/jpeg')
@@ -1755,13 +1760,14 @@ def confirm_upload():
             # planos). Generada aqui, cuando alguien abre la tira ya existen.
             if str(mime_type or '').startswith('image/') or \
                     str(filename or '').lower().endswith(('.pdf', '.pdfx')):
-                from gcs_manager import get_or_create_thumbnail
-                threading.Thread(target=get_or_create_thumbnail, args=(gcs_urn, 420), daemon=True).start()
+                # Por la cola acotada, no por un hilo suelto por fichero: 45
+                # planos subidos a la vez eran 90 dibujos simultaneos.
+                _encolar_miniaturas([gcs_urn])
             # La vista previa legible (2000 px) solo de los PDF, y tambien al
             # subir: ver el motivo en routes/uploads.py.
             if str(filename or '').lower().endswith(('.pdf', '.pdfx')):
-                from gcs_manager import crear_vista_previa
-                threading.Thread(target=crear_vista_previa, args=(gcs_urn,), daemon=True).start()
+                # (crear_vista_previa, por la misma cola acotada)
+                _encolar_vistas_previas([gcs_urn])
                 # Y SU MOSAICO (docs/archivos/15): los niveles de arriba, para
                 # que la primera apertura ya no dependa de bajar el PDF entero.
                 _encolar_mosaicos([gcs_urn])
@@ -2567,7 +2573,7 @@ def share_document():
 # Pequena a proposito: cada trabajo baja un PDF a disco y lo rasteriza. Dos
 # a la vez es suficiente para que una carpeta se prepare en segundos sin
 # acercarse al limite de memoria, y no compite con el sellado de integridad.
-_COLA_MINIATURAS = _ThreadPoolExecutor(max_workers=2,
+_COLA_MINIATURAS = _ThreadPoolExecutor(max_workers=1,
                                        thread_name_prefix='miniaturas')
 _MINIATURAS_ENCOLADAS = set()
 _CANDADO_MINIATURAS = _threading.Lock()
@@ -2914,10 +2920,13 @@ def url_de_vista_previa():
         if url:
             return jsonify({"success": True, "url": url, "pendiente": False}), 200
 
-    # Todavia no esta: se encola UNA vez y el lector sigue como hasta hoy. Nunca
-    # se prepara aqui mismo: eso seria mudar la espera del navegador al servidor.
-    _encolar_vistas_previas([gcs_urn])
-    return jsonify({"success": True, "url": None, "pendiente": True}), 200
+    # Todavia no esta. ABRIR NO DIBUJA (14-oct-2026): el lector sigue como hasta
+    # hoy, dibujando en el navegador. Se prepara al subir; al abrir, solo si se
+    # enciende ALEPHIA_DIBUJAR_AL_ABRIR=1 (ver _dibujar_al_abrir).
+    if _dibujar_al_abrir():
+        _encolar_vistas_previas([gcs_urn])
+        return jsonify({"success": True, "url": None, "pendiente": True}), 200
+    return jsonify({"success": True, "url": None, "pendiente": False}), 200
 
 
 # ── LOS MOSAICOS DE UNA LAMINA (paso B de docs/archivos/15) ─────────────────
@@ -2931,6 +2940,20 @@ def url_de_vista_previa():
 # vista previa (`_acceso_al_recurso`), ligada a la version, y sin acceso no se
 # dice ni si existe. Los niveles de arriba se preparan al subir (y en la puesta
 # al dia); los profundos, a demanda, la primera vez que alguien acerca esa zona.
+
+def _dibujar_al_abrir():
+    """¿Abrir una lamina puede poner al servidor a DIBUJAR lo que le falte?
+
+    APAGADO por omision desde el 14-oct-2026. Ese dia Render reinicio el backend
+    tres veces en seis minutos (mas de 2 GB) con seis personas abriendo laminas:
+    cada apertura de una hoja sin vista previa o sin mosaico encolaba su dibujo
+    en el mismo proceso que atiende a todos, y si el proceso caia a mitad, nada
+    quedaba guardado y la siguiente apertura volvia a empezar. Como Autodesk: se
+    prepara al SUBIR; al abrir se sirve lo que ya existe y, si falta, dibuja el
+    navegador. `ALEPHIA_DIBUJAR_AL_ABRIR=1` lo vuelve a encender.
+    """
+    return os.environ.get('ALEPHIA_DIBUJAR_AL_ABRIR', '').strip() == '1'
+
 
 def _encolar_mosaicos(urns):
     """Encola la preparacion de los mosaicos sin repetir (la cola de las miniaturas)."""
@@ -3019,8 +3042,10 @@ def mosaico_del_documento():
         logger.error('mosaico: no se pudo leer el manifiesto: %s', e)
         man = None
     if not man:
-        _encolar_mosaicos([gcs_urn])
-        return jsonify({"success": True, "manifiesto": None, "urls": {}, "pendiente": True}), 200
+        if _dibujar_al_abrir():
+            _encolar_mosaicos([gcs_urn])
+            return jsonify({"success": True, "manifiesto": None, "urls": {}, "pendiente": True}), 200
+        return jsonify({"success": True, "manifiesto": None, "urls": {}, "pendiente": False}), 200
 
     if datos.get('z') is None:
         return jsonify({"success": True, "manifiesto": man, "pendiente": False,
@@ -3030,7 +3055,10 @@ def mosaico_del_documento():
     if z is None:
         return jsonify({"success": False, "error": "Nivel inexistente"}), 400
     try:
-        listas = mosaicos_almacen.asegurar_teselas(gcs_urn, man, z, pedidas)
+        if _dibujar_al_abrir():
+            listas = mosaicos_almacen.asegurar_teselas(gcs_urn, man, z, pedidas)
+        else:
+            listas = mosaicos_almacen.teselas_existentes(gcs_urn, man, z, pedidas)
     except Exception as e:
         logger.error('mosaico: no se pudieron preparar teselas: %s', e)
         return jsonify({"success": False, "error": "No se pudieron preparar"}), 503

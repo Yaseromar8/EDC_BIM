@@ -463,14 +463,15 @@ def _complete_upload_locked(data, upload_id):
             # justo lo que las dejaba en blanco. Va por el mismo ejecutor
             # acotado que el sellado, no por un hilo suelto.
             if str(filename or '').lower().endswith(('.pdf', '.pdfx')):
-                from file_system_db import gcs_executor
-                from gcs_manager import get_or_create_thumbnail, crear_vista_previa
-                gcs_executor.submit(get_or_create_thumbnail, gcs_urn, 420)
+                # Por la cola de UN hilo de las miniaturas (routes/documents.py),
+                # que comparte el turno de dibujo del proceso (gcs_manager.RASTER_PDF).
+                from routes.documents import _encolar_miniaturas, _encolar_vistas_previas
+                _encolar_miniaturas([gcs_urn])
                 # Y LA VISTA PREVIA LEGIBLE (2000 px), aqui y no al abrir: una
                 # lamina de 72 MB tarda 45-50 s en dibujarse y esta imagen la
                 # enseña legible en 1,1 s. Prepararla al subir es lo unico que
                 # hace que la PRIMERA apertura ya la encuentre hecha.
-                gcs_executor.submit(crear_vista_previa, gcs_urn)
+                _encolar_vistas_previas([gcs_urn])   # crear_vista_previa, encolada
                 # Y SU MOSAICO (docs/archivos/15): los niveles de arriba de la
                 # piramide, en la misma cola acotada de las miniaturas.
                 from routes.documents import _encolar_mosaicos

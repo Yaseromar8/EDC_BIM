@@ -141,7 +141,10 @@ def preparar(blob):
             subidas.append(_SUBIDAS.submit(_subir, bucket, nombre_tesela(blob, z, x, y),
                                            datos, 'image/webp', inmutable))
 
-        man, resumen = mosaicos.preparar(ruta, escribir)
+        from gcs_manager import RASTER_PDF
+        print('[mosaico] preparando %s' % blob)
+        with RASTER_PDF:
+            man, resumen = mosaicos.preparar(ruta, escribir)
         for s in subidas:
             s.result()          # si una fallo, salta aqui y NO se sube el manifiesto
         _subir(bucket, nombre_manifiesto(blob), json.dumps(man).encode('utf-8'),
@@ -292,6 +295,15 @@ def teselas_validas(man, z, lista):
     return z, buenas
 
 
+def teselas_existentes(blob, man, z, teselas):
+    """Las de esa lista que YA estan en el almacen, sin dibujar ninguna."""
+    if int(z) in set(man.get('preparados') or []):
+        return list(teselas)
+    prefijo = '%s/z%d/' % (carpeta(blob), int(z))
+    existentes = {b.name for b in _bucket().list_blobs(prefix=prefijo)}
+    return [(x, y) for (x, y) in teselas if nombre_tesela(blob, z, x, y) in existentes]
+
+
 def asegurar_teselas(blob, man, z, teselas):
     """Garantiza que esas teselas del nivel z esten en el almacen.
 
@@ -314,7 +326,8 @@ def asegurar_teselas(blob, man, z, teselas):
     # Primero el candado de ESA lamina y despues el cupo general: asi las
     # peticiones que esperan a la misma lamina no ocupan el cupo de las demas.
     hechas = []
-    with _LAMINAS.candado(blob), _LAMINAS.dibujando:
+    from gcs_manager import RASTER_PDF
+    with _LAMINAS.candado(blob), _LAMINAS.dibujando, RASTER_PDF:
         with _LAMINAS.abierta(bucket, blob) as fuente:
             if fuente is None:
                 return listas

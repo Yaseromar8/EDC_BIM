@@ -95,6 +95,8 @@ class _Conexion:
 
 @pytest.fixture
 def banco(monkeypatch):
+    # Modo ENCENDIDO (dibujar al abrir); el de por omision va al final.
+    monkeypatch.setenv('ALEPHIA_DIBUJAR_AL_ABRIR', '1')
     estado = {'preparadas': {VIVA, ANTERIOR}, 'obra': OBRA, 'acceso': True,
               'permiso': True, 'consultas': [], 'encoladas': [], 'trabajos': []}
 
@@ -406,7 +408,7 @@ def test_al_subir_un_pdf_se_prepara_la_vista_previa():
     subidas = io.open(os.path.join(raiz, 'routes', 'uploads.py'), encoding='utf-8').read()
     confirmar = io.open(os.path.join(raiz, 'routes', 'documents.py'), encoding='utf-8').read()
     assert 'crear_vista_previa' in subidas, 'la subida por bloques la prepara'
-    assert re.search(r"endswith\(\('\.pdf', '\.pdfx'\)\)[\s\S]{0,600}crear_vista_previa", subidas), \
+    assert re.search(r"endswith\(\('\.pdf', '\.pdfx'\)\)[\s\S]{0,900}_encolar_vistas_previas", subidas), \
         'y solo para PDF'
     assert 'crear_vista_previa' in confirmar, 'la subida de Multimedia tambien'
 
@@ -421,3 +423,63 @@ def test_el_nombre_lleva_el_tamaño_y_cuelga_de_la_version():
     assert gcs_manager.nombre_de_vista_previa(ANTERIOR) != gcs_manager.nombre_de_vista_previa(VIVA)
     assert (gcs_manager.PX_VISTA_PREVIA, gcs_manager.CALIDAD_VISTA_PREVIA) == (1500, 85)
     assert gcs_manager.ENFOQUE_VISTA_PREVIA == (1.0, 160, 2)
+
+
+# ── 7 · por omision, abrir no dibuja (14-oct-2026) ──────────────────────────
+
+def test_por_omision_lo_que_falta_no_se_encola(banco, monkeypatch):
+    pedir, estado = banco
+    monkeypatch.delenv('ALEPHIA_DIBUJAR_AL_ABRIR', raising=False)
+    estado['preparadas'] = set()
+    codigo, d = pedir({'node_id': NODO})
+    assert (codigo, d) == (200, {'success': True, 'url': None, 'pendiente': False})
+    assert estado['trabajos'] == [], 'abrir no pone al servidor a dibujar'
+
+
+def test_por_omision_la_preparada_se_sigue_entregando(banco, monkeypatch):
+    pedir, _estado = banco
+    monkeypatch.delenv('ALEPHIA_DIBUJAR_AL_ABRIR', raising=False)
+    codigo, d = pedir({'node_id': NODO})
+    assert codigo == 200 and d['pendiente'] is False and d['url']
+
+
+def test_un_solo_dibujo_de_pdf_a_la_vez(monkeypatch):
+    import threading
+    import gcs_manager
+    dentro, maximo, candado = [0], [0], threading.Lock()
+    def lento(ruta, max_px):
+        with candado:
+            dentro[0] += 1; maximo[0] = max(maximo[0], dentro[0])
+        import time; time.sleep(0.05)
+        with candado:
+            dentro[0] -= 1
+    monkeypatch.setattr(gcs_manager, '_rasterizar_pdf_de_fichero_sin_turno', lento)
+    hilos = [threading.Thread(target=gcs_manager._rasterizar_pdf_de_fichero, args=('x', 10)) for _ in range(6)]
+    for h in hilos: h.start()
+    for h in hilos: h.join()
+    assert maximo[0] == 1
+
+
+def test_la_subida_va_por_la_cola_de_un_hilo():
+    import io
+    import os
+    raiz = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    confirmar = io.open(os.path.join(raiz, 'routes', 'documents.py'), encoding='utf-8').read()
+    assert 'threading.Thread(target=get_or_create_thumbnail' not in confirmar
+    assert 'threading.Thread(target=crear_vista_previa' not in confirmar
+    assert '_COLA_MINIATURAS = _ThreadPoolExecutor(max_workers=1,' in confirmar
+
+
+def test_dentro_de_una_peticion_no_se_espera_el_turno_sin_limite(monkeypatch):
+    import gcs_manager
+    from flask import Flask
+    monkeypatch.setattr(gcs_manager, 'ESPERA_DEL_TURNO_EN_PETICION', 0.05)
+    monkeypatch.setattr(gcs_manager, '_rasterizar_pdf_de_fichero_sin_turno', lambda r, m: 'imagen')
+    assert gcs_manager.RASTER_PDF.acquire(timeout=1)
+    try:
+        with Flask(__name__).test_request_context('/'):
+            assert gcs_manager._rasterizar_pdf_de_fichero('x', 10) is None
+    finally:
+        gcs_manager.RASTER_PDF.release()
+    with Flask(__name__).test_request_context('/'):
+        assert gcs_manager._rasterizar_pdf_de_fichero('x', 10) == 'imagen'

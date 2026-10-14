@@ -297,7 +297,39 @@ def get_blob_data(blob_name):
 ULTIMO_ERROR_RASTER = None
 
 
+# UN SOLO DIBUJO DE PDF A LA VEZ EN TODO EL PROCESO (14-oct-2026).
+#
+# Render reinicio el backend tres veces en seis minutos por pasar de 2 GB con
+# seis personas consultando laminas: dibujar una hoja pesada (o con una imagen
+# grande dentro) ocupa cientos de MB, y miniaturas, vistas previas y mosaicos
+# podian dibujar a la vez en el mismo proceso que atiende a todos. Este turno
+# lo comparten los tres: lo que espera, espera; lo que no espera es la memoria.
+RASTER_PDF = threading.BoundedSemaphore(1)
+# Dentro de una PETICION no se espera el turno mas que esto: ocho peticiones
+# esperando dejarian al servidor sin hilos para nadie. Sin turno, no hay
+# miniatura en esa respuesta (la pantalla ya sabe vivir sin ella). En segundo
+# plano se espera lo que haga falta.
+ESPERA_DEL_TURNO_EN_PETICION = 5
+
+
 def _rasterizar_pdf_de_fichero(ruta, max_px):
+    """Como `_rasterizar_pdf_de_fichero_sin_turno`, esperando el turno de dibujo."""
+    global ULTIMO_ERROR_RASTER
+    from flask import has_request_context
+    if has_request_context():
+        if not RASTER_PDF.acquire(timeout=ESPERA_DEL_TURNO_EN_PETICION):
+            ULTIMO_ERROR_RASTER = 'otro dibujo en curso: sin turno'
+            print('[thumb] sin turno de dibujo; se omite %s' % ruta)
+            return None
+    else:
+        RASTER_PDF.acquire()
+    try:
+        return _rasterizar_pdf_de_fichero_sin_turno(ruta, max_px)
+    finally:
+        RASTER_PDF.release()
+
+
+def _rasterizar_pdf_de_fichero_sin_turno(ruta, max_px):
     """La primera pagina de un PDF EN DISCO, como imagen PIL.
 
     Se le pasa una RUTA y no los bytes A PROPOSITO: asi el fichero no vive

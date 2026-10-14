@@ -100,6 +100,9 @@ class _Conexion:
 
 @pytest.fixture
 def banco(monkeypatch):
+    # Estas pruebas cubren el modo ENCENDIDO (dibujar al abrir). El apagado, que
+    # es el de por omision desde el 14-oct-2026, va al final del fichero.
+    monkeypatch.setenv('ALEPHIA_DIBUJAR_AL_ABRIR', '1')
     estado = {'con_mosaico': {VIVA, ANTERIOR}, 'obra': OBRA, 'acceso': True, 'permiso': True,
               'consultas': [], 'trabajos': [], 'preparadas': [], 'a_demanda': [], 'firmadas': []}
 
@@ -326,3 +329,40 @@ def test_la_subida_prepara_el_mosaico_de_los_pdf():
         'la subida por bloques lo prepara, y solo para PDF'
     assert re.search(r"endswith\(\('\.pdf', '\.pdfx'\)\)[\s\S]{0,600}_encolar_mosaicos", confirmar), \
         'la subida de Multimedia tambien'
+
+
+# ── 6 · por omision, abrir no dibuja (14-oct-2026) ──────────────────────────
+
+def test_por_omision_sin_mosaico_no_se_encola_nada(banco, monkeypatch):
+    pedir, estado = banco
+    monkeypatch.delenv('ALEPHIA_DIBUJAR_AL_ABRIR', raising=False)
+    estado['con_mosaico'] = set()
+    codigo, d = pedir({'node_id': NODO})
+    assert (codigo, d) == (200, {'success': True, 'manifiesto': None, 'urls': {}, 'pendiente': False})
+    assert estado['trabajos'] == [], 'abrir no pone al servidor a preparar el mosaico'
+
+
+def test_por_omision_un_nivel_profundo_solo_entrega_lo_que_ya_existe(banco, monkeypatch):
+    pedir, estado = banco
+    monkeypatch.delenv('ALEPHIA_DIBUJAR_AL_ABRIR', raising=False)
+    vistas = []
+    monkeypatch.setattr(mosaicos_almacen, 'teselas_existentes',
+                        lambda blob, man, z, teselas: vistas.append((blob, z, list(teselas))) or [(10, 7)])
+    codigo, d = pedir({'node_id': NODO, 'z': 3, 'teselas': [[10, 7], [11, 7]]})
+    assert codigo == 200
+    assert sorted(d['urls']) == ['3/10_7'], 'la que falta no se dibuja: el lector la resuelve con el PDF'
+    assert estado['a_demanda'] == [], 'nada se dibuja a demanda'
+    assert vistas == [(VIVA, 3, [(10, 7), (11, 7)])]
+
+
+def test_las_teselas_existentes_no_dibujan(monkeypatch):
+    class _Blob:
+        def __init__(self, nombre): self.name = nombre
+    class _Cubo:
+        def list_blobs(self, prefix):
+            return [_Blob(mosaicos_almacen.nombre_tesela('b.pdf', 3, 1, 1))]
+    monkeypatch.setattr(mosaicos_almacen, '_bucket', lambda: _Cubo())
+    monkeypatch.setattr(mosaicos_almacen, '_LAMINAS', None)    # tocarlo seria dibujar
+    man = {'preparados': [0, 1, 2]}
+    assert mosaicos_almacen.teselas_existentes('b.pdf', man, 3, [(1, 1), (2, 1)]) == [(1, 1)]
+    assert mosaicos_almacen.teselas_existentes('b.pdf', man, 1, [(5, 5)]) == [(5, 5)]
