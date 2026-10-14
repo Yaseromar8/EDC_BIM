@@ -186,3 +186,48 @@ nuevas no estorban al código viejo.
 copias deja esa columna en su `DEFAULT` nuevo y las siete vistas históricas
 pierden su condición de *legacy*. Es una deuda conocida de recuperación, no un
 fallo del esquema. Ver `AI_WORKSTATE.md → KNOWN BACKLOG`.
+
+## H · Identidad visual
+
+### D-24 · ALEPHIA Docs usa la **paleta oficial de Claude** desde el 14-oct-2026
+Decisión del propietario: «guarda la paleta oficial de Claude, la usaremos desde ahora».
+
+Son los siete colores de la guía de marca de Anthropic (skill `brand-guidelines` del repositorio
+`anthropics/skills`):
+
+| Nombre | Color | Papel |
+|---|---|---|
+| Dark | `#141413` | Texto principal, fondos oscuros, **acción principal** |
+| Light | `#faf9f5` | Fondo de página, texto sobre oscuro |
+| Mid Gray | `#b0aea5` | Elementos secundarios, deshabilitado |
+| Light Gray | `#e8e6dc` | Fondos sutiles, bordes |
+| Orange | `#d97757` | Acento principal: **gesto de enviar** e indicador activo |
+| Blue | `#6a9bcc` | Acento secundario: foco, selección, enlaces, «Compartido» |
+| Green | `#788c5d` | Acento terciario: aprobado y publicado |
+
+**Reglas que no se negocian:**
+- **Derivados.** Los tintes y los tonos de texto se **derivan** de los siete (mezcla con Light o
+  Dark), siempre con contraste **≥ 4,5:1** para texto: enlace `#507294`, verde de texto `#667650`,
+  texto secundario `#5e5d59`, de apoyo `#6d6b67`, selección `#e6ecef`, laterales `#f1f0e8`.
+- **Texto.** Orange, Blue y Mid Gray **no son color de texto** (contraste de 2,1 a 3,0).
+- **Fuera de la paleta.** Error `#b93535` y aviso `#734500` salen del sistema de la app de Claude,
+  porque la oficial no los trae.
+- **Color como dato.** El color que codifica información (marcas de PDF y CAD, comparación,
+  gráficos) **no se rebrandea**.
+- **Dónde vive.** `frontend-docs/src/tema-claude.css` (solo Docs, solo modo claro). Detalle en
+  `docs/ux/PALETA_CLAUDE_EN_DOCS.md`; lámina en `docs/ux/maquetas/paleta_oficial_claude.html`.
+- **Pantalla de referencia.** El ejemplo de esa lámina es la referencia visual: página Light,
+  tarjetas blancas con borde Light Gray y radio 8, cabecera en minúscula de oración y botón
+  principal Dark.
+- **Lista cerrada de derivados** (26 colores en total, método: oficial mezclado con Light o Dark en % redondo): `docs/ux/PALETA_OFICIAL_CLAUDE_DEFINICION.md` es la fuente de verdad del color.
+- **Barra superior: Dark 12 `#302f2e`** con texto y logo en Light (12,7:1), selectores hundidos en Dark 04 `#1d1d1c` y avatar Light. El 14-oct-2026 se eligió primero Mid Gray (opción C); el mismo día el propietario la cambió: «el gris lo confundo mucho con lo que está en la pantalla… Dark 12 lo veo mejor, y resalta». Es la misma en el inicio, en la lista de proyectos y en Archivos; debajo, página Light y tarjetas blancas.
+- ~~View usa el modo oscuro de la paleta~~ (14-oct-2026, sustituido el mismo día por lo siguiente). Se mantiene **Gris 500 `#918f88`** (Mid Gray + 20 % Dark) para texto de apoyo sobre oscuro.
+- **Iconos de obra: APROBADOS** (14-oct-2026, «sí, queda así por ahora, guárdalo»): `design/iconos/iconos-obra.json`, 60 iconos de línea en el estilo de Claude, lámina `docs/ux/maquetas/iconos_obra_v1.html`. **Aplicados en Docs** (14-oct-2026, `IconoModulo.jsx` lee el JSON); en View, pendientes.
+- **IDENTIDAD CONFIRMADA** (14-oct-2026). El propietario: «excelente, esa va a ser nuestra identidad desde ahora; de un momento mejoramos más». Lo que se describe en esta sección es la línea base: se mejora sobre ella y no se vuelve a abrir la elección de paleta.
+- **View CLARO con la barra en Dark 12** (14-oct-2026). El propietario: «no me gusta mucho el dark en barras y fondo de paneles». Ante la lámina `docs/ux/maquetas/view_claro_v1.html`, eligió «Dark 12 #302f2e».
+  - Barra superior en Dark 12, como Docs.
+  - Todo lo demás claro: página Light, paneles blancos, laterales Light 50, líneas Light Gray, interacción Blue 30D y raya Orange en lo activo.
+  - Paneles propios de Autodesk en `light-theme` y lienzo en Light 50. Esto sustituye a la política C de UX-08 por requisito nuevo del propietario.
+  - Sigue oscura la barra inferior (`ViewerLabelsBar`, protegida), con sus chips Revit y Corte.
+  - Siguen oscuras las vistas de AR y cámara, que van sobre la imagen de la cámara.
+- **View.** El visor aún no la usa: decisión pendiente.
