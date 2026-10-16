@@ -32,7 +32,7 @@ const refLinePlugin = {
     ctx.stroke();
     if (opts.label) {
       ctx.fillStyle = '#e0a63f';
-      ctx.font = "600 10px 'Inter', sans-serif";
+      ctx.font = "600 10px 'IBM Plex Sans', sans-serif";
       if (onX) { ctx.textAlign = 'left'; ctx.fillText(opts.label, px + 5, chartArea.top + 11); }
       else { ctx.textAlign = 'right'; ctx.fillText(opts.label, chartArea.right - 5, px - 5); }
     }
@@ -269,7 +269,7 @@ function CjsChart({ config, agg, points, onSegment, activeKey, metricLabel, zoom
 function Kpi({ total, totalCount, config }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
-      <div style={{ fontSize: 40, fontWeight: 700, color: '#171c24', letterSpacing: -1, fontVariantNumeric: 'tabular-nums', fontFamily: "'Poppins', 'Inter', sans-serif" }}>{fmt(total)}</div>
+      <div style={{ fontSize: 40, fontWeight: 700, color: '#171c24', letterSpacing: -1, fontVariantNumeric: 'tabular-nums', fontFamily: "'IBM Plex Sans', sans-serif" }}>{fmt(total)}</div>
       <div style={{ fontSize: 12, color: '#7a8494', marginTop: 6, textAlign: 'center' }}>
         {METRIC_LABEL[config.metric || 'count']}{config.metric !== 'count' && config.valueField ? ` de ${config.valueField}` : ''} · {fmt(totalCount)} elementos
       </div>
@@ -424,8 +424,8 @@ export default function ChartCard({ config, rows, fields = [], onEdit, onUpdate,
       <div {...dragHandlers}
         style={{ display: 'flex', alignItems: 'flex-start', gap: 8, cursor: 'grab', flexShrink: 0, userSelect: 'none', touchAction: 'none' }}>
         <div style={{ flex: 1, minWidth: 0 }}>
-          {/* Título en Poppins (misma receta tipográfica de Vyssuals) */}
-          <div style={{ fontSize: 14, fontWeight: 600, color: '#171c24', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontFamily: "'Poppins', 'Inter', system-ui, sans-serif", letterSpacing: 0.1 }}>{config.title || config.groupBy || (isQa ? 'Parámetros del modelo' : 'Gráfico')}</div>
+          {/* Título en IBM Plex Sans, la letra del sistema (D-26) */}
+          <div style={{ fontSize: 14, fontWeight: 600, color: '#171c24', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontFamily: "'IBM Plex Sans', system-ui, sans-serif", letterSpacing: 0.1 }}>{config.title || config.groupBy || (isQa ? 'Parámetros del modelo' : 'Gráfico')}</div>
           <div style={{ fontSize: 10.5, color: '#8a93a1', marginTop: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{subtitle}</div>
           {/* La PREGUNTA que responde el gráfico (patrón editorial de Plotly/Dash) */}
           {config.question && (

@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
 import { API, formatDate, getInitials } from '../utils/helpers';
 import { apiFetch } from '../utils/apiFetch';
+import { LaminaVacia } from './IlustracionesDeObra';
 
 export function TransmittalModal({ isOpen, onClose, items, projectPrefix, user, onCreated }) {
   const [subject, setSubject] = useState('');
@@ -162,6 +163,7 @@ export function TransmittalsView({ projectPrefix }) {
         <div style={{ textAlign: 'center', padding: 48 }}><div className="adsk-spinner" style={{ margin: '0 auto' }} /></div>
       ) : list.length === 0 ? (
         <div style={{ textAlign: 'center', padding: 48, color: '#72706b', fontSize: 13 }}>
+          <LaminaVacia nombre="gaviones" />
           No hay transmittals. Selecciona archivos en Archivos y pulsa "Transmittal".
         </div>
       ) : list.map(t => (

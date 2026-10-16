@@ -373,7 +373,7 @@ export default function RevisionDetalle({ rid, projectPrefix, onVolver, onCambio
                   ? <div>Plazo: <b>{formatDate(p.vence)}</b></div>
                   : <div>Sin plazo</div>)}
                 {p.estado === 'pendiente' && p.dias && (
-                  <div>Plazo al empezar su turno: {p.dias} días calendario</div>
+                  <div>Plazo al empezar su turno: {p.dias} {p.dias_tipo === 'laborables' ? 'días hábiles' : 'días calendario'}</div>
                 )}
                 {p.acto && (
                   <div>

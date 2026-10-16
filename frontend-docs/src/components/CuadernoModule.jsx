@@ -17,6 +17,7 @@ import toast from 'react-hot-toast';
 import { apiFetch } from '../utils/apiFetch';
 import * as campo from '../offline/captura';
 import * as precarga from '../offline/precarga';
+import { LaminaVacia } from './IlustracionesDeObra';
 
 /* El MISMO catálogo cerrado que cuaderno_de_obra.TIPOS_DE_ASIENTO y el CHECK
  * de la base — hay un tripwire en el backend que los casa: si esta lista
@@ -656,6 +657,7 @@ export default function CuadernoModule({ project, API, user }) {
           {partes === null && <div style={{ padding: 40, textAlign: 'center', color: '#72706b' }}>Cargando…</div>}
           {partes && partes.length === 0 && (
             <div style={{ padding: 40, textAlign: 'center', color: '#52524d' }}>
+              <LaminaVacia nombre="excavadora" />
               Todavía no hay partes en esta obra.
             </div>
           )}

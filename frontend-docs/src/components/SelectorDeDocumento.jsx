@@ -125,7 +125,12 @@ export default function SelectorDeDocumento({ API, project, titulo, ayuda,
                              borderBottom: '1px solid #f1f0e8', background: '#fff',
                              padding: '9px 12px', cursor: 'pointer', display: 'flex',
                              alignItems: 'center', gap: 9, fontSize: 13 }}>
-              <span style={{ fontSize: 14 }}>{n._carpeta ? '📁' : '📄'}</span>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#72706b" strokeWidth="1.6"
+                   strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ flex: 'none' }}>
+                {n._carpeta
+                  ? <path d="M3 6.5h6l2 2h10V19H3z" />
+                  : <><path d="M7 3h7l5 5v13H7z" /><path d="M14 3v5h5" /></>}
+              </svg>
               <span style={{ flex: 1, color: '#141413', overflow: 'hidden',
                              textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {n.name}

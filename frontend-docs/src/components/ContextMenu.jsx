@@ -32,6 +32,7 @@ export default function ContextMenu({
   onAttributes,
   onNuevaVersion,
   onCopiarEnlace,
+  onAnadirAGrupo,
 }) {
   // CERRAR COMO SE ESPERA (UI polish F1). Hasta ahora el menú solo se cerraba
   // con un clic fuera: Escape no hacía nada, y al desplazar la lista o cambiar
@@ -91,6 +92,7 @@ export default function ContextMenu({
     (isAdmin ? 2 : 0) +
     (item.type !== 'folder' && onAttributes ? 1 : 0) +
     (onCopiarEnlace && !varios ? 1 : 0) +
+    (item.type !== 'folder' && onAnadirAGrupo ? 1 : 0) +
     1 +
     (isAdmin ? 2 : 0);
   // Opciones de 36 px, 4 px de margen arriba y abajo y el separador de
@@ -189,6 +191,13 @@ export default function ContextMenu({
         <button onClick={() => { onClose(); onCopiarEnlace(item); }}>
           <div className="menu-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg></div>
           Copiar enlace
+        </button>
+      )}
+      {/* AÑADIR A GRUPO (15-oct-2026): el documento sigue en su carpeta; el grupo solo lo enlaza. */}
+      {item.type !== 'folder' && onAnadirAGrupo && (
+        <button onClick={() => { onClose(); onAnadirAGrupo((objetivo.length ? objetivo : [item]).filter(o => o.type !== 'folder')); }}>
+          <div className="menu-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round"><path d="M12 3.5 20.5 8 12 12.5 3.5 8z"></path><path d="m3.5 12 8.5 4.5 8.5-4.5"></path></svg></div>
+          Añadir a grupo{sufijo}
         </button>
       )}
       {item.type !== 'folder' && onAttributes && visible('atributos') && (

@@ -1,6 +1,6 @@
 /* ── NativeFileTree styles ── */
 .native-file-tree {
-    font-family: 'Inter', sans-serif;
+    font-family: var(--a-font-sans);
     user-select: none;
 }
 

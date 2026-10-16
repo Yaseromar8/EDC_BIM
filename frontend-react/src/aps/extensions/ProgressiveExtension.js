@@ -257,7 +257,7 @@ class ProgressiveExtension extends BaseExtension {
                     padding: 2px 6px;
                     border-radius: 3px;
                     border: 1px solid rgba(180,180,180,0.5);
-                    font: 600 10px Inter, Arial, sans-serif;
+                    font: 600 10px 'IBM Plex Sans', Arial, sans-serif;
                     white-space: nowrap;
                     pointer-events: auto;
                     cursor: grab;
@@ -311,7 +311,7 @@ class ProgressiveExtension extends BaseExtension {
                             background: #f59e0b; color: white; border: none; padding: 10px 20px;
                             border-radius: 20px; font-weight: bold; cursor: pointer;
                             box-shadow: 0 4px 15px rgba(0,0,0,0.4); pointer-events: auto;
-                            z-index: 1000; font-family: Inter, sans-serif; transition: background 0.2s;
+                            z-index: 1000; font-family: 'IBM Plex Sans', sans-serif; transition: background 0.2s;
                         `;
                         this._clearSectionBtn.onmouseenter = () => this._clearSectionBtn.style.background = '#d97706';
                         this._clearSectionBtn.onmouseleave = () => this._clearSectionBtn.style.background = '#f59e0b';

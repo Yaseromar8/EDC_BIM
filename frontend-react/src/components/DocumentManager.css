@@ -62,7 +62,7 @@
     font-size: 16px;
     font-weight: 600;
     color: #e0e0e0;
-    font-family: 'Inter', 'Segoe UI', sans-serif;
+    font-family: var(--a-font-sans);
 }
 
 .dm-topbar-left .dm-icon {
@@ -212,7 +212,7 @@
     font-weight: 500;
     cursor: pointer;
     transition: all 0.15s;
-    font-family: 'Inter', 'Segoe UI', sans-serif;
+    font-family: var(--a-font-sans);
 }
 
 .dm-btn-primary {

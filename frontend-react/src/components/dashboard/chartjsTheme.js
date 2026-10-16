@@ -8,7 +8,7 @@
 // así que chart.js NO engorda el bundle principal del visor.
 import Chart from 'chart.js/auto';
 
-Chart.defaults.font.family = "'Inter', system-ui, -apple-system, sans-serif";
+Chart.defaults.font.family = "'IBM Plex Sans', system-ui, -apple-system, sans-serif";
 Chart.defaults.font.size = 11;
 Chart.defaults.color = '#5f6b7a';                       // texto de ejes/leyendas (tema claro Miro)
 Chart.defaults.borderColor = 'rgba(23, 28, 38, 0.09)';  // rejillas
@@ -31,6 +31,6 @@ tt.displayColors = true;
 tt.boxWidth = 8;
 tt.boxHeight = 8;
 tt.usePointStyle = true;
-tt.titleFont = { family: "'Poppins', 'Inter', sans-serif", size: 12, weight: '600' };
+tt.titleFont = { family: "'IBM Plex Sans', sans-serif", size: 12, weight: '600' };
 
 export default Chart;

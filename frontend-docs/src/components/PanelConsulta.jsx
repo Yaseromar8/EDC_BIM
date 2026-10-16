@@ -78,7 +78,7 @@ export default function PanelConsulta({ item, onCerrar, onAbrir, onVersiones, on
         <div className="recorrido" style={{ '--avance': `${paso * 25}%` }}>
           {RECORRIDO.map(([k, n], i) => (
             <div key={k} className={i < paso ? 'hecho' : i === paso ? 'aqui' : ''}>
-              <i /><b>{n}</b><small>{i <= paso && fechas[k] ? fecha(fechas[k], CORTA) : '—'}</small>
+              <i /><b>{n}</b><small>{i > paso ? '—' : fechas[k] ? fecha(fechas[k], CORTA) : datos ? 'sin registro' : '…'}</small>
             </div>
           ))}
         </div>

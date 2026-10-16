@@ -30,7 +30,7 @@ export default function SelloEscritorio({ app, tamano = 16 }) {
         {/* La banda roja: es lo que hace reconocible el icono a tamaño pequeño */}
         <rect x="3" y="11.6" width="17" height="7.6" rx="1.2" fill="#B93535" />
         <text x="11" y="17.2" textAnchor="middle" fill="#fff"
-          fontSize="6.1" fontWeight="700" fontFamily="Inter, Arial, sans-serif"
+          fontSize="6.1" fontWeight="700" fontFamily="'IBM Plex Sans', Arial, sans-serif"
           letterSpacing="0.2">PDF</text>
       </svg>
     );

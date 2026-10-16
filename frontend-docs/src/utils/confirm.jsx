@@ -92,7 +92,10 @@ export function ConfirmHost() {
       onClick={() => close(false)}
       style={{
         position: 'fixed', inset: 0, background: 'rgba(20,20,19,0.45)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 20000,
+        // POR ENCIMA DEL LECTOR (14-oct-2026): `.file-viewer-overlay` está en
+        // 999999, y con 20000 la confirmación pedida DESDE el lector (decidir una
+        // revisión) se abría detrás, invisible. Una confirmación es modal: va arriba.
+        display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000001,
       }}
     >
       <div

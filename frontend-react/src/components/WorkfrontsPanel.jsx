@@ -77,7 +77,7 @@ const WorkfrontsPanel = ({ workfronts, setWorkfronts, onClose, isVisible }) => {
             boxShadow: '0 10px 25px rgba(0,0,0,0.5)',
             zIndex: 1000,
             color: 'white',
-            fontFamily: 'Inter, sans-serif',
+            fontFamily: 'var(--a-font-sans)',
             overflow: 'hidden'
         }}>
             {/* Header / Drag Handle */}

@@ -3,6 +3,17 @@ import React, { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import PDFViewer from './PDFViewer';
 import SelloEscritorio from './SelloEscritorio';
 import AccLinkPicker from './AccLinkPicker';
+import DecisionEnLector from './DecisionEnLector';
+const LectorDeTabla = lazy(() => import('./LectorDeTabla'));
+import CajetinDelDocumento, { SelloSustituida, AccionesDelCajetin } from './CajetinDelDocumento';
+import { CapaDeSustento, CapaDeSustentoEnCad, PanelDeSustento } from './SustentoDelPlano';
+import { useSustento } from '../hooks/useSustento';
+import { vincularDeLaDireccion, sinCircuito, conCircuito, numeroDe, cantidadLegible } from '../utils/sustento';
+import { confirmAction } from '../utils/confirm';
+import { conArchivos, leerEnlaceDeArchivos } from '../utils/enlacesDeArchivos';
+const PdfCompareView = lazy(() => import('./PdfCompareView'));
+import { chipDeVersion, verdadDelPlano, modoDelDocumento } from '../utils/lectorDePlanos';
+import { estadoDe } from '../utils/estadosECD';
 import { apiFetch, apiJson } from '../utils/apiFetch';
 import { accPreviewEnabled, accPreviewKey, readAccPreview } from '../utils/accPreviewLocal';
 import { getRecentPdfUrl } from '../utils/recentPdfCache';
@@ -45,6 +56,10 @@ export default function DocumentViewer({
   
   API,
   onClose,
+  // LDA C9: copiar el enlace de lo que se mira (el explorador sabe hacerlo) y el nombre del juego que
+  // recorren ‹ › («Publicados», la carpeta…), para el pie del lector.
+  onCopiarEnlace = null,
+  nombreDelJuego = '',
   // La tira de la carpeta (boton de cuadricula del lector, como ACC):
   // el explorador YA tiene la lista de la carpeta abierta, asi que se
   // pasa tal cual -- ni una peticion nueva por abrir un plano.
@@ -71,6 +86,68 @@ export default function DocumentViewer({
   const [accLinkRetry, setAccLinkRetry] = useState(0);
   const lastAccFocusCheck = useRef(0);
   const [showAccPicker, setShowAccPicker] = useState(false);
+  // SUSTENTO DE METRADOS SOBRE EL PLANO (ESTANDAR_LDA §6): zonas que sustentan ítems de partida.
+  // Solo PDF y nunca en enlaces compartidos. Si el servidor no tiene la ruta (migración 34 sin
+  // aplicar), `disponible` es false y no se enseña nada.
+  // También en un DWG (16-oct-2026): hay planos que se entregan en CAD y su sustento se marca en su vista 2D.
+  const esDwgSustento = !isShared && /\.(dwg|dxf)$/i.test(file?.name || '');
+  const sustento = useSustento(API, !isShared && (/\.pdfx?$/i.test(file?.name || '') || esDwgSustento) ? file?.id : null, 'documento');
+  // En el DWG: la vista que se mira (la da CadViewer) y cómo pedirle otra (un vínculo de otra presentación).
+  const [vistaCad, setVistaCad] = useState(null);
+  const irAVistaRef = useRef(null);
+  // La presentación con la que abrir, si la dirección la trae (la planilla abre el DWG en la del vínculo).
+  const [vistaPedida] = useState(() => {
+    const p = new URLSearchParams(window.location.search);
+    return leerEnlaceDeArchivos(window.location.search)?.documento === String(file?.id) ? (p.get('vista') || null) : null;
+  });
+  // EXCEL O PLANILLA (15-oct-2026, a petición del propietario): un Excel se ve COMO EXCEL (visor de Office),
+  // igual que siempre. Solo la planilla que ya sustenta algún plano se abre como PLANILLA, para todos: así
+  // quien revisa ve de dónde sale cada cantidad. El conmutador del cajetín cambia la vista de ESTE documento
+  // (no se transforma nada: el fichero es el mismo). CSV, ODS y XLSM van siempre como planilla: esta rama de Office no los muestra.
+  const esHojaDeCalculo = !isShared && /\.(xlsx|xls)$/i.test(file?.name || '');
+  const sustentoDeLaObra = useSustento(API, esHojaDeCalculo ? file?.id : null, 'obra');
+  const sustentaPlanos = sustentoDeLaObra.vinculos.some(v => String(v.planilla_node_id) === String(file?.id));
+  const [vistaElegida, setVistaElegida] = useState({});      // { [id del documento]: 'excel' | 'planilla' }
+  // La vista automática se decide UNA vez, al abrir: si luego cambian los vínculos (otra pestaña del
+  // circuito), la hoja no salta de vista bajo los ojos de quien la lee.
+  const [vistaAlAbrir, setVistaAlAbrir] = useState({});
+  if (esHojaDeCalculo && file?.id && sustentoDeLaObra.listo && !vistaAlAbrir[file.id]) {
+    setVistaAlAbrir(v => ({ ...v, [file.id]: sustentaPlanos ? 'planilla' : 'excel' }));
+  }
+  const vistaDeLaHoja = vistaElegida[file?.id] || vistaAlAbrir[file?.id] || (sustentaPlanos ? 'planilla' : 'excel');
+  const vistaDecidida = Boolean(vistaElegida[file?.id]) || sustentoDeLaObra.listo;
+  // LLEGAR DESDE LA PLANILLA («+ Vincular un plano» en la fila del Excel): la dirección trae el ítem, lo
+  // que falta y la planilla. Se toma UNA vez, solo si la dirección es de ESTE documento, y se borra.
+  const [desdePlanilla] = useState(() => {
+    const v = vincularDeLaDireccion(window.location.search);
+    return v && leerEnlaceDeArchivos(window.location.search)?.documento === String(file?.id)
+      ? { ...v, nodeId: String(file.id) } : null;
+  });
+  useEffect(() => {
+    if (!vincularDeLaDireccion(window.location.search) && !new URLSearchParams(window.location.search).get('vista')) return;
+    window.history.replaceState(window.history.state, '',
+      window.location.pathname + sinCircuito(window.location.search) + window.location.hash);
+  }, []);
+  // «Metrados» (zonas y panel) NO tiene botón fijo: se enciende desde el estuche si el plano tiene
+  // vínculos, o solo al llegar desde la planilla.
+  const [sustentoAbierto, setSustentoAbierto] = useState(() => !!desdePlanilla);
+  const [dibujandoZona, setDibujandoZona] = useState(() => !!desdePlanilla);
+  const [compararAbierto, setCompararAbierto] = useState(false);
+  const [zonaBorrador, setZonaBorrador] = useState(null);   // { zona, pagina }
+  const [vinculoElegido, setVinculoElegido] = useState(null);
+  // La zona a medio guardar es de UN documento: al pasar a otro (‹ ›) deja de valer sola.
+  const borradorVigente = zonaBorrador && zonaBorrador.nodeId === file?.id ? zonaBorrador : null;
+  // La intención es de UN plano: al pasar a otro con ‹ › deja de valer.
+  const intencionVigente = desdePlanilla && desdePlanilla.nodeId === String(file?.id) ? desdePlanilla : null;
+
+  // Abre un documento de la obra en una pestaña con nombre (una para planos, otra para planillas): ir y
+  // volver entre plano y Excel no llena el navegador de pestañas.
+  const abrirEnPestana = (destino, pestana, extra = {}) => {
+    const obra = leerEnlaceDeArchivos(window.location.search)?.obra || new URLSearchParams(window.location.search).get('obra');
+    if (!obra) { toast.error('No se pudo saber la obra.'); return; }
+    const base = sinCircuito(conArchivos(window.location.search, { obra, ...destino }));
+    window.open(window.location.pathname + conCircuito(base, extra), pestana);
+  };
   const accFileId = file?.id;
   const accFileName = file?.name;
   const accVersionId = viewedVersionInfo?.id;
@@ -173,7 +250,7 @@ export default function DocumentViewer({
     const soltar = () => { vigente = false; };
 
     const lowerName = file.name.toLowerCase();
-    if (['.docx', '.doc', '.xlsx', '.xls', '.pptx', '.ppt'].some(ext => lowerName.endsWith(ext))) {
+    if (['.docx', '.doc', '.xlsx', '.xls', '.xlsm', '.csv', '.ods', '.pptx', '.ppt'].some(ext => lowerName.endsWith(ext))) {
       // Si es enlace compartido, ya tenemos la URL firmada
       if (isShared && file.url) {
         queueMicrotask(() => { if (vigente) setOfficeUrl(file.url); });
@@ -398,6 +475,15 @@ export default function DocumentViewer({
       setConectorAviso({ firmada });
     }
   };
+  // ── LDA C9 y el conmutador [Vigente | Anterior]: lo mismo para todos los formatos ──
+  const vvActual = viewedVersionInfo || versionHistory[0] || null;
+  const enVersionAnterior = !!(vvActual && versionHistory[0] && vvActual.version_number !== versionHistory[0].version_number);
+  const copiarEnlaceDeLoQueSeMira = onCopiarEnlace && !isShared
+    ? () => onCopiarEnlace(file, enVersionAnterior ? vvActual.id : null) : null;
+  const puedeComparar = !isShared && /\.pdfx?$/i.test(file?.name || '') && versionHistory.length >= 2;
+  const irAVigente = setViewedVersionInfo && versionHistory[0] ? () => setViewedVersionInfo(versionHistory[0]) : null;
+  const irAAnterior = setViewedVersionInfo && versionHistory[1] ? () => setViewedVersionInfo(versionHistory[1]) : null;
+
   const popoverVersiones = (
               <div className="version-popover" style={{ top: 32, left: 0, width: 350 }}>
                 <div style={{ padding: '8px 12px', borderBottom: '1px solid #f1f0e8', fontSize: 12, fontWeight: 600, color: '#72706b' }}>
@@ -467,35 +553,50 @@ export default function DocumentViewer({
   return (
     <div className="file-viewer-overlay" style={isShared ? { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 9999, display: 'flex', flexDirection: 'column', background: '#fff' } : undefined}>
       {!esPdf && (
-      <div className="file-viewer-header" style={isShared ? { padding: '0 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #e8e6dc', flexShrink: 0 } : undefined}>
-        <div className="file-viewer-title" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <span style={{ fontSize: 16, fontWeight: 500, color: 'var(--accent)', maxWidth: 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {file.name}
-          </span>
-          
-          <div style={{ position: 'relative' }}>
-            <div 
-              className="version-link-acc" 
-              onClick={() => { if (!isShared && setShowVersions) setShowVersions(!showVersions); }}
-              style={{ fontSize: 13, padding: '2px 12px', cursor: isShared ? 'default' : 'pointer' }}
-            >
-              {viewedVersionInfo ? `V${viewedVersionInfo.version_number}` : (file.version ? `V${file.version}` : 'V1')}
-              {!isShared && (
-                <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" style={{ marginLeft: 6, transform: showVersions ? 'rotate(180deg)' : 'none' }}>
-                  <path d="M7 10l5 5 5-5H7z"/>
-                </svg>
-              )}
-            </div>
-
-            {!isShared && showVersions && !esPdf && popoverVersiones}
+      <div className={`file-viewer-header${isShared ? '' : ' file-viewer-header--cajetin'}`} style={isShared ? { padding: '0 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #e8e6dc', flexShrink: 0 } : undefined}>
+        {/* EL CAJETÍN EN TODOS LOS FORMATOS (ESTANDAR_LDA.md, capa 1): CAD, modelos, Office,
+            imagen y vídeo dicen lo mismo y con la misma forma que un PDF. El modo (Plano, Modelo,
+            Planilla, Documento, Imagen) sale del formato y del código. Los enlaces compartidos
+            conservan su cabecera: el invitado no tiene el historial. */}
+        {!isShared ? (
+          <div className="file-viewer-cajetin">
+            <CajetinDelDocumento API={API} obra={projectPrefix}
+              vv={viewedVersionInfo || versionHistory[0] || null} file={file} historial={versionHistory}
+              modo={modoDelDocumento({ nombre: file.name })}
+              onVersiones={setShowVersions ? () => setShowVersions(!showVersions) : null}
+              onIrVigente={irAVigente} onIrAnterior={irAAnterior} />
+            {showVersions && <div className="file-viewer-cajetin__versiones">{popoverVersiones}</div>}
           </div>
+        ) : (
+          <div className="file-viewer-title" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <span style={{ fontSize: 16, fontWeight: 500, color: 'var(--accent)', maxWidth: 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {file.name}
+            </span>
+          
+            <div style={{ position: 'relative' }}>
+              <div 
+                className="version-link-acc" 
+                onClick={() => { if (!isShared && setShowVersions) setShowVersions(!showVersions); }}
+                style={{ fontSize: 13, padding: '2px 12px', cursor: isShared ? 'default' : 'pointer' }}
+              >
+                {viewedVersionInfo ? `V${viewedVersionInfo.version_number}` : (file.version ? `V${file.version}` : 'V1')}
+                {!isShared && (
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" style={{ marginLeft: 6, transform: showVersions ? 'rotate(180deg)' : 'none' }}>
+                    <path d="M7 10l5 5 5-5H7z"/>
+                  </svg>
+                )}
+              </div>
 
-          {!isShared && viewedVersionInfo && viewedVersionInfo.version_number !== (versionHistory[0]?.version_number || file.version) && (
-            <div className="no-actual-badge">
-              No actual
+              {!isShared && showVersions && !esPdf && popoverVersiones}
             </div>
-          )}
-        </div>
+
+            {!isShared && viewedVersionInfo && viewedVersionInfo.version_number !== (versionHistory[0]?.version_number || file.version) && (
+              <div className="no-actual-badge">
+                No actual
+              </div>
+            )}
+          </div>
+        )}
 
         <div className="file-viewer-actions">
            {esCad && !isShared && !esVistaPuente && accLinkFor === accKey && accLink && (
@@ -522,10 +623,29 @@ export default function DocumentViewer({
              </button>
            )}
            {isShared && sharedRole && (
-             <span style={{ fontFamily: 'Inter', fontSize: 13, fontWeight: 500, color: '#72706b', marginRight: 16 }}>
+             <span style={{ fontFamily: 'var(--a-font-sans)', fontSize: 13, fontWeight: 500, color: '#72706b', marginRight: 16 }}>
                Acceso compartido: {sharedRole === 'viewer' ? 'Lector' : 'Comentador'}
              </span>
            )}
+           {esHojaDeCalculo && vistaDecidida && (
+             <span className="cajetin__alternar cajetin__vista" role="group" aria-label="Cómo se ve la hoja de cálculo">
+               <button type="button" aria-pressed={vistaDeLaHoja === 'excel'} title="Verla como en Excel, con su formato"
+                 onClick={() => setVistaElegida(v => ({ ...v, [file.id]: 'excel' }))}>Excel</button>
+               <button type="button" aria-pressed={vistaDeLaHoja === 'planilla'}
+                 title="Leerla como planilla: buscar por ítem y vincular planos (metrados)"
+                 onClick={() => setVistaElegida(v => ({ ...v, [file.id]: 'planilla' }))}>Planilla</button>
+             </span>
+           )}
+           {esDwgSustento && sustento.disponible && (sustento.vinculos.length > 0 || intencionVigente) && (
+             <button type="button" className="cajetin__metrados" aria-pressed={sustentoAbierto}
+               title="Las partidas que salen de este plano, con su zona"
+               onClick={() => { setSustentoAbierto(a => !a); setDibujandoZona(false); setZonaBorrador(null); }}>
+               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"
+                 strokeLinecap="round" strokeLinejoin="round"><path d="M17.5 5.5V5H6.5l6 7-6 7h11v-.5" /></svg>
+               Metrados ({sustento.vinculos.length})
+             </button>
+           )}
+           {!isShared && <AccionesDelCajetin onCopiarEnlace={copiarEnlaceDeLoQueSeMira} />}
            <button className="file-viewer-close" onClick={onClose || (() => window.close())}>✕</button>
         </div>
       </div>
@@ -590,12 +710,16 @@ export default function DocumentViewer({
           como en ACC: la barra lleva menú (32) + búsqueda (32) + el hueco, así
           que el chip empieza sobre los 76 px. */}
       {esPdf && !isShared && showVersions && (
-        <div style={{ position: 'absolute', top: 44, left: 76, zIndex: 40 }}>
+        <div style={{ position: 'absolute', top: 56, left: 408, zIndex: 40 }}>
           {popoverVersiones}
         </div>
       )}
       
       <div className="file-viewer-content" style={{ flex: 1, position: 'relative', background: '#f1f0e8', display: 'flex', justifyContent: 'center' }}>
+        {!esPdf && !isShared && (() => {
+          const selloFuera = verdadDelPlano({ vv: viewedVersionInfo || versionHistory[0] || null, file, historial: versionHistory })?.sello;
+          return selloFuera ? <div className="sello-sustituida--flotante"><SelloSustituida sello={selloFuera} /></div> : null;
+        })()}
         {(() => {
           const fileUrl = isShared && file.url ? file.url : securePreviewUrl;
           const lowerName = file.name.toLowerCase();
@@ -652,6 +776,23 @@ export default function DocumentViewer({
             );
           }
           
+          // 2.b MODO TABLA (ESTANDAR_LDA §5): las planillas se leen como TABLA en el propio lector,
+          //     no en el visor de Office: así ALEPHIA sabe qué hay en cada fila (la clave, el ítem) y
+          //     cada fila tiene su ancla LDA. Los enlaces compartidos siguen con el visor de Office.
+          if (esHojaDeCalculo && !vistaDecidida) {
+            return <div style={{ padding: 40, textAlign: 'center' }}><div className="adsk-spinner" style={{ margin: '0 auto' }} /></div>;
+          }
+          if (!isShared && modoDelDocumento({ nombre: file.name }) === 'tabla' && (!esHojaDeCalculo || vistaDeLaHoja === 'planilla')) {
+            const vvT = viewedVersionInfo || versionHistory[0] || null;
+            return (
+              <Suspense fallback={<div style={{ padding: 40, textAlign: 'center' }}><div className="adsk-spinner" style={{ margin: '0 auto' }} /></div>}>
+                <LectorDeTabla key={officeUrl || 'sin-url'} url={officeUrl} cargando={loadingOffice}
+                  codigo={file.name.replace(/\.[^.]+$/, '')} version={vvT?.version_number || file.version || null}
+                  API={API} nodeId={file.id} projectPrefix={projectPrefix} nombre={file.name} />
+              </Suspense>
+            );
+          }
+
           // 3. OFFICE (Word, Excel, PPT)
           if (['.docx', '.doc', '.xlsx', '.xls', '.pptx', '.ppt'].some(ext => lowerName.endsWith(ext))) {
             if (loadingOffice) {
@@ -667,6 +808,21 @@ export default function DocumentViewer({
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#72706b' }}>
                   <div style={{ fontSize: 14 }}>No se pudo cargar la vista previa de Office.</div>
                   <button onClick={() => window.open(fileUrl, '_blank')} style={{ marginTop: 12, padding: '8px 16px', background: 'var(--accent)', color: 'white', border: 'none', borderRadius: 4, cursor: 'pointer' }}>Descargar archivo</button>
+                </div>
+              );
+            }
+            // El visor de Microsoft baja el fichero DESDE SUS SERVIDORES: una dirección local (el banco,
+            // localhost) no la alcanza y enseñaba un «Se produjo un error» sin explicación. Se dice claro.
+            const direccionLocal = (() => {
+              try { return /^(localhost|127\.0\.0\.1|\[::1\])$|\.localhost$/i.test(new URL(officeUrl, window.location.href).hostname); }
+              catch { return true; }
+            })();
+            if (direccionLocal) {
+              return (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 10, color: '#52524d', textAlign: 'center', padding: 24 }}>
+                  <div style={{ fontSize: 15, fontWeight: 600, color: '#141413' }}>La vista «Excel» no está disponible en este equipo</div>
+                  <div style={{ fontSize: 13, maxWidth: 460 }}>La muestra el visor de Microsoft, que baja el archivo desde internet y no puede leer uno que está en tu PC. En la plataforma publicada funciona.</div>
+                  <button type="button" onClick={() => window.open(officeUrl, '_blank')} className="barra-btn">Descargar el Excel</button>
                 </div>
               );
             }
@@ -700,8 +856,8 @@ export default function DocumentViewer({
                  <div style={{ background: '#f1f0e8', padding: 32, borderRadius: '50%', marginBottom: 24 }}>
                    <svg width="48" height="48" viewBox="0 0 24 24" fill="#52524d"><path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2h12c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>
                  </div>
-                 <p style={{ fontFamily: 'Inter', fontSize: 16, color: '#333330', fontWeight: 500 }}>No hay vista previa disponible</p>
-                 <a href={fileUrl} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, marginTop: 24, background: 'var(--accent)', color: '#fff', padding: '10px 24px', borderRadius: 8, textDecoration: 'none', fontFamily: 'Inter', fontWeight: 500, fontSize: 14, transition: 'background 0.2s' }}>
+                 <p style={{ fontFamily: 'var(--a-font-sans)', fontSize: 16, color: '#333330', fontWeight: 500 }}>No hay vista previa disponible</p>
+                 <a href={fileUrl} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, marginTop: 24, background: 'var(--accent)', color: '#fff', padding: '10px 24px', borderRadius: 8, textDecoration: 'none', fontFamily: 'var(--a-font-sans)', fontWeight: 500, fontSize: 14, transition: 'background 0.2s' }}>
                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
                    Descargar Archivo
                  </a>
@@ -715,7 +871,47 @@ export default function DocumentViewer({
             // la cabecera del documento desaparece y la versión debe seguir
             // a la vista (la trazabilidad no se va con el fullscreen).
             const vv = viewedVersionInfo || versionHistory[0] || null;
+            // EL CAJETÍN (LDA-1, docs/ux/LECTOR_ALEPHIA_ESTANDAR.md §15): la cabecera del lector dice
+            // qué es, qué versión, para qué sirve y si sigue vigente, igual en planos y documentos.
+            // En una versión anterior, además, el sello encima de la hoja.
+            // No en enlaces compartidos: el invitado no tiene el historial.
+            const sello = isShared ? null : verdadDelPlano({ vv, file, historial: versionHistory })?.sello;
             return <PDFViewer url={fileUrl} fileName={file.name}
+              cajetin={isShared ? null : ({ apaisada }) => (
+                <CajetinDelDocumento API={API} obra={projectPrefix} vv={vv} file={file} historial={versionHistory}
+                  modo={modoDelDocumento({ nombre: file.name, apaisada })}
+                  onVersiones={setShowVersions ? () => setShowVersions(!showVersions) : null}
+                  onIrVigente={irAVigente} onIrAnterior={irAAnterior} />
+              )}
+              accionesDelCajetin={isShared ? null : (
+                <AccionesDelCajetin claseBoton="pdf-ico" onCopiarEnlace={copiarEnlaceDeLoQueSeMira}
+                  onComparar={puedeComparar ? () => setCompararAbierto(true) : null} />
+              )}
+              // «Metrados» en el estuche SOLO si este plano ya sustenta algo (o se llega a vincular).
+              extrasDelEstuche={!isShared && sustento.disponible && (sustento.vinculos.length || intencionVigente) ? [{
+                id: 'metrados', etiqueta: `Metrados (${sustento.vinculos.length})`,
+                titulo: 'Las partidas que salen de este plano, con su zona',
+                icono: <path d="M17.5 5.5V5H6.5l6 7-6 7h11v-.5" />,
+                activo: sustentoAbierto,
+                onClick: () => { setSustentoAbierto(a => !a); setDibujandoZona(false); setZonaBorrador(null); },
+              }] : []}
+              nombreDelJuego={nombreDelJuego}
+              sobreLaHoja={({ pagina }) => (
+                <>
+                  {sello && <SelloSustituida sello={sello} enLaHoja />}
+                  {/* Las zonas se VEN siempre que el plano sustente algo (al reabrirlo, el revisor las encuentra);
+                      con el panel cerrado van discretas y solo su etiqueta se pulsa, para no estorbar a las
+                      demás herramientas (Medir, Nube…). La etiqueta abre el panel con ese vínculo. */}
+                  {!isShared && sustento.disponible && (sustentoAbierto || dibujandoZona || sustento.vinculos.length > 0) && (
+                    <CapaDeSustento vinculos={sustento.vinculos} pagina={pagina} discreta={!sustentoAbierto && !dibujandoZona}
+                      versionVista={vv?.version_number || null} dibujando={dibujandoZona}
+                      borrador={borradorVigente && borradorVigente.pagina === pagina ? borradorVigente.zona : null}
+                      elegido={vinculoElegido}
+                      onZona={(zona) => { setZonaBorrador({ zona, pagina, nodeId: file.id }); setDibujandoZona(false); setSustentoAbierto(true); }}
+                      onElegir={(id) => { setVinculoElegido(id); setSustentoAbierto(true); }} />
+                  )}
+                </>
+              )}
               // El lector conserva el plano anterior mientras se pide la URL
               // firmada del nuevo (asi la cinta no se desmonta), pero entonces
               // NO SABE que viene otro. Sin este aviso, el primer tramo de la
@@ -736,7 +932,11 @@ export default function DocumentViewer({
               onAbrirHermano={isShared ? null : onAbrirHermano}
               esAdmin={!isShared && isAdmin}
               obraDelDocumento={projectPrefix}
-              versionLabel={vv ? `V${vv.version_number || 1}` : null}
+              // «V2 · P02 · Compartido», como el visor de Procore: versión,
+              // revisión y estado (este, solo si es la vigente). utils/lectorDePlanos.js
+              versionLabel={isShared ? (vv ? `V${vv.version_number || 1}` : null)
+                : chipDeVersion({ vv, file, actual: versionHistory[0]?.version_number || file.version,
+                                  etiquetaDeEstado: c => estadoDe(c)?.etiqueta || '' }).texto}
               // La vista previa legible se pide por documento Y VERSIÓN: con una
               // versión fijada tiene que salir la de ESA, no la de la actual.
               versionId={isShared ? null : (viewedVersionInfo ? viewedVersionInfo.id : null)}
@@ -833,7 +1033,17 @@ export default function DocumentViewer({
                 <CadViewer key={`${accKey}:${accLink?.version_id || 'sin-acc'}`}
                            file={file} projectPrefix={projectPrefix}
                            urnDirecto={accLink?.viewer_urn || null}
-                           versionId={viewedVersionInfo ? viewedVersionInfo.id : null} />
+                           versionId={viewedVersionInfo ? viewedVersionInfo.id : null}
+                           vistaInicial={vistaPedida} onVista={setVistaCad} irAVistaRef={irAVistaRef}
+                           capa={esDwgSustento && sustento.disponible && (sustentoAbierto || dibujandoZona || sustento.vinculos.length > 0)
+                             ? ({ viewer, vista }) => (
+                               <CapaDeSustentoEnCad viewer={viewer} vista={vista.guid} vinculos={sustento.vinculos}
+                                 dibujando={dibujandoZona} discreta={!sustentoAbierto && !dibujandoZona}
+                                 borrador={borradorVigente && borradorVigente.vista === vista.guid ? borradorVigente.zona : null}
+                                 elegido={vinculoElegido}
+                                 onZona={(zona) => { setZonaBorrador({ zona, pagina: 1, nodeId: file.id, vista: vista.guid, vistaNombre: vista.nombre }); setDibujandoZona(false); setSustentoAbierto(true); }}
+                                 onElegir={(id) => { setVinculoElegido(id); setSustentoAbierto(true); }} />
+                             ) : null} />
               </Suspense>
             );
           }
@@ -847,6 +1057,68 @@ export default function DocumentViewer({
             />
           );
         })()}
+        {/* DECIDIR SIN SALIR DEL PLANO (C2): solo aparece si quien mira tiene que
+            decidir una revisión que incluye este documento. Nunca en un enlace
+            compartido. Ver components/DecisionEnLector.jsx. */}
+        {!isShared && file?.id && (
+          <DecisionEnLector API={API} projectPrefix={projectPrefix} nodeId={file.id} />
+        )}
+        {/* METRADOS (ESTANDAR_LDA §6): lo que sale de este plano. Sin botón fijo: se abre desde el estuche
+            («Ver → Metrados») o al llegar desde la fila de la planilla para vincular. */}
+        {!isShared && (esPdf || esDwgSustento) && sustento.disponible && (
+          <PanelDeSustento key={intencionVigente ? 'desde-planilla' : 'plano'} vinculos={sustento.vinculos}
+            abierto={sustentoAbierto}
+            onCerrar={() => { setSustentoAbierto(false); setDibujandoZona(false); setZonaBorrador(null); }}
+            desdePlanilla={intencionVigente}
+            onVolverAPlanilla={intencionVigente?.planilla
+              ? () => abrirEnPestana({ documento: intencionVigente.planilla }, 'lda-planilla', { fila: intencionVigente.item }) : null}
+            onAbrirPlanilla={(v) => abrirEnPestana({ documento: v.planilla_node_id }, 'lda-planilla', { fila: v.item })}
+            dibujando={dibujandoZona} onDibujar={() => setDibujandoZona(d => !d)}
+            borrador={borradorVigente} onDescartar={() => setZonaBorrador(null)}
+            elegido={vinculoElegido}
+            onElegir={(id) => {
+              setVinculoElegido(id);
+              // En un DWG, un vínculo de otra presentación lleva a esa presentación.
+              const v = sustento.vinculos.find(x => x.id === id);
+              if (esDwgSustento && v?.vista && v.vista !== vistaCad?.guid) irAVistaRef.current?.(v.vista);
+            }}
+            onRetirar={async (v) => {
+              // Un vínculo es lo que el cliente revisa: retirarlo se confirma (la zona dibujada se pierde).
+              const ok = await confirmAction({
+                title: `¿Retirar el sustento de ${v.item}?`,
+                message: `Esta zona deja de sustentar ${cantidadLegible(v.cantidad, v.unidad)} de la partida ${v.item}. El plano y la planilla no cambian.`,
+                confirmText: 'Retirar', danger: true,
+              });
+              if (!ok) return;
+              const r = await sustento.retirar(v.id);
+              if (!r.ok) toast.error(r.error);
+            }}
+            onGuardar={async (form) => {
+              const vvS = viewedVersionInfo || versionHistory[0] || null;
+              const r = await sustento.crear({
+                node_id: file.id, version_id: vvS?.id || null, pagina: borradorVigente?.pagina || 1,
+                // La cantidad viaja como NÚMERO ya interpretado (miles/decimales resueltos aquí, con la misma
+                // regla que la planilla); un texto que no es número se manda tal cual para que el servidor lo rechace.
+                zona: borradorVigente?.zona, item: form.item.trim(), unidad: form.unidad.trim(), nota: form.nota,
+                cantidad: String(form.cantidad).trim() === '' ? '' : (numeroDe(form.cantidad) ?? form.cantidad),
+                // El vínculo recuerda de qué planilla vino: el plano ofrecerá «Planilla ›». Aunque se cambie el
+                // ítem en el formulario: la planilla es la misma (sustentar también la partida de al lado).
+                planilla_node_id: intencionVigente ? intencionVigente.planilla : null,
+                // En un DWG: la vista donde se marcó (la zona va en coordenadas del dibujo).
+                vista: borradorVigente?.vista || null, vista_nombre: borradorVigente?.vistaNombre || null,
+              });
+              if (r.ok) setZonaBorrador(null);
+              return r;
+            }} />
+        )}
+        {compararAbierto && puedeComparar && (
+          <Suspense fallback={null}>
+            <PdfCompareView fileName={file.name}
+              versionA={enVersionAnterior ? vvActual : versionHistory[1]}
+              versionB={versionHistory[0]}
+              projectPrefix={projectPrefix} onClose={() => setCompararAbierto(false)} />
+          </Suspense>
+        )}
       </div>
     </div>
   );

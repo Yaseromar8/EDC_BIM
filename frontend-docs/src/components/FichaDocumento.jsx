@@ -114,7 +114,9 @@ function Recorrido({ item, datos }) {
     <div className="recorrido" style={{ '--avance': `${paso * 25}%` }}>
       {RECORRIDO.map(([k, n], i) => (
         <div key={k} className={i < paso ? 'hecho' : i === paso ? 'aqui' : ''}>
-          <i /><b>{n}</b><small>{i <= paso && fechas[k] ? fecha(fechas[k], CORTA) : '—'}</small>
+          {/* Un paso ya dado sin fecha es anterior al registro de eventos: se
+              dice así, no con un guion que parece «aún no». */}
+          <i /><b>{n}</b><small>{i > paso ? '—' : fechas[k] ? fecha(fechas[k], CORTA) : datos ? 'sin registro' : '…'}</small>
         </div>
       ))}
     </div>

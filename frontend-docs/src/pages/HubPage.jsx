@@ -15,6 +15,7 @@ import { apiFetch } from '../utils/apiFetch';
 import MiTrabajo from '../components/MiTrabajo';
 import SegundoFactorPanel from '../components/SegundoFactorPanel';
 import MiCuentaPanel from '../components/MiCuentaPanel';
+import { PaisajeDeObra } from '../components/IlustracionesDeObra';
 import './entradaGris.css';
 
 function ProductCard({ icon, producto, onClick, locked = false, lockNote }) {
@@ -119,7 +120,15 @@ export default function HubPage({ user, onChooseDocs, onLogout, onAbrirRevision 
       )}
       {panel === '2fa' && <SegundoFactorPanel onClose={() => setPanel('cuenta')} />}
 
-      <main style={{ position: 'relative', flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '24px 24px 64px', overflow: 'hidden' }}>
+      <main style={{ position: 'relative', isolation: 'isolate', flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '24px 24px 64px', overflow: 'hidden' }}>
+
+        {/* PAISAJE DE OBRA al pie, solo líneas y en gris muy tenue (14-oct-2026).
+            Aquí sí cabe: la entrada no tiene datos que leer. Detrás del
+            contenido (`isolation` + z-index -1) y sin eventos. */}
+        <div aria-hidden="true" style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: 'min(34vh, 260px)',
+                                         zIndex: -1, pointerEvents: 'none', color: '#72706B', opacity: 0.13 }}>
+          <PaisajeDeObra />
+        </div>
 
         {/* Sin la luz difusa de antes: el fondo gris y el borde de las fichas
             bastan para situar el centro (maqueta v4). */}

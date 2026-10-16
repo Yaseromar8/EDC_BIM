@@ -17,6 +17,7 @@ import toast from 'react-hot-toast';
 import { apiFetch } from '../utils/apiFetch';
 import * as campo from '../offline/captura';
 import { confirmAction } from '../utils/confirm';
+import { LaminaVacia } from './IlustracionesDeObra';
 
 const COLOR = {
   'Borrador':    { fondo: '#f1f0e8', texto: '#52524d' },
@@ -290,6 +291,7 @@ export default function ProtocolosModule({ project, API, user, isAdmin }) {
           {actas.length === 0 && !error && (
             <div style={{ padding: '28px 20px', textAlign: 'center', color: '#72706b',
                           fontSize: 13, border: '1px dashed #e8e6dc', borderRadius: 8 }}>
+              <LaminaVacia nombre="vial" />
               {plantillas.length === 0
                 ? 'Primero crea una plantilla de protocolo; después se levantan actas con ella.'
                 : 'Todavía no hay actas en esta obra.'}

@@ -1,0 +1,92 @@
+/* Grupos de documentos (PanelDeGrupos, GrupoAbierto y «Añadir a grupo»). Paleta D-24, como la barra de Archivos. */
+
+.grupos-panel { padding: 4px 0 12px; margin-bottom: 8px; border-bottom: 1px solid #e8e6dc; }
+.grupos-panel__titulo { padding: 6px 16px 6px; font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #6d6b67; }
+
+.grupos-item {
+  display: flex; align-items: center; gap: 8px; width: 100%;
+  padding: 6px 16px; border: 0; background: none; color: #141413;
+  font: inherit; font-size: 13.5px; text-align: left; cursor: pointer;
+}
+.grupos-item:hover { background: #e9e6da; }
+.grupos-item.es-activo { background: #fff; font-weight: 600; box-shadow: inset 3px 0 0 #d97757; border-radius: 0 6px 6px 0; width: calc(100% - 8px); }
+.grupos-item:focus-visible { outline: 2px solid #6a9bcc; outline-offset: -2px; }
+.grupos-item svg { width: 16px; height: 16px; flex-shrink: 0; fill: none; stroke: #52524d; stroke-width: 1.5; stroke-linejoin: round; }
+.grupos-item__nombre { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.grupos-item__n { margin-left: auto; color: #6d6b67; font-size: 12px; font-variant-numeric: tabular-nums; }
+.grupos-obra { flex-shrink: 0; padding: 1px 5px; border-radius: 3px; background: #e2ddd0; color: #52524d; font-size: 9.5px; font-weight: 700; letter-spacing: 0.06em; }
+.grupos-obra--largo { font-size: 10px; padding: 2px 7px; }
+.grupos-punto { width: 7px; height: 7px; flex-shrink: 0; border-radius: 50%; background: #d97757; }
+.grupos-nuevo {
+  display: block; width: calc(100% - 32px); height: 30px; margin: 6px 16px 0; padding: 0 10px;
+  border: 1px dashed #cfcabb; border-radius: 5px; background: transparent; color: #52524d;
+  font: inherit; font-size: 13px; text-align: left; cursor: pointer;
+}
+.grupos-nuevo:hover { border-color: #141413; color: #141413; background: #fff; }
+.grupos-nuevo:focus-visible { outline: 2px solid #6a9bcc; outline-offset: 1px; }
+.grupos-ayuda { margin: 6px 16px 0; color: #6d6b67; font-size: 11.5px; line-height: 1.4; }
+
+/* El diálogo de nuevo grupo */
+.grupos-velo { position: fixed; inset: 0; z-index: 3000; display: grid; place-items: center; background: rgba(20, 20, 19, 0.35); }
+.grupos-modal { width: 440px; max-width: 92vw; padding: 18px 20px; border: 1px solid #cfcabb; border-radius: 8px; background: #fff; color: #141413; }
+.grupos-modal h4 { margin: 0 0 12px; font-size: 16px; font-weight: 600; }
+.grupos-modal label, .grupos-modal__rot { display: block; margin: 10px 0 4px; color: #6d6b67; font-size: 12px; }
+.grupos-modal input { width: 100%; height: 34px; padding: 0 10px; border: 1px solid #cfcabb; border-radius: 5px; font: inherit; }
+.grupos-modal input:focus { outline: 2px solid #6a9bcc; outline-offset: 0; border-color: #6a9bcc; }
+.grupos-opciones { display: flex; gap: 8px; }
+.grupos-opciones button { flex: 1; padding: 9px 10px; border: 1px solid #cfcabb; border-radius: 5px; background: #fff; text-align: left; font: inherit; cursor: pointer; }
+.grupos-opciones button.es-on { border-color: #141413; background: #faf9f5; }
+.grupos-opciones b { display: block; font-size: 13px; }
+.grupos-opciones small { color: #6d6b67; font-size: 11.5px; }
+.grupos-modal__pie { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+.grupos-modal__pie button { height: 32px; padding: 0 14px; border: 1px solid #cfcabb; border-radius: 5px; background: #fff; font: inherit; cursor: pointer; }
+.grupos-modal__pie button.es-principal { border-color: #141413; background: #141413; color: #fff; font-weight: 600; }
+.grupos-modal__pie button:disabled { opacity: 0.45; cursor: default; }
+.grupos-error { margin: 10px 0 0; color: #b93535; font-size: 12px; }
+
+/* El grupo abierto, sobre el panel de datos */
+.grupo-abierto { position: absolute; inset: 0; z-index: 40;   /* encima de la cabecera fija de la tabla (z 30) */ overflow: auto; padding: 16px 22px; background: #fff; color: #141413; }
+.grupo-abierto__cab { display: flex; align-items: center; gap: 10px; }
+.grupo-abierto__cab h2 { margin: 0; font-size: 18px; font-weight: 600; }
+.grupo-volver { width: 30px; height: 30px; border: 1px solid #e8e6dc; border-radius: 5px; background: #fff; cursor: pointer; }
+.grupo-volver:hover { background: #f1f0e8; }
+.grupo-mio { color: #6d6b67; font-size: 12px; }
+.grupo-borrar { margin-left: auto; height: 30px; padding: 0 12px; border: 1px solid #cfcabb; border-radius: 5px; background: #fff; color: #b93535; font: inherit; font-size: 12.5px; cursor: pointer; }
+.grupo-borrar:hover { background: #fbf1f1; }
+.grupo-abierto__desc { margin: 4px 0 14px; color: #52524d; font-size: 13px; }
+.grupo-vacio { margin: 30px 0; color: #6d6b67; text-align: center; }
+
+.grupo-tabla { width: 100%; border-collapse: collapse; font-size: 13px; }
+.grupo-tabla th { padding: 7px 8px; border-bottom: 1px solid #cfcabb; color: #6d6b67; font-size: 11.5px; font-weight: 600; text-align: left; }
+.grupo-tabla td { padding: 8px; border-bottom: 1px solid #e8e6dc; vertical-align: middle; }
+.grupo-tabla tr:hover td { background: #faf9f5; }
+.grupo-doc { display: inline-flex; align-items: center; gap: 10px; padding: 0; border: 0; background: none; color: #141413; font: inherit; text-align: left; cursor: pointer; }
+.grupo-doc:hover span:last-child { text-decoration: underline; }
+.grupo-ico { display: inline-grid; place-items: center; width: 26px; height: 30px; flex-shrink: 0; border: 1px solid #cfcabb; border-radius: 3px; font-size: 8.5px; font-weight: 700; color: #52524d; }
+.grupo-ico--xls, .grupo-ico--csv { color: #1d6f42; border-color: #9cc3a9; }
+.grupo-ico--pdf { color: #b93535; border-color: #e2a9a9; }
+.grupo-ico--doc { color: #2b5797; border-color: #a9bde0; }
+.grupo-vive { padding: 0; border: 0; background: none; color: #507294; font: inherit; font-size: 12.5px; text-align: left; cursor: pointer; }
+.grupo-vive:hover { text-decoration: underline; }
+.grupo-sigue { display: inline-block; padding: 2px 7px; border: 1px solid #cfcabb; border-radius: 3px; background: #fff; color: #52524d; font: inherit; font-size: 12px; white-space: nowrap; }
+button.grupo-sigue { cursor: pointer; }
+button.grupo-sigue:hover { border-color: #141413; color: #141413; }
+.grupo-sigue.es-fijo { border-color: #141413; color: #141413; font-weight: 600; }
+.grupo-version { white-space: nowrap; }
+.grupo-nueva { margin-left: 6px; padding: 2px 7px; border-radius: 3px; background: #f6efe2; color: #734500; font-size: 11px; font-weight: 600; }
+.grupo-quitar { padding: 2px 6px; border: 0; border-radius: 3px; background: none; color: #6d6b67; cursor: pointer; }
+.grupo-quitar:hover { background: #f1f0e8; color: #141413; }
+.grupo-doc:focus-visible, .grupo-vive:focus-visible, .grupo-sigue:focus-visible, .grupo-quitar:focus-visible,
+.grupo-volver:focus-visible, .grupo-borrar:focus-visible { outline: 2px solid #6a9bcc; outline-offset: 2px; }
+
+/* El selector «Añadir a grupo» */
+.grupos-modal__nota { margin: -6px 0 10px; color: #6d6b67; font-size: 12.5px; }
+.grupos-lista { max-height: 260px; overflow: auto; border: 1px solid #e8e6dc; border-radius: 5px; }
+.grupos-lista button { display: flex; align-items: center; gap: 8px; width: 100%; padding: 8px 10px; border: 0; border-bottom: 1px solid #f1f0e8; background: #fff; font: inherit; font-size: 13.5px; text-align: left; cursor: pointer; }
+.grupos-lista button:last-child { border-bottom: 0; }
+.grupos-lista button:hover { background: #faf9f5; }
+.grupos-lista button:focus-visible { outline: 2px solid #6a9bcc; outline-offset: -2px; }
+.grupos-lista button:disabled { opacity: 0.5; cursor: default; }
+.grupos-lista svg { width: 16px; height: 16px; flex-shrink: 0; fill: none; stroke: #52524d; stroke-width: 1.5; stroke-linejoin: round; }
+.grupos-lista .grupos-modal__nota { margin: 10px; }
+.grupos-nuevo--modal { width: 100%; margin: 10px 0 0; }

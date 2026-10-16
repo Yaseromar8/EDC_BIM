@@ -12,7 +12,7 @@
     display: flex;
     justify-content: center;
     align-items: center;
-    font-family: 'Inter', -apple-system, sans-serif;
+    font-family: var(--a-font-sans);
 }
 
 .album-modal {

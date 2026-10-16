@@ -17,6 +17,7 @@ import {
 import Button from '../../../design/ui/Button';
 import IconButton from '../../../design/ui/IconButton';
 import './ReviewsModule.css';
+import { LaminaVacia } from './IlustracionesDeObra';
 
 // ── Modal: enviar documentos a revisión ──
 export function ReviewModal({ isOpen, onClose, items, projectPrefix, onCreated }) {
@@ -144,7 +145,7 @@ export function ReviewModal({ isOpen, onClose, items, projectPrefix, onCreated }
       setOpciones(t.opciones);
       setBloqueo('');
       setSteps(t.pasos.map(p => ({
-        id: p.user_id, name: p.name, email: p.email, dias: p.dias,
+        id: p.user_id, name: p.name, email: p.email, dias: p.dias, dias_tipo: p.dias_tipo,
         etiqueta: p.etiqueta, decision: p.decision, de_funcion: p.de_funcion,
       })));
     } else if (t.tipo !== 'recuperar') {
@@ -266,6 +267,7 @@ export function ReviewModal({ isOpen, onClose, items, projectPrefix, onCreated }
               user_id: s.id, email: s.email, name: s.name,
               decision: decisionDe(s, i, steps.length),
               ...(s.dias ? { dias: Number(s.dias) } : {}),
+              ...(s.dias && s.dias_tipo === 'laborables' ? { dias_tipo: 'laborables' } : {}),
             })),
           }),
           final_status: finalStatus, codigo_idoneidad: idoneidad || undefined
@@ -452,10 +454,12 @@ export function ReviewModal({ isOpen, onClose, items, projectPrefix, onCreated }
                       no desde que se crea la revisión: cuando se crea no se
                       sabe cuándo le tocará al paso 3. Vacío = sin plazo. */}
                   <input
-                    type="number" min="1" placeholder="d. cal." value={s.dias || ''}
+                    type="number" min="1" placeholder={s.dias_tipo === 'laborables' ? 'd. háb.' : 'd. cal.'} value={s.dias || ''}
                     onChange={e => { soltarPlantilla(); setSteps(prev => prev.map((x, j) =>
                       j === i ? { ...x, dias: e.target.value } : x)); }}
-                    title="Días CALENDARIO de plazo para este paso (opcional). Son días naturales: no hay calendario de días hábiles, así que un plazo de 3 días vence en 3 días aunque caigan en fin de semana."
+                    title={s.dias_tipo === 'laborables'
+                      ? 'Días HÁBILES de plazo para este paso, como dice su flujo: de lunes a viernes, sin feriados.'
+                      : 'Días CALENDARIO de plazo para este paso (opcional): un plazo de 3 días vence en 3 días aunque caigan en fin de semana. Los días hábiles se eligen en el flujo.'}
                     style={{ width: 52, border: '1px solid #cccac0', borderRadius: 8, padding: '1px 5px', fontSize: 11, color: '#507294', background: '#fff' }}
                   />
                   <button type="button" aria-label={`Quitar el paso ${i + 1}`} title="Quitar este paso"
@@ -701,6 +705,7 @@ export function ReviewsView({ projectPrefix }) {
         <div className="rev-vacio"><div className="adsk-spinner" style={{ margin: '0 auto' }} /></div>
       ) : reviews.length === 0 ? (
         <div className="rev-vacio">
+          {filtro === 'todas' && <LaminaVacia nombre="canal" />}
           {filtro === 'todas' ? 'No hay revisiones aún.' : 'No hay revisiones en este filtro.'}
         </div>
       ) : (

@@ -32,6 +32,9 @@
    Contrato completo, con la evidencia de cada valor: UX-01 · PASADA 1.
    ═══════════════════════════════════════════════════════════════════════ */
 
+/* La letra del sistema, servida desde el proyecto (D-26). Va antes que cualquier regla. */
+@import './fuentes/ibm-plex.css';
+
 :root {
 
   /* ─── PRIMITIVAS · 39 valores ────────────────────────────────────────
@@ -111,8 +114,10 @@
      Ocho roles. Hoy hay 23 tamaños distintos; los dominantes son 13, 12,
      11 y 14 px, y eso dice algo cierto: esta es una interfaz DENSA de
      obra, no una web. La escala respeta esa densidad. */
-  --a-font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  --a-font-mono: 'SF Mono', 'Fira Code', Consolas, monospace;
+  /* IBM Plex Sans y su Mono desde el 16-oct-2026 (D-26): técnica, de ingeniería, y la
+     Mono para códigos, versiones y fechas (RV-041, v2). Servidas desde design/fuentes/. */
+  --a-font-sans: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --a-font-mono: 'IBM Plex Mono', 'SF Mono', Consolas, monospace;
 
   --a-type-display-size: 24px;  --a-type-display-weight: 700;  --a-type-display-lh: 1.15;
   --a-type-heading-size: 20px;  --a-type-heading-weight: 600;  --a-type-heading-lh: 1.2;

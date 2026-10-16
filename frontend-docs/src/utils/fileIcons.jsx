@@ -57,7 +57,7 @@ export function renderFileIconSop(filename, size = 24) {
         <path fill={`var(--archivo-${familia})`} d="M5 1.5h15.5l7 7v22H5z" />
         <path fill="white" opacity=".38" d="M20.5 1.5v7h7z" />
         <text x="16.25" y="25.2" textAnchor="middle" fontSize={letra} fontWeight="700"
-          fontFamily="Inter, system-ui, sans-serif" letterSpacing=".2" fill="white">
+          fontFamily="'IBM Plex Sans', system-ui, sans-serif" letterSpacing=".2" fill="white">
           {rotulo}
         </text>
       </svg>

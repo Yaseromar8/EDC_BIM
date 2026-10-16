@@ -1,0 +1,127 @@
+/* Sustento de metrados sobre el plano (SustentoDelPlano.jsx). Paleta D-24: azul para lo vinculado,
+   ámbar para lo medido sobre otra versión. Sobrio: líneas finas, sin sombras grandes. */
+
+.sustento-capa { position: absolute; inset: 0; z-index: 4; pointer-events: none; }
+.sustento-capa.es-dibujo { pointer-events: auto; cursor: crosshair; }
+/* Sobre el visor de CAD: por encima del lienzo de Autodesk y de la revisión de planos. */
+.sustento-capa--cad { z-index: 6; overflow: hidden; }
+
+.sustento-zona {
+  position: absolute;
+  padding: 0;
+  border: 1.5px dashed #507294;
+  border-radius: 2px;
+  background: rgba(106, 155, 204, 0.10);
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+.sustento-zona b {
+  position: absolute;
+  left: -1.5px;
+  bottom: 100%;
+  padding: 1px 6px;
+  border-radius: 2px 2px 0 0;
+  background: #507294;
+  color: #fff;
+  font: 600 10.5px/1.5 var(--a-font-sans);
+  white-space: nowrap;
+}
+
+.sustento-zona.es-elegida { border-style: solid; background: rgba(106, 155, 204, 0.22); box-shadow: 0 0 0 3px rgba(106, 155, 204, 0.25); }
+.sustento-zona.es-otra-version { border-color: #734500; background: rgba(115, 69, 0, 0.07); }
+.sustento-zona.es-otra-version b { background: #734500; }
+.sustento-zona.es-borrador { border: 1.5px solid #141413; background: rgba(20, 20, 19, 0.06); pointer-events: none; }
+.sustento-zona:focus-visible { outline: 2px solid #6a9bcc; outline-offset: 2px; }
+/* Con el panel cerrado: las zonas se ven, finas, y no capturan el ratón (solo su etiqueta). */
+.sustento-capa.es-discreta .sustento-zona { pointer-events: none; border-width: 1px; background: rgba(106, 155, 204, 0.05); }
+.sustento-capa.es-discreta .sustento-zona b { pointer-events: auto; cursor: pointer; opacity: 0.9; }
+.sustento-capa.es-discreta .sustento-zona b:hover { opacity: 1; }
+
+/* El botón plegado y el panel: arriba a la derecha del contenido, bajo el cajetín. */
+.sustento-panel {
+  position: absolute;
+  top: 70px;
+  right: 16px;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  width: 320px;
+  max-height: calc(100% - 140px);
+  border: 1px solid #cfcabb;
+  border-radius: 4px;
+  background: #faf9f5;
+  color: #141413;
+  font: 12.5px/1.4 var(--a-font-sans);
+  box-shadow: 2px 3px 0 rgba(20, 20, 19, 0.05);
+}
+
+.sustento-panel header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 8px 7px 12px;
+  border-bottom: 1px solid #e2ddd0;
+  color: #6d6b67;
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.sustento-cerrar { width: 24px; height: 24px; border: 0; border-radius: 3px; background: none; color: #6d6b67; cursor: pointer; }
+.sustento-cerrar:hover { background: #efebe0; color: #141413; }
+
+.sustento-lista { overflow: auto; min-height: 0; }
+.sustento-vacio { margin: 0; padding: 12px; color: #6d6b67; }
+
+.sustento-fila { padding: 9px 12px; border-bottom: 1px solid #e2ddd0; cursor: pointer; }
+.sustento-fila:hover, .sustento-fila.es-elegida { background: #efebe0; }
+.sustento-fila.es-elegida { box-shadow: inset 3px 0 0 #141413; }
+.sustento-fila:focus-visible { outline: 2px solid #6a9bcc; outline-offset: -2px; }
+.sustento-fila__l1 { display: flex; justify-content: space-between; gap: 8px; }
+.sustento-item { font-family: ui-monospace, Consolas, monospace; font-weight: 600; }
+.sustento-q { font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.sustento-fila__l3 { display: flex; justify-content: space-between; gap: 8px; margin-top: 3px; color: #6d6b67; font-size: 11.5px; }
+.sustento-nota { margin-top: 3px; color: #52524d; font-size: 11.5px; }
+.sustento-aviso { margin-top: 5px; padding: 4px 7px; border-radius: 3px; background: #f6efe2; color: #734500; font-size: 11.5px; }
+.sustento-retirar { padding: 0; border: 0; background: none; color: #b93535; font: inherit; cursor: pointer; }
+.sustento-retirar:hover { text-decoration: underline; }
+
+.sustento-pie, .sustento-form { padding: 10px 12px; border-top: 1px solid #e2ddd0; }
+.sustento-pie { display: flex; flex-direction: column; gap: 6px; }
+.sustento-ayuda { color: #6d6b67; font-size: 11.5px; }
+
+.sustento-pie button, .sustento-form__pie button {
+  height: 30px;
+  padding: 0 12px;
+  border: 1px solid #cfcabb;
+  border-radius: 4px;
+  background: #fff;
+  color: #141413;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.sustento-pie button.es-principal, .sustento-form__pie button.es-principal { border-color: #141413; background: #141413; color: #fff; }
+.sustento-pie button:disabled, .sustento-form__pie button:disabled { opacity: 0.45; cursor: default; }
+
+.sustento-form__t { margin-bottom: 8px; font-weight: 600; }
+.sustento-form label { display: flex; flex-direction: column; gap: 3px; margin-bottom: 8px; color: #6d6b67; font-size: 11.5px; }
+.sustento-form input { height: 30px; padding: 0 8px; border: 1px solid #cfcabb; border-radius: 4px; background: #fff; color: #141413; font: inherit; font-size: 12.5px; }
+.sustento-form input:focus { outline: 2px solid #6a9bcc; outline-offset: 0; border-color: #6a9bcc; }
+.sustento-form__par { display: grid; grid-template-columns: 1fr 90px; gap: 8px; }
+.sustento-form__pie { display: flex; justify-content: flex-end; gap: 8px; }
+.sustento-error { margin-bottom: 8px; color: #b93535; font-size: 11.5px; }
+/* Cómo se entendió la cantidad («9,490» = 9 490): se ve antes de guardar. */
+.sustento-leida { margin: -2px 0 8px; color: #52524d; font-size: 11.5px; }
+.sustento-form input[aria-invalid="true"] { border-color: #b93535; }
+
+/* Llegando desde la planilla: de qué partida se trata y la vuelta. */
+.sustento-origen { display: flex; flex-direction: column; gap: 6px; padding: 9px 12px; border-bottom: 1px solid #e2ddd0; background: #e6ecef; color: #141413; }
+.sustento-origen button { align-self: flex-start; padding: 0; border: 0; background: none; color: #507294; font: inherit; font-weight: 600; cursor: pointer; }
+.sustento-origen button:hover { text-decoration: underline; }
+.sustento-acciones { display: inline-flex; gap: 10px; }
+.sustento-planilla { padding: 0; border: 0; background: none; color: #507294; font: inherit; font-weight: 600; cursor: pointer; }
+.sustento-planilla:hover { text-decoration: underline; }

@@ -1,0 +1,209 @@
+/* El modo Tabla del lector (LectorDeTabla.jsx). Paleta D-24: papel, tinta y líneas finas. */
+
+.tabla-lda {
+  /* Ocupa justo el hueco del contenido (que es position: relative): así la barra, las hojas y la fila
+     elegida quedan siempre a la vista y solo la rejilla se desplaza. */
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto auto;
+  min-height: 0;
+  background: #f5f2ea;
+  color: #141413;
+  font-size: 12.5px;
+}
+
+.tabla-lda__estado { margin: auto; padding: 40px; color: #52524d; font-size: 14px; text-align: center; }
+
+.tabla-lda__barra {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  background: #faf9f5;
+  border-bottom: 1px solid #cfcabb;
+}
+
+.tabla-lda__buscar {
+  width: 300px;
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid #cfcabb;
+  border-radius: 4px;
+  background: #fff;
+  font: inherit;
+  color: inherit;
+}
+
+.tabla-lda__buscar:focus { outline: 2px solid #6a9bcc; outline-offset: 0; border-color: #6a9bcc; }
+.tabla-lda__cuenta { color: #6d6b67; min-width: 80px; }
+.tabla-lda__clave { margin-left: auto; color: #6d6b67; }
+.tabla-lda__clave b { color: #141413; }
+
+.tabla-lda__rejilla { overflow: auto; min-height: 0; background: #fff; }
+
+.tabla-lda__rejilla table { border-collapse: separate; border-spacing: 0; font-variant-numeric: tabular-nums; }
+
+.tabla-lda__rejilla th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  min-width: 64px;
+  padding: 4px 8px;
+  background: #f1f0e8;
+  border-right: 1px solid #e2ddd0;
+  border-bottom: 1px solid #cfcabb;
+  color: #52524d;
+  font-size: 11px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.tabla-lda__rejilla td {
+  max-width: 420px;
+  padding: 4px 8px;
+  border-right: 1px solid #efece3;
+  border-bottom: 1px solid #efece3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: default;
+}
+
+.tabla-lda__num {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  min-width: 44px;
+  background: #f6f5f0 !important;
+  color: #8a877e;
+  font-size: 11px;
+  text-align: center;
+}
+
+.tabla-lda__rejilla thead .tabla-lda__num { z-index: 3; }
+
+/* La columna clave: un fondo apenas distinto y el texto en monoespaciada. */
+.tabla-lda__rejilla th.es-clave { color: #141413; box-shadow: inset 0 -2px 0 #141413; }
+.tabla-lda__rejilla td.es-clave { background: #faf9f5; font-family: ui-monospace, Consolas, monospace; }
+.tabla-lda__rejilla tr.es-cabecera td { font-weight: 600; background: #f6f5f0; border-bottom-color: #cfcabb; }
+.tabla-lda__rejilla tbody tr:hover td:not(.tabla-lda__num) { background: #f6f3ea; }
+.tabla-lda__rejilla tr.es-elegida td:not(.tabla-lda__num) { background: #e6ecef; }
+.tabla-lda__rejilla tr.es-elegida .tabla-lda__num { box-shadow: inset 3px 0 0 #141413; color: #141413; }
+
+.tabla-lda__tope { padding: 10px 12px; color: #6d6b67; background: #faf9f5; border-top: 1px solid #e2ddd0; }
+
+/* La fila elegida y su ancla. */
+.tabla-lda__fila {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 7px 12px;
+  background: #faf9f5;
+  border-top: 1px solid #cfcabb;
+}
+
+.tabla-lda__fila code {
+  min-width: 0;
+  padding: 3px 7px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border-radius: 3px;
+  background: #f1f0e8;
+  color: #52524d;
+  font-size: 11.5px;
+}
+
+.tabla-lda__fila button {
+  flex-shrink: 0;
+  height: 26px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 4px;
+  background: #141413;
+  color: #fff;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.tabla-lda__fila button:hover { background: #302f2e; }
+.tabla-lda__fila button:focus-visible { outline: 2px solid #6a9bcc; outline-offset: 2px; }
+.tabla-lda__sin { color: #6d6b67; }
+
+/* Las hojas, abajo, como en Excel. */
+.tabla-lda__hojas {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  min-height: 34px;
+  padding: 0 8px;
+  background: #faf9f5;
+  border-top: 1px solid #cfcabb;
+  overflow-x: auto;
+}
+
+.tabla-lda__hojas button {
+  padding: 0 14px;
+  border: 0;
+  border-right: 1px solid #e2ddd0;
+  background: none;
+  color: #52524d;
+  font: inherit;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.tabla-lda__hojas button[aria-selected="true"] { background: #fff; color: #141413; font-weight: 600; box-shadow: inset 0 2px 0 #141413; }
+.tabla-lda__hojas button:focus-visible { outline: 2px solid #6a9bcc; outline-offset: -2px; }
+.tabla-lda__pie { margin-left: auto; align-self: center; padding-left: 12px; color: #6d6b67; white-space: nowrap; }
+
+/* El sustento de cada partida (ESTANDAR_LDA §6): la columna al final y la línea de la fila elegida. */
+.tabla-lda__rejilla th.tabla-lda__sus { min-width: 200px; text-align: left; }
+.tabla-lda__rejilla td.tabla-lda__sus { max-width: none; background: #fcfbf8; }
+.sus-chip { display: inline-block; margin-right: 4px; padding: 0 6px; border: 1px solid #507294; border-radius: 3px; color: #507294; font-size: 11px; font-weight: 600; line-height: 18px; }
+.sus-chip.sus-cuadra { border-color: #667650; color: #667650; }
+.sus-chip.sus-falta, .sus-chip.sus-sobra { border-color: #b93535; color: #b93535; }
+.sus-chip.sus-version { border-color: #734500; color: #734500; }
+.sus-sin { color: #a8a59c; font-size: 11px; }
+
+.tabla-lda__sustento {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  padding: 7px 12px;
+  background: #faf9f5;
+  border-top: 1px solid #e2ddd0;
+}
+
+.tabla-lda__rot { color: #6d6b67; font-size: 9.5px; font-weight: 600; letter-spacing: 0.09em; text-transform: uppercase; }
+
+.sus-plano {
+  height: 24px;
+  padding: 0 8px;
+  border: 1px solid #507294;
+  border-radius: 3px;
+  background: #fff;
+  color: #507294;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.sus-plano:hover { background: #e6ecef; }
+.sus-plano:focus-visible { outline: 2px solid #6a9bcc; outline-offset: 2px; }
+.sus-plano.sus-version { border-color: #734500; color: #734500; }
+.sus-cuadre { font-size: 12px; }
+.sus-cuadre.sus-cuadra { color: #667650; font-weight: 600; }
+.sus-cuadre.sus-falta, .sus-cuadre.sus-sobra { color: #b93535; font-weight: 600; }
+.sus-vincular { height: 24px; margin-left: auto; padding: 0 10px; border: 0; border-radius: 3px; background: #141413; color: #fff; font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
+.sus-vincular:hover { background: #302f2e; }
+.sus-vincular:focus-visible { outline: 2px solid #6a9bcc; outline-offset: 2px; }
+.tabla-lda__metrado { display: inline-flex; align-items: center; gap: 6px; color: #6d6b67; }
+.tabla-lda__metrado select { height: 28px; max-width: 240px; padding: 0 6px; border: 1px solid #cfcabb; border-radius: 4px; background: #fff; color: #141413; font: inherit; }
+.tabla-lda__metrado select:focus { outline: 2px solid #6a9bcc; outline-offset: 0; }

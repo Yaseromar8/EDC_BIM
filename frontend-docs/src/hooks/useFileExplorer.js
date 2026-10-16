@@ -716,7 +716,9 @@ export function useFileExplorer(project, user) {
       if (raiz) enlace = { obra: obraDelEnlace };
       else if (esIdentificador(item.id)) enlace = { obra: obraDelEnlace, carpeta: String(item.id) };
     } else if (item && esIdentificador(item.id)) {
-      enlace = { obra: obraDelEnlace, carpeta: carpetaVisible(), documento: String(item.id) };
+      enlace = { obra: obraDelEnlace, carpeta: carpetaVisible(), documento: String(item.id),
+                 // Desde el lector, si se mira una versión que no es la vigente, el enlace la fija.
+                 ...(esIdentificador(item._versionEnlace) ? { version: String(item._versionEnlace) } : {}) };
     }
     if (!enlace?.obra) {
       toast.error('Este elemento todavía no tiene enlace. Inténtalo en un momento.');

@@ -14,6 +14,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
 import { apiFetch } from '../utils/apiFetch';
 import SelectorDeDocumento from './SelectorDeDocumento';
+import { LaminaVacia } from './IlustracionesDeObra';
 
 const COLOR_REVISION = {
   'Vigente':  { fondo: '#e0e3d7', texto: '#64744e', borde: '#e0e3d7' },
@@ -139,6 +140,9 @@ export default function PlanosModule({ project, API, user, isAdmin }) {
       {planos.length === 0 && !error && (
         <div style={{ padding: '28px 20px', textAlign: 'center', color: '#72706b',
                       fontSize: 13, border: '1px dashed #e8e6dc', borderRadius: 8 }}>
+          {!filtro && (
+            <LaminaVacia nombre="alcantarilla" />
+          )}
           {filtro ? 'Ningún plano de esa disciplina.' : 'Todavía no hay planos en esta obra.'}
         </div>
       )}

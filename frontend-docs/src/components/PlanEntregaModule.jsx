@@ -24,6 +24,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import toast from 'react-hot-toast';
 import { API } from '../utils/helpers';
 import { apiFetch } from '../utils/apiFetch';
+import { LaminaVacia } from './IlustracionesDeObra';
 
 // Los colores salen del sistema del portal, que ya tiene el contraste medido.
 // Inventarlos a mano fue el error de la primera version: quedaron pensados para
@@ -473,6 +474,8 @@ export function PlanEntregaView({ projectPrefix, isAdmin }) {
           marginTop: 20, padding: 20, borderRadius: 10, textAlign: 'center',
           background: 'var(--bg-secondary)', border: '1px dashed var(--border-strong)',
         }}>
+          {/* El calendario de los compromisos (ilustración plana de estado vacío). */}
+          <LaminaVacia nombre="perfil" />
           <p style={{ margin: 0, fontSize: 13.5, color: 'var(--text-primary)' }}>
             Esta obra todavía no tiene plan de entrega cargado.
           </p>

@@ -60,7 +60,7 @@
     height: 100vh;
     background: var(--acc-bg);
     color: var(--acc-text);
-    font-family: 'Inter', 'Segoe UI', sans-serif;
+    font-family: var(--a-font-sans);
     display: flex;
     flex-direction: column;
     overflow: hidden;

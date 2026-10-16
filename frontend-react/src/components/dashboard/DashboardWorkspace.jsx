@@ -23,9 +23,9 @@ const NODE_KPI = { w: 304, h: 176 };
 // nodos alineados sin esfuerzo).
 const SNAP = 16;
 const snap = (v) => Math.round(v / SNAP) * SNAP;
-// Tipografía (misma receta de Vyssuals): Inter para UI, Poppins para títulos.
-const FONT_UI = "'Inter', system-ui, -apple-system, sans-serif";
-export const FONT_TITLE = "'Poppins', 'Inter', system-ui, sans-serif";
+// Tipografía: IBM Plex Sans para todo, la letra del sistema (D-26).
+const FONT_UI = "'IBM Plex Sans', system-ui, -apple-system, sans-serif";
+export const FONT_TITLE = "'IBM Plex Sans', system-ui, sans-serif";
 // Secciones (frames) estilo Miro: título de color sobre una región que agrupa
 // nodos — la estructura narrativa del tablero del usuario en Miro.
 const FRAME_COLORS = ['#d66a6a', '#5b8fd6', '#3fb27f', '#e0a63f', '#8b6cf0', '#4fc1c9'];

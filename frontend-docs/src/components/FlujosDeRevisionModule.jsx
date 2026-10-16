@@ -181,6 +181,15 @@ export default function FlujosDeRevisionModule({ project, API, user, isAdmin }) 
                                    fontSize: 12, cursor: 'pointer', color: '#507294' }}>
                     Editar
                   </button>
+                  {/* Duplicar (como ACC): abre el alta con sus pasos, para crear otro
+                      flujo parecido sin tocar este ni sus revisiones. */}
+                  <button type="button"
+                          onClick={() => setEditando({ nombre: `${p.nombre} (copia)`, descripcion: p.descripcion,
+                                                       alcance: p.alcance, pasos: (p.pasos || []).map(x => ({ ...x })) })}
+                          style={{ ...CAJA, padding: '4px 11px', background: '#fff',
+                                   fontSize: 12, cursor: 'pointer', color: '#507294' }}>
+                    Duplicar
+                  </button>
                   <button type="button" onClick={() => activar(p, !p.activa)}
                           style={{ ...CAJA, padding: '4px 11px', background: '#fff',
                                    fontSize: 12, cursor: 'pointer',
@@ -224,7 +233,9 @@ export default function FlujosDeRevisionModule({ project, API, user, isAdmin }) 
                         : (nombres[paso.user_id] || `usuario ${paso.user_id}`)}
                     </span>
                     {paso.dias ? (
-                      <span style={{ color: '#72706b' }}>· {paso.dias} d</span>
+                      <span style={{ color: '#72706b' }}>
+                        · {paso.dias} {paso.dias_tipo === 'laborables' ? 'd háb.' : 'd'}
+                      </span>
                     ) : null}
                   </span>
                 );
@@ -277,6 +288,7 @@ function ModalFlujo({ API, urn, catalogo, miembros, inicial, onCerrar, onGuardad
         ...(p.funcion ? { funcion: p.funcion }
                       : (p.user_id ? { user_id: Number(p.user_id) } : {})),
         ...(String(p.dias ?? '').trim() ? { dias: Number(p.dias) } : {}),
+        ...(String(p.dias ?? '').trim() && p.dias_tipo === 'laborables' ? { dias_tipo: 'laborables' } : {}),
       }));
     if (!f.nombre.trim()) { toast.error('El flujo necesita un nombre.'); return; }
     if (!limpios.length) { toast.error('Un flujo sin pasos no describe nada.'); return; }
@@ -390,6 +402,13 @@ function ModalFlujo({ API, urn, catalogo, miembros, inicial, onCerrar, onGuardad
                    onChange={e => cambiar(i, 'dias', e.target.value)}
                    placeholder="días"
                    style={{ ...CAJA, width: 66, height: 34, padding: '0 8px', fontSize: 12 }} />
+            <select value={p.dias_tipo || 'naturales'} onChange={e => cambiar(i, 'dias_tipo', e.target.value)}
+                    aria-label={`Cómo se cuentan los días del paso ${i + 1}`}
+                    disabled={!String(p.dias ?? '').trim()}
+                    style={{ ...CAJA, height: 34, fontSize: 12, background: '#fff' }}>
+              <option value="naturales">calendario</option>
+              <option value="laborables">hábiles</option>
+            </select>
             <button type="button" onClick={() => setPasos(a => a.filter((_x, n) => n !== i))}
                     style={{ border: 'none', background: 'none', color: '#b93535',
                              cursor: 'pointer', fontSize: 15 }}>×</button>
@@ -406,8 +425,8 @@ function ModalFlujo({ API, urn, catalogo, miembros, inicial, onCerrar, onGuardad
         )}
         <p style={{ margin: '8px 0 0', fontSize: 11.5, color: '#72706b', lineHeight: 1.5 }}>
           Cada paso designa <b>una persona o una función</b>, no las dos: al aplicarlo
-          no se sabría cuál manda. El plazo se cuenta en días naturales desde que
-          empieza ese turno. Máximo {catalogo.max_pasos || 6} pasos
+          no se sabría cuál manda. El plazo se cuenta desde que empieza ese turno, en
+          días calendario o en días hábiles (de lunes a viernes, sin feriados). Máximo {catalogo.max_pasos || 6} pasos
           {catalogo.paralelo === false && ' — y son secuenciales: este motor no tiene pasos en paralelo'}.
         </p>
 

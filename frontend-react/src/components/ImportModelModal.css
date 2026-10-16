@@ -32,7 +32,7 @@
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 8px;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.04) inset;
-  font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
+  font-family: var(--a-font-sans);
   color: #e4e4e7;
   overflow: hidden;
   animation: importSlideUp 0.25s ease-out;

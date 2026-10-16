@@ -13,6 +13,8 @@ import { apiFetch } from '../utils/apiFetch';
 import { tiraEstaAbierta, recordarTira } from '../utils/tiraDocumentos';
 import { urlsDeMiniaturas, urlDeVistaPrevia } from '../utils/colaMiniaturas';
 import { planDeVecinas } from '../utils/vecinasDelLector';
+import { aplanarIndice } from '../utils/lectorDePlanos';
+import { marcaDeLaDireccion } from '../utils/marcasConEnlace';
 import CapaMosaico from './CapaMosaico';
 import { fuenteRemota } from '../utils/mosaicoRemoto';
 import {
@@ -158,48 +160,56 @@ function Thumbnail({ pdf, pageNum, isActive, onClick }) {
 // Once iconos en fila plana no se leen: hay que buscarlos uno a uno. En
 // grupos —navegar, medir, anotar, borrar— la mano va sola. Cada uno lleva su
 // PISTA, que se enseña cuando está activo en vez de un letrero permanente.
+// El estuche (LDA-1 E1) dice el nombre de cada grupo como se dice en obra.
+const TITULO_DE_GRUPO = { navegar: 'Ver', medir: 'Medir', anotar: 'Marcar' };
+
 const GRUPOS_DE_HERRAMIENTAS = [
   { nombre: 'navegar', items: [
     { id: 'pan', etiqueta: 'Mover', title: 'Navegar: arrastra para mover, rueda para acercar',
       icon: <><path d="M9 11V6a1.6 1.6 0 0 1 3.2 0v5"/><path d="M12.2 11V4.8a1.6 1.6 0 0 1 3.2 0V11"/><path d="M15.4 11.4V7.6a1.6 1.6 0 0 1 3.2 0V15a6 6 0 0 1-6 6h-1.3a5 5 0 0 1-3.7-1.7L5 15.6a1.6 1.6 0 0 1 2.4-2.1L9 15"/></>,
       hint: 'Arrastra para mover el plano · rueda para acercar' } ] },
   { nombre: 'medir', items: [
-    { id: 'calibrate', etiqueta: 'Escala', title: 'Calibrar escala con una distancia conocida',
-      icon: <><circle cx="5" cy="19" r="2"/><circle cx="19" cy="5" r="2"/><path d="M6.8 17.2 17.2 6.8"/><path d="m10 14 1 1M13 11l1 1"/></>,
-      hint: 'Marca dos puntos de una distancia conocida y escríbela' },
     { id: 'measure', etiqueta: 'Medir', title: 'Medir distancia',
-      icon: <><rect x="2" y="9" width="20" height="6" rx="1" transform="rotate(-45 12 12)"/><path d="m8 12 1.4 1.4M11 9l1.4 1.4M14 6l1.4 1.4"/></>,
+      icon: <><path d="M4 7v10M20 7v10"/><path d="M4 12h16"/><path d="m7 9.5-3 2.5 3 2.5M17 9.5l3 2.5-3 2.5"/></>,
       hint: 'Clic por puntos · doble clic termina la medición' },
     { id: 'area', etiqueta: 'Área', title: 'Medir área',
-      icon: <path d="m12 3 8.5 6.5-3.2 10.4H6.7L3.5 9.5z"/>,
+      icon: <><path d="M5 7 14 4l6 7-4 9H6z"/><path d="M4 6h2v2H4zM13 3h2v2h-2zM19 10h2v2h-2zM15 19h2v2h-2zM5 19h2v2H5z" fill="currentColor" stroke="none"/></>,
       hint: 'Clic en cada vértice · doble clic cierra el área' },
     { id: 'count', etiqueta: 'Contar', title: 'Conteo de elementos',
-      icon: <><circle cx="12" cy="12" r="8.5"/><path d="M12 8.5v7M8.5 12h7"/></>,
+      icon: <><circle cx="12" cy="12" r="8"/><path d="M10.5 9.5 12.5 8v8M10.5 16h4"/></>,
       hint: 'Cada clic suma una unidad al conteo' } ] },
   { nombre: 'anotar', items: [
     { id: 'cloud', etiqueta: 'Nube', title: 'Nube de revisión',
-      icon: <path d="M17.5 19a4.5 4.5 0 0 0 .4-9 7 7 0 0 0-13.5 1.9A4 4 0 0 0 6 19z"/>,
+      icon: <path d="M6 7.5a2 2 0 0 1 3.3-1.4 2 2 0 0 1 3.4 0 2 2 0 0 1 3.4 0A2 2 0 0 1 18.5 8a2 2 0 0 1 .1 3.5 2 2 0 0 1-.1 3.6 2 2 0 0 1-2.4 2 2 2 0 0 1-3.4 0 2 2 0 0 1-3.4 0 2 2 0 0 1-3.3-1.5 2 2 0 0 1-1-3.4A2 2 0 0 1 6 7.5z"/>,
       hint: 'Arrastra para encerrar lo que hay que revisar' },
     { id: 'arrow', etiqueta: 'Flecha', title: 'Flecha',
-      icon: <path d="M5 19 19 5m0 0h-7m7 0v7"/>,
+      icon: <><path d="M5 19 18 6"/><path d="M18 6h-6.5M18 6v6.5"/></>,
       hint: 'Arrastra desde el origen hasta la punta' },
-    { id: 'rect', etiqueta: 'Marco', title: 'Rectángulo',
-      icon: <rect x="4" y="6" width="16" height="12" rx="1.5"/>,
-      hint: 'Arrastra para dibujar el rectángulo' },
-    { id: 'pen', etiqueta: 'Lápiz', title: 'Lápiz libre',
-      icon: <path d="M17 3a2.8 2.8 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5z"/>,
-      hint: 'Dibuja a mano alzada' },
     { id: 'text', etiqueta: 'Texto', title: 'Texto',
-      icon: <path d="M5 6V4h14v2M12 4v16M9 20h6"/>,
+      icon: <><path d="M4 4h16v16H4z" strokeDasharray="2 2"/><path d="M8.5 8.5h7M12 8.5v7.5"/></>,
       hint: 'Clic donde quieras escribir' } ] },
+  // FOTO y SELLO (16-oct-2026, docs/ux/ACC_LECTOR_MARCAS_FOTO_REFERENCIA.md). Las REFERENCIAS no son una
+  // herramienta: cualquier marca las lleva desde su panel (clic sobre ella con «Mover»).
+  { nombre: 'evidencia', items: [
+    { id: 'photo', etiqueta: 'Foto', title: 'Foto: marca dónde se tomó y súbela o elígela de la obra',
+      icon: <><path d="M4 8h3l1.6-2.2h6.8L17 8h3v11H4z"/><circle cx="12" cy="13" r="3.4"/></>,
+      hint: 'Clic donde se tomó la foto · luego súbela o elígela de la obra' },
+    { id: 'stamp', etiqueta: 'Sello', title: 'Sello de revisión (no cambia el estado del documento)',
+      icon: <><path d="M9.5 4h5l-1 6h-3z"/><path d="M5 13h14v3.5H5z"/><path d="M6 20h12"/></>,
+      hint: 'Clic donde va el sello · eliges estado, título y comentario' } ] },
   { nombre: 'borrar', items: [
-    { id: 'erase', etiqueta: 'Borrar', title: 'Borrar anotación',
-      icon: <><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M10 11v6M14 11v6"/></>,
+    { id: 'erase', etiqueta: 'Borrar marca', title: 'Borrar una marca: clic sobre ella',
+      icon: <><path d="m5.5 14.5 8-8a1.5 1.5 0 0 1 2.1 0l3.4 3.4a1.5 1.5 0 0 1 0 2.1L12.5 18.5H9.5l-4-4z"/><path d="m9.5 10.5 5 5"/><path d="M12.5 18.5H20"/></>,
       hint: 'Clic sobre una anotación para borrarla' } ] },
 ];
 
-const HINTS = Object.fromEntries(
-  GRUPOS_DE_HERRAMIENTAS.flatMap(g => g.items.map(t => [t.id, t.hint])));
+// El estuche estándar (16-oct-2026): Mover · Medir · Área · Contar · Nube · Flecha · Texto · Foto · Sello · Borrar marca.
+// La ESCALA ya no es un botón: Medir y Área la piden la primera vez (PdfToolsOverlay) y se puede cambiar
+// desde allí. Marco y Lápiz salen del estuche; las marcas que ya existan de esos tipos se siguen viendo.
+const HINTS = {
+  ...Object.fromEntries(GRUPOS_DE_HERRAMIENTAS.flatMap(g => g.items.map(t => [t.id, t.hint]))),
+  calibrate: 'Marca dos puntos de una distancia conocida y escríbela',
+};
 
 // ----------------------------------------------------------------------
 // Visor Principal
@@ -420,7 +430,17 @@ export default function PDFViewer({ url, preparando = false,
                                     esAdmin = false, obraDelDocumento = '',
   // MOSAICOS (docs/archivos/15): quien quiera seguir el nivel y las teselas
   // (el banco lo enseña en pantalla). El mosaico en si sale del documento.
-  alEstadoMosaico = null }) {
+  alEstadoMosaico = null,
+  // IDENTIDAD PROPIA · LDA-1 (docs/ux/LECTOR_ALEPHIA_ESTANDAR.md §15). `cajetin({ apaisada })`
+  // devuelve el cajetín que sustituye a la identificación de la barra; con él el lector pasa a
+  // la forma ALEPHIA: mesa de papel, estuche con nombres y la página en el pie. `sobreLaHoja`
+  // va encima de la hoja y se mueve con ella (el sello SUSTITUIDA, las zonas de sustento); puede ser
+  // una función ({ pagina }) para pintar solo lo de la página que se ve.
+  cajetin = null, sobreLaHoja = null,
+  // Con cajetín: sus acciones (copiar enlace, comparar), lo que se añade al grupo «Ver» del estuche
+  // ([{ id, etiqueta, icono, activo, onClick }]: p. ej. «Metrados», solo si el plano los tiene) y el
+  // nombre del juego que recorren ‹ › («Publicados», la carpeta…), para el pie.
+  accionesDelCajetin = null, extrasDelEstuche = [], nombreDelJuego = '' }) {
   const viewerRef = useRef(null); // Para Fullscreen
   const canvasRef = useRef(null);
   const wrapRef = useRef(null); // Envuelve canvas + overlay de herramientas
@@ -705,6 +725,20 @@ export default function PDFViewer({ url, preparando = false,
   const [progress, setProgress] = useState(0); // % de descarga del documento
   const [error, setError] = useState(null);
   const [showSidebar, setShowSidebar] = useState(false);
+  // EL ÍNDICE DEL DOCUMENTO (LDA-1 D2): los marcadores del PDF; y la forma de la primera hoja
+  // (apaisada = plano, si el código no lo dice). Se leen una vez por documento abierto.
+  const [indice, setIndice] = useState([]);
+  const [pestanaLateral, setPestanaLateral] = useState('paginas');
+  const [apaisada, setApaisada] = useState(null);
+  // EL ESTUCHE SE PLIEGA (LDA E6): con nombres tapa el borde de la hoja; plegado deja solo los iconos.
+  // Se recuerda en este navegador (si el almacenamiento no está, empieza abierto).
+  const [estucheRecogido, setEstucheRecogido] = useState(() => {
+    try { return localStorage.getItem('lda.estucheRecogido') === '1'; } catch { return false; }
+  });
+  const plegarEstuche = () => setEstucheRecogido(v => {
+    try { localStorage.setItem('lda.estucheRecogido', v ? '0' : '1'); } catch { /* sin almacenamiento */ }
+    return !v;
+  });
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [pageRendering, setPageRendering] = useState(false);
 
@@ -905,6 +939,35 @@ export default function PDFViewer({ url, preparando = false,
   const [pedidoDesde, setPedidoDesde] = useState(0);
   useEffect(() => { setPedidoDesde(docNonceRef.current); }, [fileName, url]);
   const documentoAbierto = docNonce > pedidoDesde;
+
+  useEffect(() => {
+    const pdf = pdfDocRef.current;
+    if (!pdf || !docNonce) return undefined;
+    let vivo = true;
+    (async () => {
+      let forma = null;
+      try {
+        const p1 = await pdf.getPage(1);
+        const [x0, y0, x1, y1] = p1.view;
+        const giro = ((p1.rotate || 0) % 180) !== 0;
+        forma = giro ? (y1 - y0) > (x1 - x0) : (x1 - x0) > (y1 - y0);
+      } catch { forma = null; }
+      let lista = [];
+      try {
+        const marcadores = await pdf.getOutline();
+        lista = await aplanarIndice(marcadores, async (dest) => {
+          const d = typeof dest === 'string' ? await pdf.getDestination(dest) : dest;
+          if (!Array.isArray(d) || d[0] == null) return null;
+          return typeof d[0] === 'number' ? d[0] + 1 : (await pdf.getPageIndex(d[0])) + 1;
+        });
+      } catch { lista = []; }
+      if (!vivo || pdfDocRef.current !== pdf) return;
+      setApaisada(forma);
+      setIndice(lista);
+      setPestanaLateral(lista.length ? 'indice' : 'paginas');
+    })();
+    return () => { vivo = false; };
+  }, [docNonce]);
 
   // QUE DOCUMENTO ESTA YA ENCUADRADO.
   //
@@ -1403,6 +1466,16 @@ export default function PDFViewer({ url, preparando = false,
   }, [numPages]);
 
   useEffect(() => setPageDraft(String(currentPage)), [currentPage]);
+
+  // LLEGADA DESDE «CITADO EN»: la dirección trae la página de la marca (?pagina=). Se va una vez, cuando
+  // el documento ya sabe cuántas páginas tiene; la marca la abre PdfToolsOverlay.
+  const paginaPedida = useRef(marcaDeLaDireccion(window.location.search).pagina);
+  useEffect(() => {
+    const p = paginaPedida.current;
+    if (!p || !numPages) return;
+    paginaPedida.current = null;
+    if (p <= numPages) goToPage(p);
+  }, [numPages, goToPage]);
 
   // ── BÚSQUEDA DENTRO DEL DOCUMENTO ─────────────────────────────────────────
   // Lee el texto que el PDF YA trae, al vuelo y en memoria. No extrae, no sube
@@ -2155,11 +2228,29 @@ export default function PDFViewer({ url, preparando = false,
   // La identidad se enseña aquí SOLO si nadie la enseña fuera (o si estamos en
   // pantalla completa, donde la cabecera del expediente ya no está).
   const mostrarIdentidad = !hideTitle || isFullscreen;
+  // La paginación. Sin cajetín vive arriba, en el centro; con él baja al pie (LDA-1 P3 y D4).
+  const paginacion = (
+    <div className="pdf-pagenav">
+      <button className="pdf-ico" aria-label="Página anterior" title="Página anterior"
+        onClick={() => goToPage(currentPage - 1)} disabled={currentPage <= 1}><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button>
+      <input aria-label="Número de página" inputMode="numeric" type="number"
+        value={pageDraft} min={1} max={numPages}
+        onChange={(e) => setPageDraft(e.target.value)}
+        onBlur={() => goToPage(Number(pageDraft) || currentPage)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') { e.preventDefault(); goToPage(Number(pageDraft) || currentPage); e.currentTarget.blur(); }
+          if (e.key === 'Escape') { setPageDraft(String(currentPage)); e.currentTarget.blur(); }
+        }} />
+      <span>de {numPages || '—'}</span>
+      <button className="pdf-ico" aria-label="Página siguiente" title="Página siguiente"
+        onClick={() => goToPage(currentPage + 1)} disabled={currentPage >= numPages}><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M9 5l7 7-7 7"/></svg></button>
+    </div>
+  );
 
   return (
-    <div ref={viewerRef} className="pdf-viewer" tabIndex={-1} aria-busy={pageRendering}>
+    <div ref={viewerRef} className={`pdf-viewer${cajetin ? ' pdf-viewer--alephia' : ''}`} tabIndex={-1} aria-busy={pageRendering}>
 
-      <div className="pdf-topbar" role="toolbar" aria-label="Controles del documento">
+      <div className={`pdf-topbar${cajetin ? ' pdf-topbar--cajetin' : ''}`} role="toolbar" aria-label="Controles del documento">
         <div className="pdf-topbar__left">
           <button className="pdf-ico" onClick={() => setShowSidebar(!showSidebar)}
             aria-label="Panel de miniaturas" aria-pressed={showSidebar} title="Miniaturas de páginas">
@@ -2195,7 +2286,7 @@ export default function PDFViewer({ url, preparando = false,
               <button onClick={() => gotoMatch(-1)} disabled={!matches.length} title="Anterior (Shift+Enter)">‹</button>
               <button onClick={() => gotoMatch(1)} disabled={!matches.length} title="Siguiente (Enter)">›</button>
             </div>
-          ) : mostrarIdentidad && (
+          ) : cajetin ? cajetin({ apaisada }) : mostrarIdentidad && (
             <div className="pdf-ident">
               {versionLabel && (onVersionClick ? (
                 <button className="pdf-chip-ver pdf-chip-ver--menu" onClick={onVersionClick}
@@ -2212,25 +2303,14 @@ export default function PDFViewer({ url, preparando = false,
           )}
         </div>
 
-        <div className="pdf-topbar__center">
-          <div className="pdf-pagenav">
-            <button className="pdf-ico" aria-label="Página anterior" title="Página anterior"
-              onClick={() => goToPage(currentPage - 1)} disabled={currentPage <= 1}><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button>
-            <input aria-label="Número de página" inputMode="numeric" type="number"
-              value={pageDraft} min={1} max={numPages}
-              onChange={(e) => setPageDraft(e.target.value)}
-              onBlur={() => goToPage(Number(pageDraft) || currentPage)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') { e.preventDefault(); goToPage(Number(pageDraft) || currentPage); e.currentTarget.blur(); }
-                if (e.key === 'Escape') { setPageDraft(String(currentPage)); e.currentTarget.blur(); }
-              }} />
-            <span>de {numPages || '—'}</span>
-            <button className="pdf-ico" aria-label="Página siguiente" title="Página siguiente"
-              onClick={() => goToPage(currentPage + 1)} disabled={currentPage >= numPages}><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M9 5l7 7-7 7"/></svg></button>
+        {!cajetin && (
+          <div className="pdf-topbar__center">
+            {paginacion}
           </div>
-        </div>
+        )}
 
         <div className="pdf-topbar__right">
+          {cajetin && accionesDelCajetin}
           {alEscritorio && (
             <button className="pdf-ico pdf-escritorio" onClick={alEscritorio}
               title={`Abrir en ${appEscritorio?.nombre || 'el escritorio'}`}>
@@ -2260,8 +2340,27 @@ export default function PDFViewer({ url, preparando = false,
 
       <div className="pdf-body">
         {showSidebar && (
-          <div ref={sidebarRef} className="pdf-sidebar" aria-label="Miniaturas de páginas">
-            {Array.from({ length: numPages }, (_, i) => i + 1).map(pageNum => (
+          <div ref={sidebarRef} className={`pdf-sidebar${indice.length && pestanaLateral === 'indice' ? ' pdf-sidebar--indice' : ''}`}
+            aria-label={indice.length ? 'Índice y páginas' : 'Miniaturas de páginas'}>
+            {indice.length > 0 && (
+              <div className="pdf-lateral-pest" role="tablist">
+                <button role="tab" aria-selected={pestanaLateral === 'indice'} onClick={() => setPestanaLateral('indice')}>Índice</button>
+                <button role="tab" aria-selected={pestanaLateral === 'paginas'} onClick={() => setPestanaLateral('paginas')}>Páginas</button>
+              </div>
+            )}
+            {indice.length > 0 && pestanaLateral === 'indice' ? (
+              <ol className="pdf-indice">
+                {indice.map((e, k) => (
+                  <li key={k}>
+                    <button className={`pdf-indice__e${e.pagina === currentPage ? ' es-actual' : ''}`}
+                      style={{ paddingLeft: 12 + e.nivel * 14 }} disabled={!e.pagina}
+                      onClick={() => e.pagina && goToPage(e.pagina)}>
+                      <span>{e.titulo}</span>{e.pagina && <small>{e.pagina}</small>}
+                    </button>
+                  </li>
+                ))}
+              </ol>
+            ) : Array.from({ length: numPages }, (_, k) => k + 1).map(pageNum => (
               <Thumbnail key={pageNum} pdf={pdfDocRef.current} pageNum={pageNum}
                 isActive={currentPage === pageNum} onClick={() => goToPage(pageNum)} />
             ))}
@@ -2319,6 +2418,7 @@ export default function PDFViewer({ url, preparando = false,
                 <canvas ref={canvasRef} />
                 {/* El detalle nitido de lo visible (ver dibujarDetalle). */}
                 <canvas ref={detalleRef} className="pdf-detalle" aria-hidden="true" />
+                {typeof sobreLaHoja === 'function' ? sobreLaHoja({ pagina: currentPage }) : sobreLaHoja}
                 {/* LA IMAGEN PROVISIONAL, EXACTAMENTE SOBRE LA HOJA (ver arriba):
                     la vista previa legible si la hay y, si no, la miniatura.
                     Ocupa la caja del lienzo, asi que al retirarla no se mueve
@@ -2387,15 +2487,33 @@ export default function PDFViewer({ url, preparando = false,
           </div>
 
         {nodeId && (
-            <div className="pdf-rail" role="toolbar" aria-label="Herramientas de medición y anotación">
+            <div className={`pdf-rail${cajetin ? ' pdf-rail--estuche' : ''}${cajetin && estucheRecogido ? ' pdf-rail--recogido' : ''}`} role="toolbar" aria-label="Herramientas de medición y anotación">
+              {cajetin && (
+                <button type="button" className="pdf-rail__plegar" onClick={plegarEstuche}
+                  aria-expanded={!estucheRecogido}
+                  title={estucheRecogido ? 'Mostrar los nombres de las herramientas' : 'Plegar el estuche'}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+                    strokeLinecap="round" strokeLinejoin="round">{estucheRecogido ? <path d="M9 6l6 6-6 6" /> : <path d="M15 6l-6 6 6 6" />}</svg>
+                </button>
+              )}
               {GRUPOS_DE_HERRAMIENTAS.map(grupo => (
                 <div key={grupo.nombre} className="pdf-rail__group">
+                  {cajetin && <span className="pdf-rail__titulo">{TITULO_DE_GRUPO[grupo.nombre] || grupo.nombre}</span>}
                   {grupo.items.map(t => (
                     <button key={t.id} className="pdf-rail-btn" title={t.title}
                       aria-label={t.title} aria-pressed={tool === t.id}
                       onClick={() => setTool(prev => prev === t.id ? 'pan' : t.id)}>
                       <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                        strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">{t.icon}</svg>
+                        strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">{t.icon}</svg>
+                      {cajetin && <span className="pdf-rail-btn__txt">{t.etiqueta}</span>}
+                    </button>
+                  ))}
+                  {cajetin && grupo.nombre === 'navegar' && (extrasDelEstuche || []).map(x => (
+                    <button key={x.id} className="pdf-rail-btn" title={x.titulo || x.etiqueta} aria-label={x.titulo || x.etiqueta}
+                      aria-pressed={!!x.activo} onClick={x.onClick}>
+                      <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                        strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">{x.icono}</svg>
+                      <span className="pdf-rail-btn__txt">{x.etiqueta}</span>
                     </button>
                   ))}
                   {grupo.nombre === 'anotar' && (
@@ -2437,6 +2555,7 @@ export default function PDFViewer({ url, preparando = false,
                 y el encuadre con los dos botones de ajuste que siguen abajo.
                 Los atajos de teclado y `fitTo` se mantienen intactos. */}
             <div className="pdf-dock__group">
+              {cajetin && numPages > 1 && <>{paginacion}<span className="pdf-sep" /></>}
               <button className="pdf-ico" onClick={() => fitTo('page')}
                 aria-pressed={fitMode === 'page'} title="Ajustar página (Ctrl+0)"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="3" width="16" height="18" rx="1.5"/><path d="M9 9l-2 2 2 2M15 9l2 2-2 2"/></svg></button>
               <button className="pdf-ico" onClick={() => fitTo('width')}
@@ -2463,6 +2582,12 @@ export default function PDFViewer({ url, preparando = false,
                     <rect x="13" y="13" width="8" height="8" rx="1.5"/>
                   </svg>
                 </button>
+                {cajetin && indiceActual >= 0 && (
+                  <span className="pdf-juego" title={nombreDelJuego ? `Juego: ${nombreDelJuego}` : 'Documentos del juego'}>
+                    <i>{nombreDelJuego ? `Juego · ${nombreDelJuego}` : 'Juego'}</i>
+                    <b>{indiceActual + 1} de {hermanos.length}</b>
+                  </span>
+                )}
                 <button className="pdf-ico" onClick={() => irAHermano(1)}
                   disabled={indiceActual < 0 || indiceActual >= hermanos.length - 1}
                   title="Documento siguiente de la carpeta">

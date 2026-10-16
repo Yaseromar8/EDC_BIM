@@ -302,7 +302,14 @@ function PanelContenido({ vistas, vistaActiva, onElegir }) {
   );
 }
 
-export default function CadViewer({ file, projectPrefix = '', urnDirecto = null, versionId = null, reviewEnabled = true }) {
+/**
+ * `capa` (opcional): lo que se dibuja ENCIMA de una vista 2D (el sustento de metrados). Recibe
+ * { viewer, vista: { guid, nombre }, irAVista }. `vistaInicial`: el guid de la vista con la que abrir (un
+ * vínculo apunta a su presentación). `onVista`: avisa de la vista que se mira; `irAVistaRef` recibe la
+ * función para cambiar de vista desde fuera (el panel de Metrados).
+ */
+export default function CadViewer({ file, projectPrefix = '', urnDirecto = null, versionId = null, reviewEnabled = true,
+                                    capa = null, vistaInicial = null, onVista = null, irAVistaRef = null }) {
   const containerRef = useRef(null);
   const viewerRef = useRef(null);
   // abriendo | preparando | traduciendo | listo | error
@@ -443,7 +450,8 @@ export default function CadViewer({ file, projectPrefix = '', urnDirecto = null,
             // archivo donde esto no aplique se comporta igual que hasta hoy --
             // y un Revit, que no tiene espacio modelo, sigue abriendo en 3D.
             const esModel = (v) => /^\s*model\s*$/i.test(v.data.name || '');
-            const node = todas.find(esEspacioModelo)
+            const node = (vistaInicial && todas.find(v => v.data.guid === vistaInicial))
+                      || todas.find(esEspacioModelo)
                       || todas.find(esModel)
                       || todas.find(v => v.data.role === '3d')
                       || raiz.getDefaultGeometry();
@@ -590,11 +598,42 @@ export default function CadViewer({ file, projectPrefix = '', urnDirecto = null,
       try { viewerRef.current?.finish(); } catch { /* el visor ya podría estar destruido */ }
       viewerRef.current = null;
     };
+  // `vistaInicial` solo decide con qué vista ABRE: cambiarla después no debe recargar el plano.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [file.id, intento, urnDirecto, versionId]);
+
+  // CAMBIAR DE VISTA: lo usan el panel CONTENIDO y, desde fuera, el panel de Metrados (un vínculo de otra
+  // presentación). Mismo `loadDocumentNode` que antes.
+  const abrirVista = (guid) => {
+    const doc = documentoRef.current;
+    const viewer = viewerRef.current;
+    if (!doc || !viewer || guid === vistaActiva) return;
+    const node = (doc.getRoot().search({ type: 'geometry' }) || []).find(n => n.data.guid === guid);
+    if (!node) return;
+    setPhase('abriendo');
+    // Una presentacion no trae el estado de capas del DWG: se le aplica
+    // el del espacio modelo, que ya se leyo al abrir.
+    viewer.loadDocumentNode(doc, node).then(() => {
+      aplicarCapasDelDwg(viewer, visiblesDelDwgRef);
+      setVistaActiva(guid);
+      setPhase('listo');
+    }).catch(() => {
+      setPhase('listo');
+      toast.error('No se pudo abrir esta vista del plano.');
+    });
+  };
+  if (irAVistaRef) irAVistaRef.current = abrirVista;
+  const vistaDescrita = vistas.find(v => v.guid === vistaActiva) || null;
+  useEffect(() => {
+    if (onVista) onVista(vistaDescrita ? { guid: vistaDescrita.guid, nombre: vistaDescrita.nombre, es2D: vistaDescrita.es2D } : null);
+  }, [vistaDescrita, onVista]);
 
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%', background: '#f1f0e8' }}>
       <div ref={containerRef} style={{ position: 'absolute', inset: 0 }} />
+      {/* La capa de quien la pida (el sustento de metrados), solo sobre una vista 2D ya cargada. */}
+      {capa && phase === 'listo' && viewerRef.current && vistaDescrita?.es2D
+        && capa({ viewer: viewerRef.current, vista: { guid: vistaDescrita.guid, nombre: vistaDescrita.nombre }, irAVista: abrirVista })}
 
       {/* Aviso discreto: el plano se ve, solo faltó algo accesorio. No es un
           error y no debe ocupar la pantalla como si lo fuera. */}
@@ -626,25 +665,7 @@ export default function CadViewer({ file, projectPrefix = '', urnDirecto = null,
         <PanelContenido
           vistas={vistas}
           vistaActiva={vistaActiva}
-          onElegir={(guid) => {
-            const doc = documentoRef.current;
-            const viewer = viewerRef.current;
-            if (!doc || !viewer) return;
-            const node = (doc.getRoot().search({ type: 'geometry' }) || [])
-              .find(n => n.data.guid === guid);
-            if (!node) return;
-            setPhase('abriendo');
-            // Una presentacion no trae el estado de capas del DWG: se le aplica
-            // el del espacio modelo, que ya se leyo al abrir.
-            viewer.loadDocumentNode(doc, node).then(() => {
-              aplicarCapasDelDwg(viewer, visiblesDelDwgRef);
-              setVistaActiva(guid);
-              setPhase('listo');
-            }).catch(() => {
-              setPhase('listo');
-              toast.error('No se pudo abrir esta vista del plano.');
-            });
-          }}
+          onElegir={abrirVista}
         />
       )}
 

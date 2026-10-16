@@ -765,3 +765,186 @@
   /* Sin suavizado de mas: la tesela ya viene a la resolucion que toca. */
   image-rendering: auto;
 }
+
+/* ── LDA-1 · LA FORMA ALEPHIA DEL LECTOR (docs/ux/LECTOR_ALEPHIA_ESTANDAR.md §15) ─────────────
+   Solo con cajetín (.pdf-viewer--alephia). El lector compartido conserva su forma. Es solo aspecto:
+   el movimiento (rueda, arrastre, mosaicos) no cambia.
+   · la barra es un CAJETÍN: papel claro y una línea de tinta debajo, como el rótulo de un plano;
+   · la MESA es papel con cuadrícula de libreta, que se mueve con la hoja;
+   · el ESTUCHE (herramientas) dice el nombre de cada una y va a la izquierda;
+   · el naranja solo marca la herramienta activa. */
+
+.pdf-viewer--alephia { --pdf-field: #f5f2ea; }
+
+.pdf-viewer--alephia .pdf-topbar--cajetin {
+  height: auto;
+  min-height: 54px;
+  padding: 0 8px 0 6px;
+  align-items: stretch;
+  background: #faf9f5;
+  border-bottom: 1.5px solid #141413;
+}
+
+.pdf-viewer--alephia .pdf-topbar--cajetin .pdf-topbar__left,
+.pdf-viewer--alephia .pdf-topbar--cajetin .pdf-topbar__right { align-items: center; }
+.pdf-viewer--alephia .pdf-topbar--cajetin .pdf-topbar__left { align-items: stretch; }
+.pdf-viewer--alephia .pdf-topbar--cajetin .pdf-topbar__left > .pdf-ico { align-self: center; }
+.pdf-viewer--alephia .pdf-topbar--cajetin .pdf-search { align-self: center; }
+.pdf-viewer--alephia .pdf-topbar--cajetin .pdf-topbar__right { flex: 0 0 auto; padding-left: 6px; border-left: 1px solid #cfcabb; }
+
+/* La mesa: papel y cuadrícula de 24 px que acompaña a la hoja al desplazarse. */
+.pdf-viewer--alephia .pdf-canvas-container {
+  background-color: #f5f2ea;
+  background-image:
+    linear-gradient(#e2ddd0 1px, transparent 1px),
+    linear-gradient(90deg, #e2ddd0 1px, transparent 1px);
+  background-size: 24px 24px;
+  background-attachment: local;
+}
+
+.pdf-viewer--alephia .pdf-page canvas {
+  box-shadow: 0 0 0 1px #bdb8aa, 3px 4px 0 rgba(20, 20, 19, 0.06);
+}
+
+/* El estuche: a la izquierda, con el nombre de cada herramienta y el de su grupo. */
+.pdf-rail--estuche {
+  left: 12px;
+  right: auto;
+  width: 148px;
+  padding: 4px 0;
+  border-color: #cfcabb;
+  border-radius: 4px;
+  background: #faf9f5;
+  box-shadow: 2px 3px 0 rgba(20, 20, 19, 0.05);
+}
+
+.pdf-rail--estuche .pdf-rail__group + .pdf-rail__group { margin-top: 4px; padding-top: 2px; border-top-color: #e2ddd0; }
+
+.pdf-rail__titulo {
+  display: block;
+  padding: 6px 12px 3px;
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: #6d6b67;
+}
+
+.pdf-rail--estuche .pdf-rail-btn {
+  position: relative;
+  justify-content: flex-start;
+  gap: 9px;
+  width: 100%;
+  height: 30px;
+  padding: 0 12px;
+  border-radius: 0;
+  font: inherit;
+  font-size: 12.5px;
+}
+
+.pdf-rail--estuche .pdf-rail-btn svg { flex-shrink: 0; }
+.pdf-rail--estuche .pdf-rail-btn:hover { background: #efebe0; color: #141413; }
+.pdf-rail--estuche .pdf-rail-btn[aria-pressed="true"] {
+  background: #efebe0;
+  color: #141413;
+  font-weight: 600;
+  box-shadow: inset 3px 0 0 #d97757;
+}
+.pdf-rail--estuche .pdf-rail-btn:focus-visible { outline: 2px solid #6a9bcc; outline-offset: -2px; }
+.pdf-rail--estuche .pdf-swatch { margin: 2px 0 2px 10px; }
+
+/* El pie: la página y los ajustes, en papel y con línea fina, como el resto. */
+.pdf-viewer--alephia .pdf-dock {
+  border: 1px solid #cfcabb;
+  border-radius: 4px;
+  background: #faf9f5;
+  box-shadow: 2px 3px 0 rgba(20, 20, 19, 0.05);
+}
+.pdf-viewer--alephia .pdf-dock .pdf-ico { color: #52524d; }
+.pdf-viewer--alephia .pdf-dock .pdf-ico:hover { background: #efebe0; color: #141413; }
+.pdf-viewer--alephia .pdf-dock .pdf-ico[aria-pressed="true"] { background: #efebe0; color: #141413; }
+.pdf-viewer--alephia .pdf-dock .pdf-sep { background: #e2ddd0; }
+.pdf-viewer--alephia .pdf-dock .pdf-pagenav { color: #52524d; }
+.pdf-viewer--alephia .pdf-dock .pdf-pagenav input { background: #fff; border-color: #cfcabb; color: #141413; }
+
+/* El índice del documento (LDA-1 D2). */
+.pdf-sidebar--indice { width: 240px; }
+
+.pdf-lateral-pest {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  flex-shrink: 0;
+  background: #faf9f5;
+  border-bottom: 1px solid #e8e6dc;
+}
+
+.pdf-lateral-pest button {
+  flex: 1;
+  height: 34px;
+  border: 0;
+  background: none;
+  color: #6d6b67;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.pdf-lateral-pest button[aria-selected="true"] { color: #141413; box-shadow: inset 0 -2px 0 #141413; }
+.pdf-lateral-pest button:focus-visible { outline: 2px solid #6a9bcc; outline-offset: -2px; }
+
+.pdf-indice { list-style: none; margin: 0; padding: 6px 0; }
+
+.pdf-indice__e {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 12px;
+  border: 0;
+  background: none;
+  color: #52524d;
+  font: inherit;
+  font-size: 12.5px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.pdf-indice__e small { color: #6d6b67; font-variant-numeric: tabular-nums; flex-shrink: 0; }
+.pdf-indice__e:hover:not(:disabled) { background: #efebe0; color: #141413; }
+.pdf-indice__e:disabled { cursor: default; opacity: 0.6; }
+.pdf-indice__e.es-actual { background: #efebe0; color: #141413; font-weight: 600; box-shadow: inset 3px 0 0 #141413; }
+.pdf-indice__e:focus-visible { outline: 2px solid #6a9bcc; outline-offset: -2px; }
+
+/* El estuche plegable (LDA E6): plegado, solo iconos; los nombres siguen en el título de cada botón. */
+.pdf-rail__plegar {
+  display: none;
+  align-self: flex-end;
+  width: 24px;
+  height: 22px;
+  margin: 0 4px 2px auto;
+  padding: 0;
+  border: 0;
+  border-radius: 3px;
+  background: none;
+  color: #6d6b67;
+  cursor: pointer;
+}
+
+.pdf-rail--estuche .pdf-rail__plegar { display: grid; place-items: center; }
+.pdf-rail__plegar:hover { background: #efebe0; color: #141413; }
+.pdf-rail__plegar:focus-visible { outline: 2px solid #6a9bcc; outline-offset: -2px; }
+
+.pdf-rail--estuche.pdf-rail--recogido { width: 44px; }
+.pdf-rail--recogido .pdf-rail__titulo,
+.pdf-rail--recogido .pdf-rail-btn__txt { display: none; }
+.pdf-rail--recogido .pdf-rail-btn { justify-content: center; padding: 0; }
+.pdf-rail--recogido .pdf-rail__plegar { margin: 0 auto 2px; }
+.pdf-rail--recogido .pdf-swatch { margin: 2px auto; }
+
+/* El juego en el pie (LDA P3): «Juego · Publicados» y «3 de 12», como en la maqueta v2. */
+.pdf-juego { display: inline-flex; flex-direction: column; justify-content: center; padding: 0 8px; line-height: 1.15; }
+.pdf-juego i { font-style: normal; font-size: 9px; font-weight: 600; letter-spacing: 0.09em; text-transform: uppercase; color: #6d6b67; white-space: nowrap; max-width: 180px; overflow: hidden; text-overflow: ellipsis; }
+.pdf-juego b { font-size: 12.5px; font-weight: 600; color: #141413; font-variant-numeric: tabular-nums; white-space: nowrap; }

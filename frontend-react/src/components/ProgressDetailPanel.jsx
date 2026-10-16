@@ -366,7 +366,7 @@ const ProgressDetailPanel = ({ isOpen, onClose, pin, elementProps, onDelete, isD
                 display: 'flex',
                 flexDirection: 'column',
                 color: '#fff',
-                fontFamily: 'Inter, sans-serif',
+                fontFamily: 'var(--a-font-sans)',
                 overflow: 'hidden',
                 borderRadius: 'inherit'
             }}>
@@ -408,7 +408,7 @@ const ProgressDetailPanel = ({ isOpen, onClose, pin, elementProps, onDelete, isD
             display: 'flex',
             flexDirection: 'column',
             color: '#fff',
-            fontFamily: 'Inter, sans-serif'
+            fontFamily: 'var(--a-font-sans)'
         }}>
             <header style={{
                 padding: '16px 20px',
@@ -480,7 +480,7 @@ const ProgressDetailPanel = ({ isOpen, onClose, pin, elementProps, onDelete, isD
                                     value={partidaSearch}
                                     onChange={(e) => setPartidaSearch(e.target.value)}
                                     onKeyDown={handlePartidaKeyDown}
-                                    style={{ width: '100%', padding: '6px 8px', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '3px', color: '#fff', fontSize: '12px', outline: 'none', fontFamily: 'Inter, sans-serif', boxSizing: 'border-box' }}
+                                    style={{ width: '100%', padding: '6px 8px', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '3px', color: '#fff', fontSize: '12px', outline: 'none', fontFamily: 'var(--a-font-sans)', boxSizing: 'border-box' }}
                                 />
                             </div>
                             <div ref={optionsContainerRef} style={{ overflowY: 'auto', flex: 1 }}>

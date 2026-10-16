@@ -5,6 +5,14 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import toast from 'react-hot-toast';
 import { API } from '../utils/helpers';
 import { apiFetch } from '../utils/apiFetch';
+import { PanelDeMarca, DialogoDeSello } from './MarcaConEnlace';
+import { estadoDeSello, marcaDeLaDireccion, fechaCorta } from '../utils/marcasConEnlace';
+
+// El sello mide lo mismo EN LA HOJA (puntos PDF), como un sello de goma: al alejar el plano se hace pequeño
+// con él. 150 × 62 pt ≈ 53 × 22 mm de papel.
+const SELLO_ANCHO = 150, SELLO_ALTO = 62;
+// El marcador de foto mide lo mismo EN PANTALLA (px), como el conteo: se ve igual a cualquier zoom.
+const FOTO_R = 13, FOTO_ABANICO = 36, FOTO_APERTURA = 50;
 
 const COLORS = ['#e53935', '#1e88e5', '#43a047', '#fb8c00', '#8e24aa', '#000000'];
 
@@ -19,6 +27,16 @@ function polyArea(pts) {
   return Math.abs(s) / 2;
 }
 function fmt(n) { return n >= 100 ? n.toFixed(1) : n.toFixed(2); }
+
+// La escala como la dice un ingeniero: «≈ 1:500». Un punto PDF es 1/72 de pulgada (0,3528 mm de papel).
+const A_METROS = { m: 1, cm: 0.01, km: 1000, ft: 0.3048 };
+function escalaLegible(unidadesPorPunto, unidad) {
+  const metros = unidadesPorPunto * (A_METROS[unidad] || 1);
+  const n = metros / 0.000352778;
+  if (!Number.isFinite(n) || n < 1) return '';
+  const redondo = n >= 1000 ? Math.round(n / 50) * 50 : n >= 100 ? Math.round(n / 5) * 5 : Math.round(n);
+  return `≈ 1:${redondo.toLocaleString('es-PE')}`;
+}
 
 // Path de nube de revisión: arcos festoneados sobre el perímetro de un rect
 function cloudPath(x, y, w, h) {
@@ -43,23 +61,42 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
   const [draft, setDraft] = useState(null);            // figura en construcción
   const [textDraft, setTextDraft] = useState(null);    // { px, py } posición de input de texto
   const [calibAsk, setCalibAsk] = useState(null);      // { p1, p2 } pidiendo distancia real
+  const [recalibrar, setRecalibrar] = useState(false);  // «Cambiar» la escala ya fijada
+  const [elegida, setElegida] = useState(null);         // id de la marca abierta en su panel
+  const [selloEn, setSelloEn] = useState(null);         // { p } donde se colocará un sello
+  const marcaPedida = useRef(marcaDeLaDireccion(window.location.search).marca);
   const svgRef = useRef(null);
   const draftRef = useRef(null);
   draftRef.current = draft;
 
   const vp = vpInfo?.vp;
   const cal = calibrations[String(page)];
+  // LA ESCALA VA DENTRO DE MEDIR Y ÁREA: sin escala en esta página (o al pedir «Cambiar»), los dos primeros
+  // clics fijan la escala y después se mide en metros. No hay un botón «Escala» aparte.
+  const midiendo = tool === 'measure' || tool === 'area';
+  const faltaEscala = midiendo && (!cal || recalibrar);
 
   // ── Cargar markups + calibraciones del documento ──
   useEffect(() => {
     if (!nodeId) return undefined;
+    setElegida(null);   // otro documento: el panel de una marca del anterior no sigue abierto
     // Saltar a otro documento mientras estas dos respuestas viajaban pintaba
     // las marcas -y la escala- del documento ANTERIOR encima del que estas
     // mirando. Una redlinea sobre el plano equivocado no es una demora, es un
     // error: el pestillo descarta lo que llega cuando ya no es de este nodo.
     let vigente = true;
     apiFetch(`${API}/api/pdf/markups?node_id=${nodeId}`).then(r => r.json())
-      .then(d => { if (vigente && d.success) setMarkups(d.markups); }).catch(() => {});
+      // Una respuesta «success» sin lista no puede dejar `markups` en undefined:
+      // el render hace `markups.filter` y la página entera se quedaba en blanco.
+      .then(d => {
+        if (!vigente || !d.success) return;
+        const lista = Array.isArray(d.markups) ? d.markups : [];
+        setMarkups(lista);
+        // Llegada desde «Citado en»: la marca pedida se abre en su panel (PDFViewer ya fue a su página).
+        const pedida = marcaPedida.current;
+        if (pedida && lista.some(m => String(m.id) === String(pedida))) setElegida(Number(pedida) || pedida);
+        marcaPedida.current = null;
+      }).catch(() => {});
     apiFetch(`${API}/api/pdf/calibration?node_id=${nodeId}`).then(r => r.json())
       .then(d => { if (vigente && d.success) setCalibrations(d.calibrations || {}); }).catch(() => {});
     return () => { vigente = false; };
@@ -79,18 +116,21 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
   const toScr = useCallback((p) => vp.convertToViewportPoint(p[0], p[1]), [vp]);
 
   // ── Persistencia ──
-  const saveMarkup = async (kind, geometry, text = null) => {
-    const local = { id: `tmp_${Date.now()}`, page, kind, geometry, style: { color }, text, created_by: userName, _unsaved: true };
+  // Devuelve el id guardado (o null), para abrir enseguida el panel de una foto o un sello recién puestos.
+  const saveMarkup = async (kind, geometry, text = null, extra = {}) => {
+    const style = { color, ...extra };
+    const local = { id: `tmp_${Date.now()}`, page, kind, geometry, style, text, created_by: userName,
+                    created_at: new Date().toISOString(), publicado: false, citas: [], fotos: [], _unsaved: true };
     setMarkups(prev => [...prev, local]);
     try {
       const r = await apiFetch(`${API}/api/pdf/markups`, {
         method: 'POST',
-        body: JSON.stringify({ node_id: nodeId, model_urn: projectPrefix, page, kind, geometry, style: { color }, text, user: userName })
+        body: JSON.stringify({ node_id: nodeId, model_urn: projectPrefix, page, kind, geometry, style, text, user: userName })
       });
       if (r.status === 404) throw new Error('endpoint-404');
       const d = await r.json();
-      if (d.success) setMarkups(prev => prev.map(m => m.id === local.id ? { ...m, id: d.id, _unsaved: false } : m));
-      else throw new Error(d.error || 'fallo');
+      if (d.success) { setMarkups(prev => prev.map(m => m.id === local.id ? { ...m, id: d.id, _unsaved: false } : m)); return d.id; }
+      throw new Error(d.error || 'fallo');
     } catch (e) {
       // No borramos la anotación: el usuario no pierde su trabajo en la sesión.
       // Queda marcada como no-guardada (no sobrevive a recargar hasta que el
@@ -114,6 +154,29 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
     }
   };
 
+  // Publicar o retirar: un acto de su autor (GAP 02). Desde el panel de la marca.
+  const publicarMarkup = async (m) => {
+    const quiere = !m.publicado;
+    try {
+      const r = await apiFetch(`${API}/api/pdf/markups/${m.id}/publicar`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ publicado: quiere }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok || !d.success) throw new Error(d.error || 'No se pudo publicar.');
+      setMarkups(prev => prev.map(x => x.id === m.id ? { ...x, publicado: d.publicado } : x));
+      toast.success(d.publicado ? 'Publicada: la ve toda la obra' : 'Retirada: vuelve a ser solo tuya');
+    } catch (e) { toast.error(e.message); }
+  };
+
+  const colocarSello = async (sello) => {
+    const p = selloEn?.p;
+    setSelloEn(null);
+    if (!p) return;
+    const id = await saveMarkup('sello', { p }, null, { sello });
+    setTool('pan');
+    if (id) setElegida(id);
+  };
+
   // ── Interacción de dibujo ──
   const onPointerDown = (e) => {
     if (tool === 'pan' || !vp) return;
@@ -121,12 +184,20 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
     const p = toPdf(e);
 
     if (tool === 'count') { saveMarkup('count', { p }); return; }
+    // Foto: el marcador se pone y se abre su panel para subir o elegir las fotos.
+    if (tool === 'photo') {
+      setTool('pan');
+      saveMarkup('foto', { p, ang: 0 }).then(id => { if (id) setElegida(id); });
+      return;
+    }
+    if (tool === 'stamp') { setSelloEn({ p }); return; }
     if (tool === 'text') { setTextDraft({ p }); return; }
     if (tool === 'measure' || tool === 'area' || tool === 'calibrate') {
+      const modo = faltaEscala ? 'calibrate' : tool;
       setDraft(prev => {
-        const pts = prev?.points ? [...prev.points, p] : [p];
-        if (tool === 'calibrate' && pts.length === 2) { setCalibAsk({ p1: pts[0], p2: pts[1] }); return null; }
-        return { kind: tool, points: pts, cursor: p };
+        const pts = prev?.kind === modo && prev?.points ? [...prev.points, p] : [p];
+        if (modo === 'calibrate' && pts.length === 2) { setCalibAsk({ p1: pts[0], p2: pts[1] }); return null; }
+        return { kind: modo, points: pts, cursor: p };
       });
       return;
     }
@@ -170,7 +241,7 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
 
   // Esc cancela el dibujo en curso
   useEffect(() => {
-    const onKey = (e) => { if (e.key === 'Escape') { setDraft(null); setTextDraft(null); setCalibAsk(null); } };
+    const onKey = (e) => { if (e.key === 'Escape') { setDraft(null); setTextDraft(null); setCalibAsk(null); setSelloEn(null); } };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, []);
@@ -190,14 +261,90 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
   const countTotal = pageMarkups.filter(m => m.kind === 'count').length;
 
   // ── Render de un markup ──
+  // En «Mover» un clic en una marca la ELIGE (su panel: referencias, fotos, publicar, borrar); en «Borrar
+  // marca» la borra; con cualquier otra herramienta las marcas no se tocan, para poder dibujar encima.
+  const tocable = tool === 'erase' || tool === 'pan';
+  const alTocar = (m) => (e) => {
+    e.stopPropagation();
+    if (tool === 'erase') deleteMarkup(m);
+    else if (tool === 'pan' && !String(m.id).startsWith('tmp_')) setElegida(m.id);
+  };
+  // La caja del sello en pantalla: esquina en el clic, tamaño fijo en puntos de hoja × escala del dibujado.
+  const cajaDelSello = (p) => {
+    const s = toScr(p);
+    const k = vp?.scale || 1;
+    return { x: s[0], y: s[1], w: SELLO_ANCHO * k, h: SELLO_ALTO * k };
+  };
+  // La caja en pantalla de una marca: para el halo de la elegida y el distintivo de referencias.
+  const cajaDe = (m) => {
+    const g = m.geometry || {};
+    let pts = [];
+    if (g.points) pts = g.points.map(toScr);
+    else if (g.p1) pts = [toScr(g.p1), toScr(g.p2)];
+    else if (m.kind === 'sello' && g.p) { const c = cajaDelSello(g.p); pts = [[c.x, c.y], [c.x + c.w, c.y + c.h]]; }
+    else if (g.w != null) pts = [toScr([g.x, g.y]), toScr([g.x + g.w, g.y + g.h])];
+    else if (g.p) { const s = toScr(g.p); const r = m.kind === 'foto' ? FOTO_R + 3 : 10; pts = [[s[0] - r, s[1] - r], [s[0] + r, s[1] + r]]; }
+    if (!pts.length) return null;
+    const xs = pts.map(p => p[0]), ys = pts.map(p => p[1]);
+    return { x: Math.min(...xs), y: Math.min(...ys), x2: Math.max(...xs), y2: Math.max(...ys) };
+  };
+
   const renderMarkup = (m, i) => {
     const c = m.style?.color || '#e53935';
     const common = {
       stroke: c, fill: 'none', strokeWidth: 2,
-      style: { cursor: tool === 'erase' ? 'not-allowed' : 'default', pointerEvents: tool === 'erase' ? 'all' : 'none' },
-      onClick: tool === 'erase' ? () => deleteMarkup(m) : undefined
+      style: { cursor: tool === 'erase' ? 'not-allowed' : tool === 'pan' ? 'pointer' : 'default', pointerEvents: tocable ? 'all' : 'none' },
+      onClick: tocable ? alTocar(m) : undefined
     };
     const g = m.geometry || {};
+    if (m.kind === 'foto' && g.p) {
+      // El marcador de cámara y, delante, el abanico de lo que se fotografió (0° = arriba en la hoja).
+      const s = toScr(g.p);
+      const a = ((Number(g.ang) || 0) - 90) * Math.PI / 180;
+      const h = FOTO_APERTURA / 2 * Math.PI / 180;
+      const R = FOTO_ABANICO + FOTO_R;
+      const p1 = [s[0] + R * Math.cos(a - h), s[1] + R * Math.sin(a - h)];
+      const p2 = [s[0] + R * Math.cos(a + h), s[1] + R * Math.sin(a + h)];
+      const n = (m.fotos || []).length;
+      return (
+        <g key={m.id} style={common.style} onClick={common.onClick}>
+          <path d={`M ${s[0]} ${s[1]} L ${p1[0]} ${p1[1]} A ${R} ${R} 0 0 1 ${p2[0]} ${p2[1]} Z`} fill={c} fillOpacity="0.14" stroke={c} strokeOpacity="0.5" strokeWidth="1" />
+          <circle cx={s[0]} cy={s[1]} r={FOTO_R} fill="#fff" stroke={c} strokeWidth="2" />
+          <g transform={`translate(${s[0] - 8} ${s[1] - 8}) scale(0.6667)`} fill="none" stroke={c} strokeWidth="2.2" strokeLinejoin="round">
+            <path d="M3 7.5h3.2l1.7-2.3h8.2l1.7 2.3H21v11H3z" /><circle cx="12" cy="13" r="3.3" />
+          </g>
+          {n > 0 && (
+            <g>
+              <circle cx={s[0] + FOTO_R - 1} cy={s[1] - FOTO_R + 1} r="7.5" fill={c} stroke="#fff" strokeWidth="1.5" />
+              <text x={s[0] + FOTO_R - 1} y={s[1] - FOTO_R + 4.5} fontSize="9.5" fontWeight="700" fill="#fff" textAnchor="middle" style={{ pointerEvents: 'none' }}>{n}</text>
+            </g>
+          )}
+        </g>
+      );
+    }
+    if (m.kind === 'sello' && g.p) {
+      // Como un sello de goma, a escala de la hoja. El color dice el estado.
+      const sel = m.style?.sello || {};
+      const est = estadoDeSello(sel.estado);
+      // EN EJES DE PANTALLA, no del PDF: en una lámina que el PDF trae girada (/Rotate 90) los ejes del PDF
+      // van cruzados y el sello salía alto y estrecho, con el texto fuera (16-oct-2026, plano 004126).
+      // Se ancla en el punto del clic y mide SELLO_ANCHO × SELLO_ALTO puntos a la escala de la hoja.
+      const { x, y, w, h: hh } = cajaDelSello(g.p);
+      const k = hh / SELLO_ALTO;   // tamaños de letra proporcionales a la caja
+      const cx = x + w / 2;
+      const pie = [m.created_by, fechaCorta(m.created_at)].filter(Boolean).join(' · ');
+      return (
+        <g key={m.id} style={common.style} onClick={common.onClick} fontFamily="'IBM Plex Sans', system-ui, sans-serif">
+          <rect x={x} y={y} width={w} height={hh} rx={2 * k} fill="#fff" fillOpacity="0.9" stroke={est.color} strokeWidth={Math.max(1.2, 2 * k)} />
+          <rect x={x + 3 * k} y={y + 3 * k} width={w - 6 * k} height={hh - 6 * k} rx={1.5 * k} fill="none" stroke={est.color} strokeWidth={Math.max(0.6, 0.8 * k)} />
+          <text x={cx} y={y + 13 * k} fontSize={6.6 * k} fontWeight="600" letterSpacing={1.2 * k} fill={est.color} textAnchor="middle" style={{ pointerEvents: 'none' }}>SELLO DE REVISIÓN</text>
+          <text x={cx} y={y + (sel.titulo ? 28 : 33) * k} fontSize={12.5 * k} fontWeight="700" fill={est.color} textAnchor="middle" style={{ pointerEvents: 'none' }}>{est.etiqueta}</text>
+          {sel.titulo && <text x={cx} y={y + 40 * k} fontSize={8 * k} fill="#333330" textAnchor="middle" style={{ pointerEvents: 'none' }}>{sel.titulo.length > 34 ? `${sel.titulo.slice(0, 33)}…` : sel.titulo}</text>}
+          <line x1={x + 10 * k} x2={x + w - 10 * k} y1={y + 46 * k} y2={y + 46 * k} stroke={est.color} strokeWidth={Math.max(0.5, 0.6 * k)} />
+          <text x={cx} y={y + 55 * k} fontSize={6.8 * k} fill="#52524d" textAnchor="middle" fontFamily="'IBM Plex Mono', monospace" style={{ pointerEvents: 'none' }}>{pie}</text>
+        </g>
+      );
+    }
     if (m.kind === 'measure' || m.kind === 'area' || m.kind === 'pen') {
       const pts = (g.points || []).map(toScr);
       if (pts.length < 2) return null;
@@ -220,7 +367,7 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
       const idx = pageMarkups.filter(x => x.kind === 'count').indexOf(m) + 1;
       return (
         <g key={m.id} style={common.style} onClick={common.onClick}>
-          <circle cx={s[0]} cy={s[1]} r="10" fill={c} stroke="#fff" strokeWidth="2" pointerEvents={tool === 'erase' ? 'all' : 'none'} />
+          <circle cx={s[0]} cy={s[1]} r="10" fill={c} stroke="#fff" strokeWidth="2" pointerEvents={tocable ? 'all' : 'none'} />
           <text x={s[0]} y={s[1] + 4} fontSize="11" fontWeight="700" fill="#fff" textAnchor="middle" style={{ pointerEvents: 'none' }}>{idx}</text>
         </g>
       );
@@ -233,7 +380,7 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
         <g key={m.id}>
           <line x1={a[0]} y1={a[1]} x2={b[0]} y2={b[1]} {...common} strokeWidth={2.5} />
           <polygon points={`${b[0]},${b[1]} ${b[0] - h * Math.cos(ang - 0.45)},${b[1] - h * Math.sin(ang - 0.45)} ${b[0] - h * Math.cos(ang + 0.45)},${b[1] - h * Math.sin(ang + 0.45)}`}
-            fill={c} style={common.style} onClick={common.onClick} pointerEvents={tool === 'erase' ? 'all' : 'none'} />
+            fill={c} style={common.style} onClick={common.onClick} pointerEvents={tocable ? 'all' : 'none'} />
         </g>
       );
     }
@@ -248,8 +395,8 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
       const s = toScr(g.p);
       return (
         <text key={m.id} x={s[0]} y={s[1]} fontSize="14" fontWeight="600" fill={c} stroke="#fff" strokeWidth="3" paintOrder="stroke"
-          style={{ cursor: tool === 'erase' ? 'not-allowed' : 'default' }} pointerEvents={tool === 'erase' ? 'all' : 'none'}
-          onClick={tool === 'erase' ? () => deleteMarkup(m) : undefined}>
+          style={common.style} pointerEvents={tocable ? 'all' : 'none'}
+          onClick={common.onClick}>
           {m.text}
         </text>
       );
@@ -294,16 +441,43 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
     const upp = meters / pdfDist;
     setCalibrations(prev => ({ ...prev, [String(page)]: { units_per_pdf: upp, display_unit: unit } }));
     setCalibAsk(null);
-    setTool('measure');
+    setRecalibrar(false);
+    // Se vuelve a lo que se estaba haciendo (Medir o Área), ya con la escala.
+    if (!midiendo) setTool('measure');
     try {
       await apiFetch(`${API}/api/pdf/calibration`, {
         method: 'PUT',
         body: JSON.stringify({ node_id: nodeId, page, units_per_pdf: upp, display_unit: unit })
       });
-      toast.success(`Escala calibrada: 1 pt = ${upp.toFixed(4)} ${unit}`);
+      toast.success(`Escala fijada${escalaLegible(upp, unit) ? `: ${escalaLegible(upp, unit)}` : ''}. Ya puedes medir.`);
     } catch (e) { toast.error('No se pudo guardar la calibración'); }
   };
 
+  // El halo de la marca elegida y el distintivo de las que citan documentos (con su número).
+  const renderEnlaces = () => pageMarkups.map(m => {
+    const n = (m.citas || []).length;
+    const esElegida = m.id === elegida;
+    if (!n && !esElegida) return null;
+    const k = cajaDe(m);
+    if (!k) return null;
+    return (
+      <g key={`enl-${m.id}`} style={{ pointerEvents: 'none' }}>
+        {esElegida && <rect x={k.x - 6} y={k.y - 6} width={k.x2 - k.x + 12} height={k.y2 - k.y + 12} rx="4"
+          fill="none" stroke="#6a9bcc" strokeWidth="1.5" strokeDasharray="5 3" />}
+        {n > 0 && (
+          <g transform={`translate(${k.x2 + 2} ${k.y - 16})`}>
+            <rect width={n > 9 ? 34 : 28} height="16" rx="8" fill="#fff" stroke="#507294" strokeWidth="1" />
+            <g transform="translate(4 2.5) scale(0.46)" fill="none" stroke="#507294" strokeWidth="2.6" strokeLinecap="round">
+              <path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1" /><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1" />
+            </g>
+            <text x="18" y="11.6" fontSize="10" fontWeight="600" fill="#507294" fontFamily="'IBM Plex Mono', monospace">{n}</text>
+          </g>
+        )}
+      </g>
+    );
+  });
+
+  const marcaElegida = elegida != null ? markups.find(m => m.id === elegida) : null;
   const interactive = tool !== 'pan';
   return (
     // zIndex 9: por encima de las teselas del lector (CapaMosaico, 8), que si no
@@ -325,8 +499,22 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
         onDoubleClick={onDoubleClick}
       >
         {pageMarkups.map(renderMarkup)}
+        {renderEnlaces()}
         {renderDraft()}
       </svg>
+
+      {/* El panel de la marca elegida: referencias, fotos, sello, publicar y borrar. */}
+      {marcaElegida && (
+        <PanelDeMarca key={marcaElegida.id} API={API} obra={projectPrefix} marca={marcaElegida}
+          esAutor={!!userName && marcaElegida.created_by === userName}
+          onCambio={(nueva) => setMarkups(prev => prev.map(x => x.id === nueva.id ? { ...x, ...nueva } : x))}
+          onPublicar={() => publicarMarkup(marcaElegida)}
+          onBorrar={() => { setElegida(null); deleteMarkup(marcaElegida); }}
+          onCerrar={() => setElegida(null)} />
+      )}
+      {selloEn && (
+        <DialogoDeSello autor={userName} onAceptar={colocarSello} onCerrar={() => setSelloEn(null)} />
+      )}
 
       {/* Input de texto flotante */}
       {textDraft && (() => {
@@ -347,24 +535,37 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
 
       {/* Diálogo de calibración */}
       {calibAsk && (
-        <div style={{ position: 'absolute', top: 16, left: '50%', transform: 'translateX(-50%)', background: '#1c2027', color: '#fff', padding: '14px 18px', borderRadius: 10, boxShadow: '0 8px 30px rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', gap: 10, zIndex: 50 }}>
-          <span style={{ fontSize: 13 }}>Distancia real entre los 2 puntos:</span>
+        <div style={{ position: 'absolute', top: 16, left: '50%', transform: 'translateX(-50%)', background: '#faf9f5', color: '#141413', padding: '10px 14px', border: '1px solid #cfcabb', borderRadius: 4, boxShadow: '0 2px 8px rgba(20,20,19,0.12)', display: 'flex', alignItems: 'center', gap: 8, zIndex: 50 }}>
+          <span style={{ fontSize: 13 }}>Distancia real entre los dos puntos:</span>
           <input id="calib-input" autoFocus type="number" step="any" placeholder="10.00"
-            style={{ width: 90, padding: '5px 8px', borderRadius: 6, border: '1px solid #555', background: '#12151a', color: '#fff', fontSize: 13 }}
+            style={{ width: 90, padding: '5px 8px', borderRadius: 3, border: '1px solid #cfcabb', background: '#fff', color: '#141413', fontSize: 13 }}
             onKeyDown={(e) => { if (e.key === 'Enter') confirmCalibration(parseFloat(e.target.value), document.getElementById('calib-unit').value); }} />
-          <select id="calib-unit" defaultValue="m" style={{ padding: '5px', borderRadius: 6, background: '#12151a', color: '#fff', border: '1px solid #555' }}>
+          <select id="calib-unit" defaultValue="m" style={{ padding: '5px', borderRadius: 3, background: '#fff', color: '#141413', border: '1px solid #cfcabb' }}>
             <option value="m">m</option><option value="cm">cm</option><option value="km">km</option><option value="ft">ft</option>
           </select>
           <button onClick={() => confirmCalibration(parseFloat(document.getElementById('calib-input').value), document.getElementById('calib-unit').value)}
-            style={{ background: 'var(--accent)', border: 'none', color: '#fff', padding: '6px 14px', borderRadius: 6, fontWeight: 700, cursor: 'pointer', fontSize: 13 }}>OK</button>
-          <button onClick={() => setCalibAsk(null)} style={{ background: 'transparent', border: '1px solid #555', color: '#bbb', padding: '6px 10px', borderRadius: 6, cursor: 'pointer', fontSize: 13 }}>✕</button>
+            style={{ background: '#141413', border: 'none', color: '#fff', padding: '6px 14px', borderRadius: 3, fontWeight: 600, cursor: 'pointer', fontSize: 13 }}>Fijar escala</button>
+          <button onClick={() => { setCalibAsk(null); setRecalibrar(false); }} aria-label="Cancelar" style={{ background: 'transparent', border: '1px solid #cfcabb', color: '#52524d', padding: '6px 10px', borderRadius: 3, cursor: 'pointer', fontSize: 13 }}>Cancelar</button>
+        </div>
+      )}
+
+      {/* LA ESCALA, AL MEDIR: si falta, qué hacer; si está, cuál es y «Cambiar». */}
+      {midiendo && !calibAsk && (
+        <div style={{ position: 'absolute', top: 12, left: 12, zIndex: 40, display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', border: '1px solid #cfcabb', borderRadius: 4, background: faltaEscala ? '#f6efe2' : '#faf9f5', color: faltaEscala ? '#734500' : '#141413', fontSize: 12.5 }}>
+          {faltaEscala
+            ? <span>Primero la escala: marca dos puntos de una distancia conocida (por ejemplo, la escala gráfica del plano).</span>
+            : <><span>Escala {escalaLegible(cal.units_per_pdf, cal.display_unit) || 'fijada'}</span>
+                <button type="button" onClick={() => { setDraft(null); setRecalibrar(true); }}
+                  style={{ padding: '2px 8px', border: '1px solid #cfcabb', borderRadius: 3, background: '#fff', color: '#141413', fontSize: 12, cursor: 'pointer' }}>Cambiar</button></>}
+          {recalibrar && cal && <button type="button" onClick={() => { setDraft(null); setRecalibrar(false); }}
+            style={{ padding: '2px 8px', border: '1px solid #cfcabb', borderRadius: 3, background: '#fff', color: '#52524d', fontSize: 12, cursor: 'pointer' }}>Cancelar</button>}
         </div>
       )}
 
       {/* Barra de estado: totales de la página */}
       {(pageMarkups.length > 0 || draft) && (
-        <div style={{ position: 'absolute', bottom: 10, left: '50%', transform: 'translateX(-50%)', background: 'rgba(28,32,39,0.92)', color: '#eee', padding: '6px 14px', borderRadius: 8, fontSize: 12, display: 'flex', gap: 14, pointerEvents: 'none', whiteSpace: 'nowrap' }}>
-          <span>{cal ? `Escala: 1 pt = ${cal.units_per_pdf.toFixed(4)} ${cal.display_unit}` : '⚠ Sin calibrar'}</span>
+        <div style={{ position: 'absolute', bottom: 10, left: '50%', transform: 'translateX(-50%)', background: '#faf9f5', color: '#141413', border: '1px solid #cfcabb', padding: '5px 12px', borderRadius: 4, fontSize: 12, display: 'flex', gap: 14, pointerEvents: 'none', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>
+          <span>{cal ? `Escala ${escalaLegible(cal.units_per_pdf, cal.display_unit) || 'fijada'}` : 'Sin escala'}</span>
           {countTotal > 0 && <span>Conteo: <b>{countTotal}</b></span>}
           {(() => {
             const ms = pageMarkups.filter(m => m.kind === 'measure');

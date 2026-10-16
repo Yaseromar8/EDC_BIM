@@ -19,8 +19,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css" />
   <link rel="stylesheet" href="https://developer.api.autodesk.com/modelderivative/v2/viewers/7.*/style.min.css">
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
-  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@500;600;700&display=swap" rel="stylesheet" />
+  <!-- La letra de View es IBM Plex Sans, servida desde design/fuentes/ (D-26). Inter se sigue pidiendo SOLO
+       para las etiquetas 4D (LOB4DExtension.js y components/lob4d/*), protegidas: sin ella caerian a Arial. -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet" />
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap"
     rel="stylesheet" />
   <script src="https://cdn.tailwindcss.com?plugins=forms,typography,container-queries"></script>
@@ -36,7 +37,7 @@
             "background-dark": "#1e1e1e",
           },
           fontFamily: {
-            display: ["Inter", "sans-serif"],
+            display: ["IBM Plex Sans", "sans-serif"],
           },
           borderRadius: {
             DEFAULT: "4px",

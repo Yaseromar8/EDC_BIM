@@ -97,7 +97,7 @@ class IconMarkupExtension extends BaseExtension {
                         <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline>
                         <polyline points="17 6 23 6 23 12"></polyline>
                     </svg>
-                    <span style="font-weight: 800; font-family: Inter, sans-serif;">${valStr}</span>
+                    <span style="font-weight: 800; font-family: 'IBM Plex Sans', sans-serif;">${valStr}</span>
                 `;
 
                 // Wrapper Styles (Reverted to Box/Arrow style)

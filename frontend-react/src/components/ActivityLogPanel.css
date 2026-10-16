@@ -3,7 +3,7 @@
     flex-direction: column;
     height: 100%;
     color: #e2e8f0;
-    font-family: 'Inter', sans-serif;
+    font-family: var(--a-font-sans);
 }
 
 .activity-controls {

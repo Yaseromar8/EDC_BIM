@@ -140,7 +140,7 @@ const StationTracker = ({ isVisible, onClose, markers, viewerRef }) => {
             boxShadow: '0 10px 30px rgba(0,0,0,0.6)',
             zIndex: 1000,
             color: 'white',
-            fontFamily: 'Inter, sans-serif',
+            fontFamily: 'var(--a-font-sans)',
             overflow: 'hidden',
             userSelect: 'none'
         }}>

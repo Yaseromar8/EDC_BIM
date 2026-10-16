@@ -70,7 +70,12 @@ import PortadaObra from '../components/PortadaObra';
 import FiltrosDeArchivos, { FichasDeFiltros } from '../components/FiltrosDeArchivos';
 import PanelDeVistas, { GuardarComoVista } from '../components/PanelDeVistas';
 import { useVistasDeArchivos } from '../hooks/useVistasDeArchivos';
+import PanelDeGrupos, { ElegirGrupo } from '../components/PanelDeGrupos';
+import GrupoAbierto from '../components/GrupoAbierto';
+import { useGrupos } from '../hooks/useGrupos';
 import { aplicarFiltros, hayFiltros, describirFiltros, criteriosDeFiltros, ORDEN_POR_DEFECTO } from '../utils/vistasDeArchivos';
+import { hermanosDelLector } from '../utils/lectorDePlanos';
+import { EstadoVacio, IlustracionPlano, IlustracionCasco } from '../components/IlustracionesDeObra';
 import FolderPermissionsPanel from '../components/FolderPermissionsPanel';
 import AccFolderBridge from '../components/AccFolderBridge';
 // ESTÁTICO A PROPÓSITO: abrir un PDF es la acción más frecuente del día. Si se
@@ -259,7 +264,7 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
   
   const { columnWidths, totalTableWidth, startResizing, ajustarAncho } = useColumnResize();
 
-  const { globalSidebarWidth, setGlobalSidebarWidth, treeSidebarWidth, startTreeResize, startGlobalResize } = useSidebarResize();
+  const { globalSidebarWidth, setGlobalSidebarWidth, treeSidebarWidth, startTreeResize, startGlobalResize, teclaTree, resetTree, arbolMin, arbolMax } = useSidebarResize();
   const { versionPanelWidth, startVersionResize } = useVersionPanelResize();
 
   // LAS DOS ADMINISTRACIONES, SEPARADAS.
@@ -330,12 +335,33 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
   // EL ORDEN DE LA TABLA vive aquí (antes dentro de la tabla, con el mismo valor de
   // partida): así una vista propia lo guarda y lo devuelve al abrirse.
   const [ordenTabla, setOrdenTabla] = React.useState(ORDEN_POR_DEFECTO);
+  // GRUPOS DE DOCUMENTOS (15-oct-2026): los documentos viven en sus carpetas y cada uno arma sus grupos,
+  // que solo apuntan a ellos (routes/grupos.py). Un grupo abierto se pinta ENCIMA del panel de datos: la
+  // tabla, el árbol y las vistas no cambian. Elegir una carpeta o una vista lo cierra.
+  const grupos = useGrupos(API, projectPrefix);
+  const [grupoActivoId, setGrupoActivoId] = React.useState(null);
+  const grupoActivo = grupoActivoId ? (grupos.grupos.find(g => g.id === grupoActivoId) || null) : null;
+  const [paraAgrupar, setParaAgrupar] = React.useState(null);
+  // ‹ › del lector recorren el grupo cuando el documento se abrió desde él.
+  const [juegoDelGrupo, setJuegoDelGrupo] = React.useState(null);
+  React.useEffect(() => { setGrupoActivoId(null); }, [fe.currentPath, fe.isTrashMode, fe.sidebarView, projectPrefix]);
+  const elegirGrupo = (g) => { vistas.salir(); setConsultado(null); setGrupoActivoId(g.id); };
+  const abrirDelGrupo = (f, fijo, lista) => {
+    reiniciarTira();
+    fe.setShowVersions(false);
+    fe.setViewedVersionInfo(fijo || null);
+    fe.setActiveFile(f);
+    fe.anotarDocumento(f);
+    setJuegoDelGrupo({ grupo: grupoActivoId, archivos: lista || [] });
+  };
+
   const elegirVista = (v) => {
+    setGrupoActivoId(null);
     if (v.tipo === 'propia' && v.vista?.orden) setOrdenTabla(v.vista.orden);
     vistas.elegir(v);
   };
   // Salir de la vista al elegir una carpeta, aunque sea la que ya estaba abierta.
-  const navegarYSalir = React.useCallback((ruta, id) => { vistas.salir(); fe.navigate(ruta, id); },
+  const navegarYSalir = React.useCallback((ruta, id) => { setGrupoActivoId(null); vistas.salir(); fe.navigate(ruta, id); },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [fe.navigate, vistas.salir]);
 
@@ -1111,6 +1137,10 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
                 <PanelDeVistas recuentos={vistas.recuentos} hayPlan={vistas.hayPlan} activa={vistas.activa}
                   propias={vistas.propias} onElegir={elegirVista} onBorrar={vistas.borrar} />
               )}
+              {!fe.isTrashMode && grupos.disponible && (
+                <PanelDeGrupos grupos={grupos.grupos} activo={grupoActivo?.id || null} onElegir={elegirGrupo}
+                  onCrear={grupos.crear} puedeCrearDeLaObra={grupos.puedeCrearDeLaObra} />
+              )}
               <FolderNode
                 user={user} folder={{ id: fe.projectRootId, name: 'Archivos de proyecto', fullName: projectPrefix }}
                 currentPath={enVista ? "" : fe.currentPath} onNavigate={navegarYSalir} onReset={() => fe.setCollapseSignal(s => s+1)}
@@ -1126,12 +1156,23 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
             </aside>
 
             {/* RESIZER */}
-            <div onMouseDown={startTreeResize} style={{ width: 8, cursor: 'col-resize', background: '#faf9f5', borderRight: '1px solid #f1f0e8', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <div style={{ width: 2, height: 24, background: '#f1f0e8', borderRadius: 1 }} />
+            {/* Divisor: arrastrar (sigue al ratón desde donde se agarra), flechas del teclado o
+                doble clic para volver al ancho de siempre. El ancho se recuerda. */}
+            <div className="divisor-arbol" role="separator" aria-orientation="vertical" tabIndex={0}
+                 aria-label="Ancho del panel de carpetas" aria-valuenow={treeSidebarWidth} aria-valuemin={arbolMin} aria-valuemax={arbolMax}
+                 title="Arrastra para cambiar el ancho · doble clic para restablecerlo"
+                 onPointerDown={startTreeResize} onKeyDown={teclaTree} onDoubleClick={resetTree}>
+              <span className="divisor-arbol__asa" />
             </div>
 
             {/* DATA PANEL */}
-            <section style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: 'var(--bg-primary)' }}>
+            <section style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: 'var(--bg-primary)', position: 'relative' }}>
+              {grupoActivo && !fe.isTrashMode && (
+                <GrupoAbierto key={grupoActivo.id} grupo={grupoActivo} servicio={grupos}
+                  puedeEscribir={!grupoActivo.de_la_obra || grupos.puedeCrearDeLaObra}
+                  onAbrir={abrirDelGrupo} onCerrar={() => setGrupoActivoId(null)} onBorrado={() => setGrupoActivoId(null)}
+                  onIrACarpeta={(d) => navegarYSalir([projectPrefix, ...d.ruta].join('/') + '/', d.carpeta_id)} />
+              )}
               <div className="acc-toolbar" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', ...(enVista ? { justifyContent: 'flex-start' } : {}), background: 'var(--bg-primary)', borderBottom: '1px solid #f1f0e8', flexShrink: 0 }}>
                 {fe.puedeEditarAqui && !fe.isTrashMode && !enVista && (
                   <button type="button" onClick={() => fe.setShowUploadModal(true)} className="barra-btn barra-btn--primario">Cargar archivos</button>
@@ -1447,11 +1488,11 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
                     (vistas.cargando && vistas.filas === null) ? (
                       <div style={{ padding: 40, textAlign: 'center' }}><div className="adsk-spinner" style={{ margin: '0 auto' }} /></div>
                     ) : filasDeVista.length === 0 ? (
-                      <div style={{ padding: 48, textAlign: 'center', color: '#72706b', fontSize: 13 }}>
-                        {(vistas.filas || []).length === 0
+                      <EstadoVacio ilustracion={<IlustracionCasco />}
+                        titulo={(vistas.filas || []).length === 0
                           ? 'Ningún documento que puedas ver cumple esta vista.'
                           : 'Ningún documento de la vista cumple los filtros puestos.'}
-                      </div>
+                        texto={(vistas.filas || []).length === 0 ? 'Cuando alguno la cumpla, aparecerá aquí.' : 'Quita algún filtro para ver más.'} />
                     ) : (
                       <MatrixTable folders={[]} files={filasDeVista} selected={new Set()} soloLectura orden={ordenTabla} onOrdenar={setOrdenTabla}
                         columnWidths={columnWidths} totalTableWidth={totalTableWidth} toggle={() => {}} navigate={navegarYSalir}
@@ -1509,6 +1550,15 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
                     <DeletedTable items={fe.deletedItems} selectedIds={fe.selectedDeletedIds} onToggle={fe.setSelectedDeletedIds}
                       onRestore={(id) => restaurarElementos([id])}
                       getInitials={getInitials} restoringIds={fe.restoringIds} />
+                ) : (fe.filteredFolders.length + fe.filteredFiles.length) === 0 ? (
+                    // ESTADO VACÍO con su ilustración (14-oct-2026): antes la lista
+                    // enseñaba la cabecera de la tabla y nada debajo. Soltar archivos
+                    // aquí sigue funcionando (la superficie de soltar es el contenedor).
+                    (fe.folders.length + fe.files.length) === 0
+                      ? <EstadoVacio ilustracion={<IlustracionPlano />} titulo="Esta carpeta está vacía"
+                          texto="Arrastra aquí los archivos o pulsa «Cargar archivos»." />
+                      : <EstadoVacio ilustracion={<IlustracionCasco />} titulo="Nada de esta carpeta cumple los filtros"
+                          texto="Quita algún filtro para ver más." />
                 ) : vistaCarpeta === 'cuadricula' ? (
                     <Suspense fallback={<div style={{ padding: 40, textAlign: 'center', color: '#72706b', fontSize: 13 }}>Cargando…</div>}>
                       <MatrixGrid folders={fe.filteredFolders} files={fe.filteredFiles}
@@ -1591,10 +1641,10 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
               </div>
               <footer style={{ padding: '8px 16px', fontSize: 13, color: '#72706b', borderTop: '1px solid #f1f0e8', background: 'var(--bg-primary)', flexShrink: 0 }}>
                 {enVista
-                  ? `Mostrando ${filasDeVista.length}${filasDeVista.length !== (vistas.filas || []).length ? ` de ${(vistas.filas || []).length}` : ''} documentos de la vista`
+                  ? `Mostrando ${filasDeVista.length}${filasDeVista.length !== (vistas.filas || []).length ? ` de ${(vistas.filas || []).length}` : ''} ${(vistas.filas || []).length === 1 ? 'documento' : 'documentos'} de la vista`
                   : fe.selected.size > 0
-                  ? `${fe.selected.size} de ${fe.folders.length + fe.files.length} seleccionados`
-                  : `Mostrando ${fe.filteredFolders.length + fe.filteredFiles.length}${fe.statusFilter !== 'ALL' || fe.searchQuery || fe.hayFiltroMeta ? ` de ${fe.folders.length + fe.files.length}` : ''} elementos`}
+                  ? `${fe.selected.size} de ${fe.folders.length + fe.files.length} ${fe.selected.size === 1 ? 'seleccionado' : 'seleccionados'}`
+                  : `Mostrando ${fe.filteredFolders.length + fe.filteredFiles.length}${fe.statusFilter !== 'ALL' || fe.searchQuery || fe.hayFiltroMeta ? ` de ${fe.folders.length + fe.files.length}` : ''} ${fe.folders.length + fe.files.length === 1 ? 'elemento' : 'elementos'}`}
               </footer>
             </section>
           </div>
@@ -1634,7 +1684,22 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
         }}
         onAttributes={(item) => setAttributesItem(item)}
         onNuevaVersion={pedirNuevaVersion}
-        onCopiarEnlace={fe.copiarEnlace} />
+        onCopiarEnlace={fe.copiarEnlace}
+        onAnadirAGrupo={grupos.disponible && !fe.isTrashMode ? (docs) => setParaAgrupar(docs) : undefined} />
+      {paraAgrupar && paraAgrupar.length > 0 && (
+        <ElegirGrupo documentos={paraAgrupar} grupos={grupos.grupos} puedeCrearDeLaObra={grupos.puedeCrearDeLaObra}
+          onCrear={grupos.crear} onCerrar={() => setParaAgrupar(null)}
+          onAnadir={async (g) => {
+            let ya = 0;
+            for (const d of paraAgrupar) {
+              const r = await grupos.anadir(g.id, d.id);
+              if (!r.ok) return r;
+              if (r.ya_estaba) ya += 1;
+            }
+            toast.success(ya === paraAgrupar.length ? `Ya estaba en «${g.nombre}»` : `Añadido a «${g.nombre}» (sigue en su carpeta)`);
+            return { ok: true };
+          }} />
+      )}
       <input ref={selectorDeVersion} type="file" hidden
         onChange={(e) => {
           const fichero = e.target.files && e.target.files[0];
@@ -1663,7 +1728,13 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
           viewedVersionInfo={fe.viewedVersionInfo} setViewedVersionInfo={fe.verVersion}
           showVersions={fe.showVersions} setShowVersions={fe.setShowVersions} isAdmin={isAdmin} esEntityAdmin={esEntityAdmin}
           onPromote={vh.handlePromote} API={API}
-          hermanos={(fe.files || []).filter(f => /\.pdfx?$/i.test(f.name || ''))}
+          // ‹ › y la tira siguen a lo que se mira: la vista abierta o la carpeta.
+          hermanos={grupoActivo && juegoDelGrupo?.grupo === grupoActivo.id
+            ? hermanosDelLector({ archivos: juegoDelGrupo.archivos })
+            : hermanosDelLector({ enVista, filasDeVista, archivos: fe.files })}
+          // LDA: el pie dice qué juego recorren ‹ › y el cajetín copia el enlace (con versión si no es la vigente).
+          nombreDelJuego={grupoActivo && juegoDelGrupo?.grupo === grupoActivo.id ? grupoActivo.nombre : enVista ? (vistas.activa?.nombre || 'Vista') : ((fe.currentPath || '').replace(/\/$/, '').split('/').pop() || 'Carpeta')}
+          onCopiarEnlace={(f, versionId) => fe.copiarEnlace({ ...f, _versionEnlace: versionId })}
           onAbrirHermano={(doc) => { fe.setViewedVersionInfo(null); fe.setShowVersions(false); fe.setActiveFile(doc); fe.anotarDocumento(doc, { reemplazar: true }); }}
           onClose={fe.cerrarDocumento} />
       )}

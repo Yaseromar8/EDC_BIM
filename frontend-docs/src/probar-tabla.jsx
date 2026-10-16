@@ -55,7 +55,7 @@ function Banco() {
     const [editingNodeId, setEditingNodeId] = useState(null);
 
     return (
-        <div style={{ padding: 24, background: '#f1f0e8', minHeight: '100vh', fontFamily: 'Inter, system-ui, sans-serif' }}>
+        <div style={{ padding: 24, background: '#f1f0e8', minHeight: '100vh', fontFamily: 'var(--a-font-sans)' }}>
             <p style={{ margin: '0 0 8px', fontWeight: 600 }}>Tabla de ficheros · anchos de columna</p>
             <ul style={{ margin: '0 0 16px', paddingLeft: 18, fontSize: 13, lineHeight: 1.8, color: '#333330' }}>
                 <li>Acerca el ratón al borde derecho de CUALQUIER cabecera: el tirador se tiñe.</li>

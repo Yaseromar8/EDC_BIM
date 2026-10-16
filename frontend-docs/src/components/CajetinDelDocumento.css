@@ -1,0 +1,210 @@
+/* El cajetín del lector (CajetinDelDocumento.jsx) · LDA-1 §3. Paleta D-24, sobrio: líneas finas de tinta,
+   rótulos pequeños en mayúsculas, sin sombras ni píldoras. */
+
+.cajetin {
+  display: flex;
+  align-items: stretch;
+  align-self: stretch;
+  min-width: 0;
+  flex: 1 1 auto;
+  margin-left: 6px;
+  border-left: 1px solid #cfcabb;
+  color: #141413;
+}
+
+.cajetin__cas {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 1px;
+  min-width: 0;
+  padding: 5px 12px 6px;
+  border: 0;
+  border-right: 1px solid #cfcabb;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  color: inherit;
+}
+
+.cajetin__cas--doc { flex: 0 1 330px; }
+.cajetin__cas--ver { flex: 0 0 auto; cursor: pointer; }
+.cajetin__cas--ver:hover { background: #f1eee5; }
+.cajetin__cas--ver:focus-visible { outline: 2px solid #6a9bcc; outline-offset: -2px; }
+.cajetin__cas--est { flex: 0 1 190px; }
+.cajetin__cas--idon { flex: 0 1 220px; }
+.cajetin__cas--vig { flex: 0 1 210px; border-right: 0; }
+
+.cajetin__rot {
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: #6d6b67;
+  white-space: nowrap;
+}
+
+.cajetin__val {
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cajetin__val--codigo { font-family: ui-monospace, Consolas, monospace; font-size: 12.5px; letter-spacing: 0.01em; }
+.cajetin__flecha { font-size: 9px; color: #6d6b67; }
+
+.cajetin__det {
+  font-size: 11px;
+  color: #6d6b67;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cajetin__idon { display: flex; align-items: center; gap: 6px; min-width: 0; }
+
+.cajetin__cod {
+  display: inline-grid;
+  place-items: center;
+  flex-shrink: 0;
+  min-width: 24px;
+  height: 19px;
+  padding: 0 4px;
+  border: 1.5px solid #141413;
+  border-radius: 2px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.cajetin__vig { display: flex; align-items: center; gap: 6px; }
+.cajetin__vig::before { content: ''; width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; background: #b0aea5; }
+.cajetin__vig--bien::before { background: #788c5d; }
+.cajetin__vig--aviso::before { background: #734500; }
+
+/* Una versión anterior: las casillas de versión y vigencia pasan a aviso. */
+.cajetin__cas.es-aviso { background: #f6efe2; color: #734500; }
+.cajetin__cas.es-aviso .cajetin__rot,
+.cajetin__cas.es-aviso .cajetin__det { color: #734500; }
+
+.cajetin__ir {
+  align-self: flex-start;
+  margin-top: 2px;
+  height: 22px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 3px;
+  background: #141413;
+  color: #fff;
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.cajetin__ir:hover { background: #302f2e; }
+.cajetin__ir:focus-visible { outline: 2px solid #6a9bcc; outline-offset: 2px; }
+
+/* R-C4: en pantallas estrechas quedan Documento, Versión y Vigencia. */
+@media (max-width: 900px) {
+  .cajetin__cas:not(.cajetin__cas--doc):not(.cajetin__cas--ver):not(.cajetin__cas--vig) { display: none; }
+  .cajetin__det { display: none; }
+}
+
+/* El sello de la oficina técnica: va con la hoja (vive dentro de .pdf-page). */
+.sello-sustituida {
+  position: absolute;
+  left: 56%;
+  top: 30%;
+  z-index: 3;
+  transform: rotate(-8deg);
+  padding: 6px 14px 7px;
+  border: 2.5px solid #b93535;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.6);
+  color: #b93535;
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  line-height: 1.2;
+  text-align: center;
+  opacity: 0.85;
+  pointer-events: none;
+  user-select: none;
+}
+
+.sello-sustituida small { display: block; font-size: 10.5px; font-weight: 600; letter-spacing: 0.04em; }
+/* Sobre la hoja: proporcional a ella (2 % de su ancho), entre 7 y 22 px. */
+.sello-sustituida__hoja { position: absolute; inset: 0; z-index: 3; pointer-events: none; container-type: size; }
+.sello-sustituida__hoja .sello-sustituida { font-size: clamp(7px, 2cqw, 22px); padding: 0.3em 0.7em 0.35em; border-width: clamp(1px, 0.22cqw, 2.5px); }
+.sello-sustituida__hoja .sello-sustituida small { font-size: 0.52em; }
+
+/* ── El cajetín fuera del PDF (CAD, modelos, Office, imagen y vídeo): ESTANDAR_LDA.md, capa 1 ── */
+.file-viewer-header--cajetin {
+  height: auto;
+  min-height: 54px;
+  flex-shrink: 0;
+  align-items: stretch;
+  padding: 0 8px 0 0;
+  background: #faf9f5;
+  border-bottom: 1.5px solid #141413;
+  box-shadow: none;
+}
+
+.file-viewer-header--cajetin .file-viewer-actions {
+  align-items: center;
+  padding-left: 8px;
+  border-left: 1px solid #cfcabb;
+}
+
+.file-viewer-cajetin { position: relative; display: flex; flex: 1 1 auto; min-width: 0; }
+.file-viewer-cajetin .cajetin { margin-left: 0; border-left: 0; }
+
+/* El historial cuelga de la casilla Versión (la casilla Documento mide hasta 330 px). */
+.file-viewer-cajetin__versiones { position: absolute; top: calc(100% - 30px); left: 330px; z-index: 40; }
+
+/* Fuera del PDF el sello no puede ir pegado a la hoja: va fijo sobre el contenido. */
+.sello-sustituida--flotante { position: absolute; top: 28px; right: 96px; z-index: 5; pointer-events: none; }
+.sello-sustituida--flotante .sello-sustituida { position: static; transform: rotate(-6deg); }
+
+/* El conmutador [Vigente | Anterior] de la casilla Vigencia. */
+.cajetin__alternar { display: inline-flex; align-self: flex-start; margin-top: 3px; border: 1px solid #cfcabb; border-radius: 3px; overflow: hidden; }
+.cajetin__alternar button {
+  height: 21px;
+  padding: 0 9px;
+  border: 0;
+  background: #fff;
+  color: #52524d;
+  font: inherit;
+  font-size: 11.5px;
+  cursor: pointer;
+}
+.cajetin__alternar button + button { border-left: 1px solid #cfcabb; }
+.cajetin__alternar button[aria-pressed="true"] { background: #141413; color: #fff; font-weight: 600; cursor: default; }
+.cajetin__alternar button:hover:not([aria-pressed="true"]) { background: #efebe0; color: #141413; }
+.cajetin__alternar button:focus-visible { outline: 2px solid #6a9bcc; outline-offset: -2px; }
+.cajetin__cas.es-aviso .cajetin__alternar { border-color: #d9c7a3; }
+/* Excel | Planilla, junto a las acciones de la barra (no dentro de una casilla). */
+.cajetin__vista { align-self: center; margin: 0 8px 0 0; }
+.cajetin__vista button { height: 26px; padding: 0 11px; font-size: 12.5px; }
+
+/* Las acciones del cajetín fuera del PDF (dentro del PDF usan el estilo de iconos del lector). */
+.cajetin__accion {
+  display: inline-grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: #52524d;
+  cursor: pointer;
+}
+.cajetin__accion:hover { background: #efebe0; color: #141413; }
+/* «Metrados (n)» en la barra de un DWG (en el PDF vive en el estuche). */
+.cajetin__metrados { display: inline-flex; align-items: center; gap: 6px; align-self: center; height: 30px; margin-right: 6px; padding: 0 10px; border: 1px solid #cfcabb; border-radius: 3px; background: #fff; color: #141413; font: inherit; font-size: 12.5px; cursor: pointer; }
+.cajetin__metrados:hover { border-color: #141413; }
+.cajetin__metrados[aria-pressed="true"] { border-color: #141413; background: #141413; color: #fff; }
+.cajetin__metrados:focus-visible { outline: 2px solid #6a9bcc; outline-offset: 2px; }
+.cajetin__accion:focus-visible { outline: 2px solid #6a9bcc; outline-offset: 1px; }

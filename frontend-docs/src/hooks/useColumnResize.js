@@ -86,9 +86,25 @@ export function useColumnResize() {
   return { columnWidths, setColumnWidths, totalTableWidth, startResizing, ajustarAncho };
 }
 
+// El ancho del árbol: entre 200 px y la mitad de la ventana (tope 600), y se recuerda
+// en este navegador. Si el almacén falla (ventana privada), vale el de siempre.
+const ARBOL_MIN = 200;
+const CLAVE_ANCHO_ARBOL = 'alephia.docs.anchoArbol';
+const arbolMax = () => Math.max(ARBOL_MIN, Math.min(600, Math.round((typeof window !== 'undefined' ? window.innerWidth : 1200) * 0.5)));
+const limitarArbol = (w) => Math.round(Math.max(ARBOL_MIN, Math.min(arbolMax(), w)));
+function leerAnchoArbol(porDefecto) {
+  try {
+    const v = Number(window.localStorage.getItem(CLAVE_ANCHO_ARBOL));
+    return Number.isFinite(v) && v > 0 ? limitarArbol(v) : porDefecto;
+  } catch { return porDefecto; }
+}
+function guardarAnchoArbol(w) {
+  try { window.localStorage.setItem(CLAVE_ANCHO_ARBOL, String(w)); } catch { /* sin almacén: no se recuerda */ }
+}
+
 export function useSidebarResize(initialGlobal = 240, initialTree = 300) {
   const [globalSidebarWidth, setGlobalSidebarWidth] = useState(initialGlobal);
-  const [treeSidebarWidth, setTreeSidebarWidth] = useState(initialTree);
+  const [treeSidebarWidth, setTreeSidebarWidth] = useState(() => leerAnchoArbol(initialTree));
   const isResizingGlobal = useRef(false);
   const isResizingTree = useRef(false);
 
@@ -109,28 +125,65 @@ export function useSidebarResize(initialGlobal = 240, initialTree = 300) {
     document.body.style.cursor = 'col-resize';
   };
 
-  const startTreeResize = () => {
+  // EL DIVISOR DEL ÁRBOL SIGUE AL RATÓN DESDE DONDE SE AGARRA (16-oct-2026).
+  // Antes el ancho era `clientX - globalSidebarWidth`: suponía que el árbol empezaba
+  // 240 px a la derecha del borde de la ventana, y empieza en 0. Al agarrarlo saltaba
+  // de 300 a 200 px y luego iba 240 px por detrás del ratón (medido en el banco: ratón
+  // en x=500 → panel de 260 px). Ahora se mide el DESPLAZAMIENTO desde el agarre, con
+  // captura del puntero: no se pierde al pasar por encima de un PDF o un iframe, no
+  // selecciona texto al arrastrar, y funciona con el dedo en una tablet.
+  const startTreeResize = (e) => {
+    if (e.button !== undefined && e.button !== 0) return;
+    e.preventDefault();
+    const asa = e.currentTarget;
+    const x0 = e.clientX;
+    const ancho0 = treeSidebarWidth;
+    let ultimo = ancho0;
     isResizingTree.current = true;
-    const handleTreeResize = (e) => {
+    try { asa.setPointerCapture(e.pointerId); } catch { /* sin captura, sigue por document */ }
+    const mover = (ev) => {
       if (!isResizingTree.current) return;
-      setTreeSidebarWidth(Math.max(200, Math.min(600, e.clientX - globalSidebarWidth)));
+      ultimo = limitarArbol(ancho0 + (ev.clientX - x0));
+      setTreeSidebarWidth(ultimo);
     };
-    const stopTreeResize = () => {
+    const soltar = () => {
       isResizingTree.current = false;
-      document.removeEventListener('mousemove', handleTreeResize);
-      document.removeEventListener('mouseup', stopTreeResize);
-      document.body.style.cursor = 'default';
+      asa.removeEventListener('pointermove', mover);
+      asa.removeEventListener('pointerup', soltar);
+      asa.removeEventListener('pointercancel', soltar);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      guardarAnchoArbol(ultimo);
     };
-    document.addEventListener('mousemove', handleTreeResize);
-    document.addEventListener('mouseup', stopTreeResize);
+    asa.addEventListener('pointermove', mover);
+    asa.addEventListener('pointerup', soltar);
+    asa.addEventListener('pointercancel', soltar);
     document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
   };
+
+  // Teclado (el divisor es un separador accesible): flechas 16 px, con Mayús 64 px;
+  // Inicio/Fin, al mínimo y al máximo.
+  const teclaTree = (e) => {
+    const paso = e.shiftKey ? PASO_TECLADO_GRANDE : PASO_TECLADO;
+    const destino = { ArrowLeft: treeSidebarWidth - paso, ArrowRight: treeSidebarWidth + paso,
+                      Home: ARBOL_MIN, End: arbolMax() }[e.key];
+    if (destino === undefined) return;
+    e.preventDefault();
+    const w = limitarArbol(destino);
+    setTreeSidebarWidth(w);
+    guardarAnchoArbol(w);
+  };
+
+  // Doble clic: vuelve al ancho de siempre.
+  const resetTree = () => { setTreeSidebarWidth(initialTree); guardarAnchoArbol(initialTree); };
 
   return {
     globalSidebarWidth, setGlobalSidebarWidth,
     treeSidebarWidth, setTreeSidebarWidth,
     startGlobalResize,
-    startTreeResize,
+    startTreeResize, teclaTree, resetTree,
+    arbolMin: ARBOL_MIN, arbolMax: arbolMax(),
   };
 }
 

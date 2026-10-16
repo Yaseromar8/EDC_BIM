@@ -31,6 +31,9 @@ export function AvisosHost() {
     <Toaster
       position="bottom-right"
       gutter={8}
+      // Por encima del lector (`.file-viewer-overlay`, 999999): con el 9999 de
+      // serie, lo que se avisaba DESDE el lector salía debajo y no se veía.
+      containerStyle={{ zIndex: 1000002 }}
       toastOptions={{
         style: ESTILO,
         success: { iconTheme: { primary: 'var(--a-status-success)', secondary: 'var(--a-surface-raised)' } },

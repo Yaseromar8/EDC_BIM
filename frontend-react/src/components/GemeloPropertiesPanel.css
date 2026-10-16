@@ -19,7 +19,7 @@
     flex-direction: column;
     height: 100%;
     color: #f1f5f9;
-    font-family: 'Inter', system-ui, sans-serif;
+    font-family: var(--a-font-sans);
     overflow: hidden;
 }
 
