@@ -5,9 +5,12 @@ abajo-izquierda) para que sean independientes del zoom/rotación del visor.
 """
 from esquema_congelado import solo_con_ddl
 import json
+import os
 import traceback
+import uuid
 from flask import Blueprint, request, jsonify, g
 from db import get_db_connection
+from folder_permissions import check_folder_permission
 from perimetro_de_obra import guardia_de_recurso
 
 pdf_tools_bp = Blueprint('pdf_tools', __name__)
@@ -144,6 +147,7 @@ def list_markups():
                 "publicado": bool(r[8]),
                 "publicado_en": r[9].isoformat() if r[9] else None,
             } for r in cur.fetchall()]
+            _con_enlaces(cur, rows)
         return jsonify({"success": True, "markups": rows})
     except Exception as e:
         traceback.print_exc()
@@ -161,13 +165,23 @@ def create_markup():
     negativa = guardia_de_recurso('file_nodes', d['node_id'])
     if negativa:
         return negativa
+    # Las citas y las fotos NO entran al crear: van por el PATCH, que comprueba
+    # que cada documento es de la obra y que quien cita puede abrirlo.
+    estilo = dict(d.get('style') or {})
+    estilo.pop('citas', None)
+    estilo.pop('fotos', None)
+    if d['kind'] == 'sello':
+        sello, error = _sello(estilo.get('sello'))
+        if error:
+            return jsonify({"success": False, "error": error}), 400
+        estilo['sello'] = sello
     try:
         with get_db_connection() as conn:
             cur = conn.cursor()
             cur.execute("""INSERT INTO pdf_markups (file_node_id, model_urn, page, kind, geometry, style, text_content, created_by)
                            VALUES (%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id""",
                         (d['node_id'], d['model_urn'], d['page'], d['kind'],
-                         json.dumps(d['geometry']), json.dumps(d.get('style') or {}),
+                         json.dumps(d['geometry']), json.dumps(estilo),
                          d.get('text'), _user().get('name') or d.get('user')))
             new_id = cur.fetchone()[0]
             conn.commit()
@@ -284,4 +298,244 @@ def set_calibration():
             conn.commit()
         return jsonify({"success": True})
     except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+# ══ FOTO, SELLO Y REFERENCIAS (16-oct-2026) ════════════════════════════════
+#
+# Una marca puede CITAR documentos de la obra (`style.citas`) y una marca de
+# foto lleva sus fotos (`style.fotos`): las dos son listas de ids de
+# file_nodes. Sin migración: `style` ya es JSONB.
+#
+# Tres reglas, las mismas que el sustento de metrados y los grupos:
+#   1. Solo documentos VIVOS de la MISMA obra que el plano.
+#   2. Citar exige poder abrir lo citado.
+#   3. Una cita NO concede acceso: al listar, lo que el usuario no puede abrir
+#      sale como «restringido», sin nombre.
+# La foto es un DOCUMENTO (se sube a MULTIMEDIA/ con su versión, sus permisos y
+# su auditoría) y la marca la cita: la misma foto puede estar en varios planos.
+
+TOPE_CITAS = 20
+TOPE_FOTOS = 12
+EXTENSIONES_DE_FOTO = ('.jpg', '.jpeg', '.png', '.webp', '.heic', '.heif', '.gif', '.bmp')
+# El sello es una NOTA sobre la hoja: no cambia el estado del documento. La
+# decisión de verdad va por Revisiones. Por eso sus estados son de revisión de
+# campo y no «Aprobado».
+ESTADOS_DE_SELLO = {
+    'revisado': 'Revisado',
+    'conforme': 'Conforme',
+    'con_observaciones': 'Conforme con observaciones',
+    'observado': 'Observado',
+}
+
+
+def _user():
+    return getattr(g, 'current_user', None) or {}
+
+
+def _uuid(valor):
+    try:
+        return str(uuid.UUID(str(valor)))
+    except (TypeError, ValueError, AttributeError):
+        return None
+
+
+def _sello(valor):
+    """(sello limpio, error)."""
+    if not isinstance(valor, dict):
+        return None, 'Al sello le falta su contenido.'
+    estado = str(valor.get('estado') or '').strip()
+    if estado not in ESTADOS_DE_SELLO:
+        return None, 'El estado del sello no es válido: ' + ', '.join(ESTADOS_DE_SELLO.values()) + '.'
+    titulo = str(valor.get('titulo') or '').strip()[:80]
+    comentario = str(valor.get('comentario') or '').strip()[:300]
+    return {'estado': estado, 'titulo': titulo, 'comentario': comentario}, None
+
+
+def _ids(valor, tope, que):
+    """(lista de ids únicos y en orden, error)."""
+    if not isinstance(valor, list):
+        return None, 'Las %s van en una lista.' % que
+    ids = []
+    for v in valor:
+        nid = _uuid(v)
+        if not nid:
+            return None, 'Una de las %s no es un documento válido.' % que
+        if nid not in ids:
+            ids.append(nid)
+    if len(ids) > tope:
+        return None, 'Como mucho %d %s por marca.' % (tope, que)
+    return ids, None
+
+
+def _documentos(cur, ids):
+    """{id: (model_urn, nombre, tipo)} de los documentos vivos entre `ids`."""
+    if not ids:
+        return {}
+    cur.execute("""SELECT id::text, model_urn, name, node_type FROM file_nodes
+                    WHERE id::text = ANY(%s) AND NOT is_deleted""", (list(ids),))
+    return {r[0]: (r[1], r[2], r[3]) for r in cur.fetchall()}
+
+
+def _puede_ver(nid, obra, cache):
+    if nid not in cache:
+        cache[nid] = check_folder_permission(_user(), nid, obra, 'viewer', 'ver un documento citado') is None
+    return cache[nid]
+
+
+def _con_enlaces(cur, rows):
+    """Pone en cada marca sus `citas` y `fotos` con nombre, o restringidas."""
+    todos = set()
+    for m in rows:
+        estilo = m.get('style') or {}
+        for clave in ('citas', 'fotos'):
+            todos.update(i for i in (estilo.get(clave) or []) if _uuid(i))
+    if not todos:
+        for m in rows:
+            m['citas'], m['fotos'] = [], []
+        return rows
+    docs = _documentos(cur, todos)
+    cache = {}
+    for m in rows:
+        estilo = m.get('style') or {}
+        for clave in ('citas', 'fotos'):
+            salida = []
+            for nid in estilo.get(clave) or []:
+                doc = docs.get(nid)
+                if not doc:
+                    salida.append({'id': nid, 'eliminado': True})
+                elif _puede_ver(nid, doc[0], cache):
+                    salida.append({'id': nid, 'nombre': doc[1]})
+                else:
+                    salida.append({'id': nid, 'restringido': True})
+            m[clave] = salida
+    return rows
+
+
+@pdf_tools_bp.route('/api/pdf/markups/<int:markup_id>', methods=['PATCH'])
+def editar_markup(markup_id):
+    """Citas, fotos, sello y orientación de una marca. Solo su autor.
+
+    Cuerpo: {citas?: [id], fotos?: [id], sello?: {...}, angulo?: grados}. Lo que
+    no viene no cambia. Citar exige poder abrir lo citado (regla 2).
+    """
+    negativa = guardia_de_recurso('pdf_markups', markup_id)
+    if negativa:
+        return negativa
+    d = request.get_json(silent=True) or {}
+    autor = _user().get('name') or ''
+    try:
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            cur.execute("""SELECT m.kind, m.style, m.geometry, m.created_by, n.model_urn
+                             FROM pdf_markups m
+                             JOIN file_nodes n ON n.id = m.file_node_id
+                            WHERE m.id = %s""", (markup_id,))
+            fila = cur.fetchone()
+            if not fila:
+                return jsonify({"success": False, "error": "La marca no existe."}), 404
+            kind, estilo, geometria, creador, obra = fila
+            if not autor or creador != autor:
+                return jsonify({"success": False, "error": "Solo el autor de la marca puede cambiarla."}), 403
+            estilo, geometria = dict(estilo or {}), dict(geometria or {})
+            cache = {}
+            for clave, tope, que in (('citas', TOPE_CITAS, 'referencias'), ('fotos', TOPE_FOTOS, 'fotos')):
+                if clave not in d:
+                    continue
+                if clave == 'fotos' and kind != 'foto':
+                    return jsonify({"success": False, "error": "Solo una marca de foto lleva fotos."}), 400
+                ids, error = _ids(d[clave], tope, que)
+                if error:
+                    return jsonify({"success": False, "error": error}), 400
+                docs = _documentos(cur, ids)
+                for nid in ids:
+                    doc = docs.get(nid)
+                    if not doc or doc[2] != 'FILE':
+                        return jsonify({"success": False, "error": "Uno de los documentos ya no existe."}), 404
+                    if doc[0] != obra:
+                        return jsonify({"success": False,
+                                        "error": "Solo se pueden citar documentos de la misma obra."}), 400
+                    if clave == 'fotos' and os.path.splitext(doc[1] or '')[1].lower() not in EXTENSIONES_DE_FOTO:
+                        return jsonify({"success": False, "error": "«%s» no es una foto." % doc[1]}), 400
+                    if not _puede_ver(nid, obra, cache):
+                        return jsonify({"success": False,
+                                        "error": "No puedes citar un documento que no puedes abrir."}), 403
+                estilo[clave] = ids
+            if 'sello' in d:
+                if kind != 'sello':
+                    return jsonify({"success": False, "error": "Esta marca no es un sello."}), 400
+                sello, error = _sello(d['sello'])
+                if error:
+                    return jsonify({"success": False, "error": error}), 400
+                estilo['sello'] = sello
+            if 'angulo' in d:
+                if kind != 'foto':
+                    return jsonify({"success": False, "error": "Solo se orienta una marca de foto."}), 400
+                try:
+                    geometria['ang'] = round(float(d['angulo']) % 360, 1)
+                except (TypeError, ValueError):
+                    return jsonify({"success": False, "error": "Ángulo no válido."}), 400
+            cur.execute("UPDATE pdf_markups SET style = %s, geometry = %s WHERE id = %s",
+                        (json.dumps(estilo), json.dumps(geometria), markup_id))
+            marca = {'id': markup_id, 'kind': kind, 'style': estilo, 'geometry': geometria}
+            _con_enlaces(cur, [marca])
+            conn.commit()
+        return jsonify({"success": True, "markup": marca})
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@pdf_tools_bp.route('/api/pdf/citado-en', methods=['GET'])
+def citado_en():
+    """?node_id=<documento>: las marcas de qué planos citan este documento.
+
+    Es el sentido que ACC no tiene. Solo marcas publicadas o propias, y solo de
+    planos que el usuario puede abrir: saber que un plano cita una foto ya dice
+    algo del plano (regla 3).
+    """
+    nid = _uuid(request.args.get('node_id'))
+    if not nid:
+        return jsonify({"success": False, "error": "Documento no válido."}), 400
+    negativa = guardia_de_recurso('file_nodes', nid)
+    if negativa:
+        return negativa
+    autor = _user().get('name') or ''
+    try:
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            cur.execute("SELECT model_urn FROM file_nodes WHERE id = %s AND NOT is_deleted", (nid,))
+            fila = cur.fetchone()
+            if not fila:
+                return jsonify({"success": False, "error": "Documento no encontrado."}), 404
+            obra = fila[0]
+            cache = {}
+            if not _puede_ver(nid, obra, cache):
+                return jsonify({"success": False, "error": "No tienes acceso a este documento."}), 403
+            cur.execute("""SELECT m.id, m.kind, m.page, m.file_node_id::text, n.name,
+                                  m.created_by, m.created_at, m.publicado,
+                                  COALESCE(m.style->'fotos', '[]'::jsonb) ? %s
+                             FROM pdf_markups m
+                             JOIN file_nodes n ON n.id = m.file_node_id AND NOT n.is_deleted
+                            WHERE n.model_urn = %s
+                              AND (COALESCE(m.style->'citas', '[]'::jsonb) ? %s
+                                   OR COALESCE(m.style->'fotos', '[]'::jsonb) ? %s)
+                              AND (m.publicado OR m.created_by = %s)
+                            ORDER BY n.name, m.page, m.id
+                            LIMIT 200""", (nid, obra, nid, nid, autor))
+            citas = []
+            for r in cur.fetchall():
+                if not _puede_ver(r[3], obra, cache):
+                    continue
+                citas.append({
+                    'marca': r[0], 'tipo': r[1], 'pagina': r[2],
+                    'plano': {'id': r[3], 'nombre': r[4]},
+                    'autor': r[5], 'fecha': r[6].isoformat() if r[6] else None,
+                    'publicado': bool(r[7]), 'como': 'foto' if r[8] else 'referencia',
+                })
+        response = jsonify({"success": True, "citas": citas})
+        response.headers['Cache-Control'] = 'private, no-store'
+        return response
+    except Exception as e:
+        traceback.print_exc()
         return jsonify({"success": False, "error": str(e)}), 500

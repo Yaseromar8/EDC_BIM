@@ -199,7 +199,12 @@ def test_las_rutas_por_id_de_recurso_llevan_guardia():
                      # y 1_DRENAJE son la obra '1', con 4 miembros--; sin
                      # traducir no lo hace nadie.
                      'guardia_de_obra',
-                     '_puede_definir')
+                     '_puede_definir',
+                     # Grupos de documentos (15-oct-2026). `_guardia_del_grupo` lee la obra
+                     # de la propia fila del grupo, llama a `guardia_de_recurso` con ella y
+                     # a `_hay_acceso` (fail-closed); además exige ser el dueño de un grupo
+                     # personal y administrador de la obra para cambiar uno de la obra.
+                     '_guardia_del_grupo')
             tiene = 'guardia_de_recurso' in cuerpo or any(o in cuerpo for o in otras)
             if toca_obra and not tiene:
                 sin_guardia.append(f'{nombre}  {url}')

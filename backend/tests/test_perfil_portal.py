@@ -150,6 +150,15 @@ def test_el_recorte_es_real(rutas_portal):
     UNA ruta, `/api/docs/mosaico`, las teselas del lector de laminas del propio
     portal (docs/archivos/15); manifiesto y teselas van por la misma a
     proposito, para no abrir dos.
+    De 286 a 289 el 15-oct-2026: TRES rutas, una sola familia
+    `/api/docs/sustento` (listar, crear y retirar un vinculo de sustento de
+    metrados: la zona de un plano que sustenta un item de partida; estandar
+    LDA, capa 3, docs/ux/ESTANDAR_LDA.md). Es producto documental del propio
+    lector del portal, con guardia de obra y de carpeta en cada una.
+    De 289 a 293 el 15-oct-2026: CUATRO rutas, una familia `/api/docs/grupos`
+    (grupos de documentos: listar/crear, borrar, documentos del grupo y un
+    documento del grupo). Los documentos viven en sus carpetas y el grupo solo
+    apunta; cada ruta guarda obra, dueño y permiso de carpeta.
 
     Lo que este guardia protege NO es el numero: es que el portal no vuelva a
     arrastrar el visor, el 4D o la IA. Eso lo vigila
@@ -185,7 +194,9 @@ def test_el_recorte_es_real(rutas_portal):
     assert rutas_revision == revision_cad, (
         'el perímetro de revisión CAD cambió sin revisión: %s' %
         sorted(rutas_revision ^ revision_cad))
-    TECHO = 286
+    # 293 -> 295 (16-oct-2026): PATCH /api/pdf/markups/<id> (citas, fotos y sello de una marca)
+    # y GET /api/pdf/citado-en (que marcas citan un documento). Las dos con guardia de recurso.
+    TECHO = 295
     sin_puente = [r for r in rutas_portal
                   if r not in puente_acc and r not in revision_cad]
     assert len(sin_puente) < TECHO, (

@@ -892,7 +892,8 @@ def get_file_versions(model_urn, file_node_id):
         with get_db_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("""
-                SELECT v.id, v.version_number, v.size_bytes, v.created_at, v.created_by, v.metadata, v.gcs_urn
+                SELECT v.id, v.version_number, v.size_bytes, v.created_at, v.created_by, v.metadata, v.gcs_urn,
+                       v.codigo_revision, v.sha256
                 FROM file_versions v
                 JOIN file_nodes n ON v.file_node_id = n.id
                 WHERE n.model_urn = %s AND n.id = %s
@@ -900,7 +901,8 @@ def get_file_versions(model_urn, file_node_id):
             """, (model_urn, file_node_id))
             
             versions = []
-            for r_id, r_num, r_size, r_at, r_by, r_meta, r_gcs in cursor.fetchall():
+            for fila in cursor.fetchall():
+                r_id, r_num, r_size, r_at, r_by, r_meta, r_gcs = fila[:7]
                 versions.append({
                     "id": str(r_id),
                     "version_number": r_num,
@@ -908,7 +910,13 @@ def get_file_versions(model_urn, file_node_id):
                     "updated": r_at.isoformat() if r_at else None,
                     "updated_by": r_by,
                     "metadata": r_meta or {},
-                    "gcs_urn": r_gcs
+                    "gcs_urn": r_gcs,
+                    # La revision DE ESA version (P01, C02...): el lector la pone en
+                    # su chip al mirar una anterior (14-oct-2026).
+                    "codigo_revision": fila[7] if len(fila) > 7 else None,
+                    # La huella de ESA version: la banda del lector dice si esta
+                    # registrada (14-oct-2026). La ficha ya la enseña entera.
+                    "sha256": fila[8] if len(fila) > 8 else None,
                 })
             return versions
     except Exception as e:

@@ -100,7 +100,7 @@ WITH RECURSIVE cand AS (
     SELECT n.id, n.parent_id, n.name, n.mime_type, n.status, n.updated_at,
            n.gcs_urn, n.version_number, n.current_version_id, n.tags, n.metadata
       FROM file_nodes n
-     WHERE n.model_urn = %(obra)s
+     WHERE n.model_urn = %(arbol)s
        AND n.is_deleted = FALSE
        AND n.node_type = 'FILE'
        AND ( n.name ILIKE %(q)s ESCAPE '\\'
@@ -159,8 +159,14 @@ SELECT c.id::text, c.name, c.mime_type, c.status, c.updated_at,
 """.replace('{niveles}', _CASE_NIVEL).replace('{precedencia}', _CASE_PRECEDENCIA)
 
 
-def buscar(cur, obra, texto, usuario, tope=50):
+def buscar(cur, obra, texto, usuario, tope=50, arbol=None):
     """Documentos de ESTA obra que casan con `texto` y que ESTE usuario ve.
+
+    `obra` es `projects.id` (para los permisos); `arbol` es donde viven sus
+    documentos (`file_nodes.model_urn`, p. ej. «proyectos/PQT8_TALARA»). NO son
+    lo mismo: hasta el 14-oct-2026 se comparaba el id con el model_urn y en
+    produccion la busqueda no encontraba NADA (en el ensayo los dos valian lo
+    mismo y lo tapaba). Sin `arbol` se usa `obra`, como antes.
 
     Devuelve una lista de diccionarios listos para `useDocPreview`.
     """
@@ -188,7 +194,7 @@ def buscar(cur, obra, texto, usuario, tope=50):
         return []
 
     cur.execute(_BUSCAR, {
-        'obra': str(obra), 'q': _patron(texto),
+        'arbol': str(arbol or obra), 'q': _patron(texto),
         's_user': sujetos.get(_pd.USER) or _pd.SIN_SUJETO,
         's_company': sujetos.get(_pd.COMPANY) or _pd.SIN_SUJETO,
         's_funcion': sujetos.get(_pd.FUNCTION) or _pd.SIN_SUJETO,

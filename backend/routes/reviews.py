@@ -142,6 +142,11 @@ def _pasos_validos(cur, obra, steps, contrato):
                 return jsonify({"success": False,
                                 "error": "El plazo del paso %d tiene que ser un "
                                          "número de días mayor que cero." % (i + 1)}), 400
+        import flujo_de_revision as _flujo
+        if not _flujo.tipo_de_dias_valido(paso.get('dias_tipo')):
+            return jsonify({"success": False,
+                            "error": "Los días del paso %d se cuentan como calendario "
+                                     "o como hábiles." % (i + 1)}), 400
 
     # ── EL CONTRATO DEL FLUJO ──────────────────────────────────────────────
     #
@@ -643,6 +648,7 @@ def _pasos_para_mostrar(rev):
             'decision': flujo.decision_del_paso(paso),
             'terminal': flujo.es_paso_terminal(pasos, i),
             'dias': paso.get('dias'),
+            'dias_tipo': paso.get('dias_tipo') or 'naturales',
             'estado': estado,
             'acto': ({k: actos[-1].get(k) for k in ('event', 'by', 'at', 'comment', 'emitido')}
                      if actos else None),

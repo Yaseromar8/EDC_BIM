@@ -883,6 +883,8 @@ from routes.audit import audit_bp
 from routes.partidas import partidas_bp
 from routes.docs_cad import docs_cad_bp
 from routes.cad_review import cad_review_bp
+from routes.sustento import sustento_bp
+from routes.grupos import grupos_bp
 
 app.register_blueprint(documents_bp)
 app.register_blueprint(auth_bp)
@@ -896,6 +898,8 @@ app.register_blueprint(audit_bp)      # la auditoria es DEL expediente, no del v
 app.register_blueprint(partidas_bp, url_prefix='/api/partidas')
 app.register_blueprint(docs_cad_bp)   # ver DWG/Civil/IFC dentro de Documentos
 app.register_blueprint(cad_review_bp)  # revisiones privadas/publicadas en vistas CAD
+app.register_blueprint(sustento_bp)   # sustento de metrados: zona del plano <-> ítem (estándar LDA)
+app.register_blueprint(grupos_bp)     # grupos de documentos: apuntan a los documentos, que viven en sus carpetas
 
 from routes.pdf_tools import pdf_tools_bp, ensure_pdf_tools_tables
 app.register_blueprint(pdf_tools_bp)

@@ -37,7 +37,10 @@ GUARDIAS = ('verify_project_access', 'check_folder_permission', '_hay_acceso', '
             'guardia_del_documento',
             # CAD review resuelve file_node_id desde la marca y aplica AMBAS
             # guardias dentro de _node/_mark; no acepta model_urn del cliente.
-            '_node(', '_mark(')
+            '_node(', '_mark(',
+            # Grupos de documentos (15-oct-2026): resuelve la obra DESDE EL GRUPO y aplica
+            # guardia_de_recurso + _hay_acceso dentro; no acepta model_urn del cliente.
+            '_guardia_del_grupo')
 
 CLAVES = ('model_urn', 'project_id', 'projectId', 'scope_urn', 'base_project_id',
           'project', 'urn')

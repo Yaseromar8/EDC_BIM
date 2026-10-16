@@ -162,6 +162,10 @@ def validar_pasos(pasos, alcance, contrato=None):
             except (TypeError, ValueError, OverflowError):
                 return ('El plazo del paso %d tiene que ser un número entero de días, '
                         'de 1 en adelante, o quedar vacío si no tiene plazo.' % n)
+        import flujo_de_revision as _flujo
+        if not _flujo.tipo_de_dias_valido(paso.get('dias_tipo')):
+            return ('Los días del paso %d se cuentan como calendario o como '
+                    'hábiles.' % n)
 
     # ── ¿PUEDE ESTE FLUJO CERRARSE? ────────────────────────────────────────
     # Se pregunta con la MISMA funcion que usa el motor al aprobar. Si el molde

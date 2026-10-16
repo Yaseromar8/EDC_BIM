@@ -72,6 +72,10 @@ RECURSOS = {
     # Las marcas CAD guardan el nodo del plano, no una obra declarada por el
     # cliente. Su obra se obtiene con JOIN a file_nodes en obra_del_recurso.
     'cad_review_marks':  ('id', 'file_node_id'),
+    # Sustento de metrados (migración 34): su obra es la del plano, copiada al crearlo.
+    'vinculos_de_sustento': ('id', 'model_urn'),
+    # Grupos de documentos (migración 35): la obra es la del grupo.
+    'grupos_de_documentos': ('id', 'model_urn'),
     # La sesion de subida troceada. Sin esto, conocer un id de sesion bastaba
     # para cancelar la subida de otra obra a media carga, o para falsear su
     # progreso.
@@ -142,6 +146,14 @@ RUTAS_POR_RECURSO = {
     'upload_photo': ('cad_review_marks', 'mark_id'),
     'delete_attachment': ('cad_review_marks', 'mark_id'),
     'read_photo': ('cad_review_marks', 'mark_id'),
+    # Retirar un vínculo de sustento: solo trae su id. Dentro se exige además ser su autor
+    # y tener permiso en la carpeta del plano.
+    'borrar_sustento': ('vinculos_de_sustento', 'vid'),
+    # Grupos: solo traen el id del grupo; dentro se exige además ser su dueño (o administrador si es de la obra)
+    # y, para cada documento, permiso en su carpeta.
+    'grupo': ('grupos_de_documentos', 'gid'),
+    'documentos_del_grupo': ('grupos_de_documentos', 'gid'),
+    'documento_del_grupo': ('grupos_de_documentos', 'gid'),
 }
 
 
@@ -168,6 +180,7 @@ RUTAS_POR_QUERY = {
     'cad_status': ('file_nodes', 'node_id'),                  # ?node_id=
     'cad_acc_link': ('file_nodes', 'node_id'),               # ?node_id= (lector ACC)
     'list_marks': ('file_nodes', 'node_id'),                 # ?node_id= (revisión)
+    'listar_sustento': ('file_nodes', 'node_id'),            # ?node_id= (sustento de metrados)
 }
 
 
@@ -184,6 +197,8 @@ RUTAS_POR_CUERPO = {
     # guardia del documento esta dentro (`_acceso_al_recurso`).
     'url_de_vista_previa': ('file_nodes', 'node_id'),
     'mosaico_del_documento': ('file_nodes', 'node_id'),
+    # Crear un vínculo de sustento: el lector manda el `node_id` del plano.
+    'crear_sustento': ('file_nodes', 'node_id'),
 }
 
 

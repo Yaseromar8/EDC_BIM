@@ -299,8 +299,12 @@ def vencimiento(paso, desde=None):
     """Cuando vence el turno de este paso. None si no se le puso plazo.
 
     Se calcula al EMPEZAR el turno y no al crear la revision, porque cuando se
-    crea no se sabe cuando le tocara al paso 3. Dias naturales: un calendario de
-    feriados es un modulo, no un campo.
+    crea no se sabe cuando le tocara al paso 3.
+
+    `dias_tipo` dice como se cuentan (como ACC, 16-oct-2026): 'naturales' (por
+    omision, y lo que tienen todas las revisiones anteriores) o 'laborables'
+    (de lunes a viernes, contados en hora de Peru). Sin feriados: un calendario
+    de feriados es un modulo, no un campo.
     """
     dias = (paso or {}).get('dias')
     if dias in (None, '', 0):
@@ -312,7 +316,29 @@ def vencimiento(paso, desde=None):
     if dias <= 0:
         return None
     base = desde or datetime.datetime.now(datetime.timezone.utc)
-    return base + datetime.timedelta(days=dias)
+    if (paso or {}).get('dias_tipo') != DIAS_LABORABLES:
+        return base + datetime.timedelta(days=dias)
+    # Laborables: se avanza dia a dia sobre la fecha de Peru y solo cuentan los
+    # de lunes a viernes. La hora se conserva, como en los naturales.
+    dia = (base - _HORA_DE_PERU).date() if base.tzinfo else base.date()
+    corridos = 0
+    while dias:
+        dia += datetime.timedelta(days=1)
+        corridos += 1
+        if dia.weekday() < 5:
+            dias -= 1
+    return base + datetime.timedelta(days=corridos)
+
+
+DIAS_NATURALES = 'naturales'
+DIAS_LABORABLES = 'laborables'
+TIPOS_DE_DIAS = (DIAS_NATURALES, DIAS_LABORABLES)
+_HORA_DE_PERU = datetime.timedelta(hours=5)   # UTC-5 todo el ano, sin horario de verano
+
+
+def tipo_de_dias_valido(valor):
+    """Vacio (= naturales) o uno de TIPOS_DE_DIAS."""
+    return valor in (None, '') or valor in TIPOS_DE_DIAS
 
 
 def etiqueta_del_paso(paso):

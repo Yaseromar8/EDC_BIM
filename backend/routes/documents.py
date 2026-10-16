@@ -538,7 +538,7 @@ def buscar_documentos():
     Las reglas de quien ve que estan en `busqueda_de_documentos.py`, dentro de
     la consulta.
     """
-    from db import get_db_connection, resolve_project_id
+    from db import get_db_connection, resolve_project_id, resolve_project_document_tree
     import busqueda_de_documentos as busqueda
 
     texto = (request.args.get('q') or '').strip()
@@ -560,8 +560,14 @@ def buscar_documentos():
     except ValueError:
         limite = 50
     try:
+        # Los documentos viven bajo el ARBOL de la obra (su model_urn), no bajo
+        # su id: «1» frente a «proyectos/PQT8_TALARA». Sin arbol, no se busca.
+        arbol = resolve_project_document_tree(obra)
+        if not arbol:
+            return jsonify({'error': 'No se pudo determinar dónde viven los documentos de esta obra.',
+                            'code': 'PROJECT_UNRESOLVED'}), 400
         with get_db_connection() as conn:
-            filas = busqueda.buscar(conn.cursor(), obra, texto, usuario, limite)
+            filas = busqueda.buscar(conn.cursor(), obra, texto, usuario, limite, arbol=arbol)
         # `total` es lo que ESTE usuario puede ver, no lo que existe. Un
         # contador que dijera «12» enseñando 3 ya seria una filtracion.
         return jsonify({'results': filas, 'total': len(filas),
