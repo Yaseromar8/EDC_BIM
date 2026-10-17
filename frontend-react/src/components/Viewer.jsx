@@ -702,7 +702,9 @@ const Viewer = ({
                 // ALEPHIA View -> tema oscuro. Se declara aunque HOY coincida con
                 // el defecto del SDK (medido: dark-theme): el defecto es de la
                 // biblioteca y puede cambiar con una version. Cero cambio visual.
-                viewer.setTheme?.('dark-theme');
+                // 14-oct-2026: el propietario pide View CLARO («no me gusta mucho el dark en barras y
+                // fondo de paneles»); requisito nuevo que sustituye a la politica C (D-24).
+                viewer.setTheme?.('light-theme');
                 // CANAL ALFA del lienzo. Sin el, el contexto WebGL se crea
                 // opaco y ninguna llamada de limpieza puede volverlo
                 // transparente: en AR el area del visor tapaba la camara.
@@ -862,7 +864,7 @@ const Viewer = ({
                 // Solo se toca el fondo: la iluminación queda como estaba.
                 try {
                     if (typeof viewer.setBackgroundColor === 'function') {
-                        const bg = window.__vqBg || [243, 244, 246];
+                        const bg = window.__vqBg || [241, 240, 232];   // Light 50 de la paleta (D-24)
                         viewer.setBackgroundColor(bg[0], bg[1], bg[2], bg[0], bg[1], bg[2]);
                     }
                     // El ViewCube puede venir oculto según la versión del visor

@@ -9,16 +9,16 @@
 }
 
 .gemelo-panel.glass-panel {
-    background: rgba(26, 27, 30, 0.95);
+    background: rgba(255, 255, 255, 0.95);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(20, 20, 19, 0.1);
     box-shadow: 0 16px 32px rgba(0, 0, 0, 0.4);
     border-radius: 12px;
     display: flex;
     flex-direction: column;
     height: 100%;
-    color: #f1f5f9;
+    color: #141413;
     font-family: var(--a-font-sans);
     overflow: hidden;
 }
@@ -28,7 +28,7 @@
     justify-content: space-between;
     align-items: center;
     padding: 16px 20px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    border-bottom: 1px solid rgba(20, 20, 19, 0.08);
     background: rgba(0, 0, 0, 0.2);
 }
 
@@ -36,7 +36,7 @@
     margin: 0;
     font-size: 15px;
     font-weight: 600;
-    color: #fff;
+    color: #141413;
     letter-spacing: 0.5px;
 }
 
@@ -44,13 +44,13 @@
     display: flex;
     padding: 12px 20px 0;
     gap: 8px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    border-bottom: 1px solid rgba(20, 20, 19, 0.08);
 }
 
 .gemelo-tab {
     background: transparent;
     border: none;
-    color: #94a3b8;
+    color: #72706b;
     padding: 8px 16px;
     font-size: 13px;
     font-weight: 600;
@@ -60,7 +60,7 @@
 }
 
 .gemelo-tab:hover {
-    color: #e2e8f0;
+    color: #333330;
 }
 
 .gemelo-tab.active {
@@ -77,7 +77,7 @@
 .section-title {
     font-size: 12px;
     text-transform: uppercase;
-    color: #94a3b8;
+    color: #72706b;
     font-weight: 700;
     letter-spacing: 0.05em;
     margin-bottom: 16px;
@@ -87,27 +87,27 @@
     display: flex;
     flex-direction: column;
     margin-bottom: 16px;
-    background: rgba(255, 255, 255, 0.03);
-    border: 1px solid rgba(255, 255, 255, 0.05);
+    background: rgba(20, 20, 19, 0.03);
+    border: 1px solid rgba(20, 20, 19, 0.05);
     border-radius: 8px;
     padding: 12px;
 }
 
 .prop-row.editable-row:hover {
-    background: rgba(255, 255, 255, 0.06);
-    border-color: rgba(255, 255, 255, 0.1);
+    background: rgba(20, 20, 19, 0.06);
+    border-color: rgba(20, 20, 19, 0.1);
 }
 
 .prop-name {
     font-size: 12px;
-    color: #94a3b8;
+    color: #72706b;
     margin-bottom: 6px;
 }
 
 .prop-value,
 .prop-display {
     font-size: 14px;
-    color: #fff;
+    color: #141413;
     font-weight: 500;
     word-break: break-word;
 }
@@ -124,7 +124,7 @@
 }
 
 .prop-display:hover {
-    background: rgba(255, 255, 255, 0.05);
+    background: rgba(20, 20, 19, 0.05);
 }
 
 .prop-display svg {
@@ -142,7 +142,7 @@
     width: 100%;
     background: rgba(0, 0, 0, 0.3);
     border: 1px solid #e67e22;
-    color: #fff;
+    color: #141413;
     padding: 6px 10px;
     border-radius: 4px;
     font-size: 14px;
@@ -152,16 +152,16 @@
 }
 
 .placeholder {
-    color: #64748b;
+    color: #72706b;
     font-style: italic;
     font-size: 13px;
 }
 
 .add-custom-param-btn {
     width: 100%;
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px dashed rgba(255, 255, 255, 0.2);
-    color: #94a3b8;
+    background: rgba(20, 20, 19, 0.05);
+    border: 1px dashed rgba(20, 20, 19, 0.2);
+    color: #72706b;
     padding: 12px;
     border-radius: 8px;
     font-size: 13px;
@@ -172,14 +172,14 @@
 }
 
 .add-custom-param-btn:hover {
-    background: rgba(255, 255, 255, 0.1);
-    color: #fff;
-    border-color: rgba(255, 255, 255, 0.4);
+    background: rgba(20, 20, 19, 0.1);
+    color: #141413;
+    border-color: rgba(20, 20, 19, 0.4);
 }
 
 .empty-state {
     text-align: center;
-    color: #64748b;
+    color: #72706b;
     font-size: 13px;
     padding: 20px 0;
 }

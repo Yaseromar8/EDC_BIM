@@ -343,15 +343,15 @@ const BudgetIcon = () => (
 const PALETTE = [
   'rgb(0, 255, 255)',   // Cyan
   'rgb(138, 43, 226)',  // Purple
-  'rgb(0, 0, 205)',     // Dark Blue
+  'rgb(51, 51, 48)',     // Dark Blue
   'rgb(255, 127, 127)', // Light Red
   'rgb(127, 255, 163)', // Light Green
   'rgb(199, 127, 255)', // Medium Purple
   'rgb(255, 235, 127)', // Yellow
   'rgb(127, 237, 255)', // Light Cyan
-  'rgb(192, 192, 192)', // Silver
+  'rgb(204, 202, 192)', // Silver
   'rgb(0, 100, 0)',     // Dark Green
-  'rgb(25, 25, 112)'    // Dark Navy
+  'rgb(48, 47, 46)'    // Dark Navy
 ];
 
 const normalizePropertyList = (detail = []) => {
@@ -491,105 +491,105 @@ function FilterConfigurator({
         <div className="filters-config-body" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', flex: 1, overflow: 'hidden', padding: '20px' }}>
 
           {/* LEFT: AVAILABLE */}
-          <section style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', background: 'rgba(30, 30, 30, 0.4)' }}>
-            <div style={{ padding: '12px', background: 'rgba(255,255,255,0.03)', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+          <section style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden', border: '1px solid rgba(20, 20, 19,0.1)', borderRadius: '8px', background: 'rgba(29, 29, 28, 0.4)' }}>
+            <div style={{ padding: '12px', background: 'rgba(20, 20, 19,0.03)', borderBottom: '1px solid rgba(20, 20, 19,0.1)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                <strong style={{ color: '#e0e0e0' }}>Available Properties</strong>
-                <small style={{ color: '#999' }}>{availableGroups.reduce((acc, g) => acc + g.properties.length, 0)} items</small>
+                <strong style={{ color: '#333330' }}>Available Properties</strong>
+                <small style={{ color: '#72706b' }}>{availableGroups.reduce((acc, g) => acc + g.properties.length, 0)} items</small>
               </div>
               <input
                 type="search"
                 placeholder="Search properties..."
                 value={availableQuery}
                 onChange={e => setAvailableQuery(e.target.value)}
-                style={{ width: '100%', background: '#222', border: '1px solid #444', color: 'white', padding: '8px', borderRadius: '4px', fontSize: '13px' }}
+                style={{ width: '100%', background: '#ffffff', border: '1px solid #cccac0', color: '#141413', padding: '8px', borderRadius: '4px', fontSize: '13px' }}
               />
             </div>
 
             <div style={{ flex: 1, overflowY: 'auto', padding: '0' }}>
               {availableGroups.map(group => (
-                <details key={group.id} open style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                  <summary style={{ padding: '10px 12px', cursor: 'pointer', background: 'rgba(255,255,255,0.02)', fontWeight: 600, fontSize: '12px', color: '#ccc' }}>
+                <details key={group.id} open style={{ borderBottom: '1px solid rgba(20, 20, 19,0.05)' }}>
+                  <summary style={{ padding: '10px 12px', cursor: 'pointer', background: 'rgba(20, 20, 19,0.02)', fontWeight: 600, fontSize: '12px', color: '#52524d' }}>
                     {group.label}
                   </summary>
                   <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
                     {group.properties.map(prop => {
                       const isSelected = pendingSelection.includes(prop.id);
                       return (
-                        <li key={prop.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', borderBottom: '1px solid rgba(255,255,255,0.02)', opacity: isSelected ? 0.5 : 1 }}>
+                        <li key={prop.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', borderBottom: '1px solid rgba(20, 20, 19,0.02)', opacity: isSelected ? 0.5 : 1 }}>
                           <div style={{ overflow: 'hidden', marginRight: '8px' }}>
-                            <div style={{ fontSize: '13px', color: '#eee', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={prop.name}>{prop.name}</div>
-                            <div style={{ fontSize: '11px', color: '#888', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={prop.path}>{prop.path}</div>
+                            <div style={{ fontSize: '13px', color: '#141413', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={prop.name}>{prop.name}</div>
+                            <div style={{ fontSize: '11px', color: '#72706b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={prop.path}>{prop.path}</div>
                           </div>
                           {!isSelected && (
                             <button
                               onClick={() => addProp(prop.id)}
-                              style={{ background: 'transparent', border: '1px solid #444', borderRadius: '4px', color: '#4ade80', width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+                              style={{ background: 'transparent', border: '1px solid #cccac0', borderRadius: '4px', color: '#64744e', width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
                               title="Add to filters"
                             >
                               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
                             </button>
                           )}
-                          {isSelected && <span style={{ fontSize: '11px', color: '#666' }}>Added</span>}
+                          {isSelected && <span style={{ fontSize: '11px', color: '#72706b' }}>Added</span>}
                         </li>
                       );
                     })}
                   </ul>
                 </details>
               ))}
-              {!availableGroups.length && <div style={{ padding: '20px', textAlign: 'center', color: '#666' }}>No properties found.</div>}
+              {!availableGroups.length && <div style={{ padding: '20px', textAlign: 'center', color: '#72706b' }}>No properties found.</div>}
             </div>
           </section>
 
           {/* RIGHT: SELECTED */}
-          <section style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', background: 'rgba(30, 30, 30, 0.4)' }}>
-            <div style={{ padding: '12px', background: 'rgba(255,255,255,0.03)', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+          <section style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden', border: '1px solid rgba(20, 20, 19,0.1)', borderRadius: '8px', background: 'rgba(29, 29, 28, 0.4)' }}>
+            <div style={{ padding: '12px', background: 'rgba(20, 20, 19,0.03)', borderBottom: '1px solid rgba(20, 20, 19,0.1)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                <strong style={{ color: '#e0e0e0' }}>Selected Properties</strong>
-                <small style={{ color: '#999' }}>{pendingSelection.length} selected</small>
+                <strong style={{ color: '#333330' }}>Selected Properties</strong>
+                <small style={{ color: '#72706b' }}>{pendingSelection.length} selected</small>
               </div>
               <input
                 type="search"
                 placeholder="Filter selected..."
                 value={selectedQuery}
                 onChange={e => setSelectedQuery(e.target.value)}
-                style={{ width: '100%', background: '#222', border: '1px solid #444', color: 'white', padding: '8px', borderRadius: '4px', fontSize: '13px' }}
+                style={{ width: '100%', background: '#ffffff', border: '1px solid #cccac0', color: '#141413', padding: '8px', borderRadius: '4px', fontSize: '13px' }}
               />
             </div>
 
             <div style={{ flex: 1, overflowY: 'auto', padding: '0' }}>
               <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
                 {selectedDetails.map(prop => (
-                  <li key={prop.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px', borderBottom: '1px solid rgba(255,255,255,0.05)', background: 'rgba(59, 130, 246, 0.05)' }}>
+                  <li key={prop.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px', borderBottom: '1px solid rgba(20, 20, 19,0.05)', background: 'rgba(106, 155, 204, 0.05)' }}>
                     <div style={{ flex: 1, overflow: 'hidden', marginRight: '10px' }}>
-                      <div style={{ fontSize: '13px', color: '#fff' }}>{prop.name}</div>
-                      <div style={{ fontSize: '11px', color: '#888' }}>{prop.category} &rsaquo; {prop.group}</div>
+                      <div style={{ fontSize: '13px', color: '#141413' }}>{prop.name}</div>
+                      <div style={{ fontSize: '11px', color: '#72706b' }}>{prop.category} &rsaquo; {prop.group}</div>
                     </div>
                     <button
                       onClick={() => removeProp(prop.id)}
-                      style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '4px' }}
+                      style={{ background: 'transparent', border: 'none', color: '#b93535', cursor: 'pointer', padding: '4px' }}
                       title="Remove"
                     >
                       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
                     </button>
                   </li>
                 ))}
-                {!selectedDetails.length && <div style={{ padding: '30px', textAlign: 'center', color: '#666', fontSize: '13px' }}>No properties selected.<br />Add properties from the left panel.</div>}
+                {!selectedDetails.length && <div style={{ padding: '30px', textAlign: 'center', color: '#72706b', fontSize: '13px' }}>No properties selected.<br />Add properties from the left panel.</div>}
               </ul>
             </div>
           </section>
 
         </div>
 
-        <footer className="filters-config-footer" style={{ padding: '16px 20px', borderTop: '1px solid rgba(255,255,255,0.1)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(0,0,0,0.2)' }}>
+        <footer className="filters-config-footer" style={{ padding: '16px 20px', borderTop: '1px solid rgba(20, 20, 19,0.1)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(0,0,0,0.2)' }}>
           <div>
             {/* Options can go here if needed */}
           </div>
           <div style={{ display: 'flex', gap: '12px' }}>
-            <button className="secondary-btn" onClick={() => onReset?.()} style={{ background: 'transparent', border: '1px solid #444', color: '#ccc', padding: '8px 16px', borderRadius: '4px', cursor: 'pointer' }}>
+            <button className="secondary-btn" onClick={() => onReset?.()} style={{ background: 'transparent', border: '1px solid #cccac0', color: '#52524d', padding: '8px 16px', borderRadius: '4px', cursor: 'pointer' }}>
               Reset Default
             </button>
-            <button className="primary-btn" onClick={handleSave} style={{ background: 'var(--alephia-interactive)', border: 'none', color: 'white', padding: '8px 24px', borderRadius: '4px', fontWeight: 600, cursor: 'pointer' }}>
+            <button className="primary-btn" onClick={handleSave} style={{ background: 'var(--alephia-interactive)', border: 'none', color: '#141413', padding: '8px 24px', borderRadius: '4px', fontWeight: 600, cursor: 'pointer' }}>
               Update
             </button>
           </div>
@@ -4161,7 +4161,7 @@ function App() {
   }
 
   if (isSharedMode && !sharedViewData) {
-    return <div style={{ display: 'flex', height: '100vh', justifyContent: 'center', alignItems: 'center', background: '#1c2027', color: 'white', fontFamily: 'sans-serif' }}><h3>Cargando Vista Compartida...</h3></div>;
+    return <div style={{ display: 'flex', height: '100vh', justifyContent: 'center', alignItems: 'center', background: '#ffffff', color: '#141413', fontFamily: 'sans-serif' }}><h3>Cargando Vista Compartida...</h3></div>;
   }
 
   if (!selectedProject && !isSharedMode) {
@@ -4213,9 +4213,9 @@ function App() {
               top: '12px',
               left: '12px',
               zIndex: 3000,
-              background: '#1c2027',
-              color: '#fff',
-              border: '1px solid rgba(255,255,255,0.1)',
+              background: '#ffffff',
+              color: '#141413',
+              border: '1px solid rgba(20, 20, 19,0.1)',
               borderRadius: '8px',
               width: '40px',
               height: '40px',
@@ -4360,7 +4360,7 @@ function App() {
 
             <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%' }}>
               {/* SEPARATOR AS IN TANDEM */}
-              <div style={{ width: '40px', height: '1px', backgroundColor: '#444', margin: '8px auto' }}></div>
+              <div style={{ width: '40px', height: '1px', backgroundColor: '#cccac0', margin: '8px auto' }}></div>
 
               <button
                 type="button"
@@ -4546,7 +4546,7 @@ function App() {
             // fondo saturado. Contador de pins por categoría para ver de un vistazo.
             const TABS = [
               { id: 'avance', label: 'Avance', color: '#7ea88f', icon: <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" /> },
-              { id: 'fotos', label: 'Fotos', color: '#7e9bbd', icon: <><rect x="3" y="3" width="18" height="18" rx="2" ry="2" /><circle cx="8.5" cy="8.5" r="1.5" /><polyline points="21 15 16 10 5 21" /></> },
+              { id: 'fotos', label: 'Fotos', color: '#507294', icon: <><rect x="3" y="3" width="18" height="18" rx="2" ry="2" /><circle cx="8.5" cy="8.5" r="1.5" /><polyline points="21 15 16 10 5 21" /></> },
               { id: 'docs', label: 'Documentos', color: '#9a8fb0', icon: <><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /><line x1="16" y1="13" x2="8" y2="13" /><line x1="16" y1="17" x2="8" y2="17" /></> },
               { id: 'rfis', label: 'RFI', color: '#bd8585', icon: <><circle cx="12" cy="12" r="10" /><line x1="12" y1="16" x2="12" y2="12" /><line x1="12" y1="8" x2="12.01" y2="8" /></> },
               { id: 'restricciones', label: 'Restricciones', color: '#c2a878', icon: <><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" /></> },
@@ -4568,16 +4568,16 @@ function App() {
                     onClick={() => setTrackingTab(prev => prev === t.id ? null : t.id)}
                     style={{
                       display: 'flex', alignItems: 'center', gap: 7, padding: '7px 13px',
-                      background: active ? 'rgba(255,255,255,0.06)' : 'transparent',
-                      color: active ? '#eef1f5' : '#9aa3b0',
+                      background: active ? 'rgba(20, 20, 19,0.06)' : 'transparent',
+                      color: active ? '#141413' : '#72706b',
                       border: 'none', borderBottom: active ? `2px solid ${t.color}` : '2px solid transparent',
                       borderRadius: '6px 6px 0 0', fontWeight: 600, fontSize: 12, cursor: 'pointer',
                       transition: 'all 0.15s ease', whiteSpace: 'nowrap'
                     }}
-                    onMouseEnter={e => { if (!active) e.currentTarget.style.color = '#cdd3da'; }}
-                    onMouseLeave={e => { if (!active) e.currentTarget.style.color = '#9aa3b0'; }}
+                    onMouseEnter={e => { if (!active) e.currentTarget.style.color = '#52524d'; }}
+                    onMouseLeave={e => { if (!active) e.currentTarget.style.color = '#72706b'; }}
                   >
-                    <span style={{ display: 'inline-flex', color: active ? t.color : '#7a828e' }}>
+                    <span style={{ display: 'inline-flex', color: active ? t.color : '#72706b' }}>
                       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">{t.icon}</svg>
                     </span>
                     {t.label}
@@ -4585,8 +4585,8 @@ function App() {
                       <span style={{
                         fontSize: 10, fontWeight: 700, lineHeight: '14px', minWidth: 16, textAlign: 'center',
                         padding: '0 5px', borderRadius: 9,
-                        background: active ? t.color : 'rgba(255,255,255,0.1)',
-                        color: active ? '#15181d' : '#aab1bb'
+                        background: active ? t.color : 'rgba(20, 20, 19,0.1)',
+                        color: active ? '#141413' : '#72706b'
                       }}>{count}</span>
                     )}
                   </button>
@@ -4594,7 +4594,7 @@ function App() {
               })}
               {trackingTab && (
                 <>
-                  <div style={{ width: 1, height: 22, background: 'rgba(255,255,255,0.12)', margin: '0 6px' }} />
+                  <div style={{ width: 1, height: 22, background: 'rgba(20, 20, 19,0.12)', margin: '0 6px' }} />
                   <button
                     title={trackingPlacementMode ? 'Cancelar colocación' : 'Colocar un nuevo marcador en el modelo'}
                     onClick={() => setTrackingPlacementMode(prev => !prev)}
@@ -4731,7 +4731,7 @@ function App() {
                 {permToast && (
                   <div style={{
                     position: 'absolute', top: '12px', left: '50%', transform: 'translateX(-50%)',
-                    background: 'rgba(30,33,40,0.97)', border: '1px solid #4a4f58', color: '#e8d8b0',
+                    background: 'rgba(255, 255, 255, 0.97)', border: '1px solid #cccac0', color: '#e8d8b0',
                     padding: '9px 18px', borderRadius: '9px', fontSize: '13px', fontWeight: 600,
                     zIndex: 1200, boxShadow: '0 4px 20px rgba(0,0,0,0.45)', backdropFilter: 'blur(6px)',
                   }}>
@@ -4746,8 +4746,8 @@ function App() {
                     top: '12px',
                     left: '50%',
                     transform: 'translateX(-50%)',
-                    background: 'rgba(59, 130, 246, 0.95)',
-                    color: '#fff',
+                    background: 'rgba(106, 155, 204, 0.95)',
+                    color: '#141413',
                     padding: '10px 24px',
                     borderRadius: '10px',
                     fontSize: '13px',
@@ -4764,9 +4764,9 @@ function App() {
                     <button
                       onClick={() => setRelocatingPin(null)}
                       style={{
-                        background: 'rgba(255,255,255,0.2)',
+                        background: 'rgba(20, 20, 19,0.2)',
                         border: 'none',
-                        color: '#fff',
+                        color: '#141413',
                         padding: '4px 12px',
                         borderRadius: '6px',
                         cursor: 'pointer',
@@ -4788,7 +4788,7 @@ function App() {
                       placeholder: 'Ej: 50%',
                       defaultVal: '0%',
                       accent: '#22c55e',
-                      build: (val) => ({ ...pinPrompt.pin, val, color: '#fbbf24' })
+                      build: (val) => ({ ...pinPrompt.pin, val, color: '#734500' })
                     },
                     rfis: {
                       title: 'Nuevo RFI',
@@ -4796,7 +4796,7 @@ function App() {
                       placeholder: 'Ej: Consulta sobre detalle de armadura',
                       defaultVal: 'Nuevo RFI',
                       accent: '#ef4444',
-                      build: (val) => ({ ...pinPrompt.pin, val, docs: [], color: '#ef4444', type: 'rfi' })
+                      build: (val) => ({ ...pinPrompt.pin, val, docs: [], color: '#b93535', type: 'rfi' })
                     },
                     restricciones: {
                       title: 'Nueva restricción',
@@ -4804,7 +4804,7 @@ function App() {
                       placeholder: 'Ej: Falta liberación de área',
                       defaultVal: 'Pendiente',
                       accent: '#f59e0b',
-                      build: (val) => ({ ...pinPrompt.pin, val, docs: [], color: '#f59e0b', type: 'restriction' })
+                      build: (val) => ({ ...pinPrompt.pin, val, docs: [], color: '#734500', type: 'restriction' })
                     }
                   }[pinPrompt.tab];
                   if (!cfg) return null;
@@ -4817,19 +4817,19 @@ function App() {
                   return (
                     <div style={{
                       position: 'absolute', inset: 0, zIndex: 1200,
-                      background: 'rgba(10,12,16,0.55)', backdropFilter: 'blur(3px)',
+                      background: 'rgba(20,20,19,0.55)', backdropFilter: 'blur(3px)',
                       display: 'flex', alignItems: 'center', justifyContent: 'center'
                     }} onClick={() => setPinPrompt(null)}>
                       <div onClick={(e) => e.stopPropagation()} style={{
-                        width: 'min(380px, 90vw)', background: '#1c2027',
-                        border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px',
+                        width: 'min(380px, 90vw)', background: '#ffffff',
+                        border: '1px solid rgba(20, 20, 19,0.1)', borderRadius: '12px',
                         padding: '20px', boxShadow: '0 12px 40px rgba(0,0,0,0.5)'
                       }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px' }}>
                           <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: cfg.accent }}></span>
-                          <span style={{ color: '#fff', fontSize: '14px', fontWeight: 700 }}>{cfg.title}</span>
+                          <span style={{ color: '#141413', fontSize: '14px', fontWeight: 700 }}>{cfg.title}</span>
                         </div>
-                        <label style={{ display: 'block', color: '#9aa3b2', fontSize: '12px', marginBottom: '6px' }}>{cfg.label}</label>
+                        <label style={{ display: 'block', color: '#72706b', fontSize: '12px', marginBottom: '6px' }}>{cfg.label}</label>
                         <input
                           id="pin-prompt-input"
                           autoFocus
@@ -4838,18 +4838,18 @@ function App() {
                           onKeyDown={(e) => { if (e.key === 'Enter') confirm(); if (e.key === 'Escape') setPinPrompt(null); }}
                           onFocus={(e) => e.target.select()}
                           style={{
-                            width: '100%', boxSizing: 'border-box', background: '#12151a',
-                            border: '1px solid rgba(255,255,255,0.15)', borderRadius: '8px',
-                            color: '#fff', padding: '9px 12px', fontSize: '13px', outline: 'none'
+                            width: '100%', boxSizing: 'border-box', background: '#faf9f5',
+                            border: '1px solid rgba(20, 20, 19,0.15)', borderRadius: '8px',
+                            color: '#141413', padding: '9px 12px', fontSize: '13px', outline: 'none'
                           }}
                         />
                         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '16px' }}>
                           <button onClick={() => setPinPrompt(null)} style={{
-                            background: 'transparent', border: '1px solid rgba(255,255,255,0.15)',
-                            color: '#bbb', padding: '7px 14px', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: 600
+                            background: 'transparent', border: '1px solid rgba(20, 20, 19,0.15)',
+                            color: '#72706b', padding: '7px 14px', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: 600
                           }}>Cancelar</button>
                           <button onClick={confirm} style={{
-                            background: cfg.accent, border: 'none', color: '#fff',
+                            background: cfg.accent, border: 'none', color: '#141413',
                             padding: '7px 16px', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: 700
                           }}>Crear</button>
                         </div>
@@ -4883,7 +4883,7 @@ function App() {
                       title={isNativeAR() ? 'Realidad Aumentada (ARCore)' : 'Realidad Aumentada (ensayo, sin cámara real)'}
                       style={{
                         display: 'flex', alignItems: 'center', gap: 6, padding: '4px 12px', height: 26,
-                        background: 'var(--alephia-interactive)', color: '#fff', border: 'none', borderRadius: 6,
+                        background: 'var(--alephia-interactive)', color: '#141413', border: 'none', borderRadius: 6,
                         fontWeight: 700, fontSize: 11.5, cursor: 'pointer', whiteSpace: 'nowrap',
                       }}
                     >
@@ -4911,7 +4911,7 @@ function App() {
                   zIndex: 31,
                   display: budgetPoppedOut ? 'none' : 'flex',
                   flexDirection: 'column',
-                  borderTop: '1px solid #2a2b30',
+                  borderTop: '1px solid #e8e6dc',
                   boxShadow: '0 -2px 12px rgba(0,0,0,0.5)',
                   pointerEvents: 'auto',
                   transition: 'left 0.3s ease'
@@ -4943,7 +4943,7 @@ function App() {
                       flexShrink: 0
                     }}
                   >
-                    <div style={{ position: 'absolute', left: '50%', top: '1px', transform: 'translateX(-50%)', width: '40px', height: '3px', borderRadius: '2px', background: '#555' }} />
+                    <div style={{ position: 'absolute', left: '50%', top: '1px', transform: 'translateX(-50%)', width: '40px', height: '3px', borderRadius: '2px', background: '#cccac0' }} />
                   </div>
                   <BudgetTree
                     activeModelUrn={selectedProject?.id || 'global'}
@@ -4966,7 +4966,7 @@ function App() {
                   zIndex: 30,
                   display: 'flex',
                   flexDirection: 'column',
-                  borderTop: '1px solid #2a2b30',
+                  borderTop: '1px solid #e8e6dc',
                   boxShadow: '0 -2px 12px rgba(0,0,0,0.5)',
                   pointerEvents: 'auto',
                   transition: 'left 0.3s ease'
@@ -4998,7 +4998,7 @@ function App() {
                       flexShrink: 0
                     }}
                   >
-                    <div style={{ position: 'absolute', left: '50%', top: '1px', transform: 'translateX(-50%)', width: '40px', height: '3px', borderRadius: '2px', background: '#555' }} />
+                    <div style={{ position: 'absolute', left: '50%', top: '1px', transform: 'translateX(-50%)', width: '40px', height: '3px', borderRadius: '2px', background: '#cccac0' }} />
                   </div>
                   <InventoryDataGrid
                     activeModelUrn={selectedProject?.id || 'global'}
@@ -5026,8 +5026,8 @@ function App() {
                 <>
                   {/* Header styled like Minimap: Dark Grey/Black */}
                   <div className="doc-header" style={{
-                    backgroundColor: '#222',
-                    color: '#fff',
+                    backgroundColor: '#ffffff',
+                    color: '#141413',
                     padding: '8px 12px',
                     display: 'flex',
                     alignItems: 'center',
@@ -5040,7 +5040,7 @@ function App() {
                       {/* Icon/Title */}
                       <span style={{ fontSize: '1.2rem' }}>📄</span>
                       <div style={{ display: 'flex', flexDirection: 'column' }}>
-                        <span style={{ fontSize: '0.65rem', fontWeight: 'bold', color: '#888', textTransform: 'uppercase' }}>
+                        <span style={{ fontSize: '0.65rem', fontWeight: 'bold', color: '#72706b', textTransform: 'uppercase' }}>
                           {activeSheet.isPin ? 'MARCADOR' : 'PLANO 2D'}
                         </span>
                         <span className="doc-title" style={{ fontSize: '0.9rem', fontWeight: 500, maxWidth: '180px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={activeSheet.name}>
@@ -5051,7 +5051,7 @@ function App() {
 
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                       {/* Parallel Toggle */}
-                      <label className="parallel-toggle" style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.75rem', color: '#ccc', background: 'rgba(255,255,255,0.1)', padding: '6px 10px', borderRadius: '4px', cursor: 'pointer', userSelect: 'none' }}>
+                      <label className="parallel-toggle" style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.75rem', color: '#52524d', background: 'rgba(20, 20, 19,0.1)', padding: '6px 10px', borderRadius: '4px', cursor: 'pointer', userSelect: 'none' }}>
                         <span>En Paralelo</span>
                         <input
                           className="tandem-checkbox"
@@ -5064,11 +5064,11 @@ function App() {
 
                       {/* Back Button */}
                       {openedDoc && (
-                        <button onClick={() => setOpenedDoc(null)} style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer', fontSize: '1.1rem' }} title="Volver">⬅</button>
+                        <button onClick={() => setOpenedDoc(null)} style={{ background: 'none', border: 'none', color: '#141413', cursor: 'pointer', fontSize: '1.1rem' }} title="Volver">⬅</button>
                       )}
 
                       {/* Close Button */}
-                      <button onClick={() => { setActiveSheet(null); setOpenedDoc(null); }} style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer', fontSize: '1.2rem' }}>✕</button>
+                      <button onClick={() => { setActiveSheet(null); setOpenedDoc(null); }} style={{ background: 'none', border: 'none', color: '#141413', cursor: 'pointer', fontSize: '1.2rem' }}>✕</button>
                     </div>
 
                   </div>
@@ -5078,7 +5078,7 @@ function App() {
 
                     {/* CASE A: VIWING A SPECIFIC DOCUMENT */}
                     {openedDoc ? (
-                      <div style={{ flex: 1, background: '#e5e7eb', display: 'flex', justifyContent: 'center', alignItems: 'center', overflow: 'hidden', position: 'relative' }}>
+                      <div style={{ flex: 1, background: '#e8e6dc', display: 'flex', justifyContent: 'center', alignItems: 'center', overflow: 'hidden', position: 'relative' }}>
                         {openedDoc.type === 'pdf' ? (
                           <PdfReader url={openedDoc.nodeId ? `${import.meta.env.VITE_BACKEND_URL}/api/docs/proxy?id=${openedDoc.nodeId}` : openedDoc.url} fileName={openedDoc.name || 'documento.pdf'} />
                         ) : openedDoc.type === 'image' ? (
@@ -5099,13 +5099,13 @@ function App() {
                       /* CASE B: DOCUMENT LIST (PIN) */
                       <div style={{ padding: '20px', flex: 1, overflowY: 'auto' }}>
                         <div style={{
-                          border: '2px dashed #ccc',
+                          border: '2px dashed #cccac0',
                           borderRadius: '8px',
                           padding: '20px',
                           textAlign: 'center',
                           marginBottom: '20px',
                           cursor: 'pointer',
-                          backgroundColor: '#f9fafb'
+                          backgroundColor: '#faf9f5'
                         }}
                           onClick={() => {
                             const fName = prompt("Nombre del documento (Simulación):", "Plano Detalle Estructural.pdf");
@@ -5128,11 +5128,11 @@ function App() {
                           }}
                         >
                           <span style={{ fontSize: '1.5rem', display: 'block' }}>☁️</span>
-                          <span style={{ fontWeight: '600', color: '#4b5563' }}>Subir Nuevo Documento</span>
-                          <p style={{ fontSize: '0.8rem', color: '#9ca3af', margin: '5px 0 0' }}>Click para simular carga</p>
+                          <span style={{ fontWeight: '600', color: '#52524d' }}>Subir Nuevo Documento</span>
+                          <p style={{ fontSize: '0.8rem', color: '#72706b', margin: '5px 0 0' }}>Click para simular carga</p>
                         </div>
 
-                        <h4 style={{ margin: '0 0 10px', color: '#333' }}>Archivos Adjuntos ({activeSheet.docs?.length || 0})</h4>
+                        <h4 style={{ margin: '0 0 10px', color: '#333330' }}>Archivos Adjuntos ({activeSheet.docs?.length || 0})</h4>
 
                         <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
                           {activeSheet.docs?.map(doc => (
@@ -5140,7 +5140,7 @@ function App() {
                               onClick={() => setOpenedDoc(doc)}
                               style={{
                                 display: 'flex', alignItems: 'center', gap: '12px', padding: '12px',
-                                background: 'white', border: '1px solid #e5e7eb', borderRadius: '8px',
+                                background: 'white', border: '1px solid #e8e6dc', borderRadius: '8px',
                                 marginBottom: '8px', cursor: 'pointer', transition: 'box-shadow 0.2s'
                               }}
                               onMouseEnter={e => e.currentTarget.style.boxShadow = '0 2px 5px rgba(0,0,0,0.1)'}
@@ -5148,7 +5148,7 @@ function App() {
                             >
                               <div style={{ fontSize: '1.2rem' }}>{doc.type === 'pdf' ? '📕' : '🖼️'}</div>
                               <div style={{ flex: 1 }}>
-                                <div style={{ fontWeight: '500', fontSize: '0.9rem', color: '#111' }}>{doc.name}</div>
+                                <div style={{ fontWeight: '500', fontSize: '0.9rem', color: '#141413' }}>{doc.name}</div>
                               </div>
                               <div style={{ color: 'var(--alephia-text-muted)', fontSize: '1.2rem' }}>›</div>
                             </li>
@@ -5170,7 +5170,7 @@ function App() {
 
             {/* CASE D: PHOTO ALBUM SLIDER */}
             {trackingTab === 'fotos' && photoAlbumOpen && selectedAlbumPin && (
-              <div className={`split-doc active dark-float ${panelDocked ? 'parallel' : ''}`} style={panelDocked ? { background: '#1a1b1e', borderLeft: '1px solid #444', zIndex: 10, position: 'relative', overflow: 'hidden' } : {}}>
+              <div className={`split-doc active dark-float ${panelDocked ? 'parallel' : ''}`} style={panelDocked ? { background: '#ffffff', borderLeft: '1px solid #cccac0', zIndex: 10, position: 'relative', overflow: 'hidden' } : {}}>
                 {/* Dock/Undock toggle */}
                 {!panelDocked && (
                   <button className="dock-toggle-btn" onClick={() => setPanelDocked(true)} title="Acoplar panel">
@@ -5198,7 +5198,7 @@ function App() {
 
             {/* CASE E: PROGRESS DETAIL PANEL */}
             {trackingTab === 'avance' && progressPanelOpen && selectedProgressPin && (
-              <div className={`split-doc active dark-float ${panelDocked ? 'parallel' : ''}`} style={panelDocked ? { background: '#1a1b1e', borderLeft: '1px solid #444', zIndex: 10 } : {}}>
+              <div className={`split-doc active dark-float ${panelDocked ? 'parallel' : ''}`} style={panelDocked ? { background: '#ffffff', borderLeft: '1px solid #cccac0', zIndex: 10 } : {}}>
                 <ProgressDetailPanel
                   isOpen={true}
                   onClose={() => setProgressPanelOpen(false)}
@@ -5215,7 +5215,7 @@ function App() {
 
             {/* CASE F: DOC PIN PANEL */}
             {(trackingTab === 'docs' || trackingTab === 'restricciones' || trackingTab === 'rfis') && docPinPanelOpen && selectedDocPin && (
-              <div className={`split-doc active dark-float ${panelDocked ? 'parallel' : ''}`} style={panelDocked ? { background: '#1a1b1e', borderLeft: '1px solid #444', zIndex: 10 } : {}}>
+              <div className={`split-doc active dark-float ${panelDocked ? 'parallel' : ''}`} style={panelDocked ? { background: '#ffffff', borderLeft: '1px solid #cccac0', zIndex: 10 } : {}}>
                 {!panelDocked && (
                   <button className="dock-toggle-btn" onClick={() => setPanelDocked(true)} title="Acoplar panel">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2" /><line x1="12" y1="3" x2="12" y2="21" /></svg>

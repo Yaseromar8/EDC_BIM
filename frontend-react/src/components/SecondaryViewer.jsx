@@ -84,7 +84,7 @@ const SecondaryViewer = ({ document, node, urn }) => {
             <div
                 ref={containerRef}
                 className="secondary-viewer"
-                style={{ width: '100%', height: '100%', position: 'relative', background: '#f0f0f0' }}
+                style={{ width: '100%', height: '100%', position: 'relative', background: '#f1f0e8' }}
             />
         </div>
     );

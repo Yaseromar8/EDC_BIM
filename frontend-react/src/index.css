@@ -3,6 +3,8 @@
    Debe ir ANTES que cualquier regla -- el CSS exige que los @import
    encabecen la hoja. Ver UX-01 · fase K1. */
 @import '../../design/alephia.tokens.css';
+/* Paleta oficial de Claude, modo oscuro (D-24). Quitar esta línea devuelve la paleta anterior. */
+@import './tema-claude.css';
 
 /* index.css - Zero Interference Reset */
 
@@ -43,7 +45,7 @@
   --alephia-brand: var(--a-blue-800);
   --alephia-interactive: var(--a-blue-600);
   --alephia-interactive-hover: var(--a-blue-500);
-  --alephia-text-muted: #AAB3BC;
+  --alephia-text-muted: #B0AEA5;
 
   font-family: var(--a-font-sans);
   line-height: 1.5;

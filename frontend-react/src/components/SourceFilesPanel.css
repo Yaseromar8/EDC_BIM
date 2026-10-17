@@ -2,7 +2,7 @@
     display: flex;
     flex-direction: column;
     height: 100%;
-    color: #e0e0e0;
+    color: #333330;
     font-family: inherit;
     background-color: transparent;
 }
@@ -12,14 +12,14 @@
     align-items: center;
     justify-content: space-between;
     padding: 12px 14px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    border-bottom: 1px solid rgba(20, 20, 19, 0.05);
 }
 
 .sfp-header h3 {
     margin: 0;
     font-size: 13px;
     font-weight: 600;
-    color: #f0f0f0;
+    color: #141413;
     text-transform: uppercase;
     letter-spacing: 0.03em;
 }
@@ -27,7 +27,7 @@
 .sfp-import-btn {
     background: transparent;
     border: none;
-    color: #3AA0FF;
+    color: #507294;
     font-size: 12px;
     font-weight: 500;
     cursor: pointer;
@@ -39,7 +39,7 @@
 }
 
 .sfp-import-btn:hover {
-    background: rgba(58, 160, 255, 0.1);
+    background: rgba(106, 155, 204, 0.1);
 }
 
 .sfp-list {
@@ -54,13 +54,13 @@
     padding: 20px;
     text-align: center;
     font-size: 13px;
-    color: #888;
+    color: #72706b;
 }
 
 .sfp-item {
     display: flex;
     flex-direction: column;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+    border-bottom: 1px solid rgba(20, 20, 19, 0.03);
 }
 
 .sfp-item-row {
@@ -74,13 +74,13 @@
 }
 
 .sfp-item-row:hover {
-    background: rgba(255, 255, 255, 0.04);
+    background: rgba(20, 20, 19, 0.04);
 }
 
 .sfp-list-chevron {
     background: transparent;
     border: none;
-    color: #9ca3af;
+    color: #72706b;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -111,7 +111,7 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    color: #e5e7eb;
+    color: #333330;
     font-weight: 500;
 }
 
@@ -123,7 +123,7 @@
     display: flex;
     align-items: center;
     gap: 2px;
-    color: #9ca3af;
+    color: #72706b;
     opacity: 0;
     transition: opacity 0.2s;
     flex-shrink: 0;
@@ -150,16 +150,16 @@
 }
 
 .sfp-action-btn:hover {
-    background: rgba(255, 255, 255, 0.1);
-    color: #fff;
+    background: rgba(20, 20, 19, 0.1);
+    color: #141413;
 }
 
 .sfp-action-btn.star:hover {
-    color: #fbbf24;
+    color: #734500;
 }
 
 .sfp-action-btn.eye.off {
-    color: #6b7280;
+    color: #72706b;
 }
 
 .sfp-action-btn.more {
@@ -176,9 +176,9 @@
     top: 100%;
     right: 0;
     width: 180px;
-    background: rgba(42, 42, 42, 0.95);
+    background: rgba(255, 255, 255, 0.95);
     backdrop-filter: blur(8px);
-    border: 1px solid #444;
+    border: 1px solid #cccac0;
     border-radius: 4px;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
     z-index: 100;
@@ -190,7 +190,7 @@
 .sfp-dropdown button {
     background: transparent;
     border: none;
-    color: #e0e0e0;
+    color: #333330;
     padding: 8px 16px;
     text-align: left;
     font-size: 13px;
@@ -201,12 +201,12 @@
 }
 
 .sfp-dropdown button:hover {
-    background: rgba(255, 255, 255, 0.08);
+    background: rgba(20, 20, 19, 0.08);
 }
 
 .sfp-menu-separator {
     border: none;
-    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    border-top: 1px solid rgba(20, 20, 19, 0.1);
     margin: 4px 0;
 }
 
@@ -214,11 +214,11 @@
     display: flex;
     align-items: center;
     width: 16px;
-    color: #9ca3af;
+    color: #72706b;
 }
 
 .delete-option {
-    color: #ef4444 !important;
+    color: #b93535 !important;
 }
 
 .sfp-menu-overlay {
@@ -235,7 +235,7 @@
     font-size: 10px;
     font-weight: 600;
     color: var(--alephia-interactive);
-    background: rgba(59, 158, 255, 0.12);
+    background: rgba(106, 155, 204, 0.12);
     padding: 1px 6px;
     border-radius: 3px;
     letter-spacing: 0.02em;
@@ -248,7 +248,7 @@
     font-size: 10px;
     font-weight: 600;
     color: var(--alephia-interactive);
-    background: rgba(59, 158, 255, 0.12);
+    background: rgba(106, 155, 204, 0.12);
     padding: 1px 6px;
     border-radius: 3px;
     margin-left: auto;
@@ -259,7 +259,7 @@
 .sfp-menu-badge {
     font-size: 9px;
     font-weight: 700;
-    color: #fff;
+    color: var(--alephia-on-interactive, #141413);
     background: var(--alephia-interactive);
     padding: 1px 5px;
     border-radius: 3px;
@@ -273,14 +273,14 @@
     align-items: center;
     justify-content: space-between;
     padding: 6px 12px 6px 40px;
-    background: rgba(59, 158, 255, 0.06);
+    background: rgba(106, 155, 204, 0.06);
     border-left: 3px solid var(--alephia-interactive);
     animation: sfp-banner-slide-in 0.3s ease-out;
 }
 
 .sfp-update-banner-text {
     font-size: 11px;
-    color: #8ab4f8;
+    color: #507294;
     display: flex;
     align-items: center;
     gap: 6px;
@@ -306,8 +306,8 @@
 }
 
 .sfp-update-banner-btn:hover {
-    background: rgba(59, 158, 255, 0.15);
-    color: #69b4ff;
+    background: rgba(106, 155, 204, 0.15);
+    color: #507294;
 }
 
 @keyframes sfp-banner-slide-in {
@@ -328,19 +328,19 @@
 }
 
 .sfp-status-checking {
-    color: #8ab4f8;
+    color: #507294;
 }
 
 .sfp-status-up_to_date {
-    color: #4ade80;
+    color: #64744e;
 }
 
 .sfp-status-updating {
-    color: #fbbf24;
+    color: #734500;
 }
 
 .sfp-status-error {
-    color: #f87171;
+    color: #b93535;
 }
 
 @keyframes sfp-status-fade-in {
@@ -351,8 +351,8 @@
 .sfp-check-spinner {
     width: 12px;
     height: 12px;
-    border: 2px solid rgba(138, 180, 248, 0.3);
-    border-top-color: #8ab4f8;
+    border: 2px solid rgba(106, 155, 204, 0.3);
+    border-top-color: #6a9bcc;
     border-radius: 50%;
     animation: sfp-spin 0.8s linear infinite;
     flex-shrink: 0;
@@ -365,8 +365,8 @@
     gap: 8px;
     padding: 3px 12px 3px 40px;
     font-size: 10px;
-    color: #8ab4f8;
-    background: rgba(59, 158, 255, 0.04);
+    color: #507294;
+    background: rgba(106, 155, 204, 0.04);
 }
 
 /* === EXPANDED DETAILS === */
@@ -385,7 +385,7 @@
     align-items: center;
     gap: 12px;
     font-size: 11px;
-    color: #aaa;
+    color: #72706b;
     min-height: 20px;
 }
 
@@ -399,12 +399,12 @@
 }
 
 .detail-text {
-    color: #ccc;
+    color: #52524d;
     font-family: inherit;
 }
 
 .detail-text.main {
-    color: #fff;
+    color: #141413;
     font-size: 12px;
     font-weight: 500;
     overflow: hidden;

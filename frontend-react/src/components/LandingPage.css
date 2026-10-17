@@ -3,54 +3,55 @@
 
 /* ── VARIABLES ── */
 :root {
-    --acc-bg: #1a1b1f;
-    --acc-sidebar-bg: #111215;
-    --acc-card-bg: #22242a;
-    --acc-card-hover: #2a2d35;
+    --acc-bg: #1d1d1c;
+    --acc-sidebar-bg: #141413;
+    --acc-card-bg: #1d1d1c;
+    --acc-card-hover: #302f2e;
     --acc-border: rgba(255, 255, 255, 0.07);
-    --acc-accent: #4488cc;
-    --acc-text: #e8eaf0;
-    --acc-muted: #8892a4;
+    --acc-accent: #6a9bcc;
+    --acc-text: #e8e6dc;
+    --acc-muted: #918f88;
     --acc-topbar-h: 52px;
     --acc-sidebar-w: 248px;
 }
 
-/* ENTRADA EN GRIS MEDIO (21-sep-2026). El propietario: «no tan blanco sino como
+/* ENTRADA · PALETA OFICIAL DE CLAUDE (D-24, 14-oct-2026): barra Dark 12, página Light, tarjetas
+   blancas, acción Dark; la misma que Docs. Antes: ENTRADA EN GRIS MEDIO (21-sep-2026). El propietario: «no tan blanco sino como
    escala de grises», «que sea como la maqueta y solo a esas pantallas»
    (docs/ux/maquetas/pantallas_de_entrada_v4.html, tono gris medio). La misma
    paleta que Docs (frontend-docs/src/pages/entradaGris.css). Se redefine en el
    contenedor y no en :root: solo cambian la lista de proyectos, la de frentes y
    sus ventanas. */
 .acc-home-wrapper {
-    --acc-bg: #E1E4E8;
-    --acc-sidebar-bg: #D9DDE2;
-    --acc-card-bg: #EDEFF2;
-    --acc-card-hover: #EDEFF2;
-    --acc-border: #C8CDD3;
-    --acc-border-fuerte: #B3B9C0;
-    --acc-fila: #D8DCE0;
-    --acc-hover: #E5E8EB;
-    --acc-accent: #153754;
-    --acc-accent-hover: #0F2940;
-    --acc-foco: #3E6F91;
-    --acc-enlace: #2F5F80;
-    --acc-text: #1C2024;
-    --acc-text-2: #464C53;
-    --acc-muted: #62686F;
-    --acc-cab: #3B4046;
-    --acc-cab-linea: #2F3439;
-    --acc-cab-texto: #C9CED4;
-    --acc-cab-activo: #FFFFFF;
-    --acc-cab-buscar: #474D54;
-    --acc-cab-buscar-borde: #596067;
-    --acc-avatar: #3E6F91;
-    --acc-chip: #DCE0E4;
-    --acc-activo: #CDD5DE;
-    --acc-activo-texto: #153754;
-    --acc-campo: #F7F8F9;
-    --acc-ok: #2E7D4F;
-    --acc-peligro: #B3261E;
-    --acc-sombra: 0 1px 3px rgb(11 14 18 / .10);
+    --acc-bg: #FAF9F5;
+    --acc-sidebar-bg: #F1F0E8;
+    --acc-card-bg: #FFFFFF;
+    --acc-card-hover: #FFFFFF;
+    --acc-border: #E8E6DC;
+    --acc-border-fuerte: #CCCAC0;
+    --acc-fila: #F1F0E8;
+    --acc-hover: #F1F0E8;
+    --acc-accent: #141413;
+    --acc-accent-hover: #333330;
+    --acc-foco: #6A9BCC;
+    --acc-enlace: #507294;
+    --acc-text: #141413;
+    --acc-text-2: #52524D;
+    --acc-muted: #72706B;
+    --acc-cab: #302F2E;
+    --acc-cab-linea: #302F2E;
+    --acc-cab-texto: #E8E6DC;
+    --acc-cab-activo: #FAF9F5;
+    --acc-cab-buscar: #1D1D1C;
+    --acc-cab-buscar-borde: #52524D;
+    --acc-avatar: #FAF9F5;
+    --acc-chip: #F1F0E8;
+    --acc-activo: #ECF0F1;
+    --acc-activo-texto: #141413;
+    --acc-campo: #FFFFFF;
+    --acc-ok: #64744E;
+    --acc-peligro: #B93535;
+    --acc-sombra: 0 1px 3px rgb(20 20 19 / .10);
     --acc-topbar-h: 48px;
 }
 
@@ -171,7 +172,7 @@
     justify-content: center;
     font-size: 11.5px;
     font-weight: 600;
-    color: #fff;
+    color: #141413;
     cursor: pointer;
     flex-shrink: 0;
 }
@@ -526,7 +527,7 @@
     padding: 28px 32px;
     width: 420px;
     max-width: 90vw;
-    box-shadow: 0 12px 32px rgb(11 14 18 / .25);
+    box-shadow: 0 12px 32px rgb(20 20 19 / .25);
     display: flex;
     flex-direction: column;
     gap: 10px;

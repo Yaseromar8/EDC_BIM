@@ -123,19 +123,19 @@ const ColumnConfiguratorModal = ({ open, onClose, availableColumns = [], selecte
             display: 'flex', alignItems: 'center', justifyContent: 'center'
         }}>
             <div style={{
-                background: '#2a2a2a', width: '900px', maxWidth: '95vw', height: '80vh', minHeight: '500px', maxHeight: '750px',
+                background: '#f1f0e8', width: '900px', maxWidth: '95vw', height: '80vh', minHeight: '500px', maxHeight: '750px',
                 borderRadius: '4px', display: 'flex', flexDirection: 'column',
-                boxShadow: '0 10px 40px rgba(0,0,0,0.5)', border: '1px solid #3e4045',
-                color: '#ececec', fontFamily: 'Artifakt Element, sans-serif'
+                boxShadow: '0 10px 40px rgba(0,0,0,0.5)', border: '1px solid #e8e6dc',
+                color: '#141413', fontFamily: 'Artifakt Element, sans-serif'
             }}>
 
                 {/* Header */}
                 <div style={{
-                    padding: '16px 20px', borderBottom: '1px solid #3e4045',
+                    padding: '16px 20px', borderBottom: '1px solid #e8e6dc',
                     display: 'flex', justifyContent: 'space-between', alignItems: 'center'
                 }}>
-                    <span style={{ fontWeight: 700, fontSize: '14px', letterSpacing: '0.5px', color: '#fff' }}>EDIT COLUMNS</span>
-                    <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#ccc', cursor: 'pointer' }}>
+                    <span style={{ fontWeight: 700, fontSize: '14px', letterSpacing: '0.5px', color: '#141413' }}>EDIT COLUMNS</span>
+                    <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#52524d', cursor: 'pointer' }}>
                         <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
                             <path d="M3.47 3.47a.75.75 0 0 1 1.06 0L8 6.94l3.47-3.47a.75.75 0 1 1 1.06 1.06L9.06 8l3.47 3.47a.75.75 0 1 1-1.06 1.06L8 9.06l-3.47 3.47a.75.75 0 0 1-1.06-1.06L6.94 8 3.47 4.53a.75.75 0 0 1 0-1.06Z" />
                         </svg>
@@ -147,13 +147,13 @@ const ColumnConfiguratorModal = ({ open, onClose, availableColumns = [], selecte
 
                     {/* Top Row */}
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}>
-                        <span style={{ fontSize: '12px', color: '#888' }}>
+                        <span style={{ fontSize: '12px', color: '#72706b' }}>
                             {currentSelection.length} of {availableColumns.length} columns visible
                         </span>
                         <button
                             onClick={handleReset}
                             style={{
-                                background: 'transparent', color: '#7e9bbd', border: 'none',
+                                background: 'transparent', color: '#507294', border: 'none',
                                 fontSize: '13px', cursor: 'pointer', fontWeight: 500, padding: 0
                             }}
                         >
@@ -165,7 +165,7 @@ const ColumnConfiguratorModal = ({ open, onClose, availableColumns = [], selecte
 
                         {/* Left Column: Available */}
                         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-                            <span style={{ fontSize: '12px', fontWeight: 600, marginBottom: '8px', color: '#bbb' }}>Available Columns:</span>
+                            <span style={{ fontSize: '12px', fontWeight: 600, marginBottom: '8px', color: '#72706b' }}>Available Columns:</span>
                             <div style={{ position: 'relative', marginBottom: '8px' }}>
                                 <input
                                     type="text"
@@ -173,35 +173,35 @@ const ColumnConfiguratorModal = ({ open, onClose, availableColumns = [], selecte
                                     value={searchTermAvailable}
                                     onChange={e => setSearchTermAvailable(e.target.value)}
                                     style={{
-                                        width: '100%', padding: '6px 8px 6px 30px', background: '#222', border: '1px solid #444',
-                                        borderRadius: '2px', color: '#fff', fontSize: '13px', boxSizing: 'border-box'
+                                        width: '100%', padding: '6px 8px 6px 30px', background: '#ffffff', border: '1px solid #cccac0',
+                                        borderRadius: '2px', color: '#141413', fontSize: '13px', boxSizing: 'border-box'
                                     }}
                                 />
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#888" strokeWidth="2" style={{ position: 'absolute', left: '8px', top: '8px' }}>
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#918f88" strokeWidth="2" style={{ position: 'absolute', left: '8px', top: '8px' }}>
                                     <circle cx="11" cy="11" r="8" />
                                     <line x1="21" y1="21" x2="16.65" y2="16.65" />
                                 </svg>
                             </div>
-                            <div style={{ flex: 1, border: '1px solid #3e4045', borderRadius: '2px', overflowY: 'auto', background: '#1f2227' }}>
+                            <div style={{ flex: 1, border: '1px solid #e8e6dc', borderRadius: '2px', overflowY: 'auto', background: '#ffffff' }}>
                                 {Object.keys(filteredGroups).sort().map(cat => {
                                     const props = filteredGroups[cat];
                                     const isExpanded = expandedCategories[cat] || searchTermAvailable.length > 0;
                                     const selectedCount = props.filter(p => currentSelection.includes(p.id)).length;
 
                                     return (
-                                        <div key={cat} style={{ borderBottom: '1px solid #333' }}>
+                                        <div key={cat} style={{ borderBottom: '1px solid #e8e6dc' }}>
                                             <div
                                                 onClick={() => toggleCategory(cat)}
                                                 style={{
                                                     padding: '10px 12px', fontSize: '13px', cursor: 'pointer', display: 'flex',
-                                                    justifyContent: 'space-between', background: '#25282d', alignItems: 'center'
+                                                    justifyContent: 'space-between', background: '#f1f0e8', alignItems: 'center'
                                                 }}
                                             >
-                                                <span style={{ fontWeight: 600, color: '#f0f0f0' }}>
+                                                <span style={{ fontWeight: 600, color: '#141413' }}>
                                                     {isExpanded ? '▾' : '▸'} {cat}
                                                 </span>
                                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                                    <span style={{ color: '#666', fontSize: '11px' }}>
+                                                    <span style={{ color: '#72706b', fontSize: '11px' }}>
                                                         {selectedCount} of {props.length}
                                                     </span>
                                                     <input 
@@ -212,12 +212,12 @@ const ColumnConfiguratorModal = ({ open, onClose, availableColumns = [], selecte
                                                         }}
                                                         onClick={(e) => toggleCategorySelection(e, props)}
                                                         onChange={() => {}}
-                                                        style={{ cursor: 'pointer', accentColor: '#7e9bbd', width: '14px', height: '14px' }}
+                                                        style={{ cursor: 'pointer', accentColor: '#6a9bcc', width: '14px', height: '14px' }}
                                                     />
                                                 </div>
                                             </div>
                                             {isExpanded && (
-                                                <div style={{ background: '#1a1d21' }}>
+                                                <div style={{ background: '#ffffff' }}>
                                                     {props.map(prop => {
                                                         const isAdded = currentSelection.includes(prop.id);
                                                         return (
@@ -226,11 +226,11 @@ const ColumnConfiguratorModal = ({ open, onClose, availableColumns = [], selecte
                                                                 onClick={() => !isAdded && handleAdd(prop.id)}
                                                                 style={{
                                                                     padding: '6px 12px 6px 24px', fontSize: '12px',
-                                                                    color: isAdded ? '#555' : '#ccc',
+                                                                    color: isAdded ? '#52524d' : '#52524d',
                                                                     cursor: isAdded ? 'default' : 'pointer',
                                                                     display: 'flex', alignItems: 'center', transition: 'background 0.1s'
                                                                 }}
-                                                                onMouseEnter={e => !isAdded && (e.currentTarget.style.background = '#30343a')}
+                                                                onMouseEnter={e => !isAdded && (e.currentTarget.style.background = '#e8e6dc')}
                                                                 onMouseLeave={e => !isAdded && (e.currentTarget.style.background = 'transparent')}
                                                             >
                                                                 <span>{isAdded ? '✓ ' : '+ '} {prop.name}</span>
@@ -247,7 +247,7 @@ const ColumnConfiguratorModal = ({ open, onClose, availableColumns = [], selecte
 
                         {/* Right Column: Selected (Draggable) */}
                         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-                            <span style={{ fontSize: '12px', fontWeight: 600, marginBottom: '8px', color: '#bbb' }}>Visible Columns (drag to reorder):</span>
+                            <span style={{ fontSize: '12px', fontWeight: 600, marginBottom: '8px', color: '#72706b' }}>Visible Columns (drag to reorder):</span>
                             <div style={{ position: 'relative', marginBottom: '8px' }}>
                                 <input
                                     type="text"
@@ -255,16 +255,16 @@ const ColumnConfiguratorModal = ({ open, onClose, availableColumns = [], selecte
                                     value={searchTermSelected}
                                     onChange={e => setSearchTermSelected(e.target.value)}
                                     style={{
-                                        width: '100%', padding: '6px 8px 6px 30px', background: '#222', border: '1px solid #444',
-                                        borderRadius: '2px', color: '#fff', fontSize: '13px', boxSizing: 'border-box'
+                                        width: '100%', padding: '6px 8px 6px 30px', background: '#ffffff', border: '1px solid #cccac0',
+                                        borderRadius: '2px', color: '#141413', fontSize: '13px', boxSizing: 'border-box'
                                     }}
                                 />
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#888" strokeWidth="2" style={{ position: 'absolute', left: '8px', top: '8px' }}>
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#918f88" strokeWidth="2" style={{ position: 'absolute', left: '8px', top: '8px' }}>
                                     <circle cx="11" cy="11" r="8" />
                                     <line x1="21" y1="21" x2="16.65" y2="16.65" />
                                 </svg>
                             </div>
-                            <div style={{ flex: 1, border: '1px solid #3e4045', borderRadius: '2px', overflowY: 'auto', background: '#1f2227' }}>
+                            <div style={{ flex: 1, border: '1px solid #e8e6dc', borderRadius: '2px', overflowY: 'auto', background: '#ffffff' }}>
                                 {selectedObjects.map((item, idx) => (
                                     <div
                                         key={item.id}
@@ -282,22 +282,22 @@ const ColumnConfiguratorModal = ({ open, onClose, availableColumns = [], selecte
                                         }}
                                         onDragOver={(e) => e.preventDefault()}
                                         style={{
-                                            padding: '8px 12px', borderBottom: '1px solid #333', fontSize: '13px',
-                                            display: 'flex', alignItems: 'center', background: '#25282d', gap: '8px',
+                                            padding: '8px 12px', borderBottom: '1px solid #e8e6dc', fontSize: '13px',
+                                            display: 'flex', alignItems: 'center', background: '#f1f0e8', gap: '8px',
                                             cursor: 'move'
                                         }}
                                     >
                                         {/* Grip Icon */}
-                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="#666">
+                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="#72706b">
                                             <path d="M3 6h18v2H3V6zm0 5h18v2H3v-2zm0 5h18v2H3v-2z" />
                                         </svg>
                                         <div style={{ flex: 1 }}>
-                                            <div style={{ color: '#fff', fontWeight: 500 }}>{item.name}</div>
-                                            <div style={{ fontSize: '11px', color: '#666' }}>{item.category}</div>
+                                            <div style={{ color: '#141413', fontWeight: 500 }}>{item.name}</div>
+                                            <div style={{ fontSize: '11px', color: '#72706b' }}>{item.category}</div>
                                         </div>
                                         <button
                                             onClick={(e) => { e.stopPropagation(); handleRemove(item.id); }}
-                                            style={{ background: 'none', border: 'none', color: '#888', cursor: 'pointer', padding: '4px' }}
+                                            style={{ background: 'none', border: 'none', color: '#72706b', cursor: 'pointer', padding: '4px' }}
                                             title="Remove"
                                         >
                                             <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" /></svg>
@@ -305,7 +305,7 @@ const ColumnConfiguratorModal = ({ open, onClose, availableColumns = [], selecte
                                     </div>
                                 ))}
                                 {selectedObjects.length === 0 && (
-                                    <div style={{ padding: '20px', textAlign: 'center', color: '#666', fontStyle: 'italic', fontSize: '12px' }}>
+                                    <div style={{ padding: '20px', textAlign: 'center', color: '#72706b', fontStyle: 'italic', fontSize: '12px' }}>
                                         No columns selected
                                     </div>
                                 )}
@@ -317,18 +317,18 @@ const ColumnConfiguratorModal = ({ open, onClose, availableColumns = [], selecte
 
                 {/* Footer */}
                 <div style={{
-                    padding: '16px 20px', borderTop: '1px solid #3e4045',
+                    padding: '16px 20px', borderTop: '1px solid #e8e6dc',
                     display: 'flex', justifyContent: 'flex-end', gap: '10px'
                 }}>
                     <button onClick={onClose} style={{
-                        padding: '6px 16px', background: 'transparent', border: '1px solid #666',
-                        color: '#ececec', borderRadius: '4px', cursor: 'pointer', fontSize: '13px'
+                        padding: '6px 16px', background: 'transparent', border: '1px solid #cccac0',
+                        color: '#141413', borderRadius: '4px', cursor: 'pointer', fontSize: '13px'
                     }}>
                         Cancel
                     </button>
                     <button onClick={handleSave} style={{
-                        padding: '6px 16px', background: '#7e9bbd', border: 'none',
-                        color: '#fff', borderRadius: '4px', cursor: 'pointer', fontSize: '13px', fontWeight: 600
+                        padding: '6px 16px', background: '#507294', border: 'none',
+                        color: '#ffffff', borderRadius: '4px', cursor: 'pointer', fontSize: '13px', fontWeight: 600
                     }}>
                         Update
                     </button>

@@ -56,32 +56,32 @@ export default function SheetViewerPanel({ sheet, onClose }) {
   return (
     <div style={{
       position: 'absolute', top: 0, right: 0, bottom: 0, width: '46%', minWidth: 430,
-      zIndex: 40, background: '#1a1b1e', borderLeft: '1px solid #3a3f47',
+      zIndex: 40, background: '#ffffff', borderLeft: '1px solid #e8e6dc',
       display: 'flex', flexDirection: 'column', boxShadow: '-6px 0 24px rgba(0,0,0,0.35)',
     }}>
       {/* Encabezado */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderBottom: '1px solid #2a2b30', flexShrink: 0 }}>
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#7e9bbd" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderBottom: '1px solid #e8e6dc', flexShrink: 0 }}>
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#6a9bcc" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <rect x="3" y="3" width="18" height="18" rx="2" /><line x1="3" y1="9" x2="21" y2="9" /><line x1="9" y1="21" x2="9" y2="9" />
         </svg>
-        <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: 0.6, color: '#7e9bbd' }}>LÁMINA</span>
-        <span style={{ flex: 1, fontSize: 13, color: '#e4e4e7', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={`${sheet.name} — ${sheet.modelName}`}>
+        <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: 0.6, color: '#507294' }}>LÁMINA</span>
+        <span style={{ flex: 1, fontSize: 13, color: '#333330', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={`${sheet.name} — ${sheet.modelName}`}>
           {sheet.name}
         </span>
         <button onClick={onClose} title="Cerrar lámina"
-          style={{ background: 'none', border: 'none', color: '#999', cursor: 'pointer', fontSize: 16, padding: '2px 6px', borderRadius: 4 }}>✕</button>
+          style={{ background: 'none', border: 'none', color: '#72706b', cursor: 'pointer', fontSize: 16, padding: '2px 6px', borderRadius: 4 }}>✕</button>
       </div>
 
       {/* Visor 2D */}
       <div style={{ position: 'relative', flex: 1, minHeight: 0 }}>
         <div ref={divRef} style={{ position: 'absolute', inset: 0 }} />
         {status === 'loading' && (
-          <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#888', fontSize: 13, pointerEvents: 'none' }}>
+          <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#72706b', fontSize: 13, pointerEvents: 'none' }}>
             Cargando lámina…
           </div>
         )}
         {status === 'error' && (
-          <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#f87171', fontSize: 13 }}>
+          <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#b93535', fontSize: 13 }}>
             No se pudo cargar la lámina (¿la traducción del RVT incluye vistas 2D?)
           </div>
         )}

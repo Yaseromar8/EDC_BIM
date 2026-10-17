@@ -186,7 +186,7 @@ const TopBar = ({
                         cabecera oscura), como manda el manual: 28px ≥ mínimo de
                         24px. Los gestos (clic=inicio, mantener=IA) no cambian. */}
                     <div className={`logo-wrapper ${activePanel === 'search' ? 'ai-active-glow' : ''}`}>
-                        <img src="/brand/ALEPHIA_Symbol_White.svg" alt="ALEPHIA" style={{ height: '28px', width: 'auto', display: 'block', zIndex: 2, position: 'relative' }} />
+                        <img src="/brand/ALEPHIA_Symbol_Light.svg" alt="ALEPHIA" style={{ height: '28px', width: 'auto', display: 'block', zIndex: 2, position: 'relative' }} />
                     </div>
 
                     {selectedProject && (
@@ -198,7 +198,7 @@ const TopBar = ({
                             <div 
                                 className="obra-lineal-tools" 
                                 ref={toolsRef} 
-                                style={{ position: 'relative', marginLeft: '16px', borderLeft: '1px solid #444', paddingLeft: '16px' }}
+                                style={{ position: 'relative', marginLeft: '16px', borderLeft: '1px solid #52524d', paddingLeft: '16px' }}
                                 onMouseDown={(e) => e.stopPropagation()}
                                 onMouseUp={(e) => e.stopPropagation()}
                                 onClick={(e) => e.stopPropagation()}
@@ -225,8 +225,8 @@ const TopBar = ({
                                         top: '100%',
                                         left: '16px',
                                         marginTop: '8px',
-                                        background: '#1e1e1e',
-                                        border: '1px solid #333',
+                                        background: '#1d1d1c',
+                                        border: '1px solid #333330',
                                         borderRadius: '6px',
                                         padding: '4px',
                                         display: 'flex',
@@ -241,7 +241,7 @@ const TopBar = ({
                                                 window.dispatchEvent(new CustomEvent("toggle-progressives"));
                                                 setIsProjectToolsOpen(false);
                                             }}
-                                            style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px', color: '#ccc', border: 'none', background: 'transparent', textAlign: 'left', borderRadius: '4px', cursor: 'pointer', width: '100%' }}
+                                            style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px', color: '#cccac0', border: 'none', background: 'transparent', textAlign: 'left', borderRadius: '4px', cursor: 'pointer', width: '100%' }}
                                         >
                                             <PinIcon />
                                             <span style={{ fontSize: '12px', fontWeight: 500 }}>Progresivas</span>
@@ -252,19 +252,19 @@ const TopBar = ({
                                                 window.dispatchEvent(new CustomEvent("toggle-workfronts-panel"));
                                                 setIsProjectToolsOpen(false);
                                             }}
-                                            style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px', color: '#ccc', border: 'none', background: 'transparent', textAlign: 'left', borderRadius: '4px', cursor: 'pointer', width: '100%' }}
+                                            style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px', color: '#cccac0', border: 'none', background: 'transparent', textAlign: 'left', borderRadius: '4px', cursor: 'pointer', width: '100%' }}
                                         >
                                             <HeatmapIcon />
                                             <span style={{ fontSize: '12px', fontWeight: 500 }}>Heatmap</span>
                                         </button>
-                                        <div style={{ height: '1px', background: '#333', margin: '2px 0' }} />
+                                        <div style={{ height: '1px', background: '#333330', margin: '2px 0' }} />
                                         <button
                                             className="dropdown-tool-btn"
                                             onClick={() => {
                                                 window.dispatchEvent(new CustomEvent("toggle-station-tracker"));
                                                 setIsProjectToolsOpen(false);
                                             }}
-                                            style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px', color: '#ccc', border: 'none', background: 'transparent', textAlign: 'left', borderRadius: '4px', cursor: 'pointer', width: '100%' }}
+                                            style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px', color: '#cccac0', border: 'none', background: 'transparent', textAlign: 'left', borderRadius: '4px', cursor: 'pointer', width: '100%' }}
                                         >
                                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 16.5c0 0-4-6.5-12-6.5S3 14 3 14" /><path d="M3 17h18" /><path d="M3 14v4" /><path d="M21 14v4" /><path d="M6 17v-1.5" /><path d="M9 17v-1.5" /><path d="M12 17v-1.5" /><path d="M15 17v-1.5" /><path d="M18 17v-1.5" /></svg>
                                             <span style={{ fontSize: '12px', fontWeight: 500 }}>Herramientas de Civil</span>
@@ -299,7 +299,7 @@ const TopBar = ({
                     className="tool-btn"
                     onClick={goToHub}
                     title="Volver al inicio (elegir producto)"
-                    style={{ marginRight: '8px', color: '#0696d7' }}
+                    style={{ marginRight: '8px', color: '#6a9bcc' }}
                 >
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                         <path d="M3 10.5 12 3l9 7.5" />
@@ -318,10 +318,10 @@ const TopBar = ({
                 </button>
 
                 {user && (
-                    <div className="user-profile-section" style={{ display: 'flex', alignItems: 'center', gap: '12px', marginLeft: '12px', borderLeft: '1px solid #444', paddingLeft: '12px' }}>
+                    <div className="user-profile-section" style={{ display: 'flex', alignItems: 'center', gap: '12px', marginLeft: '12px', borderLeft: '1px solid #52524d', paddingLeft: '12px' }}>
                         <div className="user-info" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
                             <span style={{ color: '#fff', fontSize: '13px', fontWeight: 500 }}>{user.name}</span>
-                            <span style={{ color: '#888', fontSize: '11px' }}>{user.role === 'admin' ? 'Administrador' : 'Usuario'}</span>
+                            <span style={{ color: '#918f88', fontSize: '11px' }}>{user.role === 'admin' ? 'Administrador' : 'Usuario'}</span>
                         </div>
                         {onLogout && (
                         <button

@@ -290,7 +290,7 @@ export default function SectionCutTool() {
         style={{
           display: 'flex', alignItems: 'center', gap: 6, padding: '4px 11px', height: 26,
           background: mode ? '#7c3aed' : 'transparent',
-          color: mode ? '#fff' : '#d8d8d8',
+          color: mode ? '#fff' : '#e8e6dc',
           border: `1px solid ${mode ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.22)'}`,
           borderRadius: 6, fontSize: 11.5, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap',
         }}
@@ -310,13 +310,13 @@ export default function SectionCutTool() {
         <div style={{
           position: 'fixed', bottom: 96, right: 16, zIndex: 1250,
           display: 'flex', flexDirection: 'column', gap: 4, padding: 4,
-          background: 'rgba(30,33,39,0.96)', border: '1px solid #3a3f47', borderRadius: 9,
+          background: 'rgba(29,29,28,0.96)', border: '1px solid #333330', borderRadius: 9,
           boxShadow: '0 6px 20px rgba(0,0,0,.45)', alignItems: 'stretch', width: 42,
         }}>
           {/* Estado: qué corte está puesto y dónde se apoya */}
           <div style={{
             fontSize: 8.5, lineHeight: 1.25, textAlign: 'center', padding: '2px 1px 3px',
-            color: activeCut ? '#c9b7ff' : '#7d8896', borderBottom: '1px solid #3a3f47', marginBottom: 1,
+            color: activeCut ? '#c9b7ff' : '#918f88', borderBottom: '1px solid #333330', marginBottom: 1,
           }}>
             {!hit ? 'toca una cara'
               : activeCut ? <>{activeCut.label}{applied.flipped ? ' ⇄' : ''}{pk ? <><br />{pk}</> : null}</>
@@ -326,13 +326,13 @@ export default function SectionCutTool() {
           {CUTS.map(c => {
             const enabled = !!hit;
             const active = applied?.key === c.key;
-            const edge = enabled ? (active ? '#ffffff' : '#7f8896') : '#464c54';
-            const planeColor = enabled ? (active ? '#ffffff' : '#5fa8ff') : '#4b5159';
+            const edge = enabled ? (active ? '#ffffff' : '#918f88') : '#52524d';
+            const planeColor = enabled ? (active ? '#ffffff' : '#6a9bcc') : '#52524d';
             return (
               <div key={c.key} style={{ display: 'flex', justifyContent: 'center' }}>
                 {iconBtn(
-                  active ? '#2563eb' : 'transparent',
-                  active ? '#2563eb' : 'transparent',
+                  active ? '#507294' : 'transparent',
+                  active ? '#507294' : 'transparent',
                   <IsoCutIcon plane={c.plane} edge={edge} planeColor={planeColor} />,
                   () => chooseCut(c.key),
                   enabled ? c.tip : 'Primero toca una cara del elemento',
@@ -342,10 +342,10 @@ export default function SectionCutTool() {
             );
           })}
 
-          <div style={{ height: 1, background: '#3a3f47', margin: '2px 4px' }} />
+          <div style={{ height: 1, background: '#333330', margin: '2px 4px' }} />
           <div style={{ display: 'flex', justifyContent: 'center' }}>
             {iconBtn('transparent', 'transparent',
-              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke={applied ? '#cdd3dc' : '#555b63'} strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3l4 4-4 4" /><path d="M7 21l-4-4 4-4" /><path d="M21 7H8a4 4 0 0 0-4 4M3 17h13a4 4 0 0 0 4-4" /></svg>,
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke={applied ? '#cccac0' : '#52524d'} strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3l4 4-4 4" /><path d="M7 21l-4-4 4-4" /><path d="M21 7H8a4 4 0 0 0-4 4M3 17h13a4 4 0 0 0 4-4" /></svg>,
               invert, applied ? 'Invertir el lado visible' : 'Aplica un corte primero', !applied)}
           </div>
           <div style={{ display: 'flex', justifyContent: 'center' }}>

@@ -674,7 +674,7 @@ export default function NativeARView({ onExit }) {
 
       {/* Panel de diagnóstico (temporal) para ver por qué el modelo no responde. */}
       {showDebug && <div style={{ position: 'absolute', top: 74, left: 8, background: 'rgba(0,0,0,0.7)', color: '#3ee87a', font: '12px monospace', padding: '6px 9px', borderRadius: 6, zIndex: 9999, lineHeight: 1.5, pointerEvents: 'none' }}>
-        <div style={{ color: '#8ab4f8' }}>build: {AR_BUILD}</div>
+        <div style={{ color: '#6a9bcc' }}>build: {AR_BUILD}</div>
         <div>eventos pose: {hud.poseEvents} {hud.poseEvents === 0 ? '❌ NO llegan' : '✓'}
           {hud.rate != null && ` · ${hud.rate}/s${hud.rate > 0 && hud.rate < 45 ? ' ⚠ lento' : ''}`}
         </div>
@@ -712,7 +712,7 @@ export default function NativeARView({ onExit }) {
               setDiagLog(l || '(vacio)');
               console.log('[AR][LOG NATIVO] ' + l);
             }}
-            style={{ marginTop: 4, padding: '3px 10px', borderRadius: 6, border: '1px solid #3a3f45', background: '#1b1f24', color: '#8ab4f8', fontSize: 11, pointerEvents: 'auto' }}
+            style={{ marginTop: 4, padding: '3px 10px', borderRadius: 6, border: '1px solid #333330', background: '#1d1d1c', color: '#6a9bcc', fontSize: 11, pointerEvents: 'auto' }}
           >
             Ver log nativo
           </button>
@@ -791,10 +791,10 @@ export default function NativeARView({ onExit }) {
         <div style={{
           position: 'absolute', left: 0, right: 0, bottom: 0, zIndex: 30,
           display: 'flex', flexDirection: 'column', alignItems: 'center',
-          gap: 8, background: 'linear-gradient(transparent, rgba(8,10,14,0.92) 38%)',
+          gap: 8, background: 'linear-gradient(transparent, rgba(20,20,19,0.92) 38%)',
           pointerEvents: 'none', padding: '48px 16px 14px',
         }}>
-          <div style={{ color: '#e9ecf1', fontSize: 15, fontWeight: 600 }}>
+          <div style={{ color: '#f1f0e8', fontSize: 15, fontWeight: 600 }}>
             Navega hasta tu punto y elige cómo referenciarte
           </div>
           {[
@@ -850,21 +850,21 @@ export default function NativeARView({ onExit }) {
               }}
               style={{
                 width: 'min(420px, 92vw)', textAlign: 'left', cursor: 'pointer',
-                background: 'rgba(20,23,28,0.94)', color: '#e9ecf1', pointerEvents: 'auto',
+                background: 'rgba(20,20,19,0.94)', color: '#f1f0e8', pointerEvents: 'auto',
                 border: '1px solid rgba(255,255,255,0.14)', borderRadius: 12,
                 padding: '10px 14px',
               }}
             >
               <div style={{ fontSize: 14.5, fontWeight: 700 }}>{m.titulo}</div>
-              <div style={{ fontSize: 12.5, color: '#aab3bf', marginTop: 2 }}>{m.texto}</div>
+              <div style={{ fontSize: 12.5, color: '#b0aea5', marginTop: 2 }}>{m.texto}</div>
             </button>
           ))}
-          <div style={{ color: '#7f8894', fontSize: 11, maxWidth: 420, textAlign: 'center' }}>
+          <div style={{ color: '#918f88', fontSize: 11, maxWidth: 420, textAlign: 'center' }}>
             El AR es una ayuda visual. Para medir o replantear, usa los métodos de siempre.
           </div>
           <button onClick={onExit} style={{
             pointerEvents: 'auto',
-            marginTop: 2, background: 'none', border: 'none', color: '#98a1ad',
+            marginTop: 2, background: 'none', border: 'none', color: '#b0aea5',
             fontSize: 13, cursor: 'pointer',
           }}>Salir</button>
         </div>
@@ -915,7 +915,7 @@ export default function NativeARView({ onExit }) {
       {enCamara && !calibrandoEsquina && <div className="native-ar-controls">
         {!anchored ? (
           <>
-            <div className="native-ar-primary" style={{ background: '#1f2937', textAlign: 'center' }}>
+            <div className="native-ar-primary" style={{ background: '#302f2e', textAlign: 'center' }}>
               {reticle.planes > 0
                 ? `${reticle.planes} superficie${reticle.planes === 1 ? '' : 's'} detectada${reticle.planes === 1 ? '' : 's'}`
                 : 'Buscando superficies…'}
@@ -944,7 +944,7 @@ export default function NativeARView({ onExit }) {
               setEligiendoModo(true);      // vuelve a preguntar el método
               setStatus('¿Cómo quieres calibrar?');
             }}
-            style={{ background: '#334155' }}
+            style={{ background: '#333330' }}
           >
             Calibrar
           </button>
@@ -966,7 +966,7 @@ export default function NativeARView({ onExit }) {
           <button
             key={etiqueta}
             className="native-ar-exit"
-            style={escala === factor ? { background: '#2b6cb0', color: '#fff' } : undefined}
+            style={escala === factor ? { background: '#507294', color: '#fff' } : undefined}
             onClick={() => {
               setEscala(factor);
               const upm = oneToOneRef.current * factor;

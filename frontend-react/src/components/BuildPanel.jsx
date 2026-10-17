@@ -242,7 +242,7 @@ const BuildPanel = ({
                         <div
                             className="sfp-section-header clickable"
                             onClick={() => setIsPinsOpen(!isPinsOpen)}
-                            style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', borderTop: activeTab === 'DATA' ? '1px solid rgba(255,255,255,0.05)' : 'none' }}
+                            style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', borderTop: activeTab === 'DATA' ? '1px solid rgba(20, 20, 19,0.05)' : 'none' }}
                         >
                             <span className="sfp-section-icon" style={{ marginRight: '8px', display: 'flex' }}>
                                 {isPinsOpen ? <ChevronDown /> : <ChevronRight />}
@@ -265,9 +265,9 @@ const BuildPanel = ({
                                         }}
                                         className="sfp-import-text-btn"
                                         style={{
-                                            background: placementMode ? '#5f7fa3' : 'transparent',
-                                            borderColor: placementMode ? '#5f7fa3' : 'rgba(255,255,255,0.2)',
-                                            color: placementMode ? 'white' : '#e0e0e0'
+                                            background: placementMode ? '#507294' : 'transparent',
+                                            borderColor: placementMode ? '#507294' : 'rgba(20, 20, 19,0.2)',
+                                            color: placementMode ? '#ffffff' : '#333330'
                                         }}
                                         title={`Crear nuevo pin de ${activeTabDef.label.toLowerCase()}`}
                                     >
@@ -304,12 +304,12 @@ const BuildPanel = ({
                                                 <span className="pin-index-badge" style={{
                                                     background: pin.color || ({
                                                         avance: '#fbbf24',
-                                                        fotos: '#3b82f6',
+                                                        fotos: '#6a9bcc',
                                                         docs: '#8b5cf6',
                                                         rfis: '#ef4444',
                                                         restricciones: '#f59e0b',
-                                                        maquinaria: '#64748b'
-                                                    }[pin._trackingType] || '#3b82f6')
+                                                        maquinaria: '#72706b'
+                                                    }[pin._trackingType] || '#6a9bcc')
                                                 }}>
                                                     {index + 1}
                                                 </span>
@@ -333,9 +333,9 @@ const BuildPanel = ({
                                                             setEditingPinId(null);
                                                         }}
                                                         style={{
-                                                            flex: 1, minWidth: 0, background: '#12151a',
-                                                            border: '1px solid #5f7fa3', borderRadius: '4px',
-                                                            color: '#fff', padding: '3px 6px', fontSize: '12px', outline: 'none'
+                                                            flex: 1, minWidth: 0, background: '#faf9f5',
+                                                            border: '1px solid #507294', borderRadius: '4px',
+                                                            color: '#141413', padding: '3px 6px', fontSize: '12px', outline: 'none'
                                                         }}
                                                     />
                                                 ) : (

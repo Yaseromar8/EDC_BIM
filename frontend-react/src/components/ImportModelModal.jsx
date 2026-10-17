@@ -491,11 +491,11 @@ const ImportModelModal = ({ open, onClose, onLinkDocs, onUploadLocal, onExtractC
                   /* ── Extraction progress INSIDE the dropzone area ── */
                   <div className="import-dropzone has-file" style={{ flexDirection: 'column', alignItems: 'stretch', padding: '16px 20px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-                      <span style={{ fontSize: 13, color: '#ccc', fontWeight: 500 }}>
+                      <span style={{ fontSize: 13, color: '#52524d', fontWeight: 500 }}>
                         {uploadLabel.length > 45 ? uploadLabel.substring(0, 42) + '...' : uploadLabel}
                       </span>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <span style={{ fontSize: 13, color: progress >= 100 ? '#2ecc71' : '#3b9eff', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
+                        <span style={{ fontSize: 13, color: progress >= 100 ? '#2ecc71' : '#507294', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
                           {Math.round(progress)}%
                         </span>
                         {extracting && (
@@ -510,7 +510,7 @@ const ImportModelModal = ({ open, onClose, onLinkDocs, onUploadLocal, onExtractC
                         background: progress >= 100 ? '#2ecc71' : undefined
                       }} />
                     </div>
-                    <span style={{ fontSize: 11, color: '#888', marginTop: 6 }}>{progressMsg}</span>
+                    <span style={{ fontSize: 11, color: '#72706b', marginTop: 6 }}>{progressMsg}</span>
                   </div>
                 ) : (
                   /* ── Normal dropzone for local file ── */
@@ -525,9 +525,9 @@ const ImportModelModal = ({ open, onClose, onLinkDocs, onUploadLocal, onExtractC
                       {localFile ? (
                         <div className="import-file-selected" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 6 }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                            <span style={{ flex: 1, fontSize: 13, color: '#ccc' }}>{localFile.name}</span>
+                            <span style={{ flex: 1, fontSize: 13, color: '#52524d' }}>{localFile.name}</span>
                             {localUploading ? (
-                              <span style={{ fontSize: 13, color: localProgress >= 100 ? '#2ecc71' : '#3b9eff', fontWeight: 600 }}>{Math.round(localProgress)}%</span>
+                              <span style={{ fontSize: 13, color: localProgress >= 100 ? '#2ecc71' : '#507294', fontWeight: 600 }}>{Math.round(localProgress)}%</span>
                             ) : (
                               <button className="import-file-inline-x" onClick={(e) => { e.stopPropagation(); setLocalFile(null); setUploadLabel(''); }}>
                                 <CloseIcon />
@@ -539,7 +539,7 @@ const ImportModelModal = ({ open, onClose, onLinkDocs, onUploadLocal, onExtractC
                               <div className="import-progress-track">
                                 <div className="import-progress-fill" style={{ width: `${localProgress}%`, background: localProgress >= 100 ? '#2ecc71' : undefined }} />
                               </div>
-                              {localMsg && <span style={{ fontSize: 11, color: '#888' }}>{localMsg}</span>}
+                              {localMsg && <span style={{ fontSize: 11, color: '#72706b' }}>{localMsg}</span>}
                             </>
                           )}
                         </div>
@@ -568,7 +568,7 @@ const ImportModelModal = ({ open, onClose, onLinkDocs, onUploadLocal, onExtractC
                     <button className="import-view-selector" onClick={() => setViewDropdownOpen(!viewDropdownOpen)}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                         <span>{modelViews.find(v => v.guid === selectedViewGuid)?.name || 'Seleccionar vista'}</span>
-                        <span style={{ fontSize: 10, color: '#666' }}>
+                        <span style={{ fontSize: 10, color: '#72706b' }}>
                           ({modelViews.find(v => v.guid === selectedViewGuid)?.is3D ? '3D' : '2D'})
                         </span>
                       </div>
@@ -581,7 +581,7 @@ const ImportModelModal = ({ open, onClose, onLinkDocs, onUploadLocal, onExtractC
                             className={`import-selector-option ${selectedViewGuid === v.guid ? 'active' : ''}`}
                             onClick={() => { setSelectedViewGuid(v.guid); setViewDropdownOpen(false); }}>
                             {v.name}
-                            <span style={{ fontSize: 10, color: '#888', marginLeft: 'auto', paddingLeft: 12 }}>{v.role}</span>
+                            <span style={{ fontSize: 10, color: '#72706b', marginLeft: 'auto', paddingLeft: 12 }}>{v.role}</span>
                           </div>
                         ))}
                       </div>
@@ -590,7 +590,7 @@ const ImportModelModal = ({ open, onClose, onLinkDocs, onUploadLocal, onExtractC
                 ) : (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 0' }}>
                     <div className="import-spinner" style={{ width: 14, height: 14, borderWidth: 2 }} />
-                    <span style={{ fontSize: 12, color: '#888' }}>Cargando vistas disponibles...</span>
+                    <span style={{ fontSize: 12, color: '#72706b' }}>Cargando vistas disponibles...</span>
                   </div>
                 )}
               </div>

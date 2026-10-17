@@ -1,6 +1,6 @@
 /* Pantalla de acceso.
    Decisión de diseño principal: el panel del formulario es SÓLIDO, no cristal.
-   El diseño anterior ponía texto casi negro (#1C1C1C) sobre un panel translúcido
+   El diseño anterior ponía texto casi negro (#1D1D1C) sobre un panel translúcido
    al 1,5 % encima de un vídeo oscuro: el contraste dependía del fotograma, así
    que era imposible de certificar y en la práctica ilegible. Con fondo sólido el
    contraste es un número fijo (aquí ~16:1) y se sostiene con sol y casco. */
@@ -14,7 +14,7 @@
     --cta-line: var(--a-ink-600);
     --cta-line-fuerte: var(--a-ink-500);
     --cta-text: var(--a-neutral-100);                /* ALEPHIA Mist */
-    --cta-muted: #A9B6C2;
+    --cta-muted: #B0AEA5;
     --cta-primary: var(--a-blue-600);
     --cta-primary-alto: var(--a-blue-500);
 }
@@ -34,7 +34,7 @@
     position: relative;
     flex: 0 0 58%;
     overflow: hidden;
-    background: #06090C;
+    background: #141413;
 }
 
 .cta-obra__video {
@@ -56,14 +56,14 @@
        entero para leer dos lineas era pagar todo el plano por el 15 % con texto.
        El primer gradiente cose la costura con el panel solido de la derecha. */
     background:
-        linear-gradient(90deg, transparent 76%, rgba(11, 14, 18, .55) 100%),
+        linear-gradient(90deg, transparent 76%, rgba(20, 20, 19, .55) 100%),
         linear-gradient(180deg,
-            rgba(11, 14, 18, .28) 0%,
-            rgba(11, 14, 18, .08) 24%,
-            rgba(21, 55, 84, .12) 50%,
-            rgba(11, 14, 18, .55) 72%,
-            rgba(11, 14, 18, .90) 88%,
-            rgba(11, 14, 18, .95) 100%);
+            rgba(20, 20, 19, .28) 0%,
+            rgba(20, 20, 19, .08) 24%,
+            rgba(51, 51, 48, .12) 50%,
+            rgba(20, 20, 19, .55) 72%,
+            rgba(20, 20, 19, .90) 88%,
+            rgba(20, 20, 19, .95) 100%);
 }
 
 .cta-obra__pie {
@@ -164,22 +164,22 @@
     transition: border-color .15s, box-shadow .15s;
 }
 
-.cta-campo input::placeholder { color: #6B7784; }
+.cta-campo input::placeholder { color: #72706B; }
 
 .cta-campo input:hover:not(:disabled) { border-color: var(--cta-line-fuerte); }
 
 .cta-campo input:focus {
     outline: none;
     border-color: var(--cta-primary);
-    /* Signal (#3E6F91): ultimo resto del azul #1473E6 de la paleta vieja. */
-    box-shadow: 0 0 0 3px rgba(62, 111, 145, .32);
+    /* Signal (#507294): ultimo resto del azul #507294 de la paleta vieja. */
+    box-shadow: 0 0 0 3px rgba(80, 114, 148, .32);
 }
 
 .cta-campo input:disabled { opacity: .6; cursor: not-allowed; }
 
 .cta-campo input:read-only {
     color: var(--cta-muted);
-    background: #0F151C;
+    background: #141413;
     cursor: default;
 }
 
@@ -372,7 +372,7 @@
   gap: 8px;
   margin: 4px 0 12px;
   font-size: 13px;
-  color: var(--text-secondary, #9ca3af);
+  color: var(--text-secondary, #b0aea5);
   cursor: pointer;
   user-select: none;
 }

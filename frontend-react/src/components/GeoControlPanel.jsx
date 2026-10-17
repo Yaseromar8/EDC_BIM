@@ -18,23 +18,23 @@ import OrthoCanalTrial from './OrthoCanalTrial';
 const S = {
   panel: {
     position: 'fixed', top: 60, right: 12, width: 400, maxHeight: 'calc(100vh - 140px)',
-    background: 'rgba(24,26,32,0.97)', color: '#e8e8ee', borderRadius: 12,
-    border: '1px solid #33363f', zIndex: 60, display: 'flex', flexDirection: 'column',
+    background: 'rgba(255, 255, 255, 0.97)', color: '#333330', borderRadius: 12,
+    border: '1px solid #e8e6dc', zIndex: 60, display: 'flex', flexDirection: 'column',
     fontSize: 13, boxShadow: '0 12px 40px rgba(0,0,0,0.5)', pointerEvents: 'auto',
   },
-  cab: { display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', borderBottom: '1px solid #33363f' },
+  cab: { display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', borderBottom: '1px solid #e8e6dc' },
   cuerpo: { padding: 12, overflowY: 'auto' },
   boton: {
-    background: '#2e6be6', border: 'none', color: '#fff', padding: '8px 12px',
+    background: '#507294', border: 'none', color: '#ffffff', padding: '8px 12px',
     borderRadius: 8, cursor: 'pointer', fontWeight: 700, fontSize: 12.5,
   },
   botonGris: {
-    background: '#3a3a46', border: 'none', color: '#e6e6f0', padding: '8px 12px',
+    background: '#e8e6dc', border: 'none', color: '#333330', padding: '8px 12px',
     borderRadius: 8, cursor: 'pointer', fontWeight: 600, fontSize: 12.5,
   },
   tabla: { width: '100%', borderCollapse: 'collapse', fontSize: 12 },
-  celda: { padding: '4px 6px', borderBottom: '1px solid #2c2e36', textAlign: 'right', fontVariantNumeric: 'tabular-nums' },
-  aviso: { background: '#252833', borderRadius: 8, padding: 10, margin: '10px 0', lineHeight: 1.5 },
+  celda: { padding: '4px 6px', borderBottom: '1px solid #e8e6dc', textAlign: 'right', fontVariantNumeric: 'tabular-nums' },
+  aviso: { background: '#f1f0e8', borderRadius: 8, padding: 10, margin: '10px 0', lineHeight: 1.5 },
 };
 
 function elViewer() {
@@ -496,7 +496,7 @@ export default function GeoControlPanel({ project, BACKEND_URL, canPublishOrtho 
           backendUrl={BACKEND_URL} canPublish={canPublishOrtho} />}
 
         {/* 2 · AMARRE */}
-        <div style={{ marginTop: 14, borderTop: '1px solid #33363f', paddingTop: 10 }}>
+        <div style={{ marginTop: 14, borderTop: '1px solid #e8e6dc', paddingTop: 10 }}>
           <strong>Amarre modelo ↔ UTM</strong>
           {georef?.transform && (
             <div style={{ ...S.aviso, borderLeft: '3px solid #3ee87a' }}>
@@ -506,7 +506,7 @@ export default function GeoControlPanel({ project, BACKEND_URL, canPublishOrtho 
           )}
           <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'center', flexWrap: 'wrap' }}>
             <select value={pcElegido} onChange={(e) => setPcElegido(e.target.value)}
-              style={{ background: '#252833', color: '#e8e8ee', border: '1px solid #33363f', borderRadius: 6, padding: '6px 8px' }}>
+              style={{ background: '#f1f0e8', color: '#333330', border: '1px solid #e8e6dc', borderRadius: 6, padding: '6px 8px' }}>
               <option value="">— punto de control —</option>
               {puntos.map((p) => <option key={p.punto_id} value={p.punto_id}>{p.punto_id}</option>)}
             </select>
@@ -556,7 +556,7 @@ export default function GeoControlPanel({ project, BACKEND_URL, canPublishOrtho 
 
         {/* 3 · LISTA */}
         {puntos.length > 0 && (
-          <div style={{ marginTop: 14, borderTop: '1px solid #33363f', paddingTop: 10 }}>
+          <div style={{ marginTop: 14, borderTop: '1px solid #e8e6dc', paddingTop: 10 }}>
             <strong>Red de puntos {georef?.transform ? '· toca uno para VOLAR a él 🟡' : '(amarra para verlos en el 3D)'}</strong>
             <table style={{ ...S.tabla, marginTop: 6 }}>
               <tbody>

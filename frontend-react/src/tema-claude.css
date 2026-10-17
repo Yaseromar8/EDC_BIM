@@ -1,0 +1,41 @@
+/* TEMA · PALETA OFICIAL DE CLAUDE EN VIEW (D-24, 14-oct-2026)
+   Fuente de verdad: docs/ux/PALETA_OFICIAL_CLAUDE_DEFINICION.md.
+   View es CLARO, como Docs: el propietario: «no me gusta mucho el dark en barras y fondo de paneles»;
+   eligió la barra superior en Dark 12 (#302f2e), como Docs, y todo lo demás claro: página Light, paneles
+   blancos, laterales Light 50, líneas Light Gray, interacción Blue 30D, raya Orange en lo activo.
+   NO toca el color que es dato: temas de color, fases 4D, filtros, gráficos, Predict y lo que se pinta
+   en 3D. Quitar el @import de index.css devuelve los tokens de antes.
+   `html:root` porque index.css redefine las --alephia-* en :root después de importar esta hoja. */
+html:root {
+  --alephia-bg: #FAF9F5;                   /* Light · página */
+  --alephia-surface: #FFFFFF;              /* paneles */
+  --alephia-surface-raised: #F1F0E8;       /* Light 50 · laterales, cabeceras, hover */
+  --alephia-brand: #302F2E;                /* Dark 12 · la barra */
+  --alephia-interactive: #507294;          /* Blue 30D · enlaces, bordes y rellenos (blanco encima: 4,9:1) */
+  --alephia-interactive-hover: #141413;
+  --alephia-on-interactive: #FFFFFF;
+  --alephia-text-muted: #72706B;           /* Gris 600 · apoyo, 4,7:1 */
+  --alephia-indicador: #D97757;            /* Orange: solo la raya de lo activo */
+}
+/* View es claro: los controles nativos (casillas, selectores, barras de desplazamiento) también.
+   index.css declaraba `light dark` y, con Windows en oscuro, las casillas salían negras. */
+html:root { color-scheme: light; }
+
+/* Acceso: el mismo que en Docs. Botón principal Light con texto Dark (el Blue con texto blanco
+   daba 2,8:1), campos en Dark 04 con línea Dark 12, foco Blue. */
+.cta-login {
+  --cta-ink: #141413;
+  --cta-surface: #1D1D1C;
+  --cta-line: #302F2E;
+  --cta-line-fuerte: #52524D;
+  --cta-text: #FAF9F5;
+  --cta-muted: #B0AEA5;
+  --cta-primary: #FAF9F5;
+  --cta-primary-alto: #FFFFFF;
+}
+.cta-enviar { color: #141413 !important; }
+.cta-enviar .cta-giro { border-color: rgb(20 20 19 / .25); border-top-color: #141413; }
+.cta-campo input:focus { box-shadow: 0 0 0 1px #6A9BCC, 0 0 6px 1px rgb(106 155 204 / .45); }
+
+/* Entrada: la pestaña activa de la barra lleva la raya Orange, como en Docs. */
+.acc-topnav-item.active { border-bottom-color: #D97757 !important; }

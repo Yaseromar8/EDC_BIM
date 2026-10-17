@@ -4,39 +4,39 @@
 .build-panel {
     /* Ensure it doesn't override the dark bg if .source-files-panel is used */
     background-color: transparent !important;
-    color: #e0e0e0;
+    color: #333330;
 }
 
 .build-panel-header {
     background-color: transparent;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    border-bottom: 1px solid rgba(20, 20, 19, 0.05);
 }
 
 .build-panel-title {
-    color: #f0f0f0;
+    color: #141413;
 }
 
 .build-panel-subtitle {
-    color: #9ca3af;
+    color: #72706b;
 }
 
 .build-panel-info {
-    background: rgba(56, 58, 62, 0.4);
+    background: rgba(51, 51, 48, 0.4);
     border-left: 3px solid var(--alephia-interactive);
-    color: #d1d5db;
+    color: #52524d;
     margin: 10px 14px;
     padding: 10px;
     border-radius: 4px;
 }
 
 .build-instruction {
-    color: #9ca3af;
+    color: #72706b;
 }
 
 /* Pins List Badges */
 .pin-index-badge {
     background: var(--alephia-interactive);
-    color: white;
+    color: var(--alephia-on-interactive, #141413);
     font-size: 10px;
     font-weight: 700;
     width: 18px;
@@ -50,11 +50,11 @@
 
 .pin-doc-badge {
     font-size: 10px;
-    background: rgba(255, 255, 255, 0.05);
+    background: rgba(20, 20, 19, 0.05);
     padding: 2px 6px;
     border-radius: 4px;
     margin-left: 8px;
-    color: #d1d5db;
+    color: #52524d;
 }
 
 .selected-indicator {
@@ -63,15 +63,15 @@
 }
 
 .simple-item.selected {
-    background: rgba(59, 130, 246, 0.15);
+    background: rgba(106, 155, 204, 0.15);
     border-left: 2px solid var(--alephia-interactive);
 }
 
 /* Import/Upload Button Area */
 .sfp-import-text-btn {
     background: transparent;
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    color: #e0e0e0;
+    border: 1px solid rgba(20, 20, 19, 0.2);
+    color: #333330;
     padding: 4px 8px;
     border-radius: 4px;
     font-size: 11px;
@@ -82,14 +82,14 @@
 }
 
 .sfp-import-text-btn:hover {
-    background: rgba(255, 255, 255, 0.1);
+    background: rgba(20, 20, 19, 0.1);
 }
 
 /* Upload Section */
 .build-upload-section {
     padding: 14px;
-    background: rgba(43, 45, 48, 0.3);
-    border-top: 1px solid rgba(255, 255, 255, 0.05);
+    background: rgba(48, 47, 46, 0.3);
+    border-top: 1px solid rgba(20, 20, 19, 0.05);
 }
 
 .build-upload-btn {
@@ -99,7 +99,7 @@
     padding: 10px 16px;
     background: var(--alephia-interactive);
     /* Blue to match accent */
-    color: white;
+    color: var(--alephia-on-interactive, #141413);
     border-radius: 6px;
     font-size: 13px;
     font-weight: 600;
@@ -110,13 +110,13 @@
 }
 
 .build-upload-btn:hover {
-    background: #2563eb;
+    background: #507294;
 }
 
 .build-upload-btn.disabled {
-    background: #4b5563;
+    background: #cccac0;
     cursor: not-allowed;
-    color: #9ca3af;
+    color: #72706b;
 }
 
 .build-upload-btn input[type="file"] {
@@ -135,9 +135,9 @@
     align-items: center;
     gap: 6px;
     font-size: 12px;
-    color: #d1d5db;
+    color: #52524d;
     padding: 4px;
-    background: rgba(255, 255, 255, 0.03);
+    background: rgba(20, 20, 19, 0.03);
     border-radius: 4px;
 }
 
@@ -165,13 +165,13 @@
     gap: 4px;
     padding: 0 4px 8px 4px;
     margin-bottom: 8px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    border-bottom: 1px solid rgba(20, 20, 19, 0.05);
 }
 
 .bp-tab {
     background: transparent;
     border: 1px solid transparent;
-    color: #9ca3af;
+    color: #72706b;
     font-size: 11px;
     font-weight: 600;
     padding: 6px 4px;
@@ -188,12 +188,12 @@
 }
 
 .bp-tab:hover {
-    color: #e0e0e0;
-    background: rgba(255, 255, 255, 0.04);
+    color: #333330;
+    background: rgba(20, 20, 19, 0.04);
 }
 
 .bp-tab.active {
-    background: rgba(255, 255, 255, 0.08);
-    color: #fff;
-    border-color: rgba(255, 255, 255, 0.1);
+    background: rgba(20, 20, 19, 0.08);
+    color: #141413;
+    border-color: rgba(20, 20, 19, 0.1);
 }

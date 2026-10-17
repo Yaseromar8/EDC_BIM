@@ -2,30 +2,30 @@
     display: flex;
     flex-direction: column;
     height: 100%;
-    color: #e0e0e0;
-    background-color: #1e1e1e;
+    color: #333330;
+    background-color: #ffffff;
 }
 
 .panel-header {
     padding: 20px;
-    border-bottom: 1px solid #333;
+    border-bottom: 1px solid #e8e6dc;
 }
 
 .panel-header h2 {
     margin: 0;
     font-size: 1.2rem;
     font-weight: 600;
-    color: #fff;
+    color: #141413;
 }
 
 .panel-subtitle {
     font-size: 0.85rem;
-    color: #888;
+    color: #72706b;
 }
 
 .nav-section {
     padding: 20px;
-    border-bottom: 1px solid #2a2a2a;
+    border-bottom: 1px solid #e8e6dc;
 }
 
 .nav-section h3 {
@@ -33,7 +33,7 @@
     margin-bottom: 15px;
     font-size: 0.9rem;
     text-transform: uppercase;
-    color: #666;
+    color: #72706b;
     font-weight: 600;
     letter-spacing: 0.5px;
 }
@@ -45,7 +45,7 @@
 .nav-desc {
     margin: 5px 0 0 0;
     font-size: 0.8rem;
-    color: #888;
+    color: #72706b;
     padding-left: 50px;
     /* Align with text start */
 }
@@ -69,7 +69,7 @@
     position: relative;
     width: 40px;
     height: 20px;
-    background-color: #444;
+    background-color: #cccac0;
     border-radius: 20px;
     transition: .3s;
     margin-right: 10px;
@@ -88,7 +88,7 @@
 }
 
 .nav-switch input:checked+.slider {
-    background-color: #3aa0ff;
+    background-color: #507294;
 }
 
 .nav-switch input:checked+.slider:before {
@@ -97,7 +97,7 @@
 
 .nav-switch .label-text {
     font-weight: 500;
-    color: #d0d0d0;
+    color: #52524d;
 }
 
 /* Sheet List */
@@ -117,7 +117,7 @@
 }
 
 .sheet-list li:hover {
-    background-color: #333;
+    background-color: #e8e6dc;
 }
 
 .sheet-icon {
@@ -127,15 +127,15 @@
 
 .sheet-name {
     font-size: 0.9rem;
-    color: #e0e0e0;
+    color: #333330;
 }
 
 .empty-state {
     padding: 20px;
     text-align: center;
-    color: #666;
+    color: #72706b;
     font-size: 0.9rem;
     font-style: italic;
-    background: #1a1a1a;
+    background: #ffffff;
     border-radius: 6px;
 }

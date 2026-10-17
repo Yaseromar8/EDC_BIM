@@ -39,7 +39,7 @@ const MoreIcon = () => (
 
 const RevitIcon = () => (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" className="sfp-icon-rvt">
-        <rect x="2" y="2" width="20" height="20" rx="4" fill="#0696D7" />
+        <rect x="2" y="2" width="20" height="20" rx="4" fill="#6A9BCC" />
         <path d="M8 7h3.5a3.5 3.5 0 0 1 3.5 3.5v0a3.5 3.5 0 0 1-3.5 3.5H9v4H7V7h1zm1 5h2.5a1.5 1.5 0 0 0 0-3H9v3z" fill="white" />
     </svg>
 );
@@ -144,12 +144,12 @@ const SourceFilesPanel = ({
 
             {/* Barra de acciones globales: actualizar todos + estado de extracción */}
             {(pendingCount > 0 || extractingCount > 0) && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', borderBottom: '1px solid #2a2b30', fontSize: 12 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', borderBottom: '1px solid #e8e6dc', fontSize: 12 }}>
                     {pendingCount > 0 && (
                         <button
                             onClick={() => onUpdateAll && onUpdateAll()}
                             disabled={updateAllBusy}
-                            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', background: updateAllBusy ? '#3a3f47' : '#7e9bbd', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 600, fontSize: 12, cursor: updateAllBusy ? 'default' : 'pointer' }}
+                            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', background: updateAllBusy ? '#e8e6dc' : '#507294', color: '#ffffff', border: 'none', borderRadius: 6, fontWeight: 600, fontSize: 12, cursor: updateAllBusy ? 'default' : 'pointer' }}
                         >
                             {updateAllBusy ? 'Actualizando…' : `Actualizar todos (${pendingCount})`}
                         </button>
@@ -222,7 +222,7 @@ const SourceFilesPanel = ({
                                             <><div className="sfp-check-spinner" /> Updated!</>
                                         )}
                                         {checkStatus.status === 'error' && (
-                                            <span style={{ color: '#f87171' }}>⚠ {checkStatus.message}</span>
+                                            <span style={{ color: '#b93535' }}>⚠ {checkStatus.message}</span>
                                         )}
                                         {checkStatus.status === 'pending' && (
                                             <span style={{ color: '#c2a878' }}>⏳ {checkStatus.message}</span>
@@ -282,8 +282,8 @@ const SourceFilesPanel = ({
                                             {extractData.status || 'Extrayendo metadata'} · {Math.round(extractData.progress || 0)}%
                                         </span>
                                     </div>
-                                    <div style={{ height: 4, background: 'rgba(255,255,255,0.08)', borderRadius: 2, overflow: 'hidden' }}>
-                                        <div style={{ height: '100%', width: `${Math.round(extractData.progress || 0)}%`, background: '#7e9bbd', borderRadius: 2, transition: 'width 0.3s ease' }} />
+                                    <div style={{ height: 4, background: 'rgba(20, 20, 19,0.08)', borderRadius: 2, overflow: 'hidden' }}>
+                                        <div style={{ height: '100%', width: `${Math.round(extractData.progress || 0)}%`, background: '#507294', borderRadius: 2, transition: 'width 0.3s ease' }} />
                                     </div>
                                 </div>
                             )}
@@ -319,7 +319,7 @@ const SourceFilesPanel = ({
                                         if (!modelSheets.length) return null;
                                         return (
                                             <div style={{ marginTop: 6 }}>
-                                                <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.6, color: '#8b93a0', padding: '4px 0 2px 26px' }}>
+                                                <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.6, color: '#72706b', padding: '4px 0 2px 26px' }}>
                                                     LÁMINAS ({modelSheets.length})
                                                 </div>
                                                 {modelSheets.map(s => (
@@ -327,7 +327,7 @@ const SourceFilesPanel = ({
                                                         onClick={(e) => { e.stopPropagation(); onOpenSheet && onOpenSheet(s); }}
                                                         style={{ cursor: 'pointer' }}>
                                                         <div className="detail-icon-wrap">
-                                                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#7e9bbd" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#6a9bcc" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                                                 <rect x="3" y="3" width="18" height="18" rx="2" /><line x1="3" y1="9" x2="21" y2="9" /><line x1="9" y1="21" x2="9" y2="9" />
                                                             </svg>
                                                         </div>

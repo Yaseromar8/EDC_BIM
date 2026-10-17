@@ -32,11 +32,11 @@ function Thumb({ pdf, pageNum, active, onClick }) {
         return () => { cancelled = true; if (task) task.cancel(); };
     }, [pdf, pageNum]);
     return (
-        <div data-thumb={pageNum} onClick={onClick} style={{ padding: '10px 0', display: 'flex', flexDirection: 'column', alignItems: 'center', cursor: 'pointer', background: active ? 'rgba(126,155,189,0.12)' : 'transparent', borderBottom: '1px solid #2a2b30' }}>
-            <div style={{ boxShadow: active ? '0 0 0 2px #7e9bbd' : '0 1px 4px rgba(0,0,0,0.4)', background: '#fff', borderRadius: 2 }}>
+        <div data-thumb={pageNum} onClick={onClick} style={{ padding: '10px 0', display: 'flex', flexDirection: 'column', alignItems: 'center', cursor: 'pointer', background: active ? 'rgba(106,155,204,0.12)' : 'transparent', borderBottom: '1px solid #e8e6dc' }}>
+            <div style={{ boxShadow: active ? '0 0 0 2px #6a9bcc' : '0 1px 4px rgba(0,0,0,0.4)', background: '#fff', borderRadius: 2 }}>
                 <canvas ref={ref} />
             </div>
-            <span style={{ fontSize: 11, color: active ? '#cdd3da' : '#777', marginTop: 6, fontWeight: active ? 600 : 400 }}>{pageNum}</span>
+            <span style={{ fontSize: 11, color: active ? '#52524d' : '#72706b', marginTop: 6, fontWeight: active ? 600 : 400 }}>{pageNum}</span>
         </div>
     );
 }
@@ -173,25 +173,25 @@ export default function PdfReader({ url: urlPedida, fileName = 'documento.pdf' }
     const onMove = (e) => { if (!drag.current) return; containerRef.current.scrollLeft = drag.current.sl - (e.clientX - drag.current.x); containerRef.current.scrollTop = drag.current.st - (e.clientY - drag.current.y); };
     const onUp = () => { drag.current = null; };
 
-    if (loading) return <div style={S.center}><div style={S.spin} /><div style={{ color: '#888', marginTop: 14, fontSize: 13 }}>Cargando documento…</div></div>;
+    if (loading) return <div style={S.center}><div style={S.spin} /><div style={{ color: '#72706b', marginTop: 14, fontSize: 13 }}>Cargando documento…</div></div>;
     if (error) return (
         <div style={S.center}>
             <div style={{ color: '#bd8585', fontSize: 14 }}>No se pudo cargar el PDF</div>
-            <div style={{ color: '#777', fontSize: 12, marginTop: 4 }}>{error}</div>
+            <div style={{ color: '#72706b', fontSize: 12, marginTop: 4 }}>{error}</div>
             <a href={url} target="_blank" rel="noopener noreferrer" style={S.dl}>Descargar archivo</a>
         </div>
     );
 
     return (
-        <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', background: '#16181c', overflow: 'hidden' }}>
+        <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', background: '#faf9f5', overflow: 'hidden' }}>
             {/* Toolbar */}
             <div style={S.bar}>
-                <button onClick={() => setShowThumbs(s => !s)} title="Miniaturas" style={{ ...S.btn, background: showThumbs ? '#2a2b30' : 'transparent' }}>
+                <button onClick={() => setShowThumbs(s => !s)} title="Miniaturas" style={{ ...S.btn, background: showThumbs ? '#f1f0e8' : 'transparent' }}>
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z" /></svg>
                 </button>
                 <div style={{ flex: 1 }} />
                 <button onClick={() => setScale(s => Math.max(s / 1.2, 0.2))} style={S.btn} title="Alejar">−</button>
-                <span style={{ fontSize: 12, color: '#aab1bb', minWidth: 42, textAlign: 'center' }}>{Math.round(scale * 100)}%</span>
+                <span style={{ fontSize: 12, color: '#72706b', minWidth: 42, textAlign: 'center' }}>{Math.round(scale * 100)}%</span>
                 <button onClick={() => setScale(s => Math.min(s * 1.2, 8))} style={S.btn} title="Acercar">+</button>
                 <button onClick={() => fitTo('page')} style={S.btn} title="Ajustar página">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="4" y="3" width="16" height="18" rx="1" /><path d="M9 8l-2 2 2 2M15 8l2 2-2 2" /></svg>
@@ -202,7 +202,7 @@ export default function PdfReader({ url: urlPedida, fileName = 'documento.pdf' }
                 <div style={S.sep} />
                 <button onClick={() => goTo(page - 1)} disabled={page <= 1} style={S.btn}>‹</button>
                 <input type="number" value={page} onChange={e => goTo(parseInt(e.target.value) || 1)} style={S.pageInput} min={1} max={numPages} />
-                <span style={{ fontSize: 12, color: '#888' }}>/ {numPages}</span>
+                <span style={{ fontSize: 12, color: '#72706b' }}>/ {numPages}</span>
                 <button onClick={() => goTo(page + 1)} disabled={page >= numPages} style={S.btn}>›</button>
                 <div style={S.sep} />
                 <button onClick={() => setRotation(r => (r + 90) % 360)} style={S.btn} title="Rotar">
@@ -216,7 +216,7 @@ export default function PdfReader({ url: urlPedida, fileName = 'documento.pdf' }
             {/* Cuerpo */}
             <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
                 {showThumbs && (
-                    <div ref={sidebarRef} style={{ width: 160, background: '#1a1b1f', borderRight: '1px solid #2a2b30', overflowY: 'auto', flexShrink: 0 }}>
+                    <div ref={sidebarRef} style={{ width: 160, background: '#ffffff', borderRight: '1px solid #e8e6dc', overflowY: 'auto', flexShrink: 0 }}>
                         {Array.from({ length: numPages }, (_, i) => i + 1).map(n => (
                             <Thumb key={n} pdf={pdfRef.current} pageNum={n} active={page === n} onClick={() => goTo(n)} />
                         ))}
@@ -234,11 +234,11 @@ export default function PdfReader({ url: urlPedida, fileName = 'documento.pdf' }
 }
 
 const S = {
-    center: { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', width: '100%', background: '#16181c' },
-    spin: { width: 34, height: 34, border: '3px solid #2a2b30', borderTop: '3px solid #7e9bbd', borderRadius: '50%', animation: 'spin-acc 1s linear infinite' },
-    dl: { marginTop: 14, padding: '8px 18px', background: '#7e9bbd', color: '#fff', borderRadius: 6, textDecoration: 'none', fontSize: 13, fontWeight: 600 },
-    bar: { display: 'flex', alignItems: 'center', gap: 3, padding: '0 10px', height: 44, background: '#1c1e22', borderBottom: '1px solid #2a2b30', flexShrink: 0 },
-    btn: { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', minWidth: 30, height: 30, border: 'none', background: 'transparent', borderRadius: 5, cursor: 'pointer', color: '#cdd3da', fontSize: 16, padding: '0 6px' },
-    sep: { width: 1, height: 22, background: '#2a2b30', margin: '0 6px' },
-    pageInput: { width: 40, textAlign: 'center', border: '1px solid #2a2b30', borderRadius: 4, padding: '4px', fontSize: 12, background: '#111315', color: '#fff', outline: 'none' },
+    center: { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', width: '100%', background: '#faf9f5' },
+    spin: { width: 34, height: 34, border: '3px solid #e8e6dc', borderTop: '3px solid #6a9bcc', borderRadius: '50%', animation: 'spin-acc 1s linear infinite' },
+    dl: { marginTop: 14, padding: '8px 18px', background: '#507294', color: '#ffffff', borderRadius: 6, textDecoration: 'none', fontSize: 13, fontWeight: 600 },
+    bar: { display: 'flex', alignItems: 'center', gap: 3, padding: '0 10px', height: 44, background: '#ffffff', borderBottom: '1px solid #e8e6dc', flexShrink: 0 },
+    btn: { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', minWidth: 30, height: 30, border: 'none', background: 'transparent', borderRadius: 5, cursor: 'pointer', color: '#52524d', fontSize: 16, padding: '0 6px' },
+    sep: { width: 1, height: 22, background: '#f1f0e8', margin: '0 6px' },
+    pageInput: { width: 40, textAlign: 'center', border: '1px solid #e8e6dc', borderRadius: 4, padding: '4px', fontSize: 12, background: '#faf9f5', color: '#141413', outline: 'none' },
 };

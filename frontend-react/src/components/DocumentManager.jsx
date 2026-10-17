@@ -315,8 +315,8 @@ export default function DocumentManager({ isOpen, onClose }) {
                                     {uploading ? `⏳ Subiendo (${uploadProgress}%)` : '📤 Cargar archivos'}
                                 </button>
                                 {uploading && (
-                                    <div className="dm-progress-track" style={{ height: '4px', background: 'rgba(255,255,255,0.1)', borderRadius: '2px', overflow: 'hidden' }}>
-                                        <div className="dm-progress-fill" style={{ width: `${uploadProgress}%`, height: '100%', background: '#3b82f6', transition: 'width 0.2s ease' }} />
+                                    <div className="dm-progress-track" style={{ height: '4px', background: 'rgba(20, 20, 19,0.1)', borderRadius: '2px', overflow: 'hidden' }}>
+                                        <div className="dm-progress-fill" style={{ width: `${uploadProgress}%`, height: '100%', background: '#507294', transition: 'width 0.2s ease' }} />
                                     </div>
                                 )}
                             </div>

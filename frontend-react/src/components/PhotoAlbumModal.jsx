@@ -20,7 +20,7 @@ const MOCK_PHOTOS = [
 const FALLBACK_IMG = 'data:image/svg+xml;charset=UTF-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22300%22%20height%3D%22200%22%3E%3Crect%20width%3D%22300%22%20height%3D%22200%22%20fill%3D%22%23cccccc%22%2F%3E%3Ctext%20x%3D%2250%25%22%20y%3D%2250%25%22%20dominant-baseline%3D%22middle%22%20text-anchor%3D%22middle%22%20font-family%3D%22sans-serif%22%20font-size%3D%2220px%22%20fill%3D%22%23666666%22%3ENo%20Image%3C%2Ftext%3E%3C%2Fsvg%3E';
 
 // Botón compacto del lightbox (zoom +/-)
-const lbBtn = { width: 28, height: 28, borderRadius: '50%', background: 'transparent', border: 'none', color: '#fff', fontSize: 16, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' };
+const lbBtn = { width: 28, height: 28, borderRadius: '50%', background: 'transparent', border: 'none', color: '#141413', fontSize: 16, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' };
 
 
 // Pide la version reducida de una foto servida por el proxy. El backend genera y
@@ -460,7 +460,7 @@ const PhotoAlbumModal = ({ isOpen, onClose, pinId, title = "Album de Fotos", pho
                         style={{
                             background: 'transparent',
                             border: 'none',
-                            color: 'rgba(255,255,255,0.35)',
+                            color: 'rgba(20, 20, 19,0.35)',
                             cursor: 'pointer',
                             display: onDelete ? 'flex' : 'none',
                             alignItems: 'center',
@@ -526,22 +526,22 @@ const PhotoAlbumModal = ({ isOpen, onClose, pinId, title = "Album de Fotos", pho
             <div style={{ 
                 padding: '4px 14px', 
                 fontSize: '10px', 
-                color: 'rgba(255,255,255,0.3)', 
-                background: 'rgba(255,255,255,0.02)',
-                borderBottom: '1px solid rgba(255,255,255,0.04)',
+                color: 'rgba(20, 20, 19,0.3)', 
+                background: 'rgba(20, 20, 19,0.02)',
+                borderBottom: '1px solid rgba(20, 20, 19,0.04)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between'
             }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <span>Ruta:</span>
-                    <span style={{ color: 'rgba(255,255,255,0.2)', fontStyle: 'italic' }}>
+                    <span style={{ color: 'rgba(20, 20, 19,0.2)', fontStyle: 'italic' }}>
                         {targetPath || 'Automática'}
                     </span>
                 </div>
                 <button 
                     onClick={() => handleOpenBrowser('folder')}
-                    style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.35)', cursor: 'pointer', fontSize: '10px', fontWeight: 500 }}
+                    style={{ background: 'none', border: 'none', color: 'rgba(20, 20, 19,0.35)', cursor: 'pointer', fontSize: '10px', fontWeight: 500 }}
                 >
                     Cambiar
                 </button>
@@ -607,9 +607,9 @@ const PhotoAlbumModal = ({ isOpen, onClose, pinId, title = "Album de Fotos", pho
             {browsing ? (
                 /* EMBEDDED ECD BROWSER (Phase 20) */
                 <div className="album-browser-overlay" style={{ flex: 1, display: 'flex', flexDirection: 'column', background: '#ffffff' }}>
-                    <div className="browser-header" style={{ padding: '10px 15px', borderBottom: '1px solid #e0e0e0', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        <button onClick={() => setBrowsing(false)} className="text-btn" style={{ color: '#555' }}>✕ Cancelar</button>
-                        <div style={{ flex: 1, fontSize: '13px', color: '#333', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    <div className="browser-header" style={{ padding: '10px 15px', borderBottom: '1px solid #e8e6dc', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <button onClick={() => setBrowsing(false)} className="text-btn" style={{ color: '#52524d' }}>✕ Cancelar</button>
+                        <div style={{ flex: 1, fontSize: '13px', color: '#333330', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                             {browseMode === 'link' ? 'Selecciona fotos para vincular' : 'Selecciona carpeta de destino'}
                             <div style={{ fontSize: '10px', opacity: 0.7 }}>{browsePath}</div>
                         </div>
@@ -624,7 +624,7 @@ const PhotoAlbumModal = ({ isOpen, onClose, pinId, title = "Album de Fotos", pho
                                 {browsePath !== 'proyectos/' && browsePath !== '' && (
                                     <div 
                                         className="browser-item" 
-                                        style={{ padding: '10px', cursor: 'pointer', borderBottom: '1px solid #eee', color: '#555' }}
+                                        style={{ padding: '10px', cursor: 'pointer', borderBottom: '1px solid #f1f0e8', color: '#52524d' }}
                                         onClick={() => {
                                             const parts = browsePath.replace(/\/$/, '').split('/');
                                             parts.pop();
@@ -639,14 +639,14 @@ const PhotoAlbumModal = ({ isOpen, onClose, pinId, title = "Album de Fotos", pho
                                     <div 
                                         key={f.fullName} 
                                         className="browser-item" 
-                                        style={{ padding: '10px', cursor: 'pointer', borderBottom: '1px solid #eee', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+                                        style={{ padding: '10px', cursor: 'pointer', borderBottom: '1px solid #f1f0e8', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
                                         onClick={() => fetchBrowseContents(f.fullName)}
                                     >
-                                        <span style={{ color: '#fbbf24' }}>📁 {f.name.replace(/\/$/, '')}</span>
+                                        <span style={{ color: '#734500' }}>📁 {f.name.replace(/\/$/, '')}</span>
                                         {browseMode === 'folder' && (
                                             <button 
                                                 onClick={(e) => { e.stopPropagation(); handleSelectFromECD(f); }}
-                                                style={{ background: '#7e9bbd', border: 'none', color: 'white', borderRadius: '4px', padding: '4px 8px', fontSize: '10px' }}
+                                                style={{ background: '#507294', border: 'none', color: '#ffffff', borderRadius: '4px', padding: '4px 8px', fontSize: '10px' }}
                                             >
                                                 SELECCIONAR
                                             </button>
@@ -664,12 +664,12 @@ const PhotoAlbumModal = ({ isOpen, onClose, pinId, title = "Album de Fotos", pho
                                         <div 
                                             key={f.id} 
                                             className="browser-item" 
-                                            style={{ padding: '10px', cursor: 'pointer', borderBottom: '1px solid #eee', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+                                            style={{ padding: '10px', cursor: 'pointer', borderBottom: '1px solid #f1f0e8', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
                                             onClick={() => browseMode === 'link' && handleSelectFromECD(f)}
                                         >
-                                            <span style={{ color: '#333' }}>{isImg ? '🖼️' : isVid ? '🎬' : '📄'} {f.name}</span>
+                                            <span style={{ color: '#333330' }}>{isImg ? '🖼️' : isVid ? '🎬' : '📄'} {f.name}</span>
                                             {browseMode === 'link' && (
-                                                <span style={{ fontSize: '10px', color: '#7e9bbd' }}>VINCULAR</span>
+                                                <span style={{ fontSize: '10px', color: '#507294' }}>VINCULAR</span>
                                             )}
                                         </div>
                                     );
@@ -683,11 +683,11 @@ const PhotoAlbumModal = ({ isOpen, onClose, pinId, title = "Album de Fotos", pho
                 {isUploading && (
                     <div className="album-uploading-overlay" style={{
                         position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-                        background: 'rgba(0,0,0,0.85)', zIndex: 10, display: 'flex',
-                        flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'white'
+                        background: 'rgba(255, 255, 255, 0.85)', zIndex: 10, display: 'flex',
+                        flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#141413'
                     }}>
-                        <div className="dm-progress-track" style={{ width: '200px', height: '6px', background: 'rgba(255,255,255,0.1)', borderRadius: '3px', overflow: 'hidden', marginBottom: '12px' }}>
-                            <div className="dm-progress-fill" style={{ width: `${uploadProgress}%`, height: '100%', background: '#7e9bbd', transition: 'width 0.2s ease' }} />
+                        <div className="dm-progress-track" style={{ width: '200px', height: '6px', background: 'rgba(20, 20, 19,0.1)', borderRadius: '3px', overflow: 'hidden', marginBottom: '12px' }}>
+                            <div className="dm-progress-fill" style={{ width: `${uploadProgress}%`, height: '100%', background: '#507294', transition: 'width 0.2s ease' }} />
                         </div>
                         <span style={{ fontWeight: 600, fontSize: '14px' }}>Subiendo... {uploadProgress}%</span>
                     </div>
@@ -730,7 +730,7 @@ const PhotoAlbumModal = ({ isOpen, onClose, pinId, title = "Album de Fotos", pho
                                                         top: '4px',
                                                         right: '4px',
                                                         background: 'rgba(0,0,0,0.5)',
-                                                        color: 'rgba(255,255,255,0.8)',
+                                                        color: 'rgba(20, 20, 19,0.8)',
                                                         border: 'none',
                                                         borderRadius: '50%',
                                                         width: '20px',
@@ -802,7 +802,7 @@ const PhotoAlbumModal = ({ isOpen, onClose, pinId, title = "Album de Fotos", pho
                 <div style={{
                     position: (variant === 'panel' && window.innerWidth >= 768) ? 'absolute' : 'fixed',
                     top: 0, left: 0, right: 0, bottom: 0,
-                    background: 'rgba(0,0,0,0.92)', zIndex: 99990,
+                    background: 'rgba(255, 255, 255, 0.92)', zIndex: 99990,
                     display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center'
                 }} onClick={() => setSelectedPhoto(null)}>
 
@@ -811,22 +811,22 @@ const PhotoAlbumModal = ({ isOpen, onClose, pinId, title = "Album de Fotos", pho
                         position: 'absolute', top: '16px', right: '16px', zIndex: 99991,
                         display: 'flex', alignItems: 'center', gap: 8
                     }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 2, background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 18, padding: '2px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 2, background: 'rgba(20, 20, 19,0.08)', border: '1px solid rgba(20, 20, 19,0.15)', borderRadius: 18, padding: '2px' }}>
                             <button title="Alejar (-)" onClick={() => setLbZoom(z => Math.max(z / 1.3, 1))} style={lbBtn}>−</button>
-                            <span style={{ color: 'rgba(255,255,255,0.7)', fontSize: 11, minWidth: 38, textAlign: 'center', fontVariantNumeric: 'tabular-nums' }}>{Math.round(lbZoom * 100)}%</span>
+                            <span style={{ color: 'rgba(20, 20, 19,0.7)', fontSize: 11, minWidth: 38, textAlign: 'center', fontVariantNumeric: 'tabular-nums' }}>{Math.round(lbZoom * 100)}%</span>
                             <button title="Acercar (+)" onClick={() => setLbZoom(z => Math.min(z * 1.3, 6))} style={lbBtn}>+</button>
                         </div>
                         {lbZoom > 1 && (
-                            <button title="Restablecer (0)" onClick={() => { setLbZoom(1); setLbPan({ x: 0, y: 0 }); }} style={{ ...lbBtn, width: 'auto', padding: '0 10px', borderRadius: 14, background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)' }}>Ajustar</button>
+                            <button title="Restablecer (0)" onClick={() => { setLbZoom(1); setLbPan({ x: 0, y: 0 }); }} style={{ ...lbBtn, width: 'auto', padding: '0 10px', borderRadius: 14, background: 'rgba(20, 20, 19,0.08)', border: '1px solid rgba(20, 20, 19,0.15)' }}>Ajustar</button>
                         )}
                         <a href={selectedPhoto.src} download={(selectedPhoto.name || selectedPhoto.desc || 'foto') + '.jpg'} target="_blank" rel="noopener noreferrer"
                             title="Descargar" onClick={e => e.stopPropagation()}
-                            style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 36, height: 36, borderRadius: '50%', background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', color: '#fff', textDecoration: 'none' }}>
+                            style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 36, height: 36, borderRadius: '50%', background: 'rgba(20, 20, 19,0.08)', border: '1px solid rgba(20, 20, 19,0.15)', color: '#141413', textDecoration: 'none' }}>
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
                         </a>
                         <button onClick={() => setSelectedPhoto(null)} title="Cerrar (Esc)" style={{
-                            background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)',
-                            color: '#fff', width: '36px', height: '36px', borderRadius: '50%',
+                            background: 'rgba(20, 20, 19,0.1)', border: '1px solid rgba(20, 20, 19,0.2)',
+                            color: '#141413', width: '36px', height: '36px', borderRadius: '50%',
                             fontSize: '18px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center'
                         }}>✕</button>
                     </div>
@@ -834,7 +834,7 @@ const PhotoAlbumModal = ({ isOpen, onClose, pinId, title = "Album de Fotos", pho
                     {/* Counter — top center */}
                     <div style={{
                         position: 'absolute', top: '16px', left: '50%', transform: 'translateX(-50%)',
-                        color: 'rgba(255,255,255,0.6)', fontSize: '13px', fontWeight: 500, zIndex: 99991
+                        color: 'rgba(20, 20, 19,0.6)', fontSize: '13px', fontWeight: 500, zIndex: 99991
                     }}>
                         {(() => {
                             const idx = filteredPhotos.findIndex(p => String(p.id) === String(selectedPhoto.id));
@@ -851,8 +851,8 @@ const PhotoAlbumModal = ({ isOpen, onClose, pinId, title = "Album de Fotos", pho
                             setSelectedPhoto(prev);
                         }} style={{
                             position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)',
-                            background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)',
-                            color: '#fff', width: '40px', height: '40px', borderRadius: '50%',
+                            background: 'rgba(20, 20, 19,0.08)', border: '1px solid rgba(20, 20, 19,0.15)',
+                            color: '#141413', width: '40px', height: '40px', borderRadius: '50%',
                             fontSize: '20px', cursor: 'pointer', zIndex: 99991,
                             display: 'flex', alignItems: 'center', justifyContent: 'center'
                         }}>‹</button>
@@ -867,8 +867,8 @@ const PhotoAlbumModal = ({ isOpen, onClose, pinId, title = "Album de Fotos", pho
                             setSelectedPhoto(next);
                         }} style={{
                             position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)',
-                            background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)',
-                            color: '#fff', width: '40px', height: '40px', borderRadius: '50%',
+                            background: 'rgba(20, 20, 19,0.08)', border: '1px solid rgba(20, 20, 19,0.15)',
+                            color: '#141413', width: '40px', height: '40px', borderRadius: '50%',
                             fontSize: '20px', cursor: 'pointer', zIndex: 99991,
                             display: 'flex', alignItems: 'center', justifyContent: 'center'
                         }}>›</button>
@@ -917,7 +917,7 @@ const PhotoAlbumModal = ({ isOpen, onClose, pinId, title = "Album de Fotos", pho
 
                         {/* Caption — minimal */}
                         <div style={{
-                            marginTop: '10px', color: 'rgba(255,255,255,0.8)',
+                            marginTop: '10px', color: 'rgba(20, 20, 19,0.8)',
                             fontSize: '13px', textAlign: 'center', maxWidth: '90vw',
                             display: 'flex', flexDirection: 'column', alignItems: 'center'
                         }}>
@@ -937,8 +937,8 @@ const PhotoAlbumModal = ({ isOpen, onClose, pinId, title = "Album de Fotos", pho
                                             e.stopPropagation();
                                         }}
                                         style={{
-                                            background: 'rgba(0,0,0,0.5)', border: '1px solid #444', 
-                                            color: '#fff', borderRadius: '4px', padding: '4px 8px', fontSize: '13px', width: '250px'
+                                            background: 'rgba(0,0,0,0.5)', border: '1px solid #cccac0', 
+                                            color: '#141413', borderRadius: '4px', padding: '4px 8px', fontSize: '13px', width: '250px'
                                         }}
                                     />
                                     <button onClick={(e) => {
@@ -946,8 +946,8 @@ const PhotoAlbumModal = ({ isOpen, onClose, pinId, title = "Album de Fotos", pho
                                         if (onUpdatePhoto) onUpdatePhoto(pinId, selectedPhoto.id, { desc: tempDesc });
                                         setSelectedPhoto({ ...selectedPhoto, desc: tempDesc });
                                         setEditingDesc(false);
-                                    }} style={{ background: '#3b82f6', border: 'none', color: '#fff', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer' }}>Guardar</button>
-                                    <button onClick={(e) => { e.stopPropagation(); setEditingDesc(false); }} style={{ background: 'transparent', border: '1px solid #444', color: '#ccc', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer' }}>Cancelar</button>
+                                    }} style={{ background: '#507294', border: 'none', color: '#ffffff', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer' }}>Guardar</button>
+                                    <button onClick={(e) => { e.stopPropagation(); setEditingDesc(false); }} style={{ background: 'transparent', border: '1px solid #cccac0', color: '#52524d', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer' }}>Cancelar</button>
                                 </div>
                             ) : (
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -956,11 +956,11 @@ const PhotoAlbumModal = ({ isOpen, onClose, pinId, title = "Album de Fotos", pho
                                         e.stopPropagation();
                                         setTempDesc(selectedPhoto.desc || '');
                                         setEditingDesc(true);
-                                    }} style={{ background: 'transparent', border: 'none', color: '#aaa', cursor: 'pointer', padding: '2px', display: 'flex', alignItems: 'center', justifyContent: 'center' }} title="Editar comentario">
+                                    }} style={{ background: 'transparent', border: 'none', color: '#72706b', cursor: 'pointer', padding: '2px', display: 'flex', alignItems: 'center', justifyContent: 'center' }} title="Editar comentario">
                                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
                                     </button>
                                     {selectedPhoto.displayDate && (
-                                        <span style={{ color: 'rgba(255,255,255,0.4)' }}>
+                                        <span style={{ color: 'rgba(20, 20, 19,0.4)' }}>
                                             {selectedPhoto.displayDate}
                                         </span>
                                     )}
@@ -989,7 +989,7 @@ const PhotoAlbumModal = ({ isOpen, onClose, pinId, title = "Album de Fotos", pho
                     left: '50%',
                     transform: 'translateX(-50%)',
                     background: toastMsg.type === 'success' ? 'rgba(16, 185, 129, 0.95)' : 'rgba(239, 68, 68, 0.95)',
-                    color: 'white',
+                    color: '#141413',
                     padding: '12px 24px',
                     borderRadius: '12px',
                     fontSize: '14px',

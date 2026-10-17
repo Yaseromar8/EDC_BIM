@@ -215,7 +215,7 @@ export default function LinkRevitBadge({ project, backendUrl, variant = 'floatin
 
   if (!project) return null;
 
-  const bg = !active ? 'rgba(40,44,52,0.92)' : revitOnline ? '#166534' : '#1d4ed8';
+  const bg = !active ? 'rgba(48,47,46,0.92)' : revitOnline ? '#166534' : '#507294';
   const title = !active
     ? 'Vincular con Revit: lo que selecciones/aísles aquí se replicará en el Revit conectado'
     : revitOnline ? 'Vinculado — Revit conectado y escuchando' : 'Vínculo activo — esperando a Revit (abre el plugin ECD Link)';
@@ -225,7 +225,7 @@ export default function LinkRevitBadge({ project, backendUrl, variant = 'floatin
     ? {
         display: 'flex', alignItems: 'center', gap: 6, padding: '4px 11px', height: 26,
         background: !active ? 'transparent' : bg,
-        color: !active ? '#d8d8d8' : '#fff',
+        color: !active ? '#e8e6dc' : '#fff',
         border: `1px solid ${!active ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.25)'}`,
         borderRadius: 6, fontSize: 11.5, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap',
       }

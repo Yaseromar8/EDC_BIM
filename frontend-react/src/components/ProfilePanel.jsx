@@ -497,12 +497,12 @@ export default function ProfilePanel() {
                 >
                     <defs>
                         <pattern id="pf-cut" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
-                            <rect width="7" height="7" fill="rgba(239,68,68,0.10)" />
-                            <line x1="0" y1="0" x2="0" y2="7" stroke="rgba(239,68,68,0.55)" strokeWidth="1" />
+                            <rect width="7" height="7" fill="rgba(255,255,255,0.05)" />
+                            <line x1="0" y1="0" x2="0" y2="7" stroke="rgba(255,255,255,0.22)" strokeWidth="1" />
                         </pattern>
                         <pattern id="pf-fill" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(-45)">
-                            <rect width="7" height="7" fill="rgba(16,185,129,0.10)" />
-                            <line x1="0" y1="0" x2="0" y2="7" stroke="rgba(16,185,129,0.55)" strokeWidth="1" />
+                            <rect width="7" height="7" fill="rgba(255,255,255,0.025)" />
+                            <line x1="0" y1="0" x2="0" y2="7" stroke="rgba(255,255,255,0.11)" strokeWidth="1" />
                         </pattern>
                     </defs>
                     <rect x="0" y="0" width={W} height={H} fill="#0d1117" />

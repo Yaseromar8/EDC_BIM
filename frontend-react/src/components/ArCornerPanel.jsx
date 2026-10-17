@@ -45,10 +45,10 @@ const claseDeNormal = (n) => {
 const dot3 = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 
 const boton = {
-  padding: '10px 16px', borderRadius: 999, border: '1px solid #3a3f45',
-  background: '#1b1f24', color: '#e6e8ea', fontSize: 14, cursor: 'pointer',
+  padding: '10px 16px', borderRadius: 999, border: '1px solid #333330',
+  background: '#1d1d1c', color: '#e8e6dc', fontSize: 14, cursor: 'pointer',
 };
-const botonFuerte = { ...boton, background: '#2b6cb0', border: '1px solid #2b6cb0', color: '#fff' };
+const botonFuerte = { ...boton, background: '#507294', border: '1px solid #507294', color: '#fff' };
 
 /** Etiqueta legible de lo capturado, para que se vea que el trío es un rincón. */
 function resumen(planos, arriba) {
@@ -424,8 +424,8 @@ export default function ArCornerPanel({
 
   const caja = {
     position: 'absolute', left: '50%', bottom: 92, transform: 'translateX(-50%)',
-    width: 'min(92vw, 460px)', background: 'rgba(12,14,17,0.94)', color: '#e6e8ea',
-    border: '1px solid #2a2f35', borderRadius: 14, padding: 16,
+    width: 'min(92vw, 460px)', background: 'rgba(20,20,19,0.94)', color: '#e8e6dc',
+    border: '1px solid #302f2e', borderRadius: 14, padding: 16,
     font: '14px/1.45 system-ui, sans-serif', zIndex: 40,
     // La raíz del AR es pointer-events:none para dejar pasar los gestos al
     // visor; TODO panel interactivo debe declararse 'auto'. Sin esta línea el
@@ -453,9 +453,9 @@ export default function ArCornerPanel({
             style={{
               flex: 1, textAlign: 'center', padding: '5px 4px', borderRadius: 8,
               fontSize: 11.5, fontWeight: actual ? 700 : 500,
-              background: actual ? '#1d4ed8' : hecho ? '#14532d' : '#1b1f24',
-              color: actual ? '#fff' : hecho ? '#86efac' : '#6b7280',
-              border: '1px solid ' + (actual ? '#1d4ed8' : hecho ? '#14532d' : '#2a2f35'),
+              background: actual ? '#507294' : hecho ? '#14532d' : '#1d1d1c',
+              color: actual ? '#fff' : hecho ? '#86efac' : '#72706b',
+              border: '1px solid ' + (actual ? '#507294' : hecho ? '#14532d' : '#302f2e'),
             }}
           >
             {hecho ? '✓ ' : q.num + ' · '}{q.nombre}
@@ -475,8 +475,8 @@ export default function ArCornerPanel({
             left: 'calc(' + (marcador.x * 100).toFixed(2) + '% - 11px)',
             top: 'calc(' + (marcador.y * 100).toFixed(2) + '% - 11px)',
             width: 22, height: 22, borderRadius: '50%',
-            background: '#2563eb', border: '3px solid #fff',
-            boxShadow: '0 0 0 8px rgba(37,99,235,0.35)',
+            background: '#507294', border: '3px solid #fff',
+            boxShadow: '0 0 0 8px rgba(80,114,148,0.35)',
             zIndex: 39, pointerEvents: 'none',
           }}
         />
@@ -486,12 +486,12 @@ export default function ArCornerPanel({
       {paso === 'intro' && (
         <>
           <div style={{ fontWeight: 600, marginBottom: 6 }}>Calibrar por esquina</div>
-          <p style={{ margin: '0 0 12px', color: '#a9b0b8' }}>
+          <p style={{ margin: '0 0 12px', color: '#b0aea5' }}>
             Busca un rincón que exista igual en la obra y en el modelo: dos muros
             y el piso. Primero escaneas las tres caras aquí, con la cámara, y
             después las señalas en el modelo.
           </p>
-          <p style={{ margin: '0 0 12px', color: '#7f8894', fontSize: 12.5 }}>
+          <p style={{ margin: '0 0 12px', color: '#918f88', fontSize: 12.5 }}>
             Aún no empieza nada: la cámara se enciende al pulsar Empezar.
           </p>
           <div style={{ display: 'flex', gap: 8 }}>
@@ -506,7 +506,7 @@ export default function ArCornerPanel({
           <div style={{ fontWeight: 600, marginBottom: 6 }}>
             Toca en el modelo la {NOMBRES[carasModelo.length] || 'última cara'}
           </div>
-          <p style={{ margin: '0 0 10px', color: '#a9b0b8' }}>
+          <p style={{ margin: '0 0 10px', color: '#b0aea5' }}>
             La cámara queda en pausa: gira y acerca el modelo con normalidad.
             Toca las mismas tres caras que escaneaste — el orden da igual. Al
             tocar la tercera, el modelo se acomoda solo a la realidad.
@@ -528,7 +528,7 @@ export default function ArCornerPanel({
           <div style={{ fontWeight: 600, marginBottom: 6 }}>
             Apunta a la {NOMBRES[carasObra.length] || 'última cara'} del rincón real
           </div>
-          <p style={{ margin: '0 0 10px', color: '#a9b0b8' }}>
+          <p style={{ margin: '0 0 10px', color: '#b0aea5' }}>
             Barre despacio el piso y los dos muros, quedándote en el mismo
             sitio. Las caras se capturan solas; cuando las tres coincidan verás
             el punto del rincón.
@@ -536,12 +536,12 @@ export default function ArCornerPanel({
           {composicionOk && (
             <div style={{
               marginBottom: 8, padding: '6px 10px', borderRadius: 8,
-              background: '#1d4ed8', color: '#fff', fontWeight: 700, textAlign: 'center',
+              background: '#507294', color: '#fff', fontWeight: 700, textAlign: 'center',
             }}>
               ¡Esquina detectada!
             </div>
           )}
-          <div style={{ marginBottom: 4, color: '#8ab4f8', fontSize: 12.5 }}>
+          <div style={{ marginBottom: 4, color: '#6a9bcc', fontSize: 12.5 }}>
             relieve reconocido: {nubePuntos} puntos
             {profundidad != null && profundidad >= 0 && ` (+${profundidad} de profundidad)`}
             {profundidad === -1 && ' (profundidad apagada: no validó)'}
@@ -571,7 +571,7 @@ export default function ArCornerPanel({
             {mira === 'inclinada' && ' (no sirve para la esquina)'}
           </div>
           {!mira && muros < 2 && (
-            <div style={{ marginBottom: 8, color: '#8ab4f8', fontSize: 12.5 }}>
+            <div style={{ marginBottom: 8, color: '#6a9bcc', fontSize: 12.5 }}>
               Muro liso: apunta al zócalo, a una esquina o a un borde con
               detalle, acércate a 1–2 m, y usa el botón manteniendo firme.
             </div>
@@ -588,7 +588,7 @@ export default function ArCornerPanel({
             </div>
           )}
           {esSimulado() && (
-            <div style={{ marginBottom: 10, color: '#8ab4f8', fontSize: 13 }}>
+            <div style={{ marginBottom: 10, color: '#6a9bcc', fontSize: 13 }}>
               Ensayo: teclas <b>1</b>, <b>2</b> y <b>3</b> para mirar al piso y a
               cada muro (mantén un segundo). <b>4</b>/<b>5</b>: rincón abierto
               (135°) / recto. <b>0</b> vuelve a la órbita.

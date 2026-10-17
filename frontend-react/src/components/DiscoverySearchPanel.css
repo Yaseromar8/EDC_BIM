@@ -2,18 +2,18 @@
     display: flex;
     flex-direction: column;
     height: 100%;
-    background: #1c2027;
-    color: #fff;
+    background: #ffffff;
+    color: #141413;
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
 }
 
 .discovery-header {
     padding: 12px 16px;
-    background: #242933;
+    background: #f1f0e8;
     display: flex;
     justify-content: space-between;
     align-items: center;
-    border-bottom: 1px solid rgba(255,255,255,0.05);
+    border-bottom: 1px solid rgba(20, 20, 19,0.05);
 }
 
 .discovery-header-left {
@@ -22,25 +22,25 @@
     gap: 8px;
     font-weight: 700;
     font-size: 13px;
-    color: #e2e8f0;
+    color: #333330;
 }
 
 .sparkle {
-    color: #fbbf24;
+    color: #734500;
     font-size: 16px;
 }
 
 .discovery-close-btn {
     background: transparent;
     border: none;
-    color: #94a3b8;
+    color: #72706b;
     cursor: pointer;
     padding: 4px;
     transition: color 0.2s;
 }
 
 .discovery-close-btn:hover {
-    color: #fff;
+    color: #141413;
 }
 
 .discovery-body {
@@ -73,15 +73,15 @@
 
 .user .message-bubble {
     background: var(--alephia-interactive);
-    color: #fff;
+    color: var(--alephia-on-interactive, #141413);
     border-top-right-radius: 2px;
 }
 
 .assistant .message-bubble {
-    background: #2d3748;
-    color: #e2e8f0;
+    background: #e8e6dc;
+    color: #333330;
     border-top-left-radius: 2px;
-    border: 1px solid rgba(255,255,255,0.05);
+    border: 1px solid rgba(20, 20, 19,0.05);
 }
 
 .message-citations {
@@ -92,20 +92,20 @@
 }
 
 .citation-chip {
-    background: #1a202c;
-    border: 1px solid rgba(255,255,255,0.1);
+    background: #ffffff;
+    border: 1px solid rgba(20, 20, 19,0.1);
     padding: 4px 10px;
     border-radius: 100px;
     display: flex;
     align-items: center;
     gap: 6px;
     font-size: 11px;
-    color: #cbd5e0;
+    color: #52524d;
 }
 
 .citation-index {
     background: var(--alephia-interactive);
-    color: #fff;
+    color: var(--alephia-on-interactive, #141413);
     width: 16px;
     height: 16px;
     display: flex;
@@ -126,7 +126,7 @@
 .citation-open-btn {
     background: transparent;
     border: none;
-    color: #4daaf6;
+    color: #507294;
     padding: 2px;
     cursor: pointer;
     display: flex;
@@ -137,7 +137,7 @@
     align-items: center;
     gap: 12px;
     padding: 12px;
-    color: #94a3b8;
+    color: #72706b;
     font-size: 13px;
     font-style: italic;
 }
@@ -145,7 +145,7 @@
 .search-spinner-small {
     width: 16px;
     height: 16px;
-    border: 2px solid rgba(59, 130, 246, 0.2);
+    border: 2px solid rgba(106, 155, 204, 0.2);
     border-top-color: var(--alephia-interactive);
     border-radius: 50%;
     animation: spin 0.8s linear infinite;
@@ -157,13 +157,13 @@
 
 .discovery-chat-footer {
     padding: 16px;
-    border-top: 1px solid rgba(255,255,255,0.05);
+    border-top: 1px solid rgba(20, 20, 19,0.05);
 }
 
 .chat-input-wrapper {
     display: flex;
-    background: #242933;
-    border: 1px solid #4a5568;
+    background: #f1f0e8;
+    border: 1px solid #cccac0;
     border-radius: 24px;
     padding: 4px 4px 4px 16px;
     align-items: center;
@@ -178,7 +178,7 @@
     flex: 1;
     background: transparent;
     border: none;
-    color: #fff;
+    color: #141413;
     font-size: 14px;
     outline: none;
     padding: 8px 0;
@@ -186,7 +186,7 @@
 
 .chat-input-wrapper button {
     background: var(--alephia-interactive);
-    color: #fff;
+    color: var(--alephia-on-interactive, #141413);
     border: none;
     width: 32px;
     height: 32px;
@@ -203,7 +203,7 @@
 }
 
 .chat-input-wrapper button:disabled {
-    background: #4a5568;
+    background: #cccac0;
     cursor: not-allowed;
     transform: none;
 }
@@ -213,7 +213,7 @@
     text-align: center;
     margin-top: 8px;
     font-size: 9px;
-    color: #4a5568;
+    color: #52524d;
     letter-spacing: 1px;
     text-transform: uppercase;
 }
@@ -223,14 +223,14 @@
     background: rgba(0, 0, 0, 0.2);
     border-radius: 8px;
     margin-bottom: 12px;
-    border: 1px solid rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(20, 20, 19, 0.05);
 }
 
 .agent-reasoning summary {
     padding: 8px 12px;
     cursor: pointer;
     font-size: 11px;
-    color: #94a3b8;
+    color: #72706b;
     font-weight: 600;
     user-select: none;
 }
@@ -244,7 +244,7 @@
     margin: 0;
     list-style-type: circle;
     font-size: 12px;
-    color: #94a3b8;
+    color: #72706b;
 }
 
 .reasoning-steps li {
@@ -252,5 +252,5 @@
 }
 
 .answer-text {
-    color: #e2e8f0;
+    color: #333330;
 }

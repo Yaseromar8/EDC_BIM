@@ -24,10 +24,10 @@ const COLORS = {
 
 // ── Design tokens (minimalista profesional, alineado al dark theme de la app) ──
 const T = {
-    bg: '#15181d', panel: '#1b2026', panelSoft: '#20262d',
-    border: '1px solid rgba(255,255,255,0.08)', borderSoft: '1px solid rgba(255,255,255,0.05)',
-    text: '#ccd2d9', muted: '#8a93a0', faint: '#5d6672',
-    accent: '#3d7eff', green: '#5fbf67', red: '#e06a6a', amber: '#dba94d', magenta: '#cf57d6',
+    bg: '#faf9f5', panel: '#ffffff', panelSoft: '#ffffff',
+    border: '1px solid rgba(20, 20, 19,0.08)', borderSoft: '1px solid rgba(20, 20, 19,0.05)',
+    text: '#52524d', muted: '#72706b', faint: '#72706b',
+    accent: '#6a9bcc', green: '#5fbf67', red: '#e06a6a', amber: '#dba94d', magenta: '#cf57d6',
     radius: 8,
 };
 
@@ -39,18 +39,18 @@ const S = {
     sideCard: { flex: 1, background: T.panelSoft, border: T.borderSoft, borderRadius: T.radius, padding: '16px 18px', minWidth: 0 },
     label: { fontSize: 11, letterSpacing: '0.08em', textTransform: 'uppercase', color: T.muted, marginBottom: 10, fontWeight: 600 },
     select: { width: '100%', background: T.bg, color: T.text, border: T.border, borderRadius: 6, padding: '8px 10px', fontSize: 13, outline: 'none', marginBottom: 10 },
-    btnPrimary: { background: T.accent, color: '#fff', border: 'none', borderRadius: 6, padding: '9px 22px', fontSize: 13, cursor: 'pointer', fontWeight: 600 },
+    btnPrimary: { background: T.accent, color: '#141413', border: 'none', borderRadius: 6, padding: '9px 22px', fontSize: 13, cursor: 'pointer', fontWeight: 600 },
     btnGhost: { background: 'transparent', color: T.muted, border: T.border, borderRadius: 6, padding: '8px 16px', fontSize: 13, cursor: 'pointer' },
     btnIcon: { background: 'transparent', color: T.muted, border: T.border, borderRadius: '50%', width: 34, height: 34, cursor: 'pointer', fontSize: 15, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
     // view
     topBar: { display: 'flex', alignItems: 'center', gap: 10, padding: '7px 14px', borderBottom: T.border, background: T.panel },
     chipSide: { fontSize: 12, padding: '4px 10px', borderRadius: 6, background: T.panelSoft, border: T.borderSoft, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 300 },
-    viewers: { flex: 1, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1, minHeight: 0, background: 'rgba(255,255,255,0.06)' },
-    pane: { position: 'relative', background: '#0e1115', overflow: 'hidden' },
-    paneTag: { position: 'absolute', top: 10, left: 12, zIndex: 5, fontSize: 11, fontWeight: 600, letterSpacing: '0.05em', padding: '3px 10px', borderRadius: 5, background: 'rgba(13,16,20,0.75)', border: T.borderSoft },
+    viewers: { flex: 1, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1, minHeight: 0, background: 'rgba(20, 20, 19,0.06)' },
+    pane: { position: 'relative', background: '#faf9f5', overflow: 'hidden' },
+    paneTag: { position: 'absolute', top: 10, left: 12, zIndex: 5, fontSize: 11, fontWeight: 600, letterSpacing: '0.05em', padding: '3px 10px', borderRadius: 5, background: 'rgba(255, 255, 255, 0.75)', border: T.borderSoft },
     statusBar: { padding: '5px 14px', fontSize: 12, color: T.muted, borderTop: T.borderSoft, background: T.panel },
     bottom: { borderTop: T.border, padding: '10px 14px', display: 'flex', gap: 16, alignItems: 'flex-start', maxHeight: 230, background: T.panel },
-    pill: (color, active) => ({ display: 'flex', alignItems: 'center', gap: 7, cursor: 'pointer', fontSize: 12.5, padding: '6px 12px', borderRadius: 6, border: active ? `1px solid ${color}` : T.border, color: T.text, background: active ? 'rgba(255,255,255,0.04)' : 'transparent', whiteSpace: 'nowrap' }),
+    pill: (color, active) => ({ display: 'flex', alignItems: 'center', gap: 7, cursor: 'pointer', fontSize: 12.5, padding: '6px 12px', borderRadius: 6, border: active ? `1px solid ${color}` : T.border, color: T.text, background: active ? 'rgba(20, 20, 19,0.04)' : 'transparent', whiteSpace: 'nowrap' }),
     dot: (color) => ({ width: 8, height: 8, borderRadius: 2, background: color, flexShrink: 0 }),
     list: { flex: 1, overflowY: 'auto', maxHeight: 180, fontSize: 12.5 },
     listItem: { padding: '4px 8px', borderBottom: T.borderSoft, cursor: 'pointer', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: T.muted },
@@ -883,7 +883,7 @@ export default function CompareView({ BACKEND_URL, projectId, onExit }) {
             <div style={S.sideCard}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
                     <div style={S.label}>{title}</div>
-                    <span style={{ fontSize: 10.5, color: T.accent, border: '1px solid rgba(61,126,255,0.35)', borderRadius: 999, padding: '2px 8px', marginBottom: 10 }}>
+                    <span style={{ fontSize: 10.5, color: T.accent, border: '1px solid rgba(106,155,204,0.35)', borderRadius: 999, padding: '2px 8px', marginBottom: 10 }}>
                         MULTI-MODELO
                     </span>
                 </div>
@@ -942,7 +942,7 @@ export default function CompareView({ BACKEND_URL, projectId, onExit }) {
                         width: '100%',
                         marginTop: 8,
                         background: addDisabled ? 'transparent' : T.accent,
-                        color: addDisabled ? T.muted : '#fff',
+                        color: addDisabled ? T.muted : '#141413',
                         border: addDisabled ? T.border : 'none',
                         fontWeight: 600,
                         opacity: addDisabled ? 0.45 : 1,
@@ -970,7 +970,7 @@ export default function CompareView({ BACKEND_URL, projectId, onExit }) {
                         )}
                     </div>
                     {s.links.length === 0 && (
-                        <div style={{ padding: '7px 8px', border: T.borderSoft, borderRadius: 6, color: T.faint, background: 'rgba(255,255,255,0.02)' }}>
+                        <div style={{ padding: '7px 8px', border: T.borderSoft, borderRadius: 6, color: T.faint, background: 'rgba(20, 20, 19,0.02)' }}>
                             Todavia no hay modelos agregados en este lado.
                         </div>
                     )}
@@ -984,7 +984,7 @@ export default function CompareView({ BACKEND_URL, projectId, onExit }) {
                                 padding: '6px 8px',
                                 border: T.borderSoft,
                                 borderRadius: 6,
-                                background: 'rgba(255,255,255,0.03)',
+                                background: 'rgba(20, 20, 19,0.03)',
                                 minWidth: 0
                             }}
                         >
@@ -1128,7 +1128,7 @@ export default function CompareView({ BACKEND_URL, projectId, onExit }) {
                 ref={tipEl}
                 style={{
                     position: 'fixed', zIndex: 9500, pointerEvents: 'none', display: tip ? 'block' : 'none',
-                    background: 'rgba(18,22,27,0.97)', border: T.border, borderRadius: T.radius,
+                    background: 'rgba(255, 255, 255, 0.97)', border: T.border, borderRadius: T.radius,
                     padding: '7px 11px', maxWidth: 280, fontSize: 12,
                 }}
             >

@@ -83,20 +83,20 @@ const FilterConfiguratorModal = ({ open, onClose, availableProperties = [], sele
             display: 'flex', alignItems: 'center', justifyContent: 'center'
         }}>
             <div className="filter-config-modal" style={{
-                background: 'rgba(30, 30, 30, 0.65)', backdropFilter: 'blur(15px)', WebkitBackdropFilter: 'blur(15px)',
+                background: 'rgba(255, 255, 255, 0.65)', backdropFilter: 'blur(15px)', WebkitBackdropFilter: 'blur(15px)',
                 width: '800px', height: '600px',
                 borderRadius: '4px', display: 'flex', flexDirection: 'column',
-                boxShadow: '0 10px 40px rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.1)',
-                color: '#ececec', fontFamily: 'Artifakt Element, sans-serif'
+                boxShadow: '0 10px 40px rgba(0,0,0,0.5)', border: '1px solid rgba(20, 20, 19,0.1)',
+                color: '#141413', fontFamily: 'Artifakt Element, sans-serif'
             }}>
 
                 {/* Header */}
                 <div className="fc-header" style={{
-                    padding: '16px 20px', borderBottom: '1px solid rgba(255,255,255,0.05)',
+                    padding: '16px 20px', borderBottom: '1px solid rgba(20, 20, 19,0.05)',
                     display: 'flex', justifyContent: 'space-between', alignItems: 'center'
                 }}>
-                    <span style={{ fontWeight: 700, fontSize: '14px', letterSpacing: '0.5px', color: '#fff' }}>CONFIGURAR FILTROS</span>
-                    <button aria-label="Cerrar configuración" onClick={onClose} style={{ background: 'none', border: 'none', color: '#ccc', cursor: 'pointer' }}>
+                    <span style={{ fontWeight: 700, fontSize: '14px', letterSpacing: '0.5px', color: '#141413' }}>CONFIGURAR FILTROS</span>
+                    <button aria-label="Cerrar configuración" onClick={onClose} style={{ background: 'none', border: 'none', color: '#52524d', cursor: 'pointer' }}>
                         <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
                             <path d="M3.47 3.47a.75.75 0 0 1 1.06 0L8 6.94l3.47-3.47a.75.75 0 1 1 1.06 1.06L9.06 8l3.47 3.47a.75.75 0 1 1-1.06 1.06L8 9.06l-3.47 3.47a.75.75 0 0 1-1.06-1.06L6.94 8 3.47 4.53a.75.75 0 0 1 0-1.06Z" />
                         </svg>
@@ -111,7 +111,7 @@ const FilterConfiguratorModal = ({ open, onClose, availableProperties = [], sele
                         <button
                             onClick={handleReset}
                             style={{
-                                background: 'transparent', color: '#7e9bbd', border: 'none',
+                                background: 'transparent', color: '#507294', border: 'none',
                                 fontSize: '13px', cursor: 'pointer', fontWeight: 500, padding: 0
                             }}
                         >
@@ -123,7 +123,7 @@ const FilterConfiguratorModal = ({ open, onClose, availableProperties = [], sele
 
                         {/* Left Column: Available */}
                         <div className="fc-column" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-                            <span style={{ fontSize: '12px', fontWeight: 600, marginBottom: '8px', color: '#bbb' }}>Propiedades disponibles</span>
+                            <span style={{ fontSize: '12px', fontWeight: 600, marginBottom: '8px', color: '#72706b' }}>Propiedades disponibles</span>
                             <div className="fc-search" style={{ position: 'relative', marginBottom: '8px' }}>
                                 <input
                                     type="search" autoFocus aria-label="Buscar propiedades disponibles"
@@ -131,35 +131,35 @@ const FilterConfiguratorModal = ({ open, onClose, availableProperties = [], sele
                                     value={searchTermAvailable}
                                     onChange={e => { setSearchTermAvailable(e.target.value); setAvailableLimit(100); }}
                                     style={{
-                                        width: '100%', padding: '6px 8px 6px 30px', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)',
-                                        borderRadius: '2px', color: '#fff', fontSize: '13px', outline: 'none'
+                                        width: '100%', padding: '6px 8px 6px 30px', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(20, 20, 19,0.1)',
+                                        borderRadius: '2px', color: '#141413', fontSize: '13px', outline: 'none'
                                     }}
                                 />
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#888" strokeWidth="2" style={{ position: 'absolute', left: '8px', top: '8px' }}>
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#918f88" strokeWidth="2" style={{ position: 'absolute', left: '8px', top: '8px' }}>
                                     <circle cx="11" cy="11" r="8" />
                                     <line x1="21" y1="21" x2="16.65" y2="16.65" />
                                 </svg>
                             </div>
-                            <div className="fc-list" style={{ flex: 1, border: '1px solid rgba(255,255,255,0.05)', borderRadius: '2px', overflowY: 'auto', background: 'rgba(0,0,0,0.15)' }}>
+                            <div className="fc-list" style={{ flex: 1, border: '1px solid rgba(20, 20, 19,0.05)', borderRadius: '2px', overflowY: 'auto', background: 'rgba(0,0,0,0.15)' }}>
                                 {Object.keys(filteredGroups).sort().slice(0, availableLimit).map(cat => {
                                     const props = filteredGroups[cat];
                                     const isExpanded = expandedCategories[cat] || searchTermAvailable.length > 0;
 
                                     return (
-                                        <div key={cat} style={{ borderBottom: '1px solid #333' }}>
+                                        <div key={cat} style={{ borderBottom: '1px solid #e8e6dc' }}>
                                             <div role="button" tabIndex={0} aria-expanded={!!isExpanded}
                                                 onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleCategory(cat); } }}
                                                 onClick={() => toggleCategory(cat)}
                                                 style={{
                                                     padding: '10px 12px', fontSize: '13px', cursor: 'pointer', display: 'flex',
-                                                    justifyContent: 'space-between', background: '#25282d', alignItems: 'center'
+                                                    justifyContent: 'space-between', background: '#f1f0e8', alignItems: 'center'
                                                 }}
                                             >
-                                                <span style={{ fontWeight: 600, color: '#f0f0f0' }}>{cat}</span>
-                                                <span style={{ color: '#666', fontSize: '11px' }}>{props.length}</span>
+                                                <span style={{ fontWeight: 600, color: '#141413' }}>{cat}</span>
+                                                <span style={{ color: '#72706b', fontSize: '11px' }}>{props.length}</span>
                                             </div>
                                             {isExpanded && (
-                                                <div style={{ background: '#1a1d21' }}>
+                                                <div style={{ background: '#ffffff' }}>
                                                     {props.slice(0, availableLimit).map(prop => {
                                                         const isAdded = selectedIds.has(prop.id);
                                                         return (
@@ -169,11 +169,11 @@ const FilterConfiguratorModal = ({ open, onClose, availableProperties = [], sele
                                                                 onClick={() => !isAdded && handleAdd(prop.id)}
                                                                 style={{
                                                                     padding: '6px 12px 6px 24px', fontSize: '12px',
-                                                                    color: isAdded ? '#555' : '#ccc',
+                                                                    color: isAdded ? '#52524d' : '#52524d',
                                                                     cursor: isAdded ? 'default' : 'pointer',
                                                                     display: 'flex', alignItems: 'center', transition: 'background 0.1s'
                                                                 }}
-                                                                onMouseEnter={e => !isAdded && (e.currentTarget.style.background = '#30343a')}
+                                                                onMouseEnter={e => !isAdded && (e.currentTarget.style.background = '#e8e6dc')}
                                                                 onMouseLeave={e => !isAdded && (e.currentTarget.style.background = 'transparent')}
                                                             >
                                                                 <span>{isAdded ? '✓ ' : '+ '} {prop.name}</span>
@@ -193,7 +193,7 @@ const FilterConfiguratorModal = ({ open, onClose, availableProperties = [], sele
 
                         {/* Right Column: Selected (Draggable) */}
                         <div className="fc-column" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-                            <span style={{ fontSize: '12px', fontWeight: 600, marginBottom: '8px', color: '#bbb' }}>Propiedades del panel ({currentSelection.length})</span>
+                            <span style={{ fontSize: '12px', fontWeight: 600, marginBottom: '8px', color: '#72706b' }}>Propiedades del panel ({currentSelection.length})</span>
                             <div className="fc-search" style={{ position: 'relative', marginBottom: '8px' }}>
                                 <input
                                     type="search" aria-label="Buscar propiedades del panel"
@@ -201,16 +201,16 @@ const FilterConfiguratorModal = ({ open, onClose, availableProperties = [], sele
                                     value={searchTermSelected}
                                     onChange={e => { setSearchTermSelected(e.target.value); setSelectedLimit(100); }}
                                     style={{
-                                        width: '100%', padding: '6px 8px 6px 30px', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)',
-                                        borderRadius: '2px', color: '#fff', fontSize: '13px', outline: 'none'
+                                        width: '100%', padding: '6px 8px 6px 30px', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(20, 20, 19,0.1)',
+                                        borderRadius: '2px', color: '#141413', fontSize: '13px', outline: 'none'
                                     }}
                                 />
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#888" strokeWidth="2" style={{ position: 'absolute', left: '8px', top: '8px' }}>
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#918f88" strokeWidth="2" style={{ position: 'absolute', left: '8px', top: '8px' }}>
                                     <circle cx="11" cy="11" r="8" />
                                     <line x1="21" y1="21" x2="16.65" y2="16.65" />
                                 </svg>
                             </div>
-                            <div className="fc-list" style={{ flex: 1, border: '1px solid rgba(255,255,255,0.05)', borderRadius: '2px', overflowY: 'auto', background: 'rgba(0,0,0,0.15)' }}>
+                            <div className="fc-list" style={{ flex: 1, border: '1px solid rgba(20, 20, 19,0.05)', borderRadius: '2px', overflowY: 'auto', background: 'rgba(0,0,0,0.15)' }}>
                                 {selectedObjects.slice(0, selectedLimit).map(item => (
                                     <div
                                         key={item.id}
@@ -231,18 +231,18 @@ const FilterConfiguratorModal = ({ open, onClose, availableProperties = [], sele
                                         onDrop={e => { e.preventDefault(); dragOverItem.current = item.id; handleSort(); }}
                                         onDragOver={(e) => e.preventDefault()}
                                         style={{
-                                            padding: '8px 12px', borderBottom: '1px solid #333', fontSize: '13px',
-                                            display: 'flex', alignItems: 'center', background: '#25282d', gap: '8px',
+                                            padding: '8px 12px', borderBottom: '1px solid #e8e6dc', fontSize: '13px',
+                                            display: 'flex', alignItems: 'center', background: '#f1f0e8', gap: '8px',
                                             cursor: 'move'
                                         }}
                                     >
                                         {/* 3-Lines Grip Icon */}
-                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="#666">
+                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="#72706b">
                                             <path d="M3 6h18v2H3V6zm0 5h18v2H3v-2zm0 5h18v2H3v-2z" />
                                         </svg>
                                         <div style={{ flex: 1 }}>
-                                            <div style={{ color: '#fff', fontWeight: 500 }}>{item.name}</div>
-                                            <div style={{ fontSize: '11px', color: '#aaa' }}>{item.id}{item.unavailable ? ' · no disponible' : ''}{filterSelections[item.id]?.length ? ' · filtro activo' : ''}</div>
+                                            <div style={{ color: '#141413', fontWeight: 500 }}>{item.name}</div>
+                                            <div style={{ fontSize: '11px', color: '#72706b' }}>{item.id}{item.unavailable ? ' · no disponible' : ''}{filterSelections[item.id]?.length ? ' · filtro activo' : ''}</div>
                                         </div>
                                         <button aria-label={`Subir ${item.id}`} disabled={item.originalIndex === 0}
                                             onClick={() => setCurrentSelection(prev => reorderProperty(prev, item.id, prev[prev.indexOf(item.id) - 1]))}>↑</button>
@@ -250,7 +250,7 @@ const FilterConfiguratorModal = ({ open, onClose, availableProperties = [], sele
                                             onClick={() => setCurrentSelection(prev => reorderProperty(prev, item.id, prev[prev.indexOf(item.id) + 1]))}>↓</button>
                                         <button
                                             onClick={(e) => { e.stopPropagation(); handleRemove(item.id); }}
-                                            style={{ background: 'none', border: 'none', color: '#888', cursor: 'pointer', padding: '4px' }}
+                                            style={{ background: 'none', border: 'none', color: '#72706b', cursor: 'pointer', padding: '4px' }}
                                             title={`Quitar ${item.id}`} aria-label={`Quitar ${item.id}`}
                                         >
                                             <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" /></svg>
@@ -258,7 +258,7 @@ const FilterConfiguratorModal = ({ open, onClose, availableProperties = [], sele
                                     </div>
                                 ))}
                                 {selectedObjects.length === 0 && (
-                                    <div style={{ padding: '20px', textAlign: 'center', color: '#666', fontStyle: 'italic', fontSize: '12px' }}>
+                                    <div style={{ padding: '20px', textAlign: 'center', color: '#72706b', fontStyle: 'italic', fontSize: '12px' }}>
                                         {currentSelection.length ? 'Sin coincidencias. La búsqueda no elimina propiedades.' : 'Ninguna propiedad seleccionada'}
                                     </div>
                                 )}
@@ -273,22 +273,22 @@ const FilterConfiguratorModal = ({ open, onClose, availableProperties = [], sele
                 </div>
 
                 {/* Footer */}
-                {removedActive.length > 0 && <p role="status" style={{ padding: '0 20px', color: '#fbbf24' }}>
+                {removedActive.length > 0 && <p role="status" style={{ padding: '0 20px', color: '#734500' }}>
                     Al aplicar se quitarán los filtros activos de: {removedActive.join(', ')}. Cancelar conserva la selección.
                 </p>}
                 <div className="fc-footer" style={{
-                    padding: '16px 20px', borderTop: '1px solid #3e4045',
+                    padding: '16px 20px', borderTop: '1px solid #e8e6dc',
                     display: 'flex', justifyContent: 'flex-end', gap: '10px'
                 }}>
                     <button onClick={onClose} style={{
-                        padding: '6px 16px', background: 'transparent', border: '1px solid #666',
-                        color: '#ececec', borderRadius: '4px', cursor: 'pointer', fontSize: '13px'
+                        padding: '6px 16px', background: 'transparent', border: '1px solid #cccac0',
+                        color: '#141413', borderRadius: '4px', cursor: 'pointer', fontSize: '13px'
                     }}>
                         Cancelar
                     </button>
                     <button onClick={handleSave} style={{
-                        padding: '6px 16px', background: '#7e9bbd', border: 'none',
-                        color: '#fff', borderRadius: '4px', cursor: 'pointer', fontSize: '13px', fontWeight: 600
+                        padding: '6px 16px', background: '#507294', border: 'none',
+                        color: '#ffffff', borderRadius: '4px', cursor: 'pointer', fontSize: '13px', fontWeight: 600
                     }}>
                         Aplicar
                     </button>

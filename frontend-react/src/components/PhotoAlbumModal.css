@@ -16,11 +16,11 @@
 }
 
 .album-modal {
-    background: #1e2128;
+    background: #ffffff;
     border-radius: 8px;
     width: 520px;
     max-width: 92vw;
-    color: #e0e0e0;
+    color: #333330;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
     display: flex;
     flex-direction: column;
@@ -30,14 +30,14 @@
 .album-panel-content {
     width: 100%;
     height: 100%;
-    background: #1a1d23;
+    background: #ffffff;
     display: flex;
     flex-direction: column;
     overflow: hidden;
     border-radius: 0;
     box-shadow: none;
     position: relative;
-    color: #e0e0e0;
+    color: #333330;
 }
 
 /* --- Header --- */
@@ -46,8 +46,8 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    background: #22252d;
-    border-bottom: 1px solid rgba(255,255,255,0.06);
+    background: #ffffff;
+    border-bottom: 1px solid rgba(20, 20, 19,0.06);
     gap: 6px;
     flex-wrap: wrap;
 }
@@ -68,7 +68,7 @@
 .album-title-group h3 {
     font-size: 13px;
     font-weight: 600;
-    color: #ffffff;
+    color: #141413;
     margin: 0;
     white-space: nowrap;
     overflow: hidden;
@@ -76,7 +76,7 @@
 }
 
 .pin-id {
-    color: rgba(255,255,255,0.3);
+    color: rgba(20, 20, 19,0.3);
     font-size: 10px;
     font-weight: 400;
     display: block;
@@ -91,14 +91,14 @@
 
 /* --- Buttons --- */
 .upload-btn {
-    background: rgba(255,255,255,0.06);
-    color: #ccc;
+    background: rgba(20, 20, 19,0.06);
+    color: #52524d;
     padding: 5px 10px;
     border-radius: 4px;
     font-size: 11px;
     font-weight: 500;
     cursor: pointer;
-    border: 1px solid rgba(255,255,255,0.1);
+    border: 1px solid rgba(20, 20, 19,0.1);
     display: flex;
     align-items: center;
     gap: 4px;
@@ -106,22 +106,22 @@
 }
 
 .upload-btn:hover {
-    background: rgba(255,255,255,0.12);
-    color: #fff;
+    background: rgba(20, 20, 19,0.12);
+    color: #141413;
 }
 
 .album-close-btn {
     background: none;
     border: none;
     font-size: 18px;
-    color: rgba(255,255,255,0.4);
+    color: rgba(20, 20, 19,0.4);
     cursor: pointer;
     padding: 4px;
     line-height: 1;
 }
 
 .album-close-btn:hover {
-    color: #fff;
+    color: #141413;
 }
 
 .album-delete-btn {
@@ -134,7 +134,7 @@
 .album-filter-toggle {
     background: transparent;
     border: none;
-    color: rgba(255,255,255,0.4);
+    color: rgba(20, 20, 19,0.4);
     cursor: pointer;
     padding: 6px;
     border-radius: 4px;
@@ -144,23 +144,23 @@
 }
 
 .album-filter-toggle:hover {
-    background: rgba(255,255,255,0.06);
-    color: #fff;
+    background: rgba(20, 20, 19,0.06);
+    color: #141413;
 }
 
 .album-filter-toggle.active {
-    background: rgba(59, 130, 246, 0.15);
+    background: rgba(106, 155, 204, 0.15);
     color: var(--alephia-interactive-hover);
 }
 
 /* --- Filter Bar --- */
 .album-filter-bar {
-    background: #22252d;
+    background: #ffffff;
     padding: 8px 14px;
     display: flex;
     align-items: center;
     gap: 10px;
-    border-bottom: 1px solid rgba(255,255,255,0.06);
+    border-bottom: 1px solid rgba(20, 20, 19,0.06);
     flex-wrap: wrap;
 }
 
@@ -169,13 +169,13 @@
     gap: 4px;
     margin-right: 8px;
     padding-right: 10px;
-    border-right: 1px solid rgba(255,255,255,0.08);
+    border-right: 1px solid rgba(20, 20, 19,0.08);
 }
 
 .preset-btn {
-    background: rgba(255,255,255,0.06);
-    border: 1px solid rgba(255,255,255,0.1);
-    color: #aaa;
+    background: rgba(20, 20, 19,0.06);
+    border: 1px solid rgba(20, 20, 19,0.1);
+    color: #72706b;
     padding: 3px 8px;
     border-radius: 3px;
     font-size: 10px;
@@ -184,23 +184,23 @@
 }
 
 .preset-btn:hover {
-    background: rgba(255,255,255,0.12);
-    color: #fff;
+    background: rgba(20, 20, 19,0.12);
+    color: #141413;
 }
 
 .media-type-filter {
     display: flex;
-    background: rgba(255,255,255,0.04);
+    background: rgba(20, 20, 19,0.04);
     border-radius: 4px;
     padding: 2px;
     gap: 1px;
-    border: 1px solid rgba(255,255,255,0.08);
+    border: 1px solid rgba(20, 20, 19,0.08);
 }
 
 .media-btn {
     background: transparent;
     border: none;
-    color: rgba(255,255,255,0.5);
+    color: rgba(20, 20, 19,0.5);
     padding: 3px 10px;
     border-radius: 3px;
     font-size: 10px;
@@ -209,12 +209,12 @@
 }
 
 .media-btn:hover {
-    color: #fff;
+    color: #141413;
 }
 
 .media-btn.active {
-    background: rgba(59, 130, 246, 0.3);
-    color: #fff;
+    background: rgba(106, 155, 204, 0.3);
+    color: #141413;
 }
 
 .filter-group {
@@ -225,15 +225,15 @@
 
 .filter-group label {
     font-size: 10px;
-    color: rgba(255,255,255,0.4);
+    color: rgba(20, 20, 19,0.4);
     text-transform: uppercase;
     font-weight: 500;
 }
 
 .filter-group input[type="date"] {
-    background: rgba(255,255,255,0.06);
-    border: 1px solid rgba(255,255,255,0.1);
-    color: #ccc;
+    background: rgba(20, 20, 19,0.06);
+    border: 1px solid rgba(20, 20, 19,0.1);
+    color: #52524d;
     padding: 3px 6px;
     border-radius: 3px;
     font-size: 11px;
@@ -246,8 +246,8 @@
 
 .filter-clear-btn {
     background: transparent;
-    border: 1px solid rgba(255,255,255,0.1);
-    color: rgba(255,255,255,0.5);
+    border: 1px solid rgba(20, 20, 19,0.1);
+    color: rgba(20, 20, 19,0.5);
     padding: 3px 8px;
     border-radius: 3px;
     font-size: 10px;
@@ -255,14 +255,14 @@
 }
 
 .filter-clear-btn:hover {
-    background: rgba(255,255,255,0.06);
-    color: #fff;
+    background: rgba(20, 20, 19,0.06);
+    color: #141413;
 }
 
 .filter-results-count {
     margin-left: auto;
     font-size: 10px;
-    color: rgba(255,255,255,0.35);
+    color: rgba(20, 20, 19,0.35);
     font-weight: 400;
 }
 
@@ -273,9 +273,9 @@
 
 .album-search-input {
     width: 100%;
-    background: rgba(255,255,255,0.06);
-    border: 1px solid rgba(255,255,255,0.1);
-    color: #e0e0e0;
+    background: rgba(20, 20, 19,0.06);
+    border: 1px solid rgba(20, 20, 19,0.1);
+    color: #333330;
     padding: 5px 10px;
     border-radius: 4px;
     font-size: 12px;
@@ -287,7 +287,7 @@
 }
 
 .album-search-input::placeholder {
-    color: rgba(255,255,255,0.25);
+    color: rgba(20, 20, 19,0.25);
 }
 
 .text-btn {
@@ -317,22 +317,22 @@
     align-items: center;
     justify-content: center;
     padding: 32px;
-    border: 1px dashed rgba(255,255,255,0.1);
+    border: 1px dashed rgba(20, 20, 19,0.1);
     border-radius: 6px;
     margin: 12px 0;
-    background: rgba(255,255,255,0.02);
+    background: rgba(20, 20, 19,0.02);
 }
 
 .no-photos {
     text-align: center;
-    color: rgba(255,255,255,0.4);
+    color: rgba(20, 20, 19,0.4);
     font-size: 13px;
     margin-bottom: 4px;
 }
 
 .hint {
     text-align: center;
-    color: rgba(255,255,255,0.25);
+    color: rgba(20, 20, 19,0.25);
     font-size: 11px;
 }
 
@@ -344,14 +344,14 @@
 .timeline-header {
     position: sticky;
     top: -14px;
-    background: #1a1d23;
+    background: #ffffff;
     padding: 6px 0;
     margin: 0 0 10px 0;
     font-size: 11px;
     font-weight: 600;
-    color: rgba(255,255,255,0.5);
+    color: rgba(20, 20, 19,0.5);
     text-transform: capitalize;
-    border-left: 2px solid rgba(255,255,255,0.15);
+    border-left: 2px solid rgba(20, 20, 19,0.15);
     padding-left: 10px;
     z-index: 5;
 }
@@ -369,12 +369,12 @@
     overflow: hidden;
     position: relative;
     aspect-ratio: 4/3;
-    background: rgba(255,255,255,0.04);
-    border: 1px solid rgba(255,255,255,0.06);
+    background: rgba(20, 20, 19,0.04);
+    border: 1px solid rgba(20, 20, 19,0.06);
 }
 
 .photo-item:hover {
-    border-color: rgba(255,255,255,0.15);
+    border-color: rgba(20, 20, 19,0.15);
 }
 
 .photo-item img,
@@ -400,7 +400,7 @@
     left: 50%;
     transform: translate(-50%, -50%);
     background: rgba(0, 0, 0, 0.5);
-    color: #fff;
+    color: #141413;
     width: 28px;
     height: 28px;
     border-radius: 50%;
@@ -416,8 +416,8 @@
     bottom: 0;
     left: 0;
     right: 0;
-    background: linear-gradient(transparent, rgba(0, 0, 0, 0.7));
-    color: #fff;
+    background: linear-gradient(transparent, rgba(255, 255, 255, 0.7));
+    color: #141413;
     padding: 16px 6px 4px;
     display: flex;
     flex-direction: column;
@@ -430,20 +430,20 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    color: rgba(255,255,255,0.85);
+    color: rgba(20, 20, 19,0.85);
 }
 
 .p-date-text {
     font-size: 9px;
-    color: rgba(255,255,255,0.4);
+    color: rgba(20, 20, 19,0.4);
     font-weight: 400;
 }
 
 /* --- Title Edit --- */
 .album-title-input {
-    background: rgba(255,255,255,0.06);
+    background: rgba(20, 20, 19,0.06);
     border: 1px solid var(--alephia-interactive);
-    color: #fff;
+    color: #141413;
     font-size: 13px;
     font-weight: 600;
     padding: 2px 8px;
@@ -468,7 +468,7 @@
 .confirm-btn {
     background: var(--alephia-interactive);
     border: none;
-    color: white;
+    color: var(--alephia-on-interactive, #141413);
     padding: 2px 8px;
     border-radius: 3px;
     cursor: pointer;
@@ -477,7 +477,7 @@
 }
 
 .confirm-btn:hover {
-    background: #2563eb;
+    background: #507294;
 }
 
 /* --- Toast Animation --- */

@@ -91,9 +91,9 @@ const ToolBtn = ({ icon, onClick, active, title }) => (
         onClick={onClick}
         title={title}
         style={{
-            background: active ? '#32363e' : 'transparent',
+            background: active ? '#e8e6dc' : 'transparent',
             border: 'none',
-            color: active ? '#7e9bbd' : '#888',
+            color: active ? '#507294' : '#72706b',
             cursor: 'pointer',
             padding: '4px 6px',
             display: 'flex',
@@ -102,10 +102,10 @@ const ToolBtn = ({ icon, onClick, active, title }) => (
             borderRadius: '4px',
             transition: 'color 0.15s, background 0.15s'
         }}
-        onMouseEnter={(e) => { e.currentTarget.style.color = '#fff'; e.currentTarget.style.background = '#32363e'; }}
+        onMouseEnter={(e) => { e.currentTarget.style.color = '#141413'; e.currentTarget.style.background = '#e8e6dc'; }}
         onMouseLeave={(e) => {
-            e.currentTarget.style.color = active ? '#7e9bbd' : '#888';
-            e.currentTarget.style.background = active ? '#32363e' : 'transparent';
+            e.currentTarget.style.color = active ? '#6a9bcc' : '#918f88';
+            e.currentTarget.style.background = active ? '#333330' : 'transparent';
         }}
     >
         {icon}
@@ -131,19 +131,19 @@ const InventoryRow = memo(({ row, columns, index, onRowClick, isHighlighted, top
             style={{
                 position: 'absolute', top, left: 0, display: 'inline-flex', 
                 minWidth: '100%',
-                borderBottom: '1px solid #32363e', alignItems: 'center',
+                borderBottom: '1px solid #e8e6dc', alignItems: 'center',
                 fontSize: '12px', height: `${ROW_HEIGHT}px`,
                 // El fondo NO va aquí: un estilo en línea gana siempre a una
                 // hoja, y sin hoja no hay `:hover`. Vive en App.css, por clases,
                 // para que pasar el ratón sombree la fila y se sepa dónde estás.
-                color: isHighlighted ? '#fff' : '#d1d5db',
+                color: isHighlighted ? '#141413' : '#52524d',
                 cursor: 'pointer', userSelect: 'none', transition: 'background 0.1s ease',
                 opacity: row._isSaving ? 0.6 : 1
             }}
             onClick={() => { if(!editingCol) onRowClick(row.dbId, row.source_urn || row.model_urn, inventoryRowKey(row)); }}
         >
-            <div style={{ width: '40px', flexShrink: 0, padding: '0 4px', color: '#666', borderRight: '1px solid #32363e', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '2px' }}>
-                <input type="checkbox" checked={!!isChecked} onChange={(e) => { e.stopPropagation(); onToggleCheck(inventoryRowKey(row)); }} onClick={e => e.stopPropagation()} style={{ accentColor: '#7e9bbd', cursor: 'pointer', width: '13px', height: '13px', margin: 0 }} />
+            <div style={{ width: '40px', flexShrink: 0, padding: '0 4px', color: '#72706b', borderRight: '1px solid #e8e6dc', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '2px' }}>
+                <input type="checkbox" checked={!!isChecked} onChange={(e) => { e.stopPropagation(); onToggleCheck(inventoryRowKey(row)); }} onClick={e => e.stopPropagation()} style={{ accentColor: '#6a9bcc', cursor: 'pointer', width: '13px', height: '13px', margin: 0 }} />
                 <span style={{ fontSize: '10px', minWidth: '18px', textAlign: 'right' }}>{index + 1}</span>
             </div>
             {columns.map(col => {
@@ -153,7 +153,7 @@ const InventoryRow = memo(({ row, columns, index, onRowClick, isHighlighted, top
                 return (
                     <div 
                         key={col.key} 
-                        style={{ width: col.width, flexShrink: 0, padding: isEditing?'0':'0 12px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', borderRight: '1px solid #32363e', height: '100%', display: 'flex', alignItems: 'center' }} 
+                        style={{ width: col.width, flexShrink: 0, padding: isEditing?'0':'0 12px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', borderRight: '1px solid #e8e6dc', height: '100%', display: 'flex', alignItems: 'center' }} 
                         onDoubleClick={(e) => {
                             // TANDEM PARITY: Solo permitimos editar propiedades extendidas de Facility (Data gemelo), los datos Nativos de Revit son READ-ONLY (Volumen, Area, etc).
                             // Por enlace compartido se MIRA, no se edita. Sin esto la
@@ -169,7 +169,7 @@ const InventoryRow = memo(({ row, columns, index, onRowClick, isHighlighted, top
                         }}
                     >
                         {isEditing ? (
-                            <input ref={inputRef} type="text" style={{ width: '100%', height: '100%', background: '#7e9bbd', color: '#fff', border: 'none', padding: '0 12px', outline: 'none', fontSize: '12.5px' }}
+                            <input ref={inputRef} type="text" style={{ width: '100%', height: '100%', background: '#507294', color: '#ffffff', border: 'none', padding: '0 12px', outline: 'none', fontSize: '12.5px' }}
                                 value={editValue} onChange={(e) => setEditValue(e.target.value)}
                                 onBlur={() => { if(editValue !== displayText) onCellEdit(row, col.key, editValue); setEditingCol(null); }}
                                 onKeyDown={(e) => {
@@ -814,12 +814,12 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
 
     // ESTILO GENERAL DE LA APP:
     return (
-        <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: '#16161a', color: '#e8e8e8', fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif', opacity: 0.95 }}>
+        <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: '#faf9f5', color: '#333330', fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif', opacity: 0.95 }}>
             
             {/* Header / Tabs - Top Level (Como Tandem) */}
-            <div style={{ display: 'flex', background: '#23242a', height: '35px', alignItems: 'flex-end', padding: '0 20px', borderBottom: '1px solid #2a2b30', justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', background: '#ffffff', height: '35px', alignItems: 'flex-end', padding: '0 20px', borderBottom: '1px solid #e8e6dc', justifyContent: 'space-between' }}>
                 <div style={{ display: 'flex', alignItems: 'flex-end', gap: '20px' }}>
-                    <div style={{ fontSize: '11px', textTransform: 'uppercase', color: '#ccc', fontWeight: 600, paddingBottom: '10px', letterSpacing: '0.8px', borderRight: '1px solid #444', paddingRight: '20px' }}>
+                    <div style={{ fontSize: '11px', textTransform: 'uppercase', color: '#52524d', fontWeight: 600, paddingBottom: '10px', letterSpacing: '0.8px', borderRight: '1px solid #cccac0', paddingRight: '20px' }}>
                         Inventory
                     </div>
                     {/* Tabs */}
@@ -831,8 +831,8 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
                                 style={{
                                     padding: '8px 16px',
                                     fontSize: '13px',
-                                    color: activeTab === tab ? '#fff' : '#aaa',
-                                    borderBottom: activeTab === tab ? '2px solid #5591f5' : '2px solid transparent',
+                                    color: activeTab === tab ? '#141413' : '#72706b',
+                                    borderBottom: activeTab === tab ? '2px solid #6a9bcc' : '2px solid transparent',
                                     cursor: 'pointer',
                                     transition: 'color 0.2s',
                                     marginBottom: '-1px'
@@ -846,11 +846,11 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
 
                 {/* Window Controls (Undock / Close) */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '15px', paddingBottom: '8px' }}>
-                    <button style={{ background:'none', border:'none', color:'#888', cursor:'pointer' }} title="Open in a new window" onClick={() => {
+                    <button style={{ background:'none', border:'none', color:'#72706b', cursor:'pointer' }} title="Open in a new window" onClick={() => {
                         openInventoryFilterPopout({ host:window,scopeId:activeModelUrn,columns,
                             assetsOnly:showAssetsOnly,selection:activeSelectionFilter||isolatedExtIds,onClose });
                     }}><Icons.Undock/></button>
-                    <button style={{ background:'none', border:'none', color:'#888', cursor:'pointer' }} onClick={() => onClose ? onClose() : window.dispatchEvent(new CustomEvent('close-inventory'))} title="Close panel"><Icons.Close/></button>
+                    <button style={{ background:'none', border:'none', color:'#72706b', cursor:'pointer' }} onClick={() => onClose ? onClose() : window.dispatchEvent(new CustomEvent('close-inventory'))} title="Close panel"><Icons.Close/></button>
                 </div>
             </div>
 
@@ -864,7 +864,7 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
                 {filterProgress?.phase === 'paused' ? ' · Aplicación visual pausada: ' + filterProgress.owner : ''}
             </div>
             {/* Toolbar (Filters, Columns, Group rows...) */}
-            <div style={{ display: 'flex', background: '#1c1d22', minHeight: '36px', alignItems: 'center', padding: '0 12px', borderBottom: checkedIds.size > 0 ? 'none' : '1px solid #252630', gap: '12px' }}>
+            <div style={{ display: 'flex', background: '#ffffff', minHeight: '36px', alignItems: 'center', padding: '0 12px', borderBottom: checkedIds.size > 0 ? 'none' : '1px solid #e8e6dc', gap: '12px' }}>
                 <div style={{ display: 'flex', alignItems: 'center' }}>
                     <ToolBtn icon={<Icons.Filter />} />
                     <ToolBtn icon={<Icons.Columns />} onClick={() => setColumnConfigOpen(true)} />
@@ -880,28 +880,28 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
                                 <div style={{ position: 'fixed', inset: 0, zIndex: 60 }} onClick={() => setGroupMenuOpen(false)} />
                                 <div style={{
                                     position: 'absolute', top: '30px', left: 0, zIndex: 61, minWidth: '240px', maxHeight: '340px', overflowY: 'auto',
-                                    background: '#1c1d22', border: '1px solid #333', borderRadius: '6px', boxShadow: '0 8px 24px rgba(0,0,0,.5)', padding: '6px'
+                                    background: '#ffffff', border: '1px solid #e8e6dc', borderRadius: '6px', boxShadow: '0 8px 24px rgba(0,0,0,.5)', padding: '6px'
                                 }}>
-                                    <div style={{ fontSize: '10.5px', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '.5px', padding: '4px 8px' }}>Agrupar por</div>
+                                    <div style={{ fontSize: '10.5px', color: '#72706b', textTransform: 'uppercase', letterSpacing: '.5px', padding: '4px 8px' }}>Agrupar por</div>
                                     <div
                                         onClick={() => { setGroupByKey(null); setGroupMenuOpen(false); }}
-                                        style={{ padding: '6px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '12.5px', color: !groupByKey ? '#7e9bbd' : '#d1d5db', background: !groupByKey ? 'rgba(126,155,189,.12)' : 'transparent' }}
+                                        style={{ padding: '6px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '12.5px', color: !groupByKey ? '#507294' : '#52524d', background: !groupByKey ? 'rgba(106,155,204,.12)' : 'transparent' }}
                                     >Sin agrupar</div>
                                     {detectedGroupKey && (
                                         <div
                                             onClick={() => { setGroupByKey(detectedGroupKey); setCollapsedGroups(new Set()); setGroupMenuOpen(false); }}
-                                            style={{ padding: '6px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '12.5px', display: 'flex', alignItems: 'center', gap: '6px', color: groupByKey === detectedGroupKey ? '#7e9bbd' : '#d1d5db', background: groupByKey === detectedGroupKey ? 'rgba(126,155,189,.12)' : 'transparent' }}
+                                            style={{ padding: '6px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '12.5px', display: 'flex', alignItems: 'center', gap: '6px', color: groupByKey === detectedGroupKey ? '#507294' : '#52524d', background: groupByKey === detectedGroupKey ? 'rgba(106,155,204,.12)' : 'transparent' }}
                                         >
-                                            <span style={{ fontSize: '9px', fontWeight: 700, background: '#2d8fa5', color: '#fff', padding: '1px 5px', borderRadius: '3px' }}>AUTO</span>
+                                            <span style={{ fontSize: '9px', fontWeight: 700, background: '#507294', color: '#ffffff', padding: '1px 5px', borderRadius: '3px' }}>AUTO</span>
                                             {detectedGroupKey}
                                         </div>
                                     )}
-                                    <div style={{ height: '1px', background: '#2f333c', margin: '4px 0' }} />
+                                    <div style={{ height: '1px', background: '#e8e6dc', margin: '4px 0' }} />
                                     {(allPropertyKeys || []).filter(k => k !== detectedGroupKey && k !== 'Name').map(k => (
                                         <div
                                             key={k}
                                             onClick={() => { setGroupByKey(k); setCollapsedGroups(new Set()); setGroupMenuOpen(false); }}
-                                            style={{ padding: '6px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '12.5px', color: groupByKey === k ? '#7e9bbd' : '#d1d5db', background: groupByKey === k ? 'rgba(126,155,189,.12)' : 'transparent', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+                                            style={{ padding: '6px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '12.5px', color: groupByKey === k ? '#507294' : '#52524d', background: groupByKey === k ? 'rgba(106,155,204,.12)' : 'transparent', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
                                         >{k}</div>
                                     ))}
                                 </div>
@@ -910,16 +910,16 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
                     </div>
                 </div>
                 
-                <div style={{ width: '1px', height: '16px', background: '#444' }} />
+                <div style={{ width: '1px', height: '16px', background: '#cccac0' }} />
                 
                 {/* View Options */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '16px', fontSize: '12.5px', color: '#d1d5db' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '16px', fontSize: '12.5px', color: '#52524d' }}>
                     <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
-                        <input type="checkbox" checked={showAssetsOnly} onChange={(e) => setShowAssetsOnly(e.target.checked)} style={{ accentColor: '#4f83e8' }} />
+                        <input type="checkbox" checked={showAssetsOnly} onChange={(e) => setShowAssetsOnly(e.target.checked)} style={{ accentColor: '#6a9bcc' }} />
                         Assets only
                     </label>
                     <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
-                        <input type="checkbox" checked={followSelection} onChange={(e) => setFollowSelection(e.target.checked)} style={{ accentColor: '#4f83e8' }} />
+                        <input type="checkbox" checked={followSelection} onChange={(e) => setFollowSelection(e.target.checked)} style={{ accentColor: '#6a9bcc' }} />
                         Follow selection
                     </label>
                 </div>
@@ -947,14 +947,14 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
                             && [...mergedSyncIds].every(id => (activeSelectionFilter || isolatedExtIds)?.has(id));
 
                         return (
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '2px', marginRight: '4px', borderRight: '1px solid #333', paddingRight: '8px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '2px', marginRight: '4px', borderRight: '1px solid #e8e6dc', paddingRight: '8px' }}>
                                 {!isFiltered ? (
                                     <button
                                         onClick={() => setActiveSelectionFilter(mergedSyncIds)}
                                         style={{
                                             background: 'transparent',
                                             border: 'none',
-                                            color: '#aaa',
+                                            color: '#72706b',
                                             padding: '4px 8px',
                                             borderRadius: '4px',
                                             fontSize: '11.5px',
@@ -964,8 +964,8 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
                                             gap: '6px',
                                             transition: 'all 0.2s'
                                         }}
-                                        onMouseEnter={e => { e.currentTarget.style.color = '#fff'; e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.08)'; }}
-                                        onMouseLeave={e => { e.currentTarget.style.color = '#aaa'; e.currentTarget.style.backgroundColor = 'transparent'; }}
+                                        onMouseEnter={e => { e.currentTarget.style.color = '#141413'; e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.08)'; }}
+                                        onMouseLeave={e => { e.currentTarget.style.color = '#72706b'; e.currentTarget.style.backgroundColor = 'transparent'; }}
                                         title="Sync inventory with selection (3D + checkboxes)"
                                     >
                                         <Icons.Sync /> Sync ({mergedSyncIds.size})
@@ -980,7 +980,7 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
                                             style={{
                                                 background: 'transparent',
                                                 border: 'none',
-                                                color: (!mergedSyncIds || isSyncDisabled) ? '#7e9bbd' : '#aaa',
+                                                color: (!mergedSyncIds || isSyncDisabled) ? '#507294' : '#72706b',
                                                 padding: '4px 8px',
                                                 borderRadius: '4px',
                                                 fontSize: '11.5px',
@@ -992,13 +992,13 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
                                             }}
                                             onMouseEnter={e => { 
                                                 if (mergedSyncIds && !isSyncDisabled) {
-                                                    e.currentTarget.style.color = '#fff';
+                                                    e.currentTarget.style.color = '#141413';
                                                     e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.08)';
                                                 }
                                             }}
                                             onMouseLeave={e => { 
                                                 if (mergedSyncIds && !isSyncDisabled) {
-                                                    e.currentTarget.style.color = '#aaa';
+                                                    e.currentTarget.style.color = '#72706b';
                                                     e.currentTarget.style.backgroundColor = 'transparent';
                                                 }
                                             }}
@@ -1009,10 +1009,10 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
                                         {activeSelectionFilter !== null && (
                                             <button
                                                 onClick={() => setActiveSelectionFilter(null)}
-                                                style={{ background: 'none', border: 'none', color: '#888', cursor: 'pointer', padding: '4px', display: 'flex', borderRadius: '4px', transition: 'all 0.2s' }}
+                                                style={{ background: 'none', border: 'none', color: '#72706b', cursor: 'pointer', padding: '4px', display: 'flex', borderRadius: '4px', transition: 'all 0.2s' }}
                                                 title="Clear Selection Filter"
                                                 onMouseEnter={e => { e.currentTarget.style.color = '#ef5350'; e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.08)'; }}
-                                                onMouseLeave={e => { e.currentTarget.style.color = '#888'; e.currentTarget.style.backgroundColor = 'transparent'; }}
+                                                onMouseLeave={e => { e.currentTarget.style.color = '#72706b'; e.currentTarget.style.backgroundColor = 'transparent'; }}
                                             >
                                                 <Icons.Close />
                                             </button>
@@ -1024,17 +1024,17 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
                     })()}
                     <button 
                         onClick={handleExportExcel}
-                        style={{ background: 'none', border: '1px solid #444', color: '#ccc', padding: '4px 10px', fontSize: '11.5px', borderRadius: '4px', cursor: 'pointer', transition: 'all 0.2s', display: 'flex', alignItems: 'center', gap: '6px' }}
-                        onMouseEnter={e => { e.currentTarget.style.color = '#fff'; e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.08)'; }}
-                        onMouseLeave={e => { e.currentTarget.style.color = '#ccc'; e.currentTarget.style.backgroundColor = 'transparent'; }}
+                        style={{ background: 'none', border: '1px solid #cccac0', color: '#52524d', padding: '4px 10px', fontSize: '11.5px', borderRadius: '4px', cursor: 'pointer', transition: 'all 0.2s', display: 'flex', alignItems: 'center', gap: '6px' }}
+                        onMouseEnter={e => { e.currentTarget.style.color = '#141413'; e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.08)'; }}
+                        onMouseLeave={e => { e.currentTarget.style.color = '#52524d'; e.currentTarget.style.backgroundColor = 'transparent'; }}
                     >
                         <Icons.ExportAction /> Export Excel
                     </button>
                     <button 
                         onClick={() => setTotalsPickerOpen(true)}
-                        style={{ background: 'none', border: '1px solid #444', color: totalColumns.size > 0 ? '#7e9bbd' : '#ccc', padding: '4px 10px', fontSize: '11.5px', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', transition: 'all 0.2s' }}
-                        onMouseEnter={e => { e.currentTarget.style.color = '#fff'; e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.08)'; }}
-                        onMouseLeave={e => { e.currentTarget.style.color = totalColumns.size > 0 ? '#7e9bbd' : '#ccc'; e.currentTarget.style.backgroundColor = 'transparent'; }}
+                        style={{ background: 'none', border: '1px solid #cccac0', color: totalColumns.size > 0 ? '#507294' : '#52524d', padding: '4px 10px', fontSize: '11.5px', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', transition: 'all 0.2s' }}
+                        onMouseEnter={e => { e.currentTarget.style.color = '#141413'; e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.08)'; }}
+                        onMouseLeave={e => { e.currentTarget.style.color = totalColumns.size > 0 ? '#6a9bcc' : '#cccac0'; e.currentTarget.style.backgroundColor = 'transparent'; }}
                         title="Configure Column Totals"
                     >
                         <Icons.Sigma /> Totals {totalColumns.size > 0 ? `(${totalColumns.size})` : ''}
@@ -1042,10 +1042,10 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
                     {totalColumns.size > 0 && (
                         <button 
                             onClick={() => setTotalColumns(new Set())}
-                            style={{ background: 'none', border: 'none', color: '#888', cursor: 'pointer', padding: '4px', display: 'flex', borderRadius: '4px', transition: 'all 0.2s' }}
+                            style={{ background: 'none', border: 'none', color: '#72706b', cursor: 'pointer', padding: '4px', display: 'flex', borderRadius: '4px', transition: 'all 0.2s' }}
                             title="Clear Totals"
                             onMouseEnter={e => { e.currentTarget.style.color = '#ef5350'; e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.08)'; }}
-                            onMouseLeave={e => { e.currentTarget.style.color = '#888'; e.currentTarget.style.backgroundColor = 'transparent'; }}
+                            onMouseLeave={e => { e.currentTarget.style.color = '#72706b'; e.currentTarget.style.backgroundColor = 'transparent'; }}
                         >
                             <Icons.Close />
                         </button>
@@ -1062,17 +1062,17 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
                 if (!bulkTargetIds) return null;
                 return (
                 <div style={{
-                    display: 'flex', background: '#1a2332', minHeight: '34px', alignItems: 'center',
-                    padding: '0 12px', borderBottom: '1px solid #252630', gap: '8px',
+                    display: 'flex', background: '#ffffff', minHeight: '34px', alignItems: 'center',
+                    padding: '0 12px', borderBottom: '1px solid #e8e6dc', gap: '8px',
                     animation: 'fadeIn 0.15s ease-out'
                 }}>
-                    <span style={{ fontSize: '11px', color: '#7e9bbd', fontWeight: 600, whiteSpace: 'nowrap' }}>{bulkTargetIds.size} sel.{checkedIds.size === 0 ? ' (3D)' : ''}</span>
-                    <div style={{ width: '1px', height: '16px', background: '#333' }} />
+                    <span style={{ fontSize: '11px', color: '#507294', fontWeight: 600, whiteSpace: 'nowrap' }}>{bulkTargetIds.size} sel.{checkedIds.size === 0 ? ' (3D)' : ''}</span>
+                    <div style={{ width: '1px', height: '16px', background: '#e8e6dc' }} />
                     <select
                         value={bulkField}
                         onChange={e => setBulkField(e.target.value)}
                         style={{
-                            background: '#2a2d33', border: '1px solid #555', color: '#e0e0e0',
+                            background: '#f1f0e8', border: '1px solid #cccac0', color: '#333330',
                             padding: '3px 6px', fontSize: '11px', borderRadius: '3px', outline: 'none',
                             maxWidth: '120px', cursor: 'pointer'
                         }}
@@ -1091,7 +1091,7 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
                             placeholder="Nombre del campo"
                             title="Crea tu propio parámetro (ej. Responsable, Frente, Prioridad)"
                             style={{
-                                background: '#1a1c22', border: '1px solid #7e9bbd', color: '#fff',
+                                background: '#ffffff', border: '1px solid #6a9bcc', color: '#141413',
                                 padding: '3px 8px', fontSize: '11px', borderRadius: '3px', outline: 'none',
                                 width: '120px'
                             }}
@@ -1104,7 +1104,7 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
                         placeholder="Valor..."
                         onKeyDown={e => { if (e.key === 'Enter' && bulkValue.trim()) document.getElementById('bulk-apply-btn')?.click(); }}
                         style={{
-                            background: '#1a1c22', border: '1px solid #555', color: '#fff',
+                            background: '#ffffff', border: '1px solid #cccac0', color: '#141413',
                             padding: '3px 8px', fontSize: '11px', borderRadius: '3px', outline: 'none',
                             width: '120px'
                         }}
@@ -1163,14 +1163,14 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
                             cursor: (bulkAssigning || !bulkValue.trim()) ? 'not-allowed' : 'pointer',
                             display: 'flex', alignItems: 'center', gap: '4px',
                             fontWeight: 600, transition: 'all 0.2s', whiteSpace: 'nowrap',
-                            boxShadow: (bulkAssigning || !bulkValue.trim()) ? 'none' : '0 2px 8px rgba(58,160,255,0.3)'
+                            boxShadow: (bulkAssigning || !bulkValue.trim()) ? 'none' : '0 2px 8px rgba(106,155,204,0.3)'
                         }}
                     >
                         {bulkAssigning ? '...' : '▶'} Aplicar
                     </button>
                     <button
                         onClick={() => { setCheckedIds(new Set()); setLocalSelIds(null); }}
-                        style={{ background: 'none', border: 'none', color: '#888', cursor: 'pointer', padding: '4px', display: 'flex', borderRadius: '4px' }}
+                        style={{ background: 'none', border: 'none', color: '#72706b', cursor: 'pointer', padding: '4px', display: 'flex', borderRadius: '4px' }}
                         title="Clear selection"
                     >
                         <Icons.Close />
@@ -1180,7 +1180,7 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
             })()}
 
             {/* Sub-header Summary */}
-            <div style={{ padding: '6px 12px', background: '#18191e', fontSize: '11px', color: '#7a808b', borderBottom: '1px solid #252630', display: 'flex', justifyContent: 'space-between' }}>
+            <div style={{ padding: '6px 12px', background: '#ffffff', fontSize: '11px', color: '#72706b', borderBottom: '1px solid #e8e6dc', display: 'flex', justifyContent: 'space-between' }}>
                  <span>Showing {flattenedData.length.toLocaleString()} items {window._lastHasActiveFilters ? '(Filtered)' : ''}</span>
             </div>
             
@@ -1202,15 +1202,15 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
                         ref={headerRef}
                         style={{ 
                             // La cabecera NO puede ser más apagada que el dato que rotula.
-                            // Estaba en #999 con las celdas en #d1d5db, o sea al revés que
-                            // en Tandem (cabecera #dcdcdc sobre celdas #999).
-                            display: 'flex', background: '#1e1f24', height: '34px', alignItems: 'center',
-                            fontSize: '12px', fontWeight: 600, color: '#dcdcdc', flexShrink: 0,
-                            borderBottom: '1px solid #2a2b30',
+                            // Estaba en #918f88 con las celdas en #cccac0, o sea al revés que
+                            // en Tandem (cabecera #e8e6dc sobre celdas #918f88).
+                            display: 'flex', background: '#ffffff', height: '34px', alignItems: 'center',
+                            fontSize: '12px', fontWeight: 600, color: '#333330', flexShrink: 0,
+                            borderBottom: '1px solid #e8e6dc',
                             position: 'sticky', top: 0, zIndex: 2
                         }}
                     >
-                        <div style={{ width: '40px', flexShrink: 0, borderRight: '1px solid #333', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <div style={{ width: '40px', flexShrink: 0, borderRight: '1px solid #e8e6dc', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                             <input 
                                 type="checkbox" 
                                 checked={checkedIds.size > 0 && checkedIds.size === flattenedData.length}
@@ -1222,7 +1222,7 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
                                         setCheckedIds(new Set(flattenedData.map(inventoryRowKey)));
                                     }
                                 }}
-                                style={{ accentColor: '#7e9bbd', cursor: 'pointer', width: '13px', height: '13px', margin: 0 }}
+                                style={{ accentColor: '#6a9bcc', cursor: 'pointer', width: '13px', height: '13px', margin: 0 }}
                                 title={checkedIds.size === flattenedData.length ? 'Deselect all' : `Select all ${flattenedData.length} items`}
                             />
                         </div>
@@ -1240,7 +1240,7 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
                                     height: '100%',
                                     display: 'flex',
                                     alignItems: 'center',
-                                    borderRight: '1px solid #333',
+                                    borderRight: '1px solid #e8e6dc',
                                     position: 'relative'
                                 }}
                             >
@@ -1261,14 +1261,14 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
                                             cx={20 + 14 * Math.cos((i * Math.PI * 2) / 8)}
                                             cy={20 + 14 * Math.sin((i * Math.PI * 2) / 8)}
                                             r={2.2 + (i * 0.35)}
-                                            fill="#7e9bbd"
+                                            fill="#6a9bcc"
                                             opacity={0.25 + (i * 0.1)}
                                         />
                                     ))}
                                 </svg>
                                 <style>{`@keyframes inv-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
                             </div>
-                            <span style={{ color: '#7a808b', fontSize: '12px', letterSpacing: '0.5px' }}>Loading inventory data...</span>
+                            <span style={{ color: '#72706b', fontSize: '12px', letterSpacing: '0.5px' }}>Loading inventory data...</span>
                         </div>
                     ) : flattenedData.length > 0 ? (
                         <div style={{ height: `${totalHeight}px`, position: 'relative' }}>
@@ -1284,14 +1284,14 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
                                         position: 'absolute', top: `${top}px`, left: 0, height: `${ROW_HEIGHT}px`,
                                         width: `${totalContentWidth}px`, display: 'flex', alignItems: 'center', gap: '8px',
                                         padding: '0 12px', boxSizing: 'border-box', cursor: 'pointer',
-                                        background: '#22252c', borderBottom: '1px solid #2f333c', borderTop: '1px solid #2f333c',
-                                        color: '#cfd6e0', fontSize: '12px', fontWeight: 700, zIndex: 1
+                                        background: '#ffffff', borderBottom: '1px solid #e8e6dc', borderTop: '1px solid #e8e6dc',
+                                        color: '#52524d', fontSize: '12px', fontWeight: 700, zIndex: 1
                                     }}
                                     title={`${groupByKey}: ${item.value}`}
                                 >
-                                    <span style={{ display: 'inline-block', transform: collapsedGroups.has(item.value) ? 'rotate(-90deg)' : 'none', transition: 'transform .1s', color: '#7e9bbd' }}>▾</span>
-                                    <span style={{ color: '#7e9bbd' }}>{item.value}</span>
-                                    <span style={{ color: '#6b7280', fontWeight: 500 }}>· {item.count}</span>
+                                    <span style={{ display: 'inline-block', transform: collapsedGroups.has(item.value) ? 'rotate(-90deg)' : 'none', transition: 'transform .1s', color: '#507294' }}>▾</span>
+                                    <span style={{ color: '#507294' }}>{item.value}</span>
+                                    <span style={{ color: '#72706b', fontWeight: 500 }}>· {item.count}</span>
                                 </div>
                             ) : (
                                 <InventoryRow
@@ -1309,7 +1309,7 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
                             ))}
                         </div>
                     ) : (
-                        <div style={{ padding: '60px 20px', color: '#555', textAlign: 'center', fontSize: '14px' }}>
+                        <div style={{ padding: '60px 20px', color: '#52524d', textAlign: 'center', fontSize: '14px' }}>
                             {window._lastHasActiveFilters ? 'No items match the current filter.' : 'Seleccione propiedades en Filters para poblar la tabla...'}
                         </div>
                     )}
@@ -1318,17 +1318,17 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
                     {totalColumns.size > 0 && flattenedData.length > 0 && (
                         <div style={{ 
                             display: 'flex', 
-                            background: 'repeating-linear-gradient(45deg, #1a1b20, #1a1b20 10px, #22252a 10px, #22252a 20px)',
-                            borderTop: '1px solid #333',
-                            alignItems: 'center', fontSize: '12px', fontWeight: 600, color: '#7e9bbd', flexShrink: 0, height: '34px',
+                            background: 'repeating-linear-gradient(45deg, #ffffff, #ffffff 10px, #ffffff 10px, #ffffff 20px)',
+                            borderTop: '1px solid #e8e6dc',
+                            alignItems: 'center', fontSize: '12px', fontWeight: 600, color: '#507294', flexShrink: 0, height: '34px',
                             position: 'sticky', bottom: 0, zIndex: 2
                         }}>
-                            <div style={{ width: '40px', flexShrink: 0, borderRight: '1px solid #333', display: 'flex', justifyContent: 'center' }}>
+                            <div style={{ width: '40px', flexShrink: 0, borderRight: '1px solid #e8e6dc', display: 'flex', justifyContent: 'center' }}>
                                 Σ
                             </div>
                             {columns.map(col => {
                                 if (!totalColumns.has(col.key)) {
-                                    return <div key={col.key} style={{ width: col.width, flexShrink: 0, padding: '0 12px', borderRight: '1px solid #333' }} />;
+                                    return <div key={col.key} style={{ width: col.width, flexShrink: 0, padding: '0 12px', borderRight: '1px solid #e8e6dc' }} />;
                                 }
                                 const sum = flattenedData.reduce((acc, row) => {
                                     const val = parseNumericCell(row[col.key]);
@@ -1338,7 +1338,7 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
                                 return (
                                     <div key={col.key} style={{ 
                                         width: col.width, flexShrink: 0, padding: '0 12px', 
-                                        borderRight: '1px solid #333', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' 
+                                        borderRight: '1px solid #e8e6dc', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' 
                                     }}>
                                         {sum.toLocaleString(undefined, { maximumFractionDigits: 2 })}
                                     </div>
@@ -1377,22 +1377,22 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
                     onClick={(e) => { if (e.target === e.currentTarget) setTotalsPickerOpen(false); }}
                 >
                     <div style={{
-                        background: '#2a2a2e', border: '1px solid #444', borderRadius: '8px',
+                        background: '#f1f0e8', border: '1px solid #cccac0', borderRadius: '8px',
                         boxShadow: '0 8px 32px rgba(0,0,0,0.6)', width: '380px', maxHeight: '70vh',
                         display: 'flex', flexDirection: 'column', overflow: 'hidden'
                     }}>
                         {/* Header */}
                         <div style={{ 
-                            padding: '16px 20px', borderBottom: '1px solid #444', 
+                            padding: '16px 20px', borderBottom: '1px solid #cccac0', 
                             display: 'flex', justifyContent: 'space-between', alignItems: 'center' 
                         }}>
                             <div>
-                                <div style={{ fontSize: '14px', fontWeight: 600, color: '#fff' }}>Column Totals</div>
-                                <div style={{ fontSize: '11px', color: '#888', marginTop: '2px' }}>Select columns to show sums in the footer</div>
+                                <div style={{ fontSize: '14px', fontWeight: 600, color: '#141413' }}>Column Totals</div>
+                                <div style={{ fontSize: '11px', color: '#72706b', marginTop: '2px' }}>Select columns to show sums in the footer</div>
                             </div>
                             <button 
                                 onClick={() => setTotalsPickerOpen(false)} 
-                                style={{ background: 'none', border: 'none', color: '#aaa', cursor: 'pointer', padding: '4px' }}
+                                style={{ background: 'none', border: 'none', color: '#72706b', cursor: 'pointer', padding: '4px' }}
                             ><Icons.Close /></button>
                         </div>
 
@@ -1420,39 +1420,39 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
                                             padding: '10px 20px', display: 'flex', alignItems: 'center', gap: '12px',
                                             cursor: hasNumericData ? 'pointer' : 'not-allowed',
                                             opacity: hasNumericData ? 1 : 0.35,
-                                            borderBottom: '1px solid rgba(255,255,255,0.04)',
-                                            background: isSelected ? 'rgba(79, 195, 247, 0.08)' : 'transparent',
+                                            borderBottom: '1px solid rgba(20, 20, 19,0.04)',
+                                            background: isSelected ? 'rgba(200, 216, 231, 0.08)' : 'transparent',
                                             transition: 'background 0.15s'
                                         }}
-                                        onMouseEnter={e => { if (hasNumericData) e.currentTarget.style.background = isSelected ? 'rgba(79, 195, 247, 0.12)' : 'rgba(255,255,255,0.05)'; }}
-                                        onMouseLeave={e => { e.currentTarget.style.background = isSelected ? 'rgba(79, 195, 247, 0.08)' : 'transparent'; }}
+                                        onMouseEnter={e => { if (hasNumericData) e.currentTarget.style.background = isSelected ? 'rgba(200, 216, 231, 0.12)' : 'rgba(255,255,255,0.05)'; }}
+                                        onMouseLeave={e => { e.currentTarget.style.background = isSelected ? 'rgba(200, 216, 231, 0.08)' : 'transparent'; }}
                                     >
                                         <div style={{
                                             width: '18px', height: '18px', borderRadius: '3px',
-                                            border: isSelected ? '2px solid #7e9bbd' : '2px solid #555',
-                                            background: isSelected ? '#7e9bbd' : 'transparent',
+                                            border: isSelected ? '2px solid #6a9bcc' : '2px solid #cccac0',
+                                            background: isSelected ? '#507294' : 'transparent',
                                             display: 'flex', alignItems: 'center', justifyContent: 'center',
                                             flexShrink: 0, transition: 'all 0.15s'
                                         }}>
                                             {isSelected && (
-                                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#1a1a2e" strokeWidth="3">
+                                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#1d1d1c" strokeWidth="3">
                                                     <polyline points="20 6 9 17 4 12"></polyline>
                                                 </svg>
                                             )}
                                         </div>
                                         <div style={{ flex: 1, minWidth: 0 }}>
-                                            <div style={{ fontSize: '13px', color: '#eee', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{col.header}</div>
+                                            <div style={{ fontSize: '13px', color: '#141413', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{col.header}</div>
                                             {hasNumericData && (
-                                                <div style={{ fontSize: '10px', color: '#666', marginTop: '1px' }}>
+                                                <div style={{ fontSize: '10px', color: '#72706b', marginTop: '1px' }}>
                                                     {sampleValues.length} numeric value{sampleValues.length !== 1 ? 's' : ''} detected
                                                 </div>
                                             )}
                                             {!hasNumericData && (
-                                                <div style={{ fontSize: '10px', color: '#555', marginTop: '1px' }}>Non-numeric column</div>
+                                                <div style={{ fontSize: '10px', color: '#52524d', marginTop: '1px' }}>Non-numeric column</div>
                                             )}
                                         </div>
                                         {isSelected && (
-                                            <div style={{ fontSize: '11px', color: '#7e9bbd', fontWeight: 600 }}>Σ</div>
+                                            <div style={{ fontSize: '11px', color: '#507294', fontWeight: 600 }}>Σ</div>
                                         )}
                                     </div>
                                 );
@@ -1461,17 +1461,17 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
 
                         {/* Footer */}
                         <div style={{ 
-                            padding: '12px 20px', borderTop: '1px solid #444', 
+                            padding: '12px 20px', borderTop: '1px solid #cccac0', 
                             display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                             background: 'rgba(0,0,0,0.2)'
                         }}>
-                            <span style={{ fontSize: '11px', color: '#888' }}>
+                            <span style={{ fontSize: '11px', color: '#72706b' }}>
                                 {totalColumns.size} column{totalColumns.size !== 1 ? 's' : ''} selected
                             </span>
                             <button 
                                 onClick={() => setTotalsPickerOpen(false)}
                                 style={{ 
-                                    background: '#4f83e8', border: 'none', color: '#fff', 
+                                    background: '#507294', border: 'none', color: '#ffffff', 
                                     padding: '6px 20px', borderRadius: '4px', fontSize: '12px', 
                                     fontWeight: 600, cursor: 'pointer' 
                                 }}

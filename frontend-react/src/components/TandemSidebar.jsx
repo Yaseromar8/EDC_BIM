@@ -139,10 +139,10 @@ const TandemSidebar = ({
                 display: isLogicallyVisible ? 'flex' : 'none', // Ocultamiento duro
                 flexShrink: 0,
                 // === Estética Tandem (Transparente + Glassmorphism) ===
-                backgroundColor: 'rgba(25, 25, 25, 0.65)', 
+                backgroundColor: 'rgba(255, 255, 255, 0.65)', 
                 backdropFilter: 'blur(10px)',
                 WebkitBackdropFilter: 'blur(10px)', // Para safari
-                borderRight: '1px solid rgba(255,255,255,0.05)'
+                borderRight: '1px solid rgba(20, 20, 19,0.05)'
             }}
         >
             {/* Manija de Arrastre (Resizer Handle) */}
@@ -157,10 +157,10 @@ const TandemSidebar = ({
                     height: '100%',
                     cursor: 'col-resize',
                     zIndex: 100,
-                    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                    backgroundColor: 'rgba(20, 20, 19, 0.05)',
                     transition: 'background-color 0.2s'
                 }}
-                onMouseEnter={(e) => { e.target.style.backgroundColor = 'rgba(74, 144, 226, 0.8)'; e.target.style.width = '8px'; }}
+                onMouseEnter={(e) => { e.target.style.backgroundColor = 'rgba(106, 155, 204, 0.8)'; e.target.style.width = '8px'; }}
                 onMouseLeave={(e) => { e.target.style.backgroundColor = 'rgba(255, 255, 255, 0.08)'; e.target.style.width = '6px'; }}
             />
             {activePanel === 'filters' && (

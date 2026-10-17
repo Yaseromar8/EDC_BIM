@@ -10,8 +10,8 @@
 }
 
 .heatmap-dialog {
-    background: #1c2027;
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: #ffffff;
+    border: 1px solid rgba(20, 20, 19, 0.1);
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
     border-radius: 8px;
     width: 360px;
@@ -36,12 +36,12 @@
     justify-content: space-between;
     align-items: center;
     padding: 16px 20px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    border-bottom: 1px solid rgba(20, 20, 19, 0.1);
 }
 
 .heatmap-dialog-header h4 {
     margin: 0;
-    color: #fff;
+    color: #141413;
     font-size: 14px;
     font-weight: 600;
 }
@@ -49,14 +49,14 @@
 .heatmap-close {
     background: transparent;
     border: none;
-    color: #9ca3af;
+    color: #72706b;
     font-size: 20px;
     cursor: pointer;
     line-height: 1;
 }
 
 .heatmap-close:hover {
-    color: #fff;
+    color: #141413;
 }
 
 .heatmap-dialog-body {
@@ -64,7 +64,7 @@
 }
 
 .heatmap-desc {
-    color: #9ca3af;
+    color: #72706b;
     font-size: 12px;
     margin: 0 0 16px 0;
 }
@@ -76,8 +76,8 @@
 }
 
 .heatmap-palette-btn {
-    background: rgba(255, 255, 255, 0.03);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(20, 20, 19, 0.03);
+    border: 1px solid rgba(20, 20, 19, 0.1);
     border-radius: 6px;
     padding: 10px 12px;
     cursor: pointer;
@@ -89,16 +89,16 @@
 }
 
 .heatmap-palette-btn:hover {
-    background: rgba(255, 255, 255, 0.08);
+    background: rgba(20, 20, 19, 0.08);
 }
 
 .heatmap-palette-btn.active {
-    border-color: #3b82f6;
-    background: rgba(59, 130, 246, 0.1);
+    border-color: #6a9bcc;
+    background: rgba(106, 155, 204, 0.1);
 }
 
 .heatmap-palette-name {
-    color: #fff;
+    color: #141413;
     font-size: 13px;
     font-weight: 500;
 }
@@ -108,7 +108,7 @@
     justify-content: flex-end;
     gap: 12px;
     padding: 16px 20px;
-    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    border-top: 1px solid rgba(20, 20, 19, 0.1);
     background: rgba(0, 0, 0, 0.1);
     border-bottom-left-radius: 8px;
     border-bottom-right-radius: 8px;
@@ -116,8 +116,8 @@
 
 .heatmap-btn-secondary {
     background: transparent;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    color: #fff;
+    border: 1px solid rgba(20, 20, 19, 0.1);
+    color: #141413;
     padding: 8px 16px;
     border-radius: 4px;
     cursor: pointer;
@@ -125,13 +125,13 @@
 }
 
 .heatmap-btn-secondary:hover {
-    background: rgba(255, 255, 255, 0.05);
+    background: rgba(20, 20, 19, 0.05);
 }
 
 .heatmap-btn-primary {
-    background: #3b82f6;
+    background: #507294;
     border: none;
-    color: #fff;
+    color: #ffffff;
     padding: 8px 16px;
     border-radius: 4px;
     cursor: pointer;
@@ -140,5 +140,5 @@
 }
 
 .heatmap-btn-primary:hover {
-    background: #2563eb;
+    background: #507294;
 }

@@ -179,8 +179,8 @@ const FilterCategory = React.memo(({
                         if (customColor === 'none') {
                             // excluido del coloreo: puntito "tachado"
                             colorStyle = {
-                                background: 'repeating-linear-gradient(45deg,#3a3d42 0 3px,#1e2126 3px 6px)',
-                                border: '1px solid #5a5f66',
+                                background: 'repeating-linear-gradient(45deg,#e8e6dc 0 3px,#ffffff 3px 6px)',
+                                border: '1px solid #cccac0',
                             };
                         } else if (customColor) {
                             colorStyle = { backgroundColor: customColor, border: `1px solid ${customColor}`, boxShadow: `0 0 6px ${customColor}55` };
@@ -238,15 +238,15 @@ const FilterCategory = React.memo(({
 
                 {/* INLINE COLOR PICKER POPOVER */}
                 {colorPickerTarget && isColorActive && (
-                    <li style={{ padding: '8px 16px 8px 36px', background: '#1a1c22', borderTop: '1px solid #333', borderBottom: '1px solid #333' }}>
+                    <li style={{ padding: '8px 16px 8px 36px', background: '#ffffff', borderTop: '1px solid #e8e6dc', borderBottom: '1px solid #e8e6dc' }}>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <span style={{ fontSize: '11px', color: '#aaa', fontWeight: 600 }}>
+                                <span style={{ fontSize: '11px', color: '#72706b', fontWeight: 600 }}>
                                     Color: {colorPickerTarget.value}
                                 </span>
                                 <button 
                                     onClick={() => setColorPickerTarget(null)} 
-                                    style={{ background: 'none', border: 'none', color: '#888', cursor: 'pointer', fontSize: '14px', padding: '0 4px' }}
+                                    style={{ background: 'none', border: 'none', color: '#72706b', cursor: 'pointer', fontSize: '14px', padding: '0 4px' }}
                                 >×</button>
                             </div>
                             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
@@ -260,9 +260,9 @@ const FilterCategory = React.memo(({
                                     style={{
                                         width: '18px', height: '18px', borderRadius: '3px', cursor: 'pointer',
                                         border: customValueColors[`${prop.id}::${colorPickerTarget.value}`] === 'none' ? '2px solid #fff' : '1px solid rgba(255,255,255,0.3)',
-                                        background: 'repeating-linear-gradient(45deg,#3a3d42 0 3px,#1e2126 3px 6px)',
+                                        background: 'repeating-linear-gradient(45deg,#e8e6dc 0 3px,#ffffff 3px 6px)',
                                         display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                        color: '#f87171', fontWeight: 900, fontSize: '11px', lineHeight: 1,
+                                        color: '#b93535', fontWeight: 900, fontSize: '11px', lineHeight: 1,
                                     }}
                                 >✕</div>
                                 {PRESET_COLORS.map(c => {
@@ -277,7 +277,7 @@ const FilterCategory = React.memo(({
                                             style={{
                                                 width: '18px', height: '18px', borderRadius: '3px',
                                                 backgroundColor: c, cursor: 'pointer',
-                                                border: isSelected ? '2px solid #fff' : '1px solid rgba(255,255,255,0.2)',
+                                                border: isSelected ? '2px solid #fff' : '1px solid rgba(20, 20, 19,0.2)',
                                                 boxShadow: isSelected ? `0 0 8px ${c}` : 'none',
                                                 transition: 'all 0.15s'
                                             }}
@@ -288,8 +288,8 @@ const FilterCategory = React.memo(({
                                 {/* Native color input for full custom */}
                                 <label style={{ 
                                     width: '18px', height: '18px', borderRadius: '3px', 
-                                    background: 'linear-gradient(135deg, #ff0000, #00ff00, #0000ff)', 
-                                    cursor: 'pointer', border: '1px solid rgba(255,255,255,0.3)',
+                                    background: 'linear-gradient(135deg, #ff0000, #00ff00, #cccac0)', 
+                                    cursor: 'pointer', border: '1px solid rgba(20, 20, 19,0.3)',
                                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                                     overflow: 'hidden', position: 'relative'
                                 }} title="Custom color...">
@@ -673,28 +673,28 @@ const TandemFilterPanel = ({
     return (
         <div className="filters-shell" style={{
             display: 'flex', flexDirection: 'column', position: 'absolute', inset: 0,
-            height: '100%', background: 'transparent', color: '#adadad', fontSize: '12px',
+            height: '100%', background: 'transparent', color: '#72706b', fontSize: '12px',
             zIndex: 20, overflow: 'hidden'
         }}>
             <style>
                 {`
           .progressbg { position: absolute; inset: 0; background: rgba(0,0,0,0.5); z-index: 50; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(2px); }
           .spinner { margin: 100px auto 0; width: 70px; text-align: center; }
-          .spinner > div { width: 14px; height: 14px; background-color: #7e9bbd; border-radius: 100%; display: inline-block; animation: sk-bouncedelay 1.4s infinite ease-in-out both; margin: 0 2px; }
+          .spinner > div { width: 14px; height: 14px; background-color: #507294; border-radius: 100%; display: inline-block; animation: sk-bouncedelay 1.4s infinite ease-in-out both; margin: 0 2px; }
           .spinner .bounce1 { animation-delay: -0.32s; }
           .spinner .bounce2 { animation-delay: -0.16s; }
           @keyframes sk-bouncedelay { 0%, 80%, 100% { transform: scale(0); } 40% { transform: scale(1); } }
           
-          .tandem-header { padding: 12px 16px; border-bottom: 1px solid rgba(255, 255, 255, 0.05); display: flex; justify-content: space-between; align-items: center; background: transparent; }
-          .tandem-title { font-weight: 600; font-size: 13px; letter-spacing: 0.5px; text-transform: uppercase; color: #f0f0f0; }
+          .tandem-header { padding: 12px 16px; border-bottom: 1px solid rgba(20, 20, 19, 0.05); display: flex; justify-content: space-between; align-items: center; background: transparent; }
+          .tandem-title { font-weight: 600; font-size: 13px; letter-spacing: 0.5px; text-transform: uppercase; color: #141413; }
           .tandem-scroll { flex: 1; overflow-y: auto; padding-bottom: 20px; }
           .tandem-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
           .tandem-scroll::-webkit-scrollbar-track { background: transparent; }
-          .tandem-scroll::-webkit-scrollbar-thumb { background: #4f5259; border-radius: 3px; }
-          .tandem-scroll::-webkit-scrollbar-thumb:hover { background: #5f6269; }
-          .tandem-group { border-bottom: 1px solid #3e4045; }
+          .tandem-scroll::-webkit-scrollbar-thumb { background: #cccac0; border-radius: 3px; }
+          .tandem-scroll::-webkit-scrollbar-thumb:hover { background: #b0aea5; }
+          .tandem-group { border-bottom: 1px solid #e8e6dc; }
           .tandem-group-header { display: flex; align-items: center; padding: 8px 16px 8px 12px; cursor: pointer; transition: background 0.1s; }
-          .tandem-group-header:hover { background: #35383d; }
+          .tandem-group-header:hover { background: #e8e6dc; }
           .tandem-cb-container { display: inline-flex; cursor: pointer; flex-shrink: 0; margin-right: 8px; }
           .tandem-cb-wrap { position: relative; display: flex; align-items: center; justify-content: center; }
           .tandem-cb-box { width: 18px; height: 18px; border-radius: 0; display: flex; align-items: center; justify-content: center; transition: background 0.15s, border-color 0.15s; border: 1.5px solid #555; background: #2a2d31; }
@@ -705,26 +705,26 @@ const TandemFilterPanel = ({
           .tandem-cb-container:hover .tandem-cb-box.checked.active { background: #35a0b8; border-color: #35a0b8; }
           .tandem-cb-container:hover input:disabled ~ .tandem-cb-wrap .tandem-cb-box { border-color: #555; background: #2a2d31; }
           .tandem-cb-icon { width: 18px; height: 18px; }
-          .facet-search-input { width: 100%; background: #1a1a1a; border: 1px solid #444; color: #e0e0e0; padding: 5px 8px; font-size: 12px; border-radius: 2px; outline: none; }
+          .facet-search-input { width: 100%; background: #ffffff; border: 1px solid #cccac0; color: #333330; padding: 5px 8px; font-size: 12px; border-radius: 2px; outline: none; }
           .tandem-group-info { flex: 1; display: flex; align-items: baseline; gap: 8px; overflow: hidden; }
           .tandem-group-title { font-weight: 600; color: #ffffff; white-space: nowrap; font-size: 13px; text-shadow: 0 1px 2px rgba(0,0,0,0.8); }
           .tandem-group-count { color: #ccc; font-size: 12px; }
           .tandem-actions { display: flex; gap: 2px; opacity: 0.8; transition: opacity 0.2s; }
           .tandem-group-header:hover .tandem-actions { opacity: 1; }
-          .tandem-action-btn { background: none; border: none; color: #999; cursor: pointer; padding: 4px; display: flex; align-items: center; justify-content: center; border-radius: 4px; }
-          .tandem-action-btn:hover { color: #fff; background: rgba(255,255,255,0.1); }
-          .tandem-action-btn.active { color: #7e9bbd; background: rgba(58, 160, 255, 0.15); }
+          .tandem-action-btn { background: none; border: none; color: #72706b; cursor: pointer; padding: 4px; display: flex; align-items: center; justify-content: center; border-radius: 4px; }
+          .tandem-action-btn:hover { color: #141413; background: rgba(20, 20, 19,0.1); }
+          .tandem-action-btn.active { color: #507294; background: rgba(106, 155, 204, 0.15); }
           .tandem-list { list-style: none; padding: 0; margin: 0; display: none; }
           .tandem-list.open { display: block; }
           .tandem-item { display: flex; align-items: center; padding: 2px 16px 2px 36px; min-height: 28px; transition: background 0.1s; }
-          .tandem-item:hover { background: rgba(53, 56, 61, 0.8); }
+          .tandem-item:hover { background: #f1f0e8; }
           .tandem-item-label { flex: 1; cursor: pointer; display: flex; align-items: center; overflow: hidden; }
           .tandem-item-text { margin-left: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #f0f0f0; font-weight: 500; text-shadow: 0 1px 2px rgba(0,0,0,0.8); }
           .tandem-item-right { display: flex; align-items: center; gap: 8px; margin-left: auto; }
-          .tandem-count-badge { color: #ccc; font-size: 11px; min-width: 20px; text-align: right; margin-right: 8px; }
-          .tandem-count-total { color: #777; font-size: 10px; }
-          .tandem-color-box { width: 10px; height: 10px; border-radius: 50%; box-shadow: 0 0 0 1px rgba(255,255,255,0.15); cursor: pointer; }
-          .tandem-color-box.default { background: #333; }
+          .tandem-count-badge { color: #52524d; font-size: 11px; min-width: 20px; text-align: right; margin-right: 8px; }
+          .tandem-count-total { color: #72706b; font-size: 10px; }
+          .tandem-color-box { width: 10px; height: 10px; border-radius: 50%; box-shadow: 0 0 0 1px rgba(20, 20, 19,0.15); cursor: pointer; }
+          .tandem-color-box.default { background: #e8e6dc; }
         `}
             </style>
 
@@ -736,7 +736,7 @@ const TandemFilterPanel = ({
                     <button className="tandem-action-btn" onClick={() => setFilterConfiguratorOpen(true)} title="Configure">
                         <GearIcon />
                     </button>
-                    <div style={{ width: '1px', height: '16px', background: 'rgba(255,255,255,0.1)', margin: '0 4px' }}></div>
+                    <div style={{ width: '1px', height: '16px', background: 'rgba(20, 20, 19,0.1)', margin: '0 4px' }}></div>
                     <button className="tandem-action-btn" title="Limpiar filtros y su color; conservar Sources y ocultos manuales" aria-label="Limpiar filtros" onClick={handleResetAll}>
                         <RevertIcon />
                     </button>
@@ -749,7 +749,7 @@ const TandemFilterPanel = ({
                 explicación de prioridad de color. `data-filter-*` se conserva
                 porque es el anclaje del banco de pruebas, y no dibuja nada. */}
             {!feedback.ready && (
-                <div style={{ padding: '8px 16px', borderBottom: '1px solid #444' }}>
+                <div style={{ padding: '8px 16px', borderBottom: '1px solid #cccac0' }}>
                     <div role="status" aria-live="polite" data-filter-state={feedback.state} data-filter-revision={feedback.revision}>
                         {feedback.text}
                     </div>
@@ -819,7 +819,7 @@ const TandemFilterPanel = ({
                                 const effColor = sourceTintOf(model.urn);
                                 const isNone = effColor === 'none';
                                 const dotStyle = !sourcesColorOn ? {} : (isNone
-                                    ? { background: 'repeating-linear-gradient(45deg,#3a3d42 0 3px,#1e2126 3px 6px)', border: '1px solid #5a5f66' }
+                                    ? { background: 'repeating-linear-gradient(45deg,#e8e6dc 0 3px,#ffffff 3px 6px)', border: '1px solid #cccac0' }
                                     : { backgroundColor: effColor, border: `1px solid ${effColor}`, boxShadow: `0 0 6px ${effColor}55` });
                                 return (
                                     <React.Fragment key={model.urn}>
@@ -859,15 +859,15 @@ const TandemFilterPanel = ({
                                             </div>
                                         </li>
                                         {sourcesColorOn && sourcePickerUrn === model.urn && (
-                                            <li style={{ padding: '8px 16px 8px 36px', background: '#1a1c22', borderTop: '1px solid #333', borderBottom: '1px solid #333' }}>
+                                            <li style={{ padding: '8px 16px 8px 36px', background: '#ffffff', borderTop: '1px solid #e8e6dc', borderBottom: '1px solid #e8e6dc' }}>
                                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                                        <span style={{ fontSize: '11px', color: '#aaa', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                        <span style={{ fontSize: '11px', color: '#72706b', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                                             Color: {model.label.replace(' (Gemelo)', '')}
                                                         </span>
                                                         <button
                                                             onClick={() => setSourcePickerUrn(null)}
-                                                            style={{ background: 'none', border: 'none', color: '#888', cursor: 'pointer', fontSize: '14px', padding: '0 4px' }}
+                                                            style={{ background: 'none', border: 'none', color: '#72706b', cursor: 'pointer', fontSize: '14px', padding: '0 4px' }}
                                                         >×</button>
                                                     </div>
                                                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
@@ -876,10 +876,10 @@ const TandemFilterPanel = ({
                                                             title="No pintar este modelo (excluir del coloreo)"
                                                             style={{
                                                                 width: '18px', height: '18px', borderRadius: '3px', cursor: 'pointer',
-                                                                border: isNone ? '2px solid #fff' : '1px solid rgba(255,255,255,0.3)',
-                                                                background: 'repeating-linear-gradient(45deg,#3a3d42 0 3px,#1e2126 3px 6px)',
+                                                                border: isNone ? '2px solid #fff' : '1px solid rgba(20, 20, 19,0.3)',
+                                                                background: 'repeating-linear-gradient(45deg,#e8e6dc 0 3px,#ffffff 3px 6px)',
                                                                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                                                color: '#f87171', fontWeight: 900, fontSize: '11px', lineHeight: 1,
+                                                                color: '#b93535', fontWeight: 900, fontSize: '11px', lineHeight: 1,
                                                             }}
                                                         >✕</div>
                                                         {SOURCE_PRESET_COLORS.map(c => (
@@ -889,7 +889,7 @@ const TandemFilterPanel = ({
                                                                 style={{
                                                                     width: '18px', height: '18px', borderRadius: '3px',
                                                                     backgroundColor: c, cursor: 'pointer',
-                                                                    border: effColor === c ? '2px solid #fff' : '1px solid rgba(255,255,255,0.2)',
+                                                                    border: effColor === c ? '2px solid #fff' : '1px solid rgba(20, 20, 19,0.2)',
                                                                     boxShadow: effColor === c ? `0 0 8px ${c}` : 'none',
                                                                     transition: 'all 0.15s'
                                                                 }}
@@ -898,8 +898,8 @@ const TandemFilterPanel = ({
                                                         ))}
                                                         <label style={{
                                                             width: '18px', height: '18px', borderRadius: '3px',
-                                                            background: 'linear-gradient(135deg, #ff0000, #00ff00, #0000ff)',
-                                                            cursor: 'pointer', border: '1px solid rgba(255,255,255,0.3)',
+                                                            background: 'linear-gradient(135deg, #ff0000, #00ff00, #cccac0)',
+                                                            cursor: 'pointer', border: '1px solid rgba(20, 20, 19,0.3)',
                                                             display: 'flex', alignItems: 'center', justifyContent: 'center',
                                                             overflow: 'hidden', position: 'relative'
                                                         }} title="Custom color...">
@@ -921,7 +921,7 @@ const TandemFilterPanel = ({
 
                 {/* 2. PROPERTIES GROUPS */}
                 {panelProperties.length === 0 && (
-                    <div style={{ padding: '20px', textAlign: 'center', color: '#666', fontStyle: 'italic' }}>
+                    <div style={{ padding: '20px', textAlign: 'center', color: '#72706b', fontStyle: 'italic' }}>
                         No hay propiedades configuradas. Usa Configurar.
                     </div>
                 )}
@@ -952,7 +952,7 @@ const TandemFilterPanel = ({
 
                 {allPropertyObjects.length > propertyLimit && (
                     <div style={{ padding: '12px', textAlign: 'center' }}>
-                        <button className="tandem-action-btn" style={{ width: '100%', padding: '8px', background: 'rgba(255,255,255,0.05)', borderRadius: '4px' }} onClick={() => setPropertyLimit(prev => prev + 5)}>
+                        <button className="tandem-action-btn" style={{ width: '100%', padding: '8px', background: 'rgba(20, 20, 19,0.05)', borderRadius: '4px' }} onClick={() => setPropertyLimit(prev => prev + 5)}>
                             Mostrar más propiedades
                         </button>
                     </div>

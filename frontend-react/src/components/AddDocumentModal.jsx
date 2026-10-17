@@ -135,7 +135,7 @@ const AddDocumentModal = ({ open, onClose, onConfirm, targetSpriteId, selectedPr
         {tab === 'docs' && (
           <div className="modal-body">
             <p>Select a document from Autodesk Docs to link it.</p>
-            <div className="modal-tree" style={{ maxHeight: '400px', overflowY: 'auto', background: '#25272a', borderRadius: '8px', padding: '12px', border: '1px solid #444' }}>
+            <div className="modal-tree" style={{ maxHeight: '400px', overflowY: 'auto', background: '#f1f0e8', borderRadius: '8px', padding: '12px', border: '1px solid #cccac0' }}>
               <NativeFileTree
                 onFileSelect={setSelectedAccDoc}
                 forcedHubId={hubId}
