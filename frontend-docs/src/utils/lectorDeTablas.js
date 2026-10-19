@@ -74,6 +74,112 @@ export function filaDeClave(filas = [], columna, clave) {
   return filas.findIndex(fila => texto((fila || [])[columna]) === k);
 }
 
+const ES_CODIGO_JERARQUICO = /^\d{1,3}(\.\d{1,3}){0,5}$/;
+const CABECERA_DESCRIPCION = /descripci[oó]n|concepto|denominaci[oó]n|detalle|nombre\s+de\s+partida/i;
+const TEXTO_TITULO = /^sub?t[ií]tulo$/i;
+
+/** La columna de DESCRIPCIÓN de la planilla (por cabecera o por longitud media de texto), o null. */
+export function columnaDescripcion(filas = [], filaCabecera = null, colClave = null) {
+  const tope = Math.min(filas.length, 15);
+  const orden = filaCabecera != null
+    ? [filaCabecera, ...Array.from({ length: tope }, (_, i) => i).filter(i => i !== filaCabecera)]
+    : Array.from({ length: tope }, (_, i) => i);
+  for (const f of orden) {
+    const fila = filas[f] || [];
+    const c = fila.findIndex((v, idx) => idx !== colClave && CABECERA_DESCRIPCION.test(texto(v)));
+    if (c >= 0) return c;
+  }
+  const inicio = filaCabecera != null ? filaCabecera + 1 : 0;
+  const muestra = filas.slice(inicio, inicio + 50);
+  const suma = new Map();
+  const cuenta = new Map();
+  for (const fila of muestra) {
+    (fila || []).forEach((v, idx) => {
+      if (idx === colClave) return;
+      const s = texto(v);
+      if (s && !ES_CODIGO_JERARQUICO.test(s) && !TEXTO_TITULO.test(s) && !/^-?[\d.,\s]+$/.test(s)) {
+        suma.set(idx, (suma.get(idx) || 0) + s.length);
+        cuenta.set(idx, (cuenta.get(idx) || 0) + 1);
+      }
+    });
+  }
+  let mejor = null;
+  for (const [c, total] of suma) {
+    const n = cuenta.get(c) || 1;
+    const media = total / n;
+    if (n >= 2 && media >= 8 && (!mejor || total > mejor.total)) mejor = { c, total };
+  }
+  return mejor ? mejor.c : null;
+}
+
+/**
+ * Analiza la jerarquía WBS de la planilla a partir de su columna clave.
+ * Por cada fila devuelve `null` (si es cabecera o sin ítem) o:
+ *   { codigo, nivel, tipo: 'titulo' | 'subtitulo' | 'partida', esGrupo, tieneHijos, ancestros, partidas }
+ * - Un ítem que es prefijo de otros (`05` → `05.01`, `05.02` → `05.02.01`) o de nivel 1 sin metrado es grupo:
+ *   nivel 1 = 'titulo', nivel >= 2 = 'subtitulo'.
+ * - Los ítems hoja son 'partida', con su nivel de sangría (2, 3, 4, 5…).
+ */
+export function jerarquiaDePlanilla(filas = [], clave = null) {
+  if (!clave || clave.columna == null) return [];
+  const col = clave.columna;
+  const cab = clave.filaCabecera;
+  const colDesc = columnaDescripcion(filas, cab, col);
+
+  const codigos = new Array(filas.length).fill('');
+  const padres = new Set();
+
+  for (let i = 0; i < filas.length; i++) {
+    if (cab != null && i <= cab) continue;
+    const c = texto((filas[i] || [])[col]);
+    if (!ES_CODIGO_JERARQUICO.test(c)) continue;
+    codigos[i] = c;
+    const partes = c.split('.');
+    for (let k = 1; k < partes.length; k++) {
+      padres.add(partes.slice(0, k).join('.'));
+    }
+  }
+
+  const resultado = new Array(filas.length).fill(null);
+  const partidasPorPrefijo = new Map();
+
+  for (let i = 0; i < filas.length; i++) {
+    const c = codigos[i];
+    if (!c) continue;
+    const fila = filas[i] || [];
+    const partes = c.split('.');
+    const nivel = partes.length;
+    const tieneHijos = padres.has(c);
+    const diceTitulo = fila.some((v, idx) => idx !== col && idx !== colDesc && TEXTO_TITULO.test(texto(v)));
+    const restoVacio = fila.every((v, idx) => {
+      if (idx === col || idx === colDesc) return true;
+      const s = texto(v);
+      return !s || TEXTO_TITULO.test(s);
+    });
+    const esGrupo = tieneHijos || diceTitulo || nivel === 1 || (fila.length >= 3 && colDesc != null && restoVacio);
+    const tipo = !esGrupo ? 'partida' : nivel === 1 ? 'titulo' : 'subtitulo';
+    const ancestros = [];
+    for (let k = 1; k < partes.length; k++) {
+      ancestros.push(partes.slice(0, k).join('.'));
+    }
+    if (!esGrupo) {
+      for (const a of ancestros) {
+        partidasPorPrefijo.set(a, (partidasPorPrefijo.get(a) || 0) + 1);
+      }
+    }
+    resultado[i] = { codigo: c, nivel, tipo, esGrupo, tieneHijos, ancestros, partidas: 0 };
+  }
+
+  for (let i = 0; i < resultado.length; i++) {
+    const r = resultado[i];
+    if (r && r.esGrupo) {
+      r.partidas = partidasPorPrefijo.get(r.codigo) || 0;
+    }
+  }
+
+  return resultado;
+}
+
 // ── EL ANCLA LDA (ESTANDAR_LDA.md §6) ─────────────────────────────────────────────────────────
 
 const ORDEN = ['pagina', 'zona', 'hoja', 'clave', 'vista', 'elemento', 't'];

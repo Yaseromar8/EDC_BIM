@@ -1,7 +1,7 @@
 // Banco de utils/lectorDeTablas.js — el modo Tabla y el ancla LDA.
 // node frontend-docs/pruebas/lectorDeTablas.prueba.mjs
 import assert from 'node:assert/strict';
-import { letraDeColumna, columnaClave, buscarFilas, filaDeClave, escribirAncla, leerAncla, firmaDelArchivo, motivoSiNoEsPlanilla } from '../src/utils/lectorDeTablas.js';
+import { letraDeColumna, columnaClave, columnaDescripcion, jerarquiaDePlanilla, buscarFilas, filaDeClave, escribirAncla, leerAncla, firmaDelArchivo, motivoSiNoEsPlanilla } from '../src/utils/lectorDeTablas.js';
 
 let ok = 0;
 const casos = [];
@@ -76,6 +76,32 @@ caso('firma de los bytes: un PDF no pasa por planilla (lo que se vio en el banco
   assert.equal(motivoSiNoEsPlanilla(csv, 'datos.csv'), null);
   assert.match(motivoSiNoEsPlanilla(pdf, 'Listado.xlsx'), /parece un PDF/);
   assert.match(motivoSiNoEsPlanilla(csv, 'Listado.xlsx'), /parece texto/);
+});
+
+caso('jerarquía de planilla: distingue títulos N1, subtítulos N2/N3 y partidas con su nivel y conteo', () => {
+  const real = [
+    ['ITEM', 'CATEGORIA', 'TIPO', 'DESCRIPCION', 'UNIDAD', 'METRADO DISEÑO'],
+    ['05', 'TITULO', 'TITULO', 'COMPONENTE 04 - CANAL', '', ''],
+    ['05.02', 'TITULO', 'TITULO', 'ESTRUCTURA DE DESCARGA', '', ''],
+    ['05.02.01', 'TITULO', 'TITULO', 'OBRAS PRELIMINARES', '', ''],
+    ['05.02.01.01', '', 'Fisica', 'LIMPIEZA INICIAL DEL TERRENO', 'm2', '2,484.84'],
+    ['05.02.01.02', '', 'Fisica', 'ELIMINACIÓN DE RESIDUOS SÓLIDOS', 'm3', '372.73'],
+  ];
+  const cl = columnaClave(real);
+  assert.equal(columnaDescripcion(real, cl.filaCabecera, cl.columna), 3);
+  const j = jerarquiaDePlanilla(real, cl);
+  assert.equal(j[0], null);
+  assert.deepEqual(
+    j.slice(1).map(x => ({ codigo: x.codigo, nivel: x.nivel, tipo: x.tipo, esGrupo: x.esGrupo, partidas: x.partidas })),
+    [
+      { codigo: '05', nivel: 1, tipo: 'titulo', esGrupo: true, partidas: 2 },
+      { codigo: '05.02', nivel: 2, tipo: 'subtitulo', esGrupo: true, partidas: 2 },
+      { codigo: '05.02.01', nivel: 3, tipo: 'subtitulo', esGrupo: true, partidas: 2 },
+      { codigo: '05.02.01.01', nivel: 4, tipo: 'partida', esGrupo: false, partidas: 0 },
+      { codigo: '05.02.01.02', nivel: 4, tipo: 'partida', esGrupo: false, partidas: 0 },
+    ]
+  );
+  assert.deepEqual(j[4].ancestros, ['05', '05.02', '05.02.01']);
 });
 
 for (const [nombre, fn] of casos) {

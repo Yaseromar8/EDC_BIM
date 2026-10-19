@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import * as XLSX from 'xlsx';
 import toast from 'react-hot-toast';
-import { letraDeColumna, columnaClave, buscarFilas, escribirAncla, filaDeClave, motivoSiNoEsPlanilla } from '../utils/lectorDeTablas';
+import { letraDeColumna, columnaClave, columnaDescripcion, jerarquiaDePlanilla, buscarFilas, escribirAncla, filaDeClave, motivoSiNoEsPlanilla } from '../utils/lectorDeTablas';
 import { porItem, cuadre, columnaMetrado, columnaUnidad, mismaUnidad, columnasConNombre, numeroDe, avisoDeVersion, cantidadLegible,
   conCircuito, filaDeLaDireccion, sinCircuito } from '../utils/sustento';
 import SelectorDeDocumento from './SelectorDeDocumento';
@@ -31,6 +31,8 @@ export default function LectorDeTabla({ url, cargando = false, codigo = '', vers
   const [hoja, setHoja] = useState('');
   const [consulta, setConsulta] = useState('');
   const [elegida, setElegida] = useState(null);
+  // Códigos de título/subtítulo cuyos hijos están plegados en la vista actual.
+  const [plegados, setPlegados] = useState(() => new Set());
   const tablaRef = useRef(null);
   // EL SUSTENTO DE CADA PARTIDA (ESTANDAR_LDA §6): las zonas de planos de la obra que sustentan cada
   // ítem. La llave es el ítem, así que vale aunque el Excel se actualice. Sin la ruta, no se enseña.
@@ -99,6 +101,10 @@ export default function LectorDeTabla({ url, cargando = false, codigo = '', vers
 
   const ancho = useMemo(() => filas.reduce((m, f) => Math.max(m, (f || []).length), 0), [filas]);
   const clave = useMemo(() => columnaClave(filas), [filas]);
+  const colDescripcion = useMemo(() => columnaDescripcion(filas, clave?.filaCabecera ?? null, clave?.columna ?? null), [filas, clave]);
+  const jerarquia = useMemo(() => jerarquiaDePlanilla(filas, clave), [filas, clave]);
+  const gruposConHijos = useMemo(() => jerarquia.filter(j => j && j.tieneHijos), [jerarquia]);
+  const hayJerarquia = gruposConHijos.length > 0;
   const resultados = useMemo(() => buscarFilas(filas, consulta, clave?.columna ?? null), [filas, consulta, clave]);
   const visibles = filas.length > TOPE_FILAS ? filas.slice(0, TOPE_FILAS) : filas;
   const colMetradoDetectada = useMemo(() => columnaMetrado(filas, clave?.filaCabecera ?? null), [filas, clave]);
@@ -157,11 +163,51 @@ export default function LectorDeTabla({ url, cargando = false, codigo = '', vers
       { obra, documento: v.file_node_id })), { vista: v.vista || '' }), 'lda-plano');
   };
 
-  // Al buscar, la primera coincidencia se elige y se trae a la vista.
+  const alternarGrupo = (codigoGrupo, e) => {
+    if (e) e.stopPropagation();
+    setPlegados(prev => {
+      const sig = new Set(prev);
+      if (sig.has(codigoGrupo)) sig.delete(codigoGrupo);
+      else sig.add(codigoGrupo);
+      return sig;
+    });
+  };
+
+  // Vistas rápidas de jerarquía: «Todo», «Títulos y subtítulos» (pliega los grupos hoja) o «Solo títulos» (pliega nivel 1).
+  const verJerarquia = (modo) => {
+    if (modo === 'todo') {
+      setPlegados(new Set());
+      return;
+    }
+    if (modo === 'titulos') {
+      setPlegados(new Set(gruposConHijos.map(g => g.codigo)));
+      return;
+    }
+    if (modo === 'subtitulos') {
+      // Deja abiertos los títulos y subtítulos que contienen otros subtítulos, y pliega el último nivel de subtítulo (el que solo tiene partidas).
+      const padresDeSubtitulo = new Set();
+      for (const j of jerarquia) {
+        if (j && j.esGrupo) {
+          for (const a of j.ancestros) padresDeSubtitulo.add(a);
+        }
+      }
+      setPlegados(new Set(gruposConHijos.filter(g => !padresDeSubtitulo.has(g.codigo)).map(g => g.codigo)));
+    }
+  };
+
+  // Al buscar, la primera coincidencia se elige, se despliega su rama si estaba plegada y se trae a la vista.
   const alBuscar = (v) => {
     setConsulta(v);
     const r = buscarFilas(filas, v, clave?.columna ?? null);
     if (!r.length) return;
+    const j = jerarquia[r[0]];
+    if (j && j.ancestros.length && plegados.size) {
+      setPlegados(prev => {
+        const sig = new Set(prev);
+        j.ancestros.forEach(a => sig.delete(a));
+        return sig;
+      });
+    }
     setElegida(r[0]);
     requestAnimationFrame(() => {
       tablaRef.current?.querySelector(`[data-fila="${r[0]}"]`)?.scrollIntoView({ block: 'center' });
@@ -169,7 +215,9 @@ export default function LectorDeTabla({ url, cargando = false, codigo = '', vers
   };
 
   const valorClave = elegida != null && clave ? String((filas[elegida] || [])[clave.columna] ?? '').trim() : '';
+  const jerarquiaElegida = elegida != null ? jerarquia[elegida] : null;
   const ancla = valorClave ? escribirAncla({ codigo, version, selector: { hoja, clave: valorClave } }) : '';
+  const buscando = consulta.trim().length >= 2;
 
   const copiarAncla = () => {
     try { navigator.clipboard.writeText(ancla); toast.success('Ancla copiada'); }
@@ -194,8 +242,27 @@ export default function LectorDeTabla({ url, cargando = false, codigo = '', vers
           placeholder={clave ? 'Buscar un ítem (02.01.03) o un texto…' : 'Buscar en la hoja…'}
           aria-label="Buscar en la planilla" onChange={e => alBuscar(e.target.value)} />
         <span className="tabla-lda__cuenta">
-          {consulta.trim().length >= 2 ? (resultados.length ? `${resultados.length} filas` : 'Sin resultados') : ''}
+          {buscando ? (resultados.length ? `${resultados.length} filas` : 'Sin resultados') : ''}
         </span>
+        {hayJerarquia && (
+          <div className="tabla-lda__niveles" role="group" aria-label="Niveles visibles de la planilla">
+            <span className="tabla-lda__niveles-rot">Niveles:</span>
+            <button type="button" className={plegados.size === 0 ? 'es-activo' : ''}
+              onClick={() => verJerarquia('todo')} title="Mostrar todos los niveles y partidas">
+              Todo
+            </button>
+            <button type="button"
+              className={plegados.size > 0 && plegados.size < gruposConHijos.length ? 'es-activo' : ''}
+              onClick={() => verJerarquia('subtitulos')} title="Plegar el último nivel de partidas">
+              Estructura
+            </button>
+            <button type="button"
+              className={plegados.size === gruposConHijos.length && gruposConHijos.length > 0 ? 'es-activo' : ''}
+              onClick={() => verJerarquia('titulos')} title="Plegar al primer nivel">
+              Nivel 1
+            </button>
+          </div>
+        )}
         {conSustento && columnasDeCabecera.length > 0 && (
           <label className="tabla-lda__metrado" title="La columna contra la que se cuadra el sustento de cada partida">
             Metrado:
@@ -218,40 +285,89 @@ export default function LectorDeTabla({ url, cargando = false, codigo = '', vers
             <tr>
               <th className="tabla-lda__num" aria-label="Fila" />
               {Array.from({ length: ancho }, (_, c) => (
-                <th key={c} className={clave?.columna === c ? 'es-clave' : undefined}>{letraDeColumna(c)}</th>
+                <th key={c} className={clave?.columna === c ? 'es-clave' : colDescripcion === c ? 'es-descripcion' : undefined}>{letraDeColumna(c)}</th>
               ))}
               {conSustento && <th className="tabla-lda__sus">Sustento en planos</th>}
             </tr>
           </thead>
           <tbody>
-            {visibles.map((fila, i) => (
-              <tr key={i} data-fila={i}
-                className={`${i === clave?.filaCabecera ? 'es-cabecera' : ''}${i === elegida ? ' es-elegida' : ''}`}
-                onClick={() => setElegida(i)}>
-                <td className="tabla-lda__num">{i + 1}</td>
-                {Array.from({ length: ancho }, (_, c) => (
-                  <td key={c} className={clave?.columna === c ? 'es-clave' : undefined}>{String((fila || [])[c] ?? '')}</td>
-                ))}
-                {conSustento && (() => {
-                  if (i === clave.filaCabecera) return <td className="tabla-lda__sus" />;
-                  const q = cuadreDeFila(fila, i);
-                  if (!q.item || !/^\d/.test(q.item)) return <td className="tabla-lda__sus" />;
-                  // Una fila de título (02.01 CONCRETO) no tiene metrado: no se le pide sustento.
-                  if (!q.vs.length) return <td className="tabla-lda__sus">{q.estado !== 'sin-sustento' || metradoDe(i) == null ? null : <span className="sus-sin">sin sustento</span>}</td>;
-                  return (
-                    <td className="tabla-lda__sus">
-                      <span className={`sus-chip sus-${q.otraUnidad ? 'sobra' : q.estado}`}>
-                        {q.vs.length} {q.vs.length === 1 ? 'zona' : 'zonas'} · {cantidadLegible(q.suma, q.vs[0].unidad)}
-                        {q.otraUnidad ? ` · unidad distinta (${q.otraUnidad} ≠ ${q.unidadFila})`
-                          : q.estado === 'cuadra' ? ' · cuadra' : q.estado === 'falta' ? ` · faltan ${cantidadLegible(q.diferencia, q.vs[0].unidad)}`
-                          : q.estado === 'sobra' ? ` · sobran ${cantidadLegible(-q.diferencia, q.vs[0].unidad)}` : ''}
-                      </span>
-                      {q.vs.some(v => avisoDeVersion(v)) && <span className="sus-chip sus-version" title="Alguna zona se midió sobre una versión anterior del plano">revisar versión</span>}
-                    </td>
-                  );
-                })()}
-              </tr>
-            ))}
+            {visibles.map((fila, i) => {
+              const j = jerarquia[i];
+              // Si algún ancestro está plegado (y no se está buscando activamente), se oculta la fila.
+              if (j && !buscando && plegados.size > 0 && j.ancestros.some(a => plegados.has(a))) {
+                return null;
+              }
+              const plegado = !!(j && j.tieneHijos && plegados.has(j.codigo));
+              const clasesFila = [
+                i === clave?.filaCabecera ? 'es-cabecera' : '',
+                i === elegida ? 'es-elegida' : '',
+                j ? `es-${j.tipo} es-nivel-${Math.min(j.nivel, 6)}` : '',
+              ].filter(Boolean).join(' ');
+
+              return (
+                <tr key={i} data-fila={i} data-nivel={j?.nivel} className={clasesFila || undefined}
+                  onClick={() => setElegida(i)}>
+                  <td className="tabla-lda__num">{i + 1}</td>
+                  {Array.from({ length: ancho }, (_, c) => {
+                    const textoCelda = String((fila || [])[c] ?? '');
+                    if (j && clave?.columna === c) {
+                      return (
+                        <td key={c} className="es-clave" style={{ '--nivel': j.nivel - 1 }}>
+                          <span className="celda-jerarquia">
+                            {j.tieneHijos ? (
+                              <button type="button" className="celda-jerarquia__plegar"
+                                aria-expanded={!plegado}
+                                title={plegado ? `Desplegar ${j.codigo} (${j.partidas} partidas)` : `Plegar ${j.codigo}`}
+                                onClick={e => alternarGrupo(j.codigo, e)}>
+                                {plegado ? '▸' : '▾'}
+                              </button>
+                            ) : (
+                              <span className="celda-jerarquia__guia" aria-hidden="true" />
+                            )}
+                            <span className="celda-jerarquia__codigo">{textoCelda}</span>
+                          </span>
+                        </td>
+                      );
+                    }
+                    if (j && colDescripcion === c) {
+                      return (
+                        <td key={c} className="es-descripcion" style={{ '--nivel': j.nivel - 1 }}>
+                          <span className="celda-descripcion">
+                            <span className="celda-descripcion__texto">{textoCelda}</span>
+                            {j.esGrupo && j.partidas > 0 && (
+                              <span className="celda-descripcion__cuenta" title={`${j.partidas} partidas dentro de ${j.codigo}`}>
+                                {plegado ? `▸ ${j.partidas}` : `${j.partidas}`}
+                              </span>
+                            )}
+                          </span>
+                        </td>
+                      );
+                    }
+                    const esMetaTitulo = !!(j && j.esGrupo && /^sub?t[ií]tulo$/i.test(textoCelda.trim()));
+                    return (
+                      <td key={c}>{esMetaTitulo ? '' : textoCelda}</td>
+                    );
+                  })}
+                  {conSustento && (() => {
+                    if (i === clave.filaCabecera) return <td className="tabla-lda__sus" />;
+                    const q = cuadreDeFila(fila, i);
+                    if (!q.item || !/^\d/.test(q.item)) return <td className="tabla-lda__sus" />;
+                    if (!q.vs.length) return <td className="tabla-lda__sus">{j?.esGrupo || q.estado !== 'sin-sustento' || metradoDe(i) == null ? null : <span className="sus-sin">sin sustento</span>}</td>;
+                    return (
+                      <td className="tabla-lda__sus">
+                        <span className={`sus-chip sus-${q.otraUnidad ? 'sobra' : q.estado}`}>
+                          {q.vs.length} {q.vs.length === 1 ? 'zona' : 'zonas'} · {cantidadLegible(q.suma, q.vs[0].unidad)}
+                          {q.otraUnidad ? ` · unidad distinta (${q.otraUnidad} ≠ ${q.unidadFila})`
+                            : q.estado === 'cuadra' ? ' · cuadra' : q.estado === 'falta' ? ` · faltan ${cantidadLegible(q.diferencia, q.vs[0].unidad)}`
+                            : q.estado === 'sobra' ? ` · sobran ${cantidadLegible(-q.diferencia, q.vs[0].unidad)}` : ''}
+                        </span>
+                        {q.vs.some(v => avisoDeVersion(v)) && <span className="sus-chip sus-version" title="Alguna zona se midió sobre una versión anterior del plano">revisar versión</span>}
+                      </td>
+                    );
+                  })()}
+                </tr>
+              );
+            })}
           </tbody>
         </table>
         {filas.length > TOPE_FILAS && (
@@ -272,6 +388,16 @@ export default function LectorDeTabla({ url, cargando = false, codigo = '', vers
 
       {conSustento && elegida != null && valorClave && (() => {
         const q = cuadreDeFila(filas[elegida], elegida);
+        if (jerarquiaElegida?.esGrupo && !q.vs.length && metradoDe(elegida) == null) {
+          return (
+            <div className="tabla-lda__sustento">
+              <span className="tabla-lda__rot">Ítem {valorClave}</span>
+              <span className="tabla-lda__sin">
+                Agrupa <b>{jerarquiaElegida.partidas}</b> {jerarquiaElegida.partidas === 1 ? 'partida' : 'partidas'}. Elige una partida para vincularla a un plano.
+              </span>
+            </div>
+          );
+        }
         return (
           <div className="tabla-lda__sustento">
             <span className="tabla-lda__rot">Sustento de {valorClave}</span>
@@ -307,7 +433,7 @@ export default function LectorDeTabla({ url, cargando = false, codigo = '', vers
       <div className="tabla-lda__hojas" role="tablist" aria-label="Hojas de la planilla">
         {libro.SheetNames.map(n => (
           <button key={n} role="tab" aria-selected={n === hoja}
-            onClick={() => { setHoja(n); setElegida(null); setConsulta(''); }}>{n}</button>
+            onClick={() => { setHoja(n); setElegida(null); setConsulta(''); setPlegados(new Set()); }}>{n}</button>
         ))}
         <span className="tabla-lda__pie">{filas.length.toLocaleString('es-PE')} filas · {ancho} columnas</span>
       </div>

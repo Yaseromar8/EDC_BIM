@@ -1,64 +1,123 @@
 /**
- * UploadModal.jsx — Modal de carga de archivos (Chunked Upload)
- * Refactorización Fase 2: Capa de Modales
- * Extraído de App.jsx líneas 2691-2821
+ * UploadModal.jsx — Subir archivos (motor: useChunkedUpload, subida por trozos).
+ *
+ * ASPECTO PROPIO (16-oct-2026). El funcionamiento venía de medir ACC; el aspecto ya no lo imita:
+ * diálogo «Subir archivos» con el DESTINO a la vista, zona de arrastre con la ilustración plana de la
+ * obra (D-25), resumen de la tanda (cuántos subidos, en curso, con error) y una bandeja minimizada
+ * que dice en su cabecera cómo va todo. Paleta D-24 y letra del sistema (D-26).
+ *
+ * ACTIVIDAD Y PROGRESO, SEPARADOS (se conserva, medido).
+ * El porcentaje real NO avanza de forma regular -- llega a saltos, y entre trozo y trozo hay viajes en los
+ * que no se mueve nada -- así que una barra pega tirones y se queda congelada. Medido en ACC sobre 9,1 MB:
+ * salta 4-7 puntos cada ~330 ms y un salto de 55 a 77 tras 1,9 s parado. Por eso NO hay barra: un girador
+ * continuo dice «esto sigue vivo» y el número real dice «cuánto llevas». Nada se simula ni se interpola:
+ * todo sale de los estados que expone `useChunkedUpload`.
  */
 import React from 'react';
 import { renderFileIconSop } from '../../utils/fileIcons';
 import { formatSizeDetailed } from '../../utils/helpers';
 import { confirmAction } from '../../utils/confirm';
+import { IlustracionPlana } from '../IlustracionesPlanas';
+import './Subida.css';
 
-/**
- * ACTIVIDAD Y PROGRESO, SEPARADOS.
- *
- * Antes había una barra que se llenaba con el porcentaje real. El porcentaje
- * real NO avanza de forma regular -- llega a saltos, y entre trozo y trozo hay
- * viajes de ida y vuelta en los que no se mueve nada -- así que la barra pegaba
- * tirones y se quedaba congelada. Medido en ACC sobre una subida de 9,1 MB: su
- * porcentaje salta igual que el nuestro (4-7 puntos cada ~330 ms, y un salto de
- * 55 a 77 tras 1,9 s parado), y por eso ACC NO dibuja barra: pone un girador
- * continuo al lado del número. El girador dice «esto sigue vivo», el número dice
- * «cuánto llevas», y ninguna de las dos señales estropea a la otra.
- *
- * Aquí se adopta ese principio y se conserva lo que ya teníamos de más: los
- * bytes transferidos sobre el total, el motivo real de cada espera y Cancelar.
- * Nada se simula ni se interpola: todo sale de los estados que expone
- * `useChunkedUpload`.
- */
+const EN_CURSO = ['queued', 'init', 'uploading', 'paused'];
 
 /** ¿Sigue pasando algo? Sólo donde el motor está realmente trabajando o esperando él. */
 function hayActividad(item) {
   if (['queued', 'init', 'uploading', 'confirming'].includes(item.status)) return true;
-  // `paused` son DOS cosas distintas: la cuenta atrás de un reintento (el motor
-  // espera solo) y «hace falta el fichero» (espera a una persona). Girar en el
-  // segundo caso sería mentir: ahí no avanza nada hasta que alguien actúe.
+  // `paused` son DOS cosas distintas: la cuenta atrás de un reintento (el motor espera solo) y «hace falta
+  // el fichero» (espera a una persona). Girar en el segundo caso sería mentir.
   return item.status === 'paused' && !item.needsFile;
 }
 
 function uploadStatusLabel(item, formatSize) {
   switch (item.status) {
-    case 'queued': return 'En cola…';
-    case 'init': return 'Preparando la carga segura…';
-    // El porcentaje REAL, y los bytes reales: el dato se conserva entero, sólo
-    // deja de dibujarse como barra.
-    case 'uploading': return `Subiendo · ${item.progress}% · ${formatSize(item.bytesUploaded || 0)} de ${formatSize(item.sizeBytes || 0)}`;
-    // Transferencia terminada, confirmación pendiente.
-    case 'confirming': return 'Procesando archivo…';
-    // El texto del motor, tal cual: «Reintentando en 2s... (1/3)» o «Archivo
-    // necesario para reanudar». Lleva los números reales del reintento.
+    case 'queued': return 'En cola';
+    case 'init': return 'Preparando la subida segura…';
+    // El porcentaje REAL y los bytes reales.
+    case 'uploading': return `${item.progress}% · ${formatSize(item.bytesUploaded || 0)} de ${formatSize(item.sizeBytes || 0)}`;
+    // Transferencia terminada, la carpeta aún lo está registrando.
+    case 'confirming': return 'Registrando en la carpeta…';
+    // El texto del motor, tal cual: «Reintentando en 2s... (1/3)» o «Archivo necesario para reanudar».
     case 'paused': return item.statusText || 'Conexión interrumpida';
-    case 'completed': return item.statusText || 'Archivo listo';
+    case 'completed': return item.statusText || 'Subido';
     case 'cancelled': return 'Cancelado';
+    case 'error': return item.statusText || 'No se pudo subir';
     default: return item.statusText || 'Esperando…';
   }
 }
 
+function tonoDe(item) {
+  if (item.status === 'completed') return 'ok';
+  if (item.status === 'error') return 'error';
+  if (item.status === 'paused') return 'aviso';
+  if (item.status === 'cancelled') return 'tenue';
+  return 'curso';
+}
+
 /** Girador pequeño y continuo. Su velocidad no depende del progreso. */
 function Girador({ tam = 10 }) {
+  return <span className="sub-girador" aria-hidden="true" style={{ width: tam, height: tam }} />;
+}
+
+const Ico = ({ children, size = 16 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"
+    strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{children}</svg>
+);
+const IcoCerrar = () => <Ico><path d="M6 6l12 12M18 6 6 18" /></Ico>;
+const IcoMinimizar = () => <Ico><path d="M6 15h12" /></Ico>;
+const IcoAmpliar = () => <Ico><path d="M6 14l6-6 6 6" /></Ico>;
+const IcoCarpeta = () => <Ico size={14}><path d="M3 6.5h6l2 2h10V19H3z" /></Ico>;
+const IcoHecho = ({ size = 16 }) => <Ico size={size}><path d="m5 12.5 4.5 4.5L19 7.5" /></Ico>;
+const IcoMas = () => <Ico size={15}><path d="M12 5v14M5 12h14" /></Ico>;
+const IcoAviso = () => <Ico size={14}><path d="M12 7v6" /><path d="M12 17h.01" /></Ico>;
+
+function resumenDe(uploads) {
+  const r = { total: uploads.length, listos: 0, curso: 0, errores: 0, bytes: 0 };
+  for (const u of uploads) {
+    r.bytes += u.sizeBytes || 0;
+    if (u.status === 'completed') r.listos += 1;
+    else if (u.status === 'error') r.errores += 1;
+    else if (u.status !== 'cancelled') r.curso += 1;
+  }
+  return r;
+}
+
+const archivos = (n) => (n === 1 ? '1 archivo' : `${n} archivos`);
+
+function FilaDeSubida({ item, formatSize, compacta, onCancelar, onAbrir }) {
+  const tono = tonoDe(item);
+  const activa = hayActividad(item);
   return (
-    <div className="acc-mini-spinner" aria-hidden="true"
-         style={{ width: tam, height: tam, flexShrink: 0, border: '2px solid var(--accent)',
-                  borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1.5s linear infinite' }} />
+    <li className={`sub-fila${compacta ? ' es-compacta' : ''}`}>
+      <span className="sub-fila__ico">{renderFileIconSop(item.filename, compacta ? 24 : 28)}</span>
+      <span className="sub-fila__info">
+        <span className="sub-fila__nombre" title={item.filename}>{item.filename}</span>
+        {/* SIN BARRA: el papel de «progressbar» se conserva en la línea de texto, así un lector de pantalla
+            sigue recibiendo el porcentaje aunque no haya nada que llenar. */}
+        <span className={`sub-fila__estado es-${tono}`}
+          {...(EN_CURSO.includes(item.status) || item.status === 'confirming' ? {
+            role: 'progressbar', 'aria-label': `Progreso de ${item.filename}`, 'aria-valuemin': 0, 'aria-valuemax': 100,
+            'aria-valuenow': item.status === 'confirming' ? 100 : item.status === 'uploading' ? item.progress : undefined,
+            'aria-valuetext': uploadStatusLabel(item, formatSize), 'aria-busy': activa,
+          } : {})}>
+          {activa && <Girador tam={compacta ? 9 : 10} />}
+          {tono === 'ok' && <IcoHecho size={13} />}
+          {/* En la bandeja, «Subido» a secas: la fecha completa partía la línea. */}
+          <span>{compacta && item.status === 'completed' ? 'Subido' : uploadStatusLabel(item, formatSize)}</span>
+        </span>
+      </span>
+      <span className="sub-fila__peso">{formatSize(item.sizeBytes || 0)}</span>
+      <span className="sub-fila__accion">
+        {item.status === 'completed' && item.nodeId && onAbrir && !compacta && (
+          <button type="button" className="sub-btn sub-btn--peq" onClick={() => onAbrir(item)}>Abrir</button>
+        )}
+        {EN_CURSO.includes(item.status) && onCancelar && (
+          <button type="button" className="sub-icono" onClick={() => onCancelar(item.id)}
+            aria-label={`Cancelar ${item.filename}`} title="Cancelar este archivo"><IcoCerrar /></button>
+        )}
+      </span>
+    </li>
   );
 }
 
@@ -78,171 +137,132 @@ export default function UploadModal({
   if (!isOpen) return null;
 
   const formatSize = formatSizeDetailed;
+  const uploads = chunkedUpload.uploads;
+  const r = resumenDe(uploads);
+  const partes = String(currentPath || '').split('/').filter(Boolean);
+  const destino = partes.length > 1 ? partes.slice(1).join(' / ') : 'Archivos de proyecto';
+  const carpeta = partes.length > 1 ? partes[partes.length - 1] : 'Archivos de proyecto';
+  const cancelar = (id) => chunkedUpload.cancelUpload(id);
+  const elegir = () => fileRef.current && fileRef.current.click();
 
-  // ── Minimized Monitor ──
+  const cerrar = async () => {
+    if (!chunkedUpload.hasActiveUploads) { onClose(); return; }
+    const canCancel = uploads.some(item => EN_CURSO.includes(item.status));
+    if (!canCancel) { setSopMinimized(true); return; }
+    const ok = await confirmAction({
+      title: 'Cancelar las subidas en curso',
+      message: 'Hay archivos subiendo. Si cierras ahora, esas subidas se cancelan. Para seguir trabajando sin cancelarlas, minimiza.',
+      confirmText: 'Cancelar subidas',
+      cancelText: 'Seguir subiendo',
+      danger: true,
+    });
+    if (ok) { chunkedUpload.cancelAll(); onClose(); }
+  };
+
+  // ── Bandeja minimizada: la subida sigue mientras se trabaja ──
   if (sopMinimized) {
+    const titulo = r.curso
+      ? `Subiendo · ${r.listos} de ${r.total} listos`
+      : r.errores ? `${r.listos} subidos · ${r.errores} con error` : `${archivos(r.total)} subidos`;
     return (
-      <div className="acc-upload-monitor" style={{ position: 'fixed', bottom: 20, right: 20, width: 320, background: '#fff', border: '1px solid #e8e6dc', borderRadius: 4, boxShadow: '0 8px 24px rgba(0,0,0,0.15)', zIndex: 10000, overflow: 'hidden' }}>
-        <div style={{ padding: '8px 12px', background: '#faf9f5', borderBottom: '1px solid #f1f0e8', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={{ fontSize: 13, fontWeight: 500 }}>Cargar</span>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2 }} onClick={() => setSopMinimized(false)}>^</button>
-            <button style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2 }} onClick={onClose}>X</button>
-          </div>
-        </div>
-        <div style={{ maxHeight: 400, overflowY: 'auto' }}>
-          <div style={{ padding: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #f1f0e8' }}>
-            <span style={{ fontSize: 12, color: '#333330' }}>Total de {chunkedUpload.uploads.length} {chunkedUpload.uploads.length === 1 ? 'archivo' : 'archivos'}...</span>
-            <span style={{ fontSize: 12, color: 'var(--accent)', cursor: 'pointer', fontWeight: 600 }} onClick={() => { chunkedUpload.cancelAll(); onClose(); }}>Cancelar todo</span>
-          </div>
-          {chunkedUpload.uploads.map(item => (
-            <div key={item.id} style={{ padding: '12px', borderBottom: '1px solid #faf9f5', display: 'flex', gap: 12 }}>
-              {renderFileIconSop(item.filename, 28)}
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 12, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.filename}</div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
-                  {item.status === 'completed' ? (
-                    <span style={{ fontSize: 11, color: '#64744e' }}>{uploadStatusLabel(item, formatSize)}</span>
-                  ) : item.status === 'error' ? (
-                    // EL MISMO MOTIVO QUE ARRIBA. Aquí ponía «Error» a secas, así
-                    // que minimizar la ventana te quitaba la razón del fallo:
-                    // «No tienes permiso para subir aquí» pasaba a ser «Error».
-                    <span style={{ fontSize: 11, color: '#b93535' }}>{item.statusText || 'Error'}</span>
-                  ) : (
-                    // La misma señal que en el modal grande: si las dos
-                    // superficies se escriben por separado acaban divergiendo.
-                    <>
-                      {hayActividad(item) && <Girador tam={9} />}
-                      <span style={{ fontSize: 11, color: item.status === 'paused' ? '#d97757' : '#72706b' }}>{uploadStatusLabel(item, formatSize)}</span>
-                    </>
-                  )}
-                  <span style={{ fontSize: 11, color: '#72706b' }}>| {formatSize(item.sizeBytes || 0)}</span>
-                </div>
-              </div>
-            </div>
+      <section className="sub-bandeja" aria-label="Subida de archivos">
+        <header className="sub-bandeja__cab">
+          <span className={`sub-bandeja__senal es-${r.curso ? 'curso' : r.errores ? 'error' : 'ok'}`}>
+            {r.curso ? <Girador tam={12} /> : r.errores ? <IcoAviso /> : <IcoHecho size={14} />}
+          </span>
+          <span className="sub-bandeja__tit">
+            <b>{titulo}</b>
+            <small><IcoCarpeta /> {carpeta}</small>
+          </span>
+          <button type="button" className="sub-icono" onClick={() => setSopMinimized(false)}
+            aria-label="Ampliar" title="Ampliar"><IcoAmpliar /></button>
+          <button type="button" className="sub-icono" onClick={onClose} aria-label="Cerrar" title="Cerrar"><IcoCerrar /></button>
+        </header>
+        <ul className="sub-lista sub-lista--bandeja">
+          {uploads.map(item => (
+            <FilaDeSubida key={item.id} item={item} formatSize={formatSize} compacta onCancelar={cancelar} />
           ))}
-        </div>
-      </div>
+        </ul>
+        {r.curso > 0 && (
+          <footer className="sub-bandeja__pie">
+            <button type="button" className="sub-enlace sub-enlace--peligro"
+              onClick={() => { chunkedUpload.cancelAll(); onClose(); }}>Cancelar las pendientes</button>
+          </footer>
+        )}
+      </section>
     );
   }
 
-  // ── Full Modal ──
+  // ── Diálogo ──
+  const hay = uploads.length > 0;
   return (
     <div className="modal-overlay" onClick={() => { if (!chunkedUpload.hasActiveUploads) onClose(); }}>
-      <div className="acc-upload-modal" onClick={e => e.stopPropagation()}>
-        <div className="acc-upload-header">
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <span style={{ fontWeight: 600, fontSize: 14 }}>Cargar archivos</span>
-            <span style={{ color: '#72706b', fontSize: 12 }}>{currentPath.split('/').filter(Boolean).pop()}</span>
+      <div className="sub-dialogo" role="dialog" aria-label="Subir archivos" onClick={e => e.stopPropagation()}>
+        <header className="sub-cab">
+          <div className="sub-cab__tit">
+            <h2>Subir archivos</h2>
+            <span className="sub-destino" title={currentPath}><IcoCarpeta /> {destino}</span>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <button className="file-viewer-close" style={{ background: 'none' }} onClick={() => setSopMinimized(true)}>-</button>
-            <button className="file-viewer-close" style={{ background: 'none' }} title="Cerrar"
-              onClick={async () => {
-                if (!chunkedUpload.hasActiveUploads) { onClose(); return; }
-                const canCancel = chunkedUpload.uploads.some(item => ['queued', 'init', 'uploading', 'paused'].includes(item.status));
-                if (!canCancel) {
-                  setSopMinimized(true);
-                  return;
-                }
-                const ok = await confirmAction({
-                  title: 'Cancelar cargas en curso',
-                  message: 'Hay archivos subiendo. Si cierras ahora, esas cargas se cancelarán.',
-                  confirmText: 'Cancelar cargas',
-                  cancelText: 'Seguir subiendo',
-                  danger: true,
-                });
-                if (ok) { chunkedUpload.cancelAll(); onClose(); }
-              }}>✕</button>
+          <button type="button" className="sub-icono" onClick={() => setSopMinimized(true)}
+            aria-label="Minimizar" title="Minimizar: la subida sigue"><IcoMinimizar /></button>
+          <button type="button" className="sub-icono" onClick={cerrar} aria-label="Cerrar" title="Cerrar"><IcoCerrar /></button>
+        </header>
+
+        <div className="sub-cuerpo">
+          <div className={`sub-zona${dragOver ? ' es-encima' : ''}${hay ? ' es-compacta' : ''}`}
+            role="button" tabIndex={0} aria-label="Elegir archivos o arrastrarlos aquí"
+            onClick={elegir} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); elegir(); } }}
+            onDragOver={onDragOver} onDragLeave={onDragLeave} onDrop={onDrop}>
+            {hay ? (
+              <>
+                <IcoMas />
+                <span>Añadir más: arrástralos aquí o <u>elígelos</u></span>
+              </>
+            ) : (
+              <>
+                <IlustracionPlana nombre="carpeta" tamano={64} />
+                <b className="sub-zona__tit">Arrastra aquí planos y documentos</b>
+                <span className="sub-zona__sub">Se guardan en «{carpeta}», cada uno con su versión.</span>
+                <button type="button" className="sub-btn sub-btn--prim" onClick={e => { e.stopPropagation(); elegir(); }}>
+                  Elegir archivos</button>
+              </>
+            )}
           </div>
-        </div>
-        <div className="acc-upload-body" style={{ maxHeight: 600, overflowY: 'auto' }}>
-          <div className="acc-upload-entry-section" style={{ marginBottom: 20 }}>
-            <button className="acc-upload-btn-secondary" style={{ width: '100%', border: '1px solid var(--accent)', color: '#000', padding: '8px', marginBottom: 12, borderRadius: 2 }} onClick={() => fileRef.current.click()}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="#72706b"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z"/></svg>
-              Desde su equipo
-            </button>
-            <div className={`acc-upload-dropzone ${dragOver ? 'drag-over' : ''}`} onClick={() => fileRef.current.click()} onDragOver={onDragOver} onDragLeave={onDragLeave} onDrop={onDrop} style={{ border: '1px dashed #e8e6dc', padding: '40px 20px', borderRadius: 2, textAlign: 'center' }}>
-              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#e8e6dc" strokeWidth="1"><rect x="4" y="2" width="16" height="20" rx="2"/><path d="M14 2v6h6"/><path d="M12 18v-6"/><path d="M9 15l3 3 3-3"/></svg>
-              <div style={{ color: '#72706b', fontSize: 13, marginTop: 12 }}>Arrastre archivos aqui o elija una opcion arriba</div>
-            </div>
-            <input
-              type="file"
-              ref={fileRef}
-              multiple
-              style={{ display: 'none' }}
-              onChange={event => {
-                onUpload(event.target.files);
-                event.target.value = '';
-              }}
-            />
-          </div>
-          {chunkedUpload.uploads.length > 0 && (
-            <div style={{ marginTop: 20 }}>
-              <div style={{ fontSize: 13, color: '#333330', marginBottom: 16, fontWeight: 300 }}>
-                Total de {chunkedUpload.uploads.length} {chunkedUpload.uploads.length === 1 ? 'archivo' : 'archivos'}
+          <input type="file" ref={fileRef} multiple style={{ display: 'none' }}
+            onChange={event => { onUpload(event.target.files); event.target.value = ''; }} />
+
+          {hay && (
+            <>
+              <div className="sub-resumen" role="status">
+                <span>
+                  <b>{archivos(r.total)}</b>
+                  <span className="sub-resumen__peso">{formatSize(r.bytes)}</span>
+                </span>
+                <span className="sub-resumen__cuenta">
+                  <span className="es-ok">{r.listos} subidos</span>
+                  {r.curso > 0 && <span className="es-curso">{r.curso} en curso</span>}
+                  {r.errores > 0 && <span className="es-error">{r.errores} con error</span>}
+                </span>
               </div>
-              {chunkedUpload.uploads.map(item => (
-                <div key={item.id} className="acc-upload-file-row">
-                  {renderFileIconSop(item.filename, 32)}
-                  <div className="acc-upload-file-info">
-                    <div className="acc-upload-file-name">{item.filename}</div>
-                    <div className="acc-upload-file-status" style={{ marginTop: 4 }}>
-                      {item.status === 'completed' ? (
-                        <div style={{ color: '#64744e', display: 'flex', alignItems: 'center', gap: 4 }}>
-                          <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
-                          {item.statusText}
-                        </div>
-                      ) : item.status === 'error' ? (
-                        <div style={{ color: '#b93535', fontSize: 11 }}>{item.statusText}</div>
-                      ) : (
-                        // SIN BARRA. El papel de «progressbar» se conserva en la
-                        // línea de texto: el rol describe la semántica, no el
-                        // dibujo, así que un lector de pantalla sigue recibiendo
-                        // el porcentaje aunque ya no haya nada que llenar.
-                        <div
-                          role="progressbar"
-                          aria-label={`Progreso de ${item.filename}`}
-                          aria-valuemin={0}
-                          aria-valuemax={100}
-                          aria-valuenow={item.status === 'confirming' ? 100 : item.status === 'uploading' ? item.progress : undefined}
-                          aria-valuetext={uploadStatusLabel(item, formatSize)}
-                          aria-busy={hayActividad(item)}
-                          style={{ display: 'flex', alignItems: 'center', gap: 6 }}
-                        >
-                          {hayActividad(item) && <Girador />}
-                          <span style={{ fontSize: 11, color: item.status === 'paused' ? '#d97757' : '#72706b' }}>
-                            {uploadStatusLabel(item, formatSize)}
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                  <div style={{ fontSize: 12, color: '#72706b', display: 'flex', alignItems: 'center', gap: 12 }}>
-                    <span style={{ minWidth: 60, textAlign: 'right' }}>{formatSize(item.sizeBytes || 0)}</span>
-                    {item.status === 'completed' && item.nodeId && onOpenUploaded && (
-                      <button
-                        type="button"
-                        onClick={() => onOpenUploaded(item)}
-                        style={{ border: '1px solid var(--accent)', borderRadius: 4, background: '#fff', color: '#507294', cursor: 'pointer', fontSize: 11, fontWeight: 600, padding: '5px 10px' }}
-                      >
-                        Abrir
-                      </button>
-                    )}
-                    {item.status === 'completed' ? (
-                      <span style={{ color: '#64744e', fontSize: 16 }} title="Subido">✓</span>
-                    ) : ['queued', 'init', 'uploading', 'paused'].includes(item.status) ? (
-                      <span onClick={() => chunkedUpload.cancelUpload(item.id)} style={{ cursor: 'pointer', fontSize: 16 }} title="Cancelar">✕</span>
-                    ) : null}
-                  </div>
-                </div>
-              ))}
-            </div>
+              <ul className="sub-lista">
+                {uploads.map(item => (
+                  <FilaDeSubida key={item.id} item={item} formatSize={formatSize} onCancelar={cancelar} onAbrir={onOpenUploaded} />
+                ))}
+              </ul>
+            </>
           )}
         </div>
-        <div className="acc-upload-footer">
-          <button className="acc-btn-listo" disabled={chunkedUpload.hasActiveUploads} onClick={onListo}>Listo</button>
-        </div>
+
+        <footer className="sub-pie">
+          <span className="sub-pie__nota">
+            {r.curso > 0 ? 'Puedes minimizar y seguir trabajando: la subida continúa.' : ''}
+          </span>
+          {r.curso > 0 && (
+            <button type="button" className="sub-btn" onClick={() => setSopMinimized(true)}>Minimizar</button>
+          )}
+          <button type="button" className="sub-btn sub-btn--prim" disabled={chunkedUpload.hasActiveUploads} onClick={onListo}>
+            Listo</button>
+        </footer>
       </div>
     </div>
   );

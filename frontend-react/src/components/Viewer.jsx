@@ -1,6 +1,6 @@
 import { apiFetch } from '../utils/apiFetch';
 import { installPivotUnderPointer } from '../utils/pivotUnderPointer';
-import { installForwardWheelZoom } from '../utils/forwardWheelZoom';
+import { installForwardWheelZoom, forwardWheelDirectionForScope } from '../utils/forwardWheelZoom';
 import { mountFiltersRuntime } from '../lib/filterRuntimeBridge.js';
 import { viewerElementKey } from '../lib/filtersCore.js';
 import React, { useEffect, useRef, useState, useCallback } from 'react';
@@ -2463,7 +2463,7 @@ const Viewer = ({
             viewer,
             window.Autodesk?.Viewing?.GEOMETRY_LOADED_EVENT,
             window.Autodesk?.Viewing?.VIEWER_STATE_RESTORED_EVENT,
-            scopeId === '1_CANAL'
+            forwardWheelDirectionForScope(scopeId)
         );
     }, [viewerReady, scopeId]);
 

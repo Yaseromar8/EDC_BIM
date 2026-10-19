@@ -420,15 +420,15 @@ const TableRow = ({ index, style, data }) => {
         }}
       >
         {(processingIds[item.id] || PREPARANDO.has(estadosCad[item.id])) ? (
-          <div className="adsk-spinner" style={{ width: 14, height: 14, borderWidth: 2, marginRight: 8 }} />
+          <div className="adsk-spinner" style={{ width: 14, height: 14, borderWidth: 2 }} />
         ) : (
           isFolder ? (
             // Carpeta sólida de ALEPHIA (estilo B, 13-oct-2026): la misma de la barra.
             <IconoModulo nombre="archivos" tamano={20} className="adsk-icon"
-              style={{ marginRight: 8, color: 'var(--archivo-carpeta)' }} />
+              style={{ color: 'var(--archivo-carpeta)' }} />
           ) : (
             renderFileIconSop ? renderFileIconSop(item.name, 22) : (
-              <svg className="adsk-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ marginRight: 8, color: '#72706b' }}>
+              <svg className="adsk-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ color: '#72706b' }}>
                 <path d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
               </svg>
             )
@@ -484,7 +484,7 @@ const TableRow = ({ index, style, data }) => {
             {/* En una vista (A2-2) cada documento viene de una carpeta distinta: se
                 dice cuál, bajo el nombre, sin columna nueva. */}
             {item.ubicacion !== undefined ? (
-              <span className="nombre-con-ubicacion" style={{ marginLeft: 8 }}>
+              <span className="nombre-con-ubicacion">
                 <span className="file-name-text" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {item.name || 'Sin nombre'}
                 </span>
@@ -494,7 +494,6 @@ const TableRow = ({ index, style, data }) => {
             <span 
               className="file-name-text" 
               style={{ 
-                marginLeft: isFolder ? 0 : 8, 
                 cursor: isGrey ? 'not-allowed' : 'pointer', 
                 overflow: 'hidden', 
                 textOverflow: 'ellipsis', 
@@ -988,7 +987,7 @@ const MatrixTable = ({
               <List
                 height={height}
                 itemCount={allItems.length}
-                itemSize={48}
+                itemSize={42}
                 width={totalTableWidth}
                 // DOS BARRAS HORIZONTALES ABAJO (lo enseno el dueno en
                 // captura). react-window pone overflow:auto en su scroller y

@@ -85,10 +85,155 @@
 
 /* La columna clave: un fondo apenas distinto y el texto en monoespaciada. */
 .tabla-lda__rejilla th.es-clave { color: #141413; box-shadow: inset 0 -2px 0 #141413; }
-.tabla-lda__rejilla td.es-clave { background: #faf9f5; font-family: ui-monospace, Consolas, monospace; }
+.tabla-lda__rejilla td.es-clave {
+  background: #faf9f5;
+  font-family: ui-monospace, Consolas, monospace;
+  padding-left: calc(8px + var(--nivel, 0) * 12px);
+}
+.tabla-lda__rejilla td.es-descripcion {
+  max-width: 540px;
+  padding-left: calc(8px + var(--nivel, 0) * 14px);
+}
 .tabla-lda__rejilla tr.es-cabecera td { font-weight: 600; background: #f6f5f0; border-bottom-color: #cfcabb; }
+
+/* Jerarquía WBS: Títulos (Nivel 1), Subtítulos (N2, N3, N4…) y Partidas ejecutables. */
+.tabla-lda__rejilla tr.es-titulo td:not(.tabla-lda__num) {
+  background: #e8e3d3;
+  color: #141413;
+  font-weight: 700;
+  border-top: 1px solid #c8c1ae;
+  border-bottom: 1px solid #cfcabb;
+  padding-top: 6px;
+  padding-bottom: 6px;
+}
+.tabla-lda__rejilla tr.es-titulo .tabla-lda__num {
+  box-shadow: inset 3px 0 0 #141413;
+  color: #141413;
+  font-weight: 700;
+}
+
+.tabla-lda__rejilla tr.es-subtitulo td:not(.tabla-lda__num) {
+  background: #f1ede1;
+  color: #1f1e1b;
+  font-weight: 600;
+  border-bottom: 1px solid #dfdace;
+  padding-top: 5px;
+  padding-bottom: 5px;
+}
+.tabla-lda__rejilla tr.es-subtitulo.es-nivel-3 td:not(.tabla-lda__num),
+.tabla-lda__rejilla tr.es-subtitulo.es-nivel-4 td:not(.tabla-lda__num),
+.tabla-lda__rejilla tr.es-subtitulo.es-nivel-5 td:not(.tabla-lda__num) {
+  background: #f7f5ed;
+  color: #2e2d29;
+  font-weight: 600;
+}
+.tabla-lda__rejilla tr.es-subtitulo .tabla-lda__num {
+  box-shadow: inset 2px 0 0 #6a9bcc;
+  color: #52524d;
+  font-weight: 600;
+}
+
+.tabla-lda__rejilla tr.es-partida td.es-descripcion .celda-descripcion {
+  border-left: 1.5px solid #e2ddd0;
+  padding-left: 7px;
+}
+
+.celda-jerarquia {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.celda-jerarquia__plegar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 1px solid #c5beac;
+  border-radius: 3px;
+  background: #fff;
+  color: #141413;
+  font-size: 10px;
+  line-height: 1;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.celda-jerarquia__plegar:hover { background: #141413; color: #fff; border-color: #141413; }
+
+.celda-jerarquia__guia {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin: 0 5px;
+  border-left: 1px solid #c5beac;
+  border-bottom: 1px solid #c5beac;
+  flex-shrink: 0;
+}
+
+.celda-descripcion {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+}
+
+.celda-descripcion__texto {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.celda-descripcion__cuenta {
+  flex-shrink: 0;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: rgba(20, 20, 19, 0.08);
+  color: #52524d;
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 16px;
+}
+
+.tabla-lda__niveles {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px;
+  border: 1px solid #cfcabb;
+  border-radius: 5px;
+  background: #f1f0e8;
+}
+.tabla-lda__niveles-rot {
+  padding: 0 6px;
+  color: #6d6b67;
+  font-size: 11px;
+  font-weight: 600;
+}
+.tabla-lda__niveles button {
+  height: 24px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: #52524d;
+  font: inherit;
+  font-size: 11.5px;
+  cursor: pointer;
+}
+.tabla-lda__niveles button:hover { color: #141413; background: rgba(255, 255, 255, 0.6); }
+.tabla-lda__niveles button.es-activo {
+  background: #fff;
+  color: #141413;
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgba(20, 20, 19, 0.08);
+}
+
 .tabla-lda__rejilla tbody tr:hover td:not(.tabla-lda__num) { background: #f6f3ea; }
-.tabla-lda__rejilla tr.es-elegida td:not(.tabla-lda__num) { background: #e6ecef; }
+.tabla-lda__rejilla tbody tr.es-titulo:hover td:not(.tabla-lda__num) { background: #dfd9c6; }
+.tabla-lda__rejilla tbody tr.es-subtitulo:hover td:not(.tabla-lda__num) { background: #e9e4d5; }
+.tabla-lda__rejilla tr.es-elegida td:not(.tabla-lda__num) { background: #e6ecef !important; }
 .tabla-lda__rejilla tr.es-elegida .tabla-lda__num { box-shadow: inset 3px 0 0 #141413; color: #141413; }
 
 .tabla-lda__tope { padding: 10px 12px; color: #6d6b67; background: #faf9f5; border-top: 1px solid #e2ddd0; }
