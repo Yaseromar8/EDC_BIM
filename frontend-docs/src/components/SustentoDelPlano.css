@@ -1,8 +1,10 @@
 /* Sustento de metrados sobre el plano (SustentoDelPlano.jsx). Paleta D-24: azul para lo vinculado,
    ámbar para lo medido sobre otra versión. Sobrio: líneas finas, sin sombras grandes. */
 
-.sustento-capa { position: absolute; inset: 0; z-index: 4; pointer-events: none; }
-.sustento-capa.es-dibujo { pointer-events: auto; cursor: crosshair; }
+/* z-index 9: por encima de la vista previa (7) y del mosaico de teselas (8) de la hoja PDF. Estaba en 4 y
+   las zonas quedaban DETRÁS del plano (20-oct-2026). */
+.sustento-capa { position: absolute; inset: 0; z-index: 9; pointer-events: none; }
+.sustento-capa.es-dibujo { z-index: 10; pointer-events: auto; cursor: crosshair; }
 /* Sobre el visor de CAD: por encima del lienzo de Autodesk y de la revisión de planos. */
 .sustento-capa--cad { z-index: 6; overflow: hidden; }
 
