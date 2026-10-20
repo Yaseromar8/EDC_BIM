@@ -80,11 +80,25 @@ def get_project_config_internal():
         from db import get_db_connection
         with get_db_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute('''
-                SELECT model_id, name, urn, source, region, project_id, item_id,
-                       version_id, version_number, last_modified_time, app_project_id, added_at, default_view_guid
-                FROM model_config ORDER BY added_at
-            ''')
+            # Con la migración 38 aún sin aplicar, leer `default_view_name` fallaría y TODOS los
+            # frentes se quedarían sin modelos. Se lee como antes y el nombre queda vacío.
+            cursor.execute("SAVEPOINT leer_config")
+            try:
+                cursor.execute('''
+                    SELECT model_id, name, urn, source, region, project_id, item_id,
+                           version_id, version_number, last_modified_time, app_project_id, added_at, default_view_guid,
+                           default_view_name
+                    FROM model_config ORDER BY added_at
+                ''')
+            except Exception:
+                cursor.execute("ROLLBACK TO SAVEPOINT leer_config")
+                print("[digital_twin] model_config sin default_view_name (falta la migración 38): se lee sin él.")
+                cursor.execute('''
+                    SELECT model_id, name, urn, source, region, project_id, item_id,
+                           version_id, version_number, last_modified_time, app_project_id, added_at, default_view_guid,
+                           NULL
+                    FROM model_config ORDER BY added_at
+                ''')
             rows = cursor.fetchall()
             models = []
             for r in rows:
@@ -101,7 +115,9 @@ def get_project_config_internal():
                     'lastModifiedTime': r[9],
                     'appProjectId': r[10],
                     'added_at': r[11].isoformat() if r[11] else None,
-                    'defaultViewGuid': r[12]
+                    'defaultViewGuid': r[12],
+                    # La vista elegida, POR NOMBRE (estable entre versiones; el GUID no). Ver vista_del_modelo.
+                    'defaultViewName': r[13]
                 })
             return {'models': models}
     except Exception as e:
@@ -115,11 +131,40 @@ def save_project_config_internal(config):
         from db import get_db_connection
         with get_db_connection() as conn:
             cursor = conn.cursor()
+            # Mismo cuidado al guardar: sin la columna (migración 38 pendiente), se guarda como antes.
+            cursor.execute("SELECT 1 FROM information_schema.columns WHERE table_name = 'model_config' "
+                           "AND column_name = 'default_view_name'")
+            con_nombre = cursor.fetchone() is not None
+            if not con_nombre:
+                print("[digital_twin] model_config sin default_view_name (falta la migración 38): se guarda sin él.")
             for model in config.get('models', []):
+                if not con_nombre:
+                    model = {**model, '_sin_nombre_de_vista': True}
                 cursor.execute('''
                     INSERT INTO model_config
                         (model_id, name, urn, source, region, project_id, item_id,
-                         version_id, version_number, last_modified_time, app_project_id, default_view_guid, updated_at)
+                         version_id, version_number, last_modified_time, app_project_id, default_view_guid,
+                         default_view_name, updated_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
+                    ON CONFLICT (model_id) DO UPDATE SET
+                        name = EXCLUDED.name,
+                        urn = EXCLUDED.urn,
+                        source = EXCLUDED.source,
+                        region = EXCLUDED.region,
+                        project_id = EXCLUDED.project_id,
+                        item_id = EXCLUDED.item_id,
+                        app_project_id = EXCLUDED.app_project_id,
+                        version_id = EXCLUDED.version_id,
+                        version_number = EXCLUDED.version_number,
+                        last_modified_time = EXCLUDED.last_modified_time,
+                        default_view_guid = EXCLUDED.default_view_guid,
+                        default_view_name = EXCLUDED.default_view_name,
+                        updated_at = NOW()
+                ''' if not model.get('_sin_nombre_de_vista') else '''
+                    INSERT INTO model_config
+                        (model_id, name, urn, source, region, project_id, item_id,
+                         version_id, version_number, last_modified_time, app_project_id, default_view_guid,
+                         updated_at)
                     VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
                     ON CONFLICT (model_id) DO UPDATE SET
                         name = EXCLUDED.name,
@@ -140,8 +185,8 @@ def save_project_config_internal(config):
                     model.get('projectId'), model.get('itemId'),
                     model.get('versionId'), model.get('versionNumber'),
                     model.get('lastModifiedTime'), model.get('appProjectId'),
-                    model.get('defaultViewGuid')
-                ))
+                    model.get('defaultViewGuid'),
+                ) + (() if model.get('_sin_nombre_de_vista') else (model.get('defaultViewName'),)))
             conn.commit()
             from db import invalidar_resolver_de_obras
             invalidar_resolver_de_obras()
@@ -389,6 +434,8 @@ def add_model_route():
     
     if data.get('defaultViewGuid'):
         new_model["defaultViewGuid"] = data.get('defaultViewGuid')
+    if data.get('defaultViewName'):
+        new_model["defaultViewName"] = data.get('defaultViewName')
     
     config.setdefault('models', []).append(new_model)
     if save_project_config_internal(config):
@@ -463,6 +510,15 @@ def update_model_link():
                     'pending_translation': True,
                     'message': 'La nueva versión aún se está traduciendo en ACC. Reintenta en unos minutos.'
                 }), 200
+
+            # LA VISTA VIAJA POR NOMBRE (vista_del_modelo). Si la elegida no está en la versión
+            # nueva, el modelo NO cambia: pasar a una versión cuya vista no se puede dibujar ni
+            # extraer deja el frente sin inventario. Si está, se guarda su GUID de ESA versión.
+            from vista_del_modelo import llevar_vista_a_la_version
+            puede, aviso = llevar_vista_a_la_version(model, model.get('urn'), new_urn, token)
+            if not puede:
+                print(f"[Update] {model['name']}: {aviso}")
+                return jsonify({'updated': False, 'view_missing': True, 'message': aviso}), 200
 
             # SEGURIDAD TRANSACCIONAL (Fase 6): NO se borra el inventario viejo aqui.
             # Es la misma version-lineage (mismo base_urn), asi que extract_metadata_task
@@ -623,6 +679,13 @@ def update_all_models():
             if not _is_model_translated(new_urn, token):
                 entry.update(status='pending_translation',
                              message='La versión nueva aún se traduce en ACC. Reintenta en unos minutos.')
+                results.append(entry)
+                continue
+
+            from vista_del_modelo import llevar_vista_a_la_version
+            puede, aviso = llevar_vista_a_la_version(model, model.get('urn'), new_urn, token)
+            if not puede:
+                entry.update(status='view_missing', message=aviso)
                 results.append(entry)
                 continue
 
@@ -993,14 +1056,17 @@ def finalize_local_upload():
 
         # Traducción lista → primera vista 3D (fallback: primera geometría)
         default_guid = None
+        default_name = None
         try:
             for d in manifest.get('derivatives', []):
                 for ch in d.get('children', []):
                     if ch.get('type') == 'geometry':
                         if ch.get('role') == '3d':
                             default_guid = ch.get('guid')
+                            default_name = ch.get('name')
                             break
-                        default_guid = default_guid or ch.get('guid')
+                        if not default_guid:
+                            default_guid, default_name = ch.get('guid'), ch.get('name')
                 if default_guid:
                     break
         except Exception:
@@ -1021,6 +1087,7 @@ def finalize_local_upload():
             }
             if default_guid:
                 new_model["defaultViewGuid"] = default_guid
+                new_model["defaultViewName"] = default_name
             config.setdefault('models', []).append(new_model)
             if not save_project_config_internal(config):
                 return jsonify({'error': 'Failed to save config'}), 500
@@ -1396,6 +1463,8 @@ def relink_model_route():
             m['itemId'] = new_data.get('itemId')
             if new_data.get('defaultViewGuid'):
                 m['defaultViewGuid'] = new_data.get('defaultViewGuid')
+            # Otro archivo: su vista se elige de nuevo en la ventana; no se arrastra el nombre del anterior.
+            m['defaultViewName'] = new_data.get('defaultViewName') or None
             # appProjectId stays same to keep it in same view
             break
     

@@ -333,8 +333,48 @@ def _aps_collection(response):
     return collection
 
 
+def _vista_extraida(scope_id, source_urn):
+    """{'guid','name'} de la vista con que se extrajo esa versión en ese frente, o None."""
+    try:
+        from db import get_db_connection
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            cur.execute("SELECT view_guid, view_name FROM inventory_vista_extraida "
+                        "WHERE scope_id = %s AND source_urn = %s", (scope_id, source_urn))
+            fila = cur.fetchone()
+            return {'guid': fila[0], 'name': fila[1]} if fila else None
+    except Exception as e:
+        print(f"[Extractor] vista extraída no consultada: {str(e)[:120]}")
+        return None
+
+
+def _apuntar_vista_extraida(scope_id, source_urn, vista):
+    try:
+        from db import get_db_connection
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            cur.execute("""INSERT INTO inventory_vista_extraida (scope_id, source_urn, view_guid, view_name)
+                           VALUES (%s, %s, %s, %s)
+                           ON CONFLICT (scope_id, source_urn) DO UPDATE
+                              SET view_guid = EXCLUDED.view_guid, view_name = EXCLUDED.view_name,
+                                  extraido_en = now()""",
+                        (scope_id, source_urn, vista.get('guid'), vista.get('name')))
+            conn.commit()
+    except Exception as e:
+        print(f"[Extractor] vista extraída no apuntada: {str(e)[:120]}")
+
+
+def _misma_vista(a, b):
+    from vista_del_modelo import _clave
+    if not a or not b:
+        return False
+    if a.get('name') and b.get('name'):
+        return _clave(a['name']) == _clave(b['name'])
+    return bool(a.get('guid')) and a.get('guid') == b.get('guid')
+
+
 def extract_metadata_task(urn, target_urn, job_id, purge_source_urns=None, scope_hint=None,
-                          reuse_existing_snapshot=False):
+                          reuse_existing_snapshot=False, vista_pedida=None):
     """ Tarea en segundo plano para extraer metadata de Autodesk.
 
     purge_source_urns: Sources de OTRO linaje que se retiran (sin borrar historia)
@@ -367,6 +407,14 @@ def extract_metadata_task(urn, target_urn, job_id, purge_source_urns=None, scope
         with get_db_connection() as conn:
             source_context = _extraction_source_context(conn, urn, target_urn, scope_hint=scope_hint)
             urn = source_context['source_urn']
+            # LA VISTA MANDA (vista_del_modelo). El inventario guardado de esta versión solo se
+            # reutiliza si salió de la MISMA vista que se pide; si no se sabe de cuál salió (anterior
+            # a la 38) o es otra, se extrae de nuevo. Reutilizarlo era lo que dejaba al Canal con
+            # elementos sin pieza en lo dibujado.
+            if (reuse_existing_snapshot and vista_pedida and target_urn != '__cmp__'
+                    and not _misma_vista(_vista_extraida(target_urn, urn), vista_pedida)):
+                print("[Extractor] El inventario guardado no es de la vista pedida: se extrae de nuevo.")
+                reuse_existing_snapshot = False
             if reuse_existing_snapshot and source_context['linked_in_scope']:
                 raise IdentityError('MODEL_ALREADY_LINKED')
             repository = InventoryIdentityRepository(conn)
@@ -443,8 +491,21 @@ def extract_metadata_task(urn, target_urn, job_id, purge_source_urns=None, scope
                     print(f"[Extractor] default_view_guid encontrado en model_config: {configured_guid}")
         except Exception as db_err:
             print(f"[Extractor] Advertencia: No se pudo consultar model_config: {db_err}")
+        configured_name = None
+        if target_urn != '__cmp__':
+            try:
+                from db import get_db_connection
+                with get_db_connection() as conn:
+                    cursor = conn.cursor()
+                    cursor.execute("SELECT default_view_name FROM model_config "
+                                   "WHERE urn = %s AND app_project_id = %s", (urn, target_urn))
+                    row = cursor.fetchone()
+                    configured_name = row[0] if row and row[0] else None
+            except Exception as db_err:
+                print(f"[Extractor] default_view_name no consultado: {str(db_err)[:120]}")
 
         guid = None
+        vista_usada = None
         available_guids = set()
         views_3d = []
         for view in metadata:
@@ -454,10 +515,28 @@ def extract_metadata_task(urn, target_urn, job_id, purge_source_urns=None, scope
                 views_3d.append(view)
 
         # Intentar usar el GUID configurado si existe y está disponible en el manifest
-        if configured_guid and configured_guid in available_guids:
-            guid = configured_guid
-            matched_name = next((v.get('name') for v in metadata if v.get('guid') == guid), '?')
-            print(f"[Extractor] Usando default_view_guid configurado: {guid} (vista: {matched_name})")
+        from vista_del_modelo import resolver_vista, mensaje_de_vista_ausente
+        pedido_nombre = (vista_pedida or {}).get('name') or configured_name
+        pedido_guid = (vista_pedida or {}).get('guid') or configured_guid
+        vista_usada, como = resolver_vista(
+            [{'name': v.get('name'), 'guid': v.get('guid')} for v in metadata], pedido_nombre, pedido_guid)
+        if como == 'no_existe':
+            raise Exception(mensaje_de_vista_ausente(pedido_nombre))
+        if vista_usada:
+            guid = vista_usada['guid']
+            print(f"[Extractor] Vista elegida ({como}): {vista_usada.get('name')} ({guid})")
+            if not configured_name and target_urn != '__cmp__':
+                # Modelos anteriores a la 38: se aprende el nombre de su GUID, una vez.
+                try:
+                    from db import get_db_connection
+                    with get_db_connection() as conn:
+                        cursor = conn.cursor()
+                        cursor.execute("UPDATE model_config SET default_view_name = %s WHERE urn = %s "
+                                       "AND app_project_id = %s AND default_view_name IS NULL",
+                                       (vista_usada.get('name'), urn, target_urn))
+                        conn.commit()
+                except Exception as db_err:
+                    print(f"[Extractor] nombre de vista no aprendido: {str(db_err)[:120]}")
         else:
             if configured_guid:
                 print(f"[Extractor] ADVERTENCIA: default_view_guid '{configured_guid}' no encontrado en manifest, usando fallback")
@@ -500,6 +579,8 @@ def extract_metadata_task(urn, target_urn, job_id, purge_source_urns=None, scope
         if not guid:
             guid = metadata[0]['guid']
             print(f"[Extractor] Fallback final: primera vista disponible: {guid}")
+        if not vista_usada:
+            vista_usada = {'guid': guid, 'name': next((v.get('name') for v in metadata if v.get('guid') == guid), None)}
         print(f"[Extractor] GUID seleccionado final: {guid}")
 
         # Fase 2: Extracción Properties (Paginada)
@@ -908,6 +989,8 @@ def extract_metadata_task(urn, target_urn, job_id, purge_source_urns=None, scope
             if retire:
                 repository.deactivate_sources(target_urn, retire, allowed_scopes=[target_urn])
             conn.commit()
+        if target_urn != '__cmp__':
+            _apuntar_vista_extraida(target_urn, urn, vista_usada)
 
         set_job(job_id, {'status': 'success', 'progress': 100, 'message': f'Extracción completa. {len(inventory_data)} activos insertados.'})
         print(f"[Extractor] COMPLETADO: {len(inventory_data)} activos insertados en PostgreSQL")
@@ -917,8 +1000,16 @@ def extract_metadata_task(urn, target_urn, job_id, purge_source_urns=None, scope
         import traceback
         traceback.print_exc()
         print(f"[Extractor ERROR] {e}")
+        mensaje = str(e)
+        if getattr(e, 'code', None) == 'SNAPSHOT_CONTENT_CONFLICT':
+            # Una versión tiene UN inventario. Otro distinto de la misma versión es, casi siempre,
+            # otra vista (docs/visor/10). Se dice cuál hay, en vez de un código.
+            previa = _vista_extraida(target_urn, sanitize_urn(urn)) if target_urn != '__cmp__' else None
+            de_cual = f" con la vista «{previa['name']}»" if previa and previa.get('name') else ''
+            mensaje = (f"Esta versión ya tiene su inventario extraído{de_cual}, y no se reemplaza: "
+                       f"vuelve a importarla eligiendo esa vista, o sube una versión nueva desde Revit.")
         set_job(job_id, {'status': 'error', 'progress': 0,
-                         'message': str(e), 'code': getattr(e, 'code', 'EXTRACTION_FAILED')})
+                         'message': mensaje, 'code': getattr(e, 'code', 'EXTRACTION_FAILED')})
     finally:
         # Liberar el guard de concurrencia para este modelo+scope
         if _key:
@@ -980,6 +1071,11 @@ def start_extraction():
     task_kwargs = {'scope_hint': scope_hint}
     if reuse_existing_snapshot:
         task_kwargs['reuse_existing_snapshot'] = True
+    # La vista elegida en la ventana de importar: se extrae CON ELLA (vista_del_modelo).
+    vista_nombre = str(data.get('view_name') or '').strip() or None
+    vista_guid = str(data.get('view_guid') or '').strip() or None
+    if vista_nombre or vista_guid:
+        task_kwargs['vista_pedida'] = {'name': vista_nombre, 'guid': vista_guid}
     thread = threading.Thread(target=extract_metadata_task, args=(urn, target_urn, job_id),
                               kwargs=task_kwargs)
     thread.daemon = True

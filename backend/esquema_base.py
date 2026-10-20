@@ -643,6 +643,19 @@ TABLAS = [
         PRIMARY KEY (id),
         UNIQUE (base_project_id, front_id)
         )
+    """),
+    # De qué VISTA salió cada inventario extraído (migración 38). La identidad del inventario
+    # es por versión; esto dice con qué vista se extrajo esa versión, para no reutilizarlo con
+    # otra en silencio. docs/visor/10_VISTA_DEL_MODELO.md.
+    ("inventory_vista_extraida", """
+        CREATE TABLE IF NOT EXISTS "inventory_vista_extraida" (
+        "scope_id" text NOT NULL,
+        "source_urn" text NOT NULL,
+        "view_guid" text,
+        "view_name" text,
+        "extraido_en" timestamp with time zone DEFAULT now(),
+        PRIMARY KEY (scope_id, source_urn)
+        )
     """),]
 
 
@@ -660,6 +673,9 @@ COLUMNAS_PENDIENTES = [
      'TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP'),
     ('tracking_details', 'tracking_id', 'INTEGER'),
     ('model_config', 'default_view_guid', 'TEXT'),
+    # La vista elegida del modelo, POR NOMBRE: el GUID cambia entre versiones (migracion 38,
+    # docs/visor/10_VISTA_DEL_MODELO.md).
+    ('model_config', 'default_view_name', 'TEXT'),
     # Vivia SOLO dentro del manejador que publica un modelo al visor, sin
     # condicionar al interruptor: era el ultimo DDL sin guardia en camino de
     # peticion, y con DDL_EN_CALIENTE=false la columna no se habria creado
