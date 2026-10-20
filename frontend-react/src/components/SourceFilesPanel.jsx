@@ -118,7 +118,7 @@ const getActiveViewName = (modelUrn, modelViews, activeViewableGuids, defaultVie
 
 const SourceFilesPanel = ({
     models, hiddenModels = [], onImport, onRemove, onToggleVisibility,
-    modelViews, activeViewableGuids, onLoadView, onUpdate, onUpdateAll, updateAllBusy = false, onRelink,
+    modelViews, activeViewableGuids, onLoadView, onUpdate, onUpdateAll, updateAllBusy = false, onRelink, onReextract,
     extractionJobs = {}, availableUpdates = {}, updateCheckStatus = {},
     sheets = [], onOpenSheet
 }) => {
@@ -260,6 +260,18 @@ const SourceFilesPanel = ({
                                                 <button onClick={(e) => { e.stopPropagation(); onRelink && onRelink(model); setActiveMenu(null); }}>
                                                     <span className="sfp-menu-icon"><RelinkIcon /></span> Relink
                                                 </button>
+                                                {/* La misma extracción que lanzan Update y Relink, con la versión ya
+                                                    enlazada: sin buscar el archivo en ACC. Es la salida cuando una
+                                                    extracción se cortó y el frente quedó con el inventario bloqueado. */}
+                                                {onReextract && (
+                                                    <button
+                                                        disabled={isExtracting}
+                                                        title="Vuelve a extraer el inventario de la versión enlazada, sin cambiarla"
+                                                        onClick={(e) => { e.stopPropagation(); if (!isExtracting) onReextract(model); setActiveMenu(null); }}
+                                                    >
+                                                        <span className="sfp-menu-icon"><UpdateIcon /></span> Reextraer inventario
+                                                    </button>
+                                                )}
                                                 <hr className="sfp-menu-separator" />
                                                 <button
                                                     className="delete-option"
@@ -285,6 +297,18 @@ const SourceFilesPanel = ({
                                     <div style={{ height: 4, background: 'rgba(20, 20, 19,0.08)', borderRadius: 2, overflow: 'hidden' }}>
                                         <div style={{ height: '100%', width: `${Math.round(extractData.progress || 0)}%`, background: '#507294', borderRadius: 2, transition: 'width 0.3s ease' }} />
                                     </div>
+                                </div>
+                            )}
+
+                            {/* COMO TERMINÓ — antes la barra desaparecía y un error o un corte no
+                                se veían en ningún sitio: el frente quedaba con el inventario
+                                bloqueado (409) sin pista de qué modelo lo causaba. */}
+                            {extractData && !isExtracting && extractData.status && (
+                                <div className="sfp-extraction-bar" title={extractData.status}
+                                    style={{ color: extractData.fallo ? '#b93535' : '#64744e' }}>
+                                    <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                        {extractData.fallo ? '⚠ ' : '✓ '}{extractData.status}
+                                    </span>
                                 </div>
                             )}
 

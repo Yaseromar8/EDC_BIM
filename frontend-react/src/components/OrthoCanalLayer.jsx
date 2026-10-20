@@ -47,7 +47,9 @@ export default function OrthoCanalLayer({ scope, backendUrl,
       if (!alive || !manifest?.active || !files || mounting) return;
       const viewer = window.__mainViewer || window.NOP_VIEWER;
       const surface = findSurface(viewer, manifest);
-      if (overlay && overlayModel === surface?.model) return;
+      // Ya montada: solo se repasa que siga la visibilidad de su superficie (red de seguridad
+      // por si LMV no avisó de un ocultar/aislar; ver seguirVisibilidad en orthoCanalTrial).
+      if (overlay && overlayModel === surface?.model) { overlay.sincronizarVisibilidad?.(); return; }
       dispose();
       if (!surface) return; // El modelo aún puede estar cargando.
       mounting = true;

@@ -2005,19 +2005,23 @@ const Viewer = ({
                             if (doc.getRoot() && doc.getRoot().data && !doc.getRoot().data.unit) doc.getRoot().data.unit = 'm';
                         } catch (e) { }
 
-                        const timeoutPromise = new Promise((_, reject) => {
-                            setTimeout(() => reject(new Error('Model load timeout triggered')), 120000);
-                        });
+                        // MODELOS PESADOS (20-oct-2026): NO SE ABORTA POR RELOJ.
+                        // Antes: Promise.race con 120 s. Un RVT pesado recién reapuntado (Relink/Update:
+                        // versión nueva, nada en la caché del navegador) tarda más que eso en llegar. Al
+                        // vencer, el «plan B» volvía a pedir el MISMO nodo con la MISMA promesa ya
+                        // rechazada, así que fallaba al instante: el modelo no quedaba registrado (pantalla
+                        // sin él) mientras LMV seguía bajando DOS copias que nadie controlaba. Los errores
+                        // reales los da LMV por su propio camino; pasado el plazo solo se avisa.
+                        const avisoDeCargaLenta = setTimeout(() => {
+                            console.warn(`[Viewer] «${model.label || model.urn}» lleva más de 2 min cargando (modelo pesado o red lenta); se sigue esperando.`);
+                        }, 120000);
 
                         let viewableToLoad = viewable;
                         let loadedModel = null;
-                        
+
                         try {
                             console.log(`[Viewer] Attempting loadDocumentNode: type=${viewableToLoad.data.type}, role=${viewableToLoad.data.role || 'N/A'}`);
-                            loadedModel = await Promise.race([
-                                viewer.loadDocumentNode(doc, viewableToLoad, loadOptions),
-                                timeoutPromise
-                            ]);
+                            loadedModel = await viewer.loadDocumentNode(doc, viewableToLoad, loadOptions);
                         } catch (err) {
                             // Error 13 = Nodo lógico sin geometría descargable. Fallback a Geometry Parent.
                             console.warn(`[Viewer] Direct load failed (Error ${err}). Falling back to Geometry Parent.`);
@@ -2025,16 +2029,16 @@ const Viewer = ({
                             while (fallbackNode && fallbackNode.data.type !== 'geometry' && fallbackNode.parent) {
                                 fallbackNode = fallbackNode.parent;
                             }
-                            if (fallbackNode && fallbackNode.data.type === 'geometry') {
+                            // Pedir otra vez el MISMO nodo no arregla nada: solo duplica la descarga.
+                            if (fallbackNode && fallbackNode.data.type === 'geometry' && fallbackNode !== viewableToLoad) {
                                 console.log(`[Viewer] Fallback loading Geometry Master: ${fallbackNode.name()}`);
                                 viewableToLoad = fallbackNode;
-                                loadedModel = await Promise.race([
-                                    viewer.loadDocumentNode(doc, viewableToLoad, loadOptions),
-                                    timeoutPromise
-                                ]);
+                                loadedModel = await viewer.loadDocumentNode(doc, viewableToLoad, loadOptions);
                             } else {
                                 console.error('[Viewer] Exhausted fallback options. Could not find Geometry.');
                             }
+                        } finally {
+                            clearTimeout(avisoDeCargaLenta);
                         }
 
                         // Registrar el GUID de la vista cargada para evitar loops de recarga

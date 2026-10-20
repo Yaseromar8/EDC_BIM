@@ -5,7 +5,7 @@ import {
   DEFAULT_HILLSHADE_STRENGTH, DEFAULT_RELIEF_BLEND,
   orthoUv, viewerPointToUtm,
   buildCanalOrthoGeometry, buildCanalOrthoGeometries,
-  findPublishedSurface, mountCanalOrthoTrial,
+  findPublishedSurface, mountCanalOrthoTrial, superficieVisible,
 } from '../orthoCanalTrial.js';
 
 class Vector3 {
@@ -405,4 +405,24 @@ test('proyecta en todos los fragmentos del mismo dbId sin copiar ni destruir mal
     URL.createObjectURL = priorCreate;
     URL.revokeObjectURL = priorRevoke;
   }
+});
+
+test('la ortofoto solo se ve si su superficie se ve (ocultar, aislar, modelo oculto)', () => {
+  const superficie = { id: 'dwg' };
+  const otro = { id: 'rvt' };
+  const nodos = new Map([[44, true]]);
+  const viewer = {
+    visibles: [superficie, otro],
+    getVisibleModels() { return this.visibles; },
+    isNodeVisible(dbId, model) { return model === superficie ? nodos.get(dbId) !== false : true; },
+  };
+  assert.equal(superficieVisible(viewer, superficie, 44), true);
+  nodos.set(44, false);                                   // aislar otra cosa u ocultar la superficie
+  assert.equal(superficieVisible(viewer, superficie, 44), false);
+  nodos.set(44, true);
+  viewer.visibles = [otro];                               // modelo de la superficie oculto
+  assert.equal(superficieVisible(viewer, superficie, 44), false);
+  // Visor sin esas funciones: ante la duda se ve (no desaparece por un fallo nuestro).
+  assert.equal(superficieVisible({}, superficie, 44), true);
+  assert.equal(superficieVisible({ getVisibleModels() { throw new Error('x'); } }, superficie, 44), true);
 });

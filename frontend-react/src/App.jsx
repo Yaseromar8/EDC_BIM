@@ -2686,7 +2686,12 @@ function App() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ urn, target_urn: selectedProject ? selectedProject.id : urn })
         });
-        if (!res.ok) throw new Error("Error iniciando job");
+        if (!res.ok) {
+          // El motivo del servidor ({error, code}) a la vista: sin él, un rechazo
+          // de identidad y un corte de red se veían igual.
+          const cuerpo = await res.json().catch(() => ({}));
+          throw new Error(cuerpo.code || cuerpo.error || `HTTP ${res.status}`);
+        }
         job_id = (await res.json()).job_id;
       }
 
@@ -2710,7 +2715,7 @@ function App() {
         attempts++;
         if (attempts > MAX_ATTEMPTS) {
           stopPoll();
-          setExtractionJobs(prev => ({ ...prev, [urn]: { ...prev[urn], status: 'La extracción tardó demasiado (reintenta)', isActive: false } }));
+          setExtractionJobs(prev => ({ ...prev, [urn]: { ...prev[urn], status: 'La extracción tardó demasiado (reintenta)', isActive: false, fallo: true } }));
           return;
         }
         try {
@@ -2732,7 +2737,9 @@ function App() {
               window.dispatchEvent(new CustomEvent('inventory-needs-refresh'));
             } else if (stData.status === 'error') {
               stopPoll();
-              setExtractionJobs(prev => ({ ...prev, [urn]: { ...prev[urn], status: 'Error', isActive: false } }));
+              // El mensaje del job es el motivo (p. ej. el código de identidad); solo
+              // «Error» dejaba sin saber qué modelo bloquea el inventario ni por qué.
+              setExtractionJobs(prev => ({ ...prev, [urn]: { ...prev[urn], status: `Error: ${stData.message || 'sin detalle'}`, isActive: false, fallo: true } }));
             }
           }
         } catch (e) {
@@ -2742,7 +2749,7 @@ function App() {
       pollIntervalsRef.current[urn] = pollInterval;
     } catch (e) {
       console.error("[Extraction] Error:", e);
-      setExtractionJobs(prev => ({ ...prev, [urn]: { status: 'Fallo al iniciar', isActive: false } }));
+      setExtractionJobs(prev => ({ ...prev, [urn]: { status: `No se pudo iniciar: ${e.message || 'sin detalle'}`, isActive: false, fallo: true } }));
     }
   };
 
@@ -4492,6 +4499,7 @@ function App() {
             updateAllBusy={updateAllBusy}
             removeModel={removeModel}
             setRelinkTargetModel={setRelinkTargetModel}
+            reextractModel={(model) => triggerBackgroundExtraction(model.urn)}
             extractionJobs={extractionJobs}
             availableUpdates={availableUpdates}
             updateCheckStatus={updateCheckStatus}

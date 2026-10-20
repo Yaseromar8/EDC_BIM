@@ -47,6 +47,7 @@ const TandemSidebar = ({
     updateAllBusy,
     removeModel,
     setRelinkTargetModel,
+    reextractModel,
     setImportModalOpen,
     extractionJobs,
     availableUpdates,
@@ -207,6 +208,7 @@ const TandemSidebar = ({
                         setRelinkTargetModel(model);
                         setImportModalOpen(true);
                     }}
+                    onReextract={reextractModel}
                     extractionJobs={extractionJobs}
                     availableUpdates={availableUpdates}
                     updateCheckStatus={updateCheckStatus}

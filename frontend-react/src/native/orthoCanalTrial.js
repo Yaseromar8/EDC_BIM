@@ -103,6 +103,46 @@ export function findPublishedSurface(viewer, manifest) {
   return model ? { model, dbId: manifest.db_id } : null;
 }
 
+// LA ORTOFOTO SIGUE A SU SUPERFICIE (20-oct-2026). La foto se pinta en una escena de
+// superposición, y LMV no oculta ni aísla las superposiciones: al aislar otra cosa, la
+// superficie quedaba fantasma u oculta y la foto seguía encima, a todo color, tapando lo
+// aislado. Ahora la capa se ve solo si su superficie se ve: modelo visible y su elemento
+// ni oculto ni fuera del aislamiento. Ante la duda (visor sin esas funciones), se ve.
+export function superficieVisible(viewer, model, dbId) {
+  try {
+    const visibles = viewer?.getVisibleModels?.();
+    if (Array.isArray(visibles) && !visibles.includes(model)) return false;
+    if (typeof viewer?.isNodeVisible === 'function') return viewer.isNodeVisible(dbId, model) !== false;
+    return model?.visibilityManager?.isNodeVisible?.(dbId) !== false;
+  } catch {
+    return true;
+  }
+}
+
+const EVENTOS_DE_VISIBILIDAD = [
+  'ISOLATE_EVENT', 'HIDE_EVENT', 'SHOW_EVENT', 'SHOW_ALL_EVENT',
+  'AGGREGATE_ISOLATION_CHANGED_EVENT', 'MODEL_ADDED_EVENT', 'MODEL_REMOVED_EVENT',
+];
+
+function seguirVisibilidad(viewer, model, dbId, meshes) {
+  const AV = (typeof window !== 'undefined' && window.Autodesk?.Viewing) || {};
+  const sincronizar = () => {
+    const ver = superficieVisible(viewer, model, dbId);
+    if (meshes.every((mesh) => mesh.visible === ver)) return;
+    meshes.forEach((mesh) => { mesh.visible = ver; });
+    try { viewer.impl?.invalidate?.(false, false, true); } catch { /* visor desmontado */ }
+  };
+  // LMV avisa antes de terminar de marcar los nodos: se mira en el siguiente turno.
+  const alAvisar = () => setTimeout(sincronizar, 0);
+  const tipos = EVENTOS_DE_VISIBILIDAD.map((nombre) => AV[nombre]).filter(Boolean);
+  tipos.forEach((tipo) => viewer.addEventListener?.(tipo, alAvisar));
+  sincronizar();
+  return {
+    sincronizar,
+    retirar() { tipos.forEach((tipo) => viewer.removeEventListener?.(tipo, alAvisar)); },
+  };
+}
+
 function fragmentIds(model, dbId, allModelFragments) {
   const tree = model.getInstanceTree?.() || model.getData?.()?.instanceTree;
   const frags = model.getFragmentList?.();
@@ -385,12 +425,14 @@ async function mountProjectedSurface(viewer, model, dbId, tiles, signal,
     }
     if (!mounted.length) throw new Error('No hay mallas utilizables en la superficie seleccionada.');
     if (clearSelection) viewer.clearSelection?.();
+    const visibilidad = seguirVisibilidad(viewer, model, dbId, mounted);
     viewer.impl.invalidate(false, false, true);
     let disposed = false;
     return {
       mode: 'projection', inspected: null, included: null,
       fragments: ids.length, coveredFragments: mounted.length,
       width: images[0].width, height: images[0].height, tiles: tiles.length,
+      sincronizarVisibilidad() { if (!disposed) visibilidad.sincronizar(); },
       setReliefBlend(value) {
         if (disposed) return;
         material.uniforms.uPhotoOpacity.value = photoOpacity(value);
@@ -404,6 +446,7 @@ async function mountProjectedSurface(viewer, model, dbId, tiles, signal,
       dispose() {
         if (disposed) return;
         disposed = true;
+        visibilidad.retirar();
         for (const mesh of mounted) {
           try { viewer.impl.removeOverlay(overlayName, mesh); } catch { /* visor desmontado */ }
         }
@@ -474,12 +517,14 @@ export async function mountCanalOrthoTrial(viewer, files,
     }
     if (clearSelection) viewer.clearSelection?.();
     if (!allModelFragments) viewer.fitToView?.([dbId], model);
+    const visibilidad = seguirVisibilidad(viewer, model, dbId, mounted.map(({ mesh }) => mesh));
     viewer.impl.invalidate(false, false, true);
     let disposed = false;
     return {
       mode: 'cpu',
       inspected, included, fragments, coveredFragments,
       width: images[0].width, height: images[0].height, tiles: tiles.length,
+      sincronizarVisibilidad() { if (!disposed) visibilidad.sincronizar(); },
       setReliefBlend(value) {
         if (disposed) return;
         for (const { material } of mounted) {
@@ -492,6 +537,7 @@ export async function mountCanalOrthoTrial(viewer, files,
       dispose() {
         if (disposed) return;
         disposed = true;
+        visibilidad.retirar();
         for (const { mesh, material, texture } of mounted) {
           try { viewer.impl.removeOverlay(overlayName, mesh); } catch { /* visor desmontado */ }
           material.dispose(); texture.dispose();
