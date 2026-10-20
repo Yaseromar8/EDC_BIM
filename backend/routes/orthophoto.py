@@ -150,6 +150,10 @@ def get_orthophoto(scope):
                         'model_urn': state['model_urn'], 'db_id': state['db_id'],
                         'relief_blend': state['relief_blend'],
                         'directional_shade': state['directional_shade'],
+                        # Las imágenes vienen de esta publicación (un ajuste las reutiliza):
+                        # si no cambia, el visor no vuelve a descargarlas.
+                        'imagenes_de': state.get('imagenes_de') or state['revision'],
+                        'ajustado_en': state.get('ajustado_en'),
                         'north_path': url_for('orthophoto.get_tile', scope=scope,
                                               revision=state['revision'], part='north'),
                         'south_path': url_for('orthophoto.get_tile', scope=scope,
@@ -227,6 +231,7 @@ def publish_orthophoto(scope):
                  'south': names['south'], 'model_urn': model_urn, 'db_id': db_id,
                  'relief_blend': relief_blend,
                  'directional_shade': directional_shade,
+                 'imagenes_de': revision,
                  'published_at': datetime.now(timezone.utc).isoformat()}
         _write_state(bucket, base, key, state, generation)
         return jsonify({'active': True, 'revision': revision,
@@ -239,6 +244,68 @@ def publish_orthophoto(scope):
     except Exception:
         logger.exception('Fallo al publicar ortofoto del frente')
         return jsonify({'error': 'No se pudo publicar la ortofoto; la anterior sigue activa'}), 503
+
+
+def _copiar(bucket, origen, destino):
+    """Copia un mosaico a la ruta de otra revisión. En GCS, dentro del servidor de Google;
+    en el almacén local de desarrollo, leyendo y escribiendo (no tiene copia nativa)."""
+    fuente = bucket.get_blob(origen)
+    if fuente is None:
+        raise ValueError('Mosaico publicado incompleto')
+    if hasattr(bucket, 'copy_blob'):
+        bucket.copy_blob(fuente, bucket, destino, if_generation_match=0)
+        return
+    nuevo = bucket.blob(destino)
+    nuevo.upload_from_file(io.BytesIO(fuente.download_as_bytes()), content_type='image/jpeg',
+                           if_generation_match=0)
+
+
+@orthophoto_bp.route('/api/orthophoto/<scope>/ajustes', methods=['POST'])
+@requiere_sesion
+def adjust_orthophoto(scope):
+    """Guarda SOLO el relieve y el sombreado de la ortofoto publicada (20-oct-2026).
+
+    Antes, cambiarlos obligaba a volver a elegir y subir los dos JPG. Ahora es una revisión
+    nueva que reutiliza las MISMAS imágenes (copiadas a su ruta, porque cada revisión es
+    inmutable y se valida contra su propia carpeta) y anota de qué publicación salieron.
+    La revisión anterior queda intacta en el historial.
+    """
+    denied = _scope_guard(scope, write=True)
+    if denied:
+        return denied
+    try:
+        body = request.get_json(silent=True) or {}
+        relief_blend = _visual_value(body.get('relief_blend'), 0, 0.75, 'Mezcla de relieve')
+        directional_shade = _visual_value(body.get('directional_shade'), 0, 1,
+                                          'Sombreado de pendientes')
+        bucket = _bucket()
+        base, key = _keys(scope)
+        current, generation = _active(bucket, key)
+        if not _check_revision(current, body.get('expected_revision')):
+            return jsonify({'error': 'La ortofoto cambió; recarga antes de guardar',
+                            'code': 'REVISION_CONFLICT'}), 409
+        if not current or not current['active']:
+            return jsonify({'error': 'No hay ortofoto publicada'}), 409
+        revision = uuid.uuid4().hex
+        names = {part: f'{base}/versions/{revision}/{part}.jpg' for part in ('north', 'south')}
+        for part in ('north', 'south'):
+            _copiar(bucket, current[part], names[part])
+        state = {**current, 'revision': revision, 'north': names['north'], 'south': names['south'],
+                 'relief_blend': relief_blend, 'directional_shade': directional_shade,
+                 'imagenes_de': current.get('imagenes_de') or current['revision'],
+                 'ajustado_en': datetime.now(timezone.utc).isoformat()}
+        _write_state(bucket, base, key, state, generation)
+        return jsonify({'active': True, 'revision': revision, 'published_at': state['published_at'],
+                        'relief_blend': relief_blend, 'directional_shade': directional_shade,
+                        'imagenes_de': state['imagenes_de'], 'ajustado_en': state['ajustado_en']})
+    except (ValueError, TypeError) as error:
+        return jsonify({'error': str(error)}), 422
+    except PreconditionFailed:
+        return jsonify({'error': 'La ortofoto cambió; recarga antes de guardar',
+                        'code': 'REVISION_CONFLICT'}), 409
+    except Exception:
+        logger.exception('Fallo al ajustar ortofoto del frente')
+        return jsonify({'error': 'No se pudieron guardar los ajustes; siguen los anteriores'}), 503
 
 
 @orthophoto_bp.route('/api/orthophoto/<scope>/deactivate', methods=['POST'])
