@@ -17,6 +17,84 @@ html:root {
   --alephia-text-muted: #72706B;           /* Gris 600 · apoyo, 4,7:1 */
   --alephia-indicador: #D97757;            /* Orange: solo la raya de lo activo */
 }
+/* VENTANAS (20-oct-2026). Un solo patrón para toda ventana de View: modales, paneles flotantes y menús.
+   Velo Dark al 36 % SIN desenfoque, caja blanca SÓLIDA con línea Light Gray, radio 8, campos blancos
+   con línea Gris 300, cabeceras de grupo Light 50 y acción Blue 30D. Nada de cristal ni de fondos
+   negros translúcidos: eran restos del tema oscuro y sobre el claro lavaban el texto. */
+html:root {
+  --v-velo: rgb(20 20 19 / .36);
+  --v-superficie: #FFFFFF;
+  --v-superficie-2: #F1F0E8;               /* Light 50 · cabeceras de grupo, pie, hover */
+  --v-linea: #E8E6DC;                      /* Light Gray */
+  --v-linea-campo: #CCCAC0;                /* Gris 300 */
+  --v-texto: #141413;
+  --v-texto-2: #52524D;                    /* Gris 700 */
+  --v-texto-3: #72706B;                    /* Gris 600 · apoyo, 4,7:1 */
+  --v-accion: #507294;                     /* Blue 30D, texto blanco encima */
+  --v-accion-hover: #141413;               /* el mismo que --alephia-interactive-hover */
+  --v-foco: #6A9BCC;
+  --v-radio: 8px;
+  --v-radio-control: 4px;
+  --v-sombra: 0 12px 32px rgb(20 20 19 / .18), 0 2px 6px rgb(20 20 19 / .08);
+  --v-sombra-flotante: 0 4px 16px rgb(20 20 19 / .12);
+}
+.v-velo { position: fixed; inset: 0; background: var(--v-velo); display: flex; align-items: center; justify-content: center; }
+.v-caja {
+  background: var(--v-superficie); color: var(--v-texto); font-family: var(--a-font-sans);
+  border: 1px solid var(--v-linea); border-radius: var(--v-radio); box-shadow: var(--v-sombra);
+  display: flex; flex-direction: column; overflow: hidden; box-sizing: border-box;
+}
+.v-cabecera { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 16px 14px 20px; border-bottom: 1px solid var(--v-linea); }
+.v-titulo { margin: 0; font-size: 15px; font-weight: 600; line-height: 1.3; color: var(--v-texto); }
+.v-cerrar, .v-icono {
+  display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; padding: 0;
+  border: none; border-radius: var(--v-radio-control); background: transparent; color: var(--v-texto-3); cursor: pointer;
+}
+.v-cerrar:hover, .v-icono:hover:not(:disabled) { background: var(--v-superficie-2); color: var(--v-texto); }
+.v-icono:disabled { opacity: .35; cursor: default; }
+.v-etiqueta { font-size: 12px; font-weight: 500; color: var(--v-texto-2); }
+.v-campo {
+  width: 100%; box-sizing: border-box; height: 32px; padding: 0 10px; font: inherit; font-size: 13px;
+  background: var(--v-superficie); color: var(--v-texto); border: 1px solid var(--v-linea-campo); border-radius: var(--v-radio-control); outline: none;
+}
+.v-campo::placeholder { color: var(--v-texto-3); }
+.v-campo:focus { border-color: var(--v-accion); box-shadow: 0 0 0 2px rgb(106 155 204 / .35); }
+.v-lista { background: var(--v-superficie); border: 1px solid var(--v-linea); border-radius: var(--v-radio-control); overflow-y: auto; }
+.v-pie { display: flex; justify-content: flex-end; align-items: center; gap: 8px; padding: 12px 20px; border-top: 1px solid var(--v-linea); background: var(--v-superficie); }
+.v-boton {
+  height: 32px; padding: 0 16px; font: inherit; font-size: 13px; font-weight: 500; cursor: pointer;
+  border-radius: var(--v-radio-control); border: 1px solid var(--v-linea-campo); background: var(--v-superficie); color: var(--v-texto);
+  transition: background var(--a-motion-fast, 120ms), border-color var(--a-motion-fast, 120ms);
+}
+.v-boton:hover:not(:disabled) { background: var(--v-superficie-2); }
+.v-boton--principal { background: var(--v-accion); border-color: var(--v-accion); color: #FFFFFF; }
+.v-boton--principal:hover:not(:disabled) { background: var(--v-accion-hover); border-color: var(--v-accion-hover); }
+.v-boton:disabled { opacity: .45; cursor: default; }
+.v-boton:focus-visible, .v-cerrar:focus-visible, .v-icono:focus-visible, .v-enlace:focus-visible { outline: 2px solid var(--v-foco); outline-offset: 1px; }
+.v-enlace { background: none; border: none; padding: 0; font: inherit; font-size: 13px; color: var(--v-accion); cursor: pointer; }
+.v-enlace:hover { text-decoration: underline; }
+/* Menú contextual: blanco, filas de 32 px, hover Light 50; lo destructivo en rojo de error. */
+.v-menu { background: var(--v-superficie); border: 1px solid var(--v-linea); border-radius: var(--v-radio-control); box-shadow: var(--v-sombra-flotante); padding: 4px; min-width: 180px; font-family: var(--a-font-sans); }
+.v-menu__item { display: flex; align-items: center; gap: 8px; width: 100%; height: 32px; padding: 0 10px; border: none; border-radius: 3px; background: transparent; color: var(--v-texto); font: inherit; font-size: 13px; text-align: left; cursor: pointer; }
+.v-menu__item:hover { background: var(--v-superficie-2); }
+.v-menu__item--peligro { color: #B93535; }
+.v-menu__nota { font-size: 11px; color: var(--v-texto-3); }
+/* Aviso flotante sobre el visor: blanco, línea a la izquierda del color del estado. */
+.v-aviso {
+  position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
+  display: flex; align-items: center; gap: 12px; padding: 8px 8px 8px 14px;
+  background: var(--v-superficie); color: var(--v-texto); font-size: 13px; font-weight: 500;
+  border: 1px solid var(--v-linea); border-left: 3px solid var(--v-accion); border-radius: var(--v-radio-control);
+  box-shadow: var(--v-sombra-flotante);
+}
+.v-aviso--error { border-left-color: #B93535; }
+.v-aviso--error > span { color: #B93535; }
+.v-aviso--atencion { border-left-color: #734500; }
+.v-aviso--atencion > span { color: #734500; }
+.v-aviso--exito { border-left-color: #788C5D; }
+.v-aviso--exito > span { color: #667650; }
+.v-aviso .v-boton { height: 28px; padding: 0 12px; font-size: 12px; }
+
 /* View es claro: los controles nativos (casillas, selectores, barras de desplazamiento) también.
    index.css declaraba `light dark` y, con Windows en oscuro, las casillas salían negras. */
 html:root { color-scheme: light; }

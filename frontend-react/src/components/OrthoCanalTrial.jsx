@@ -294,7 +294,7 @@ export default function OrthoCanalTrial({ scope, backendUrl, canPublish = false 
   };
 
   return (
-    <div style={{ marginTop: 16, padding: 12, border: '1px solid #56708b', borderRadius: 8 }}>
+    <div style={{ marginTop: 16, padding: 12, border: '1px solid #e8e6dc', borderRadius: 8, background: '#ffffff' }}>
       <strong>Ortofoto · Frente Canal</strong>
       <p style={{ margin: '6px 0', lineHeight: 1.45 }}>
         {published?.active
@@ -302,7 +302,7 @@ export default function OrthoCanalTrial({ scope, backendUrl, canPublish = false 
           : published ? 'No hay una ortofoto publicada. ' : 'Estado de publicación aún no confirmado. '}
         Permanece visible hasta retirarla o reemplazarla; no caduca a los 7 días.
       </p>
-      {remoteError && <p role="alert">{remoteError}</p>}
+      {remoteError && <p role="alert" style={{ color: '#b93535' }}>{remoteError}</p>}
       {canPublish && <>
       <p style={{ margin: '6px 0', lineHeight: 1.45 }}>
         Para actualizarla, prepara los dos JPG con la misma huella de esta superficie
@@ -312,9 +312,9 @@ export default function OrthoCanalTrial({ scope, backendUrl, canPublish = false 
         coordenadas; el ECW no se sube.
       </p>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
-        <button type="button" disabled={snapshot.busy} onClick={() => northRef.current?.click()}>
+        <button type="button" className="v-boton" disabled={snapshot.busy} onClick={() => northRef.current?.click()}>
           Norte: {fileNames.north || 'elegir JPG'}</button>
-        <button type="button" disabled={snapshot.busy} onClick={() => southRef.current?.click()}>
+        <button type="button" className="v-boton" disabled={snapshot.busy} onClick={() => southRef.current?.click()}>
           Sur: {fileNames.south || 'elegir JPG'}</button>
       </div>
       <input ref={northRef} type="file" accept="image/jpeg,.jpg,.jpeg" style={{ display: 'none' }}
@@ -326,7 +326,7 @@ export default function OrthoCanalTrial({ scope, backendUrl, canPublish = false 
         <input type="range" min="0" max="75" step="5" value={snapshot.reliefPercent}
           aria-label="Relieve visible bajo la ortofoto"
           disabled={snapshot.busy}
-          style={{ display: 'block', width: '100%' }}
+          style={{ display: 'block', width: '100%', accentColor: '#507294' }}
           onChange={(event) => {
             trial.reliefPercent = Number(event.target.value);
             trial.overlay?.setReliefBlend(trial.reliefPercent / 100);
@@ -342,7 +342,7 @@ export default function OrthoCanalTrial({ scope, backendUrl, canPublish = false 
         <input type="range" min="0" max="100" step="5" value={snapshot.shadePercent}
           aria-label="Sombreado direccional de pendientes"
           disabled={snapshot.busy || (snapshot.active && snapshot.mode === 'cpu')}
-          style={{ display: 'block', width: '100%' }}
+          style={{ display: 'block', width: '100%', accentColor: '#507294' }}
           onChange={(event) => {
             trial.shadePercent = Number(event.target.value);
             trial.overlay?.setHillshadeStrength(trial.shadePercent / 100);
@@ -355,26 +355,23 @@ export default function OrthoCanalTrial({ scope, backendUrl, canPublish = false 
       </p>
       {publicadoRelieve != null && !snapshot.active && (
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
-          <button type="button" disabled={!ajustesCambiados || snapshot.busy}
-            style={{ background: ajustesCambiados ? '#141413' : undefined, color: ajustesCambiados ? '#fff' : undefined,
-              border: 0, borderRadius: 5, padding: '8px 10px' }}
+          <button type="button" className="v-boton v-boton--principal" disabled={!ajustesCambiados || snapshot.busy}
             onClick={guardarAjustes}>Guardar ajustes para todos</button>
-          <button type="button" disabled={!ajustesCambiados || snapshot.busy} onClick={descartarAjustes}>
+          <button type="button" className="v-boton" disabled={!ajustesCambiados || snapshot.busy} onClick={descartarAjustes}>
             Descartar</button>
         </div>
       )}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-        <button type="button" disabled={snapshot.busy || !published || !!remoteError}
-          style={{ background: '#2872c7', color: '#fff', border: 0, borderRadius: 5, padding: '8px 10px' }}
+        <button type="button" className="v-boton v-boton--principal" disabled={snapshot.busy || !published || !!remoteError}
           onClick={prepareAndPublish}>
           {snapshot.busy ? 'Preparando/publicando…' : 'Cargar y publicar para todos'}
         </button>
-        <button type="button" disabled={!snapshot.active || snapshot.busy}
+        <button type="button" className="v-boton" disabled={!snapshot.active || snapshot.busy}
           onClick={() => removeOverlay()}>Quitar vista previa</button>
-        <button type="button" disabled={!published?.active || snapshot.busy}
+        <button type="button" className="v-boton" disabled={!published?.active || snapshot.busy}
           onClick={removeForAll}>Retirar capa publicada</button>
       </div>
-      <p role="status" style={{ margin: '8px 0 0', color: '#c9d9eb' }}>{snapshot.message}</p>
+      <p role="status" style={{ margin: '8px 0 0', color: '#52524d' }}>{snapshot.message}</p>
       </>}
     </div>
   );

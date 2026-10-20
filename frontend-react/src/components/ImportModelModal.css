@@ -7,8 +7,7 @@
   position: fixed;
   inset: 0;
   z-index: 9999;
-  background: rgba(255, 255, 255, 0.6);
-  backdrop-filter: blur(3px);
+  background: var(--v-velo);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -29,9 +28,9 @@
   display: flex;
   flex-direction: column;
   background: #ffffff;
-  border: 1px solid rgba(20, 20, 19, 0.08);
-  border-radius: 8px;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(20, 20, 19, 0.04) inset;
+  border: 1px solid var(--v-linea);
+  border-radius: var(--v-radio);
+  box-shadow: var(--v-sombra);
   font-family: var(--a-font-sans);
   color: #333330;
   overflow: hidden;
@@ -48,17 +47,15 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 18px 24px 14px;
-  border-bottom: 1px solid rgba(20, 20, 19, 0.06);
+  padding: 14px 16px 14px 24px;
+  border-bottom: 1px solid var(--v-linea);
 }
 
 .import-header h3 {
   margin: 0;
-  font-size: 13px;
-  font-weight: 700;
-  letter-spacing: 1px;
+  font-size: 15px;
+  font-weight: 600;
   color: #141413;
-  text-transform: uppercase;
 }
 
 .import-close-btn {
@@ -284,7 +281,7 @@
   background: #f1f0e8;
   border: 1px solid #e8e6dc;
   border-radius: 4px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  box-shadow: var(--v-sombra-flotante);
   z-index: 120;
   overflow: hidden;
 }
@@ -438,7 +435,7 @@
   background: #f1f0e8;
   border: 1px solid #e8e6dc;
   border-radius: 4px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  box-shadow: var(--v-sombra-flotante);
   z-index: 120;
   overflow: hidden;
 }

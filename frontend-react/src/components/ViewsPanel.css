@@ -3,12 +3,10 @@
     top: 50px;
     right: 200px;
     width: 380px;
-    background-color: rgba(255, 255, 255, 0.65);
-    backdrop-filter: blur(15px);
-    -webkit-backdrop-filter: blur(15px);
-    border: 1px solid rgba(20, 20, 19,0.1);
-    border-radius: 4px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+    background-color: var(--v-superficie);
+    border: 1px solid var(--v-linea);
+    border-radius: var(--v-radio);
+    box-shadow: var(--v-sombra-flotante);
     z-index: 3000;
     display: flex;
     flex-direction: column;
@@ -67,8 +65,8 @@
 
 .view-creator-inline input {
     flex: 1;
-    background: rgba(0,0,0,0.3);
-    border: 1px solid rgba(20, 20, 19,0.1);
+    background: var(--v-superficie);
+    border: 1px solid var(--v-linea-campo);
     color: #141413;
     padding: 4px 8px;
     border-radius: 4px;
@@ -154,8 +152,8 @@
 .views-search-bar {
     display: flex;
     align-items: center;
-    background-color: rgba(0,0,0,0.3);
-    border: 1px solid rgba(20, 20, 19,0.1);
+    background-color: var(--v-superficie);
+    border: 1px solid var(--v-linea-campo);
     border-radius: 4px;
     padding: 6px 10px;
     margin-bottom: 12px;
@@ -330,8 +328,8 @@
   box-sizing: border-box;
   padding: 7px 9px;
   border-radius: 6px;
-  border: 1px solid rgba(20, 20, 19, 0.14);
-  background: rgba(0, 0, 0, 0.28);
+  border: 1px solid var(--v-linea-campo);
+  background: var(--v-superficie-2);
   color: #52524d;
   font-size: 11px;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;

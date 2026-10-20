@@ -8,7 +8,7 @@
     left: 0;
     width: 100vw;
     height: 100vh;
-    background: rgba(255, 255, 255, 0.7);
+    background: var(--v-velo);
     z-index: 1000;
     display: flex;
     justify-content: center;
@@ -18,12 +18,13 @@
 
 .docpin-modal {
     background: #ffffff;
-    border-radius: 12px;
+    border: 1px solid var(--v-linea);
+    border-radius: var(--v-radio);
     width: 550px;
     max-width: 90vw;
     max-height: 85vh;
     color: #141413;
-    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+    box-shadow: var(--v-sombra);
     display: flex;
     flex-direction: column;
     overflow: hidden;
@@ -790,9 +791,7 @@
     display: flex;
     align-items: center;
     gap: 5px;
-    background: rgba(255, 255, 255, 0.82);
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
+    background: var(--v-superficie);
     border: 1px solid rgba(80, 114, 148, 0.22);
     border-bottom: none;
     border-radius: 6px 6px 0 0;
@@ -979,9 +978,7 @@
     display: flex;
     align-items: center;
     gap: 0;
-    background: rgba(255, 255, 255, 0.92);
-    backdrop-filter: blur(14px);
-    -webkit-backdrop-filter: blur(14px);
+    background: var(--v-superficie);
     border-top: 1px solid rgba(80, 114, 148, 0.28);
     padding: 7px 12px;
 }
@@ -1167,9 +1164,7 @@
     display: flex;
     align-items: center;
     gap: 0;
-    background: rgba(255, 255, 255, 0.88);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
+    background: var(--v-superficie);
     border-top: 1px solid rgba(80, 114, 148, 0.25);
     padding: 8px 12px;
 }
@@ -1414,7 +1409,7 @@
     left: 0;
     right: 0;
     bottom: 0;
-    background: rgba(0, 0, 0, 0.4);
+    background: var(--v-velo);
     z-index: 100;
     display: flex;
     justify-content: flex-end;

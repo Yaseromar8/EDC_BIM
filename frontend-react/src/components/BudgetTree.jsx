@@ -144,25 +144,25 @@ function generatePopoutHTML(flatRows, engineResults) {
 <html><head><title>BIM 5D - Presupuesto</title>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
-  body { font-family: 'Segoe UI', Arial, sans-serif; background:#1a1b1f; color:#e0e0e0; font-size:12px; }
-  .header { background:#222; padding:8px 16px; display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #333; }
-  .header h3 { margin:0; font-size:14px; color:#7e9bbd; }
-  .dock-btn { background:#7e9bbd; color:#fff; border:none; padding:5px 14px; border-radius:4px; cursor:pointer; font-size:12px; }
-  .dock-btn:hover { background:#5f7fa3; }
+  body { font-family: 'IBM Plex Sans', 'Segoe UI', Arial, sans-serif; background:#ffffff; color:#141413; font-size:12px; }
+  .header { background:#ffffff; padding:8px 16px; display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #e8e6dc; }
+  .header h3 { margin:0; font-size:14px; color:#507294; }
+  .dock-btn { background:#507294; color:#fff; border:none; padding:5px 14px; border-radius:4px; cursor:pointer; font-size:12px; }
+  .dock-btn:hover { background:#141413; }
   table { width:100%; border-collapse:collapse; }
-  th { background:#2a2b30; color:#aaa; padding:6px 8px; text-align:left; font-size:11px; font-weight:600; position:sticky; top:0; z-index:2; border-bottom:1px solid #333; }
+  th { background:#f1f0e8; color:#52524d; padding:6px 8px; text-align:left; font-size:11px; font-weight:600; position:sticky; top:0; z-index:2; border-bottom:1px solid #e8e6dc; }
   th.num { text-align:right; }
-  .row { border-bottom:1px solid #2a2b30; cursor:pointer; transition:background 0.15s; }
-  .row:hover { background:#2a2b30; }
-  .row.selected { background:#262c36; }
-  .row.titulo { font-weight:700; background:#1e1f23; }
-  .row.titulo td { color:#ccc; }
+  .row { border-bottom:1px solid #e8e6dc; cursor:pointer; transition:background 0.15s; }
+  .row:hover { background:#f1f0e8; }
+  .row.selected { background:#ecf0f1; }
+  .row.titulo { font-weight:600; background:#faf9f5; }
+  .row.titulo td { color:#141413; }
   .row.n1 { font-size:13px; }
   .row.n1 td { padding:8px; }
   td { padding:4px 8px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  .cell-item { color:#7e9bbd; min-width:140px; }
+  .cell-item { color:#507294; min-width:140px; }
   .cell-desc { max-width:400px; }
-  .cell-und { text-align:center; color:#888; min-width:50px; }
+  .cell-und { text-align:center; color:#72706b; min-width:50px; }
   .cell-num { text-align:right; min-width:100px; font-variant-numeric:tabular-nums; }
   .arrow { font-size:10px; margin-right:4px; }
   .table-wrap { overflow:auto; height:calc(100vh - 40px); }
@@ -171,7 +171,7 @@ function generatePopoutHTML(flatRows, engineResults) {
 </head><body>
 <div class="header">
   <h3>5D - Presupuesto Maestro</h3>
-  <button class="dock-btn" onclick="dockBack()">⬅ Dock</button>
+  <button class="dock-btn" onclick="dockBack()">Acoplar</button>
 </div>
 <div class="table-wrap">
 <table><thead><tr>
@@ -896,14 +896,14 @@ const BudgetTree = ({ activeModelUrn = 'global', onClose, onPoppedOut }) => {
 
   // ─── Engine status indicator ──────────────────────
   const engineLabel = useMemo(() => {
-    if (engineStatus === 'loading') return '⏳ Extrayendo del modelo...';
+    if (engineStatus === 'loading') return 'Extrayendo del modelo...';
     if (engineStatus === 'done') {
       const total = Object.keys(engineResults).length;
       const complete = Object.values(engineResults).filter(r => r.status === 'complete').length;
-      return `✅ ${complete}/${total} partidas vinculadas`;
+      return `${complete}/${total} partidas vinculadas`;
     }
-    if (engineStatus === 'error') return '⚠️ Error en extracción';
-    return '⏸ Esperando modelo 3D...';
+    if (engineStatus === 'error') return 'Error en extracción';
+    return 'Esperando modelo 3D...';
   }, [engineStatus, engineResults]);
 
   // ─── Render ───────────────────────────────────────
@@ -913,9 +913,8 @@ const BudgetTree = ({ activeModelUrn = 'global', onClose, onPoppedOut }) => {
 
   if (loading) {
     return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', background: '#1a1b1f', color: '#888' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', background: '#ffffff', color: '#72706b' }}>
         <div style={{ textAlign: 'center' }}>
-          <div style={{ fontSize: '24px', marginBottom: '8px' }}>📊</div>
           <div>Cargando Presupuesto Maestro...</div>
         </div>
       </div>
@@ -924,8 +923,7 @@ const BudgetTree = ({ activeModelUrn = 'global', onClose, onPoppedOut }) => {
 
   if (error) {
     return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', background: '#1a1b1f', color: '#ff6b6b', flexDirection: 'column', gap: '8px' }}>
-        <div style={{ fontSize: '24px' }}>⚠️</div>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', background: '#ffffff', color: '#b93535', flexDirection: 'column', gap: '8px' }}>
         <div>Error: {error}</div>
       </div>
     );
@@ -933,45 +931,44 @@ const BudgetTree = ({ activeModelUrn = 'global', onClose, onPoppedOut }) => {
 
   if (flatData.length === 0) {
     return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', background: '#1a1b1f', color: '#888', flexDirection: 'column', gap: '8px' }}>
-        <div style={{ fontSize: '24px' }}>📭</div>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', background: '#ffffff', color: '#72706b', flexDirection: 'column', gap: '8px' }}>
         <div>No hay datos de presupuesto</div>
       </div>
     );
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: '#1a1b1f', color: '#e0e0e0', fontFamily: "'Segoe UI', Arial, sans-serif", fontSize: '12px', userSelect: 'none' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: '#ffffff', color: '#141413', fontFamily: 'inherit', fontSize: '12px', userSelect: 'none' }}>
       {/* ─── HEADER ─── */}
       <div style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        padding: '6px 12px', background: '#222', borderBottom: '1px solid #333',
+        padding: '6px 12px', background: '#ffffff', borderBottom: '1px solid #e8e6dc',
         flexShrink: 0
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <span style={{ fontSize: '14px', fontWeight: 700, color: '#7e9bbd' }}>5D</span>
-          <span style={{ color: '#666', fontSize: '10px' }}>{engineLabel}</span>
+          <span style={{ fontSize: '14px', fontWeight: 700, color: '#507294' }}>5D</span>
+          <span style={{ color: '#72706b', fontSize: '10px' }}>{engineLabel}</span>
         </div>
         <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
           <button onClick={expandAll} title="Expandir Todo"
-            style={{ background: 'none', border: '1px solid #444', color: '#aaa', padding: '3px 8px', borderRadius: '3px', cursor: 'pointer', fontSize: '11px' }}>
+            style={{ background: 'none', border: '1px solid #cccac0', color: '#52524d', padding: '3px 8px', borderRadius: '3px', cursor: 'pointer', fontSize: '11px' }}>
             ▼ Expandir
           </button>
           <button onClick={collapseAll} title="Contraer Todo"
-            style={{ background: 'none', border: '1px solid #444', color: '#aaa', padding: '3px 8px', borderRadius: '3px', cursor: 'pointer', fontSize: '11px' }}>
+            style={{ background: 'none', border: '1px solid #cccac0', color: '#52524d', padding: '3px 8px', borderRadius: '3px', cursor: 'pointer', fontSize: '11px' }}>
             ▶ Contraer
           </button>
           <button onClick={openPopout} title="Open in a new window"
-            style={{ background: 'none', border: '1px solid #444', color: '#aaa', padding: '3px 8px', borderRadius: '3px', cursor: 'pointer', fontSize: '11px' }}>
+            style={{ background: 'none', border: '1px solid #cccac0', color: '#52524d', padding: '3px 8px', borderRadius: '3px', cursor: 'pointer', fontSize: '11px' }}>
             ↗ New Window
           </button>
           <button onClick={exportToExcel} title="Exportar a Excel con agrupaciones"
-            style={{ background: 'none', border: '1px solid #444', color: '#aaa', padding: '3px 8px', borderRadius: '3px', cursor: 'pointer', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+            style={{ background: 'none', border: '1px solid #cccac0', color: '#52524d', padding: '3px 8px', borderRadius: '3px', cursor: 'pointer', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px' }}>
             📊 Exportar
           </button>
           {onClose && (
             <button onClick={onClose} title="Cerrar"
-              style={{ background: 'none', border: 'none', color: '#888', cursor: 'pointer', fontSize: '16px', padding: '0 4px' }}>
+              style={{ background: 'none', border: 'none', color: '#72706b', cursor: 'pointer', fontSize: '16px', padding: '0 4px' }}>
               ✕
             </button>
           )}
@@ -982,15 +979,15 @@ const BudgetTree = ({ activeModelUrn = 'global', onClose, onPoppedOut }) => {
       <div style={{
         display: 'grid',
         gridTemplateColumns: '160px 1fr 55px 120px 120px 110px 155px 155px',
-        background: '#2a2b30', borderBottom: '1px solid #333',
+        background: '#f1f0e8', borderBottom: '1px solid #e8e6dc',
         position: 'sticky', top: 0, zIndex: 5, flexShrink: 0
       }}>
         {['ÍTEM', 'DESCRIPCIÓN', 'UND.', 'METRADO\nCONTRACTUAL', 'METRADO\nREAL', 'P.U (S/)', 'P. PARCIAL (S)\nCONTRACTUAL', 'P. PARCIAL (S)\nREAL'].map((h, i) => (
           <div key={i} style={{
-            padding: '6px 8px', fontSize: '10.5px', fontWeight: 600, color: '#aaa',
+            padding: '6px 8px', fontSize: '10.5px', fontWeight: 600, color: '#52524d',
             textAlign: i >= 3 ? 'right' : 'left',
             whiteSpace: 'pre-line', lineHeight: '1.3',
-            borderRight: i < 7 ? '1px solid #333' : 'none'
+            borderRight: i < 7 ? '1px solid #e8e6dc' : 'none'
           }}>
             {h}
           </div>
@@ -1030,19 +1027,19 @@ const BudgetTree = ({ activeModelUrn = 'global', onClose, onPoppedOut }) => {
                     gridTemplateColumns: '160px 1fr 55px 120px 120px 110px 155px 155px',
                     height: `${ROW_HEIGHT}px`,
                     alignItems: 'center',
-                    borderBottom: '1px solid #2a2b30',
-                    background: isSelected ? '#262c36' : isElement ? '#151619' : isTitulo ? '#1e1f23' : 'transparent',
+                    borderBottom: '1px solid #e8e6dc',
+                    background: isSelected ? '#ecf0f1' : isElement ? '#faf9f5' : isTitulo ? '#faf9f5' : 'transparent',
                     fontWeight: isTitulo ? 700 : 400,
                     fontStyle: isElement ? 'italic' : 'normal',
                     transition: 'background 0.12s'
                   }}
                   onMouseEnter={(e) => {
-                    if (!isSelected) e.currentTarget.style.background = isElement ? '#1c1e22' : '#2a2b30';
+                    if (!isSelected) e.currentTarget.style.background = isElement ? '#f1f0e8' : '#f1f0e8';
                     const xlsIcon = e.currentTarget.querySelector('.xls-export-icon');
                     if (xlsIcon) xlsIcon.style.opacity = '1';
                   }}
                   onMouseLeave={(e) => {
-                    if (!isSelected) e.currentTarget.style.background = isElement ? '#151619' : isTitulo ? '#1e1f23' : 'transparent';
+                    if (!isSelected) e.currentTarget.style.background = isElement ? '#faf9f5' : isTitulo ? '#faf9f5' : 'transparent';
                     const xlsIcon = e.currentTarget.querySelector('.xls-export-icon');
                     if (xlsIcon) xlsIcon.style.opacity = '0';
                   }}
@@ -1056,20 +1053,20 @@ const BudgetTree = ({ activeModelUrn = 'global', onClose, onPoppedOut }) => {
                     }}
                     style={{
                     padding: '0 8px', paddingLeft: `${(node.nivel - 1) * 18 + 8}px`,
-                    color: isElement ? '#6a737d' : '#7e9bbd', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                    borderRight: '1px solid #2a2b30', display: 'flex', alignItems: 'center', gap: '5px',
+                    color: isElement ? '#72706b' : '#507294', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                    borderRight: '1px solid #e8e6dc', display: 'flex', alignItems: 'center', gap: '5px',
                     cursor: hasChildren ? 'pointer' : 'default', height: '100%'
                   }}>
                     {hasChildren ? (
                       <span
                         style={{
-                          fontSize: '11px', color: '#ccc', display: 'inline-flex', alignItems: 'center',
+                          fontSize: '11px', color: '#333330', display: 'inline-flex', alignItems: 'center',
                           justifyContent: 'center', width: '16px', height: '16px', flexShrink: 0,
                           cursor: 'pointer', borderRadius: '3px',
                           transition: 'transform 0.2s ease, background 0.15s',
                           transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)',
                         }}
-                        onMouseEnter={(e) => { e.currentTarget.style.background = '#444'; }}
+                        onMouseEnter={(e) => { e.currentTarget.style.background = '#e8e6dc'; }}
                         onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
                         title={isExpanded ? 'Contraer' : 'Expandir'}
                       >▶</span>
@@ -1090,23 +1087,23 @@ const BudgetTree = ({ activeModelUrn = 'global', onClose, onPoppedOut }) => {
                         height: '100%',
                         cursor: 'pointer',
                         fontSize: '10.5px',
-                        color: '#a0aab5'
+                        color: '#52524d'
                       }}
                       onClick={(e) => { e.stopPropagation(); handleRowSelect(node); }}
                       onDoubleClick={(e) => { e.stopPropagation(); handleRowIsolate(node); }}
                       title="Clic para seleccionar, Doble clic para aislar"
                     >
-                       <div style={{ padding: '0 8px', borderRight: '1px solid #2a2b30', display: 'flex', alignItems: 'center', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }} title={node.rawProps['01_13_DSI_Zona']}>{node.rawProps['01_13_DSI_Zona'] || '-'}</div>
-                       <div style={{ padding: '0 8px', borderRight: '1px solid #2a2b30', display: 'flex', alignItems: 'center', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }} title={node.rawProps['01_11_DSI_Ubicacion']}>{node.rawProps['01_11_DSI_Ubicacion'] || '-'}</div>
-                       <div style={{ padding: '0 8px', borderRight: '1px solid #2a2b30', display: 'flex', alignItems: 'center', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }} title={node.rawProps['01_14_DSI_SubZona']}>{node.rawProps['01_14_DSI_SubZona'] || '-'}</div>
-                       <div style={{ padding: '0 8px', borderRight: '1px solid #2a2b30', display: 'flex', alignItems: 'center', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }} title={node.rawProps['01_12_DSI_SubUbicacion']}>{node.rawProps['01_12_DSI_SubUbicacion'] || '-'}</div>
+                       <div style={{ padding: '0 8px', borderRight: '1px solid #e8e6dc', display: 'flex', alignItems: 'center', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }} title={node.rawProps['01_13_DSI_Zona']}>{node.rawProps['01_13_DSI_Zona'] || '-'}</div>
+                       <div style={{ padding: '0 8px', borderRight: '1px solid #e8e6dc', display: 'flex', alignItems: 'center', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }} title={node.rawProps['01_11_DSI_Ubicacion']}>{node.rawProps['01_11_DSI_Ubicacion'] || '-'}</div>
+                       <div style={{ padding: '0 8px', borderRight: '1px solid #e8e6dc', display: 'flex', alignItems: 'center', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }} title={node.rawProps['01_14_DSI_SubZona']}>{node.rawProps['01_14_DSI_SubZona'] || '-'}</div>
+                       <div style={{ padding: '0 8px', borderRight: '1px solid #e8e6dc', display: 'flex', alignItems: 'center', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }} title={node.rawProps['01_12_DSI_SubUbicacion']}>{node.rawProps['01_12_DSI_SubUbicacion'] || '-'}</div>
                        
-                       <div style={{ padding: '0 8px', borderRight: '1px solid #2a2b30', display: 'flex', alignItems: 'center', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis', color: '#6a737d' }} title={node.parent_item}>{node.parent_item}</div>
-                       <div style={{ padding: '0 8px', borderRight: '1px solid #2a2b30', display: 'flex', alignItems: 'center', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }} title={node.rawProps[`03_04_DSI_NombreDePartida${node.matchedSlot}`] || node.parent_nombre}>{node.rawProps[`03_04_DSI_NombreDePartida${node.matchedSlot}`] || node.parent_nombre}</div>
+                       <div style={{ padding: '0 8px', borderRight: '1px solid #e8e6dc', display: 'flex', alignItems: 'center', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis', color: '#72706b' }} title={node.parent_item}>{node.parent_item}</div>
+                       <div style={{ padding: '0 8px', borderRight: '1px solid #e8e6dc', display: 'flex', alignItems: 'center', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }} title={node.rawProps[`03_04_DSI_NombreDePartida${node.matchedSlot}`] || node.parent_nombre}>{node.rawProps[`03_04_DSI_NombreDePartida${node.matchedSlot}`] || node.parent_nombre}</div>
                        
-                       <div style={{ padding: '0 8px', borderRight: '1px solid #2a2b30', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{node.rawProps[`02_01_DSI_Unidad${node.matchedSlot}`] || node.parent_unidad || '-'}</div>
+                       <div style={{ padding: '0 8px', borderRight: '1px solid #e8e6dc', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{node.rawProps[`02_01_DSI_Unidad${node.matchedSlot}`] || node.parent_unidad || '-'}</div>
                        
-                       <div style={{ padding: '0 8px', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', color: '#cdd3da', fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>
+                       <div style={{ padding: '0 8px', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', color: '#141413', fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>
                           {metradoReal != null && metradoReal !== 0 ? fmt(metradoReal) : ''}
                        </div>
                     </div>
@@ -1120,41 +1117,41 @@ const BudgetTree = ({ activeModelUrn = 'global', onClose, onPoppedOut }) => {
                       {/* DESCRIPCIÓN */}
                       <div style={{
                         padding: '0 8px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                        color: isTitulo ? '#ccc' : '#e0e0e0',
-                        borderRight: '1px solid #2a2b30', height: '100%', display: 'flex', alignItems: 'center'
+                        color: isTitulo ? '#333330' : '#141413',
+                        borderRight: '1px solid #e8e6dc', height: '100%', display: 'flex', alignItems: 'center'
                       }}>
                         {node.descripcion}
                       </div>
                       {/* UND */}
-                      <div style={{ padding: '0 4px', textAlign: 'center', color: '#888', borderRight: '1px solid #2a2b30', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <div style={{ padding: '0 4px', textAlign: 'center', color: '#72706b', borderRight: '1px solid #e8e6dc', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                         {node.unidad || ''}
                       </div>
                       {/* METRADO CONTRACTUAL */}
-                      <div style={{ padding: '0 8px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', borderRight: '1px solid #2a2b30', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
+                      <div style={{ padding: '0 8px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', borderRight: '1px solid #e8e6dc', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
                         {node.metrado_contractual != null ? fmt(node.metrado_contractual) : ''}
                       </div>
                       {/* METRADO REAL */}
                       <div style={{
                         padding: '0 8px', textAlign: 'right', fontVariantNumeric: 'tabular-nums',
-                        borderRight: '1px solid #2a2b30', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'flex-end',
-                        color: cellStatus === 'complete' ? '#7ea88f' : cellStatus === 'no_metrado' ? '#c2a878' : cellStatus === 'no_link' ? '#bd8585' : '#cdd3da',
+                        borderRight: '1px solid #e8e6dc', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'flex-end',
+                        color: cellStatus === 'complete' ? '#667650' : cellStatus === 'no_metrado' ? '#734500' : cellStatus === 'no_link' ? '#b93535' : '#141413',
                         fontWeight: 600,
                         ...hatchStyle
                       }}>
                         {metradoReal != null && metradoReal !== 0 ? fmt(metradoReal) : (cellStatus === 'no_metrado' ? '0.00' : '')}
                       </div>
                       {/* P.U (S/) */}
-                      <div style={{ padding: '0 8px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', borderRight: '1px solid #2a2b30', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
+                      <div style={{ padding: '0 8px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', borderRight: '1px solid #e8e6dc', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
                         {node.precio_unitario != null ? fmtS(node.precio_unitario) : ''}
                       </div>
                       {/* P. PARCIAL CONTRACTUAL */}
-                      <div style={{ padding: '0 8px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', borderRight: '1px solid #2a2b30', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
+                      <div style={{ padding: '0 8px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', borderRight: '1px solid #e8e6dc', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
                         {node.parcial_contractual != null ? fmtS(node.parcial_contractual) : ''}
                       </div>
                       {/* P. PARCIAL REAL + XLS ICON */}
                       <div style={{
                         padding: '0 8px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '6px',
-                        color: cellStatus === 'complete' ? '#7ea88f' : cellStatus === 'no_metrado' ? '#c2a878' : cellStatus === 'no_link' ? '#bd8585' : '#cdd3da',
+                        color: cellStatus === 'complete' ? '#667650' : cellStatus === 'no_metrado' ? '#734500' : cellStatus === 'no_link' ? '#b93535' : '#141413',
                         fontWeight: 600,
                         ...hatchStyle
                       }}>
@@ -1181,7 +1178,7 @@ const BudgetTree = ({ activeModelUrn = 'global', onClose, onPoppedOut }) => {
                             width: '20px',
                             height: '18px',
                             borderRadius: '3px',
-                            background: '#3a5573',
+                            background: '#507294',
                             color: '#fff',
                             fontSize: '7.5px',
                             fontWeight: 800,

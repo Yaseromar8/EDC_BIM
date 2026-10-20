@@ -4,16 +4,17 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    background: rgba(0, 0, 0, 0.4);
+    background: var(--v-velo);
     pointer-events: auto;
     z-index: 10000;
 }
 
 .heatmap-dialog {
     background: #ffffff;
-    border: 1px solid rgba(20, 20, 19, 0.1);
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
-    border-radius: 8px;
+    border: 1px solid var(--v-linea);
+    box-shadow: var(--v-sombra);
+    border-radius: var(--v-radio);
+    overflow: hidden;
     width: 360px;
     display: flex;
     flex-direction: column;
@@ -35,14 +36,14 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 16px 20px;
-    border-bottom: 1px solid rgba(20, 20, 19, 0.1);
+    padding: 14px 16px 14px 20px;
+    border-bottom: 1px solid var(--v-linea);
 }
 
 .heatmap-dialog-header h4 {
     margin: 0;
     color: #141413;
-    font-size: 14px;
+    font-size: 15px;
     font-weight: 600;
 }
 
@@ -107,16 +108,16 @@
     display: flex;
     justify-content: flex-end;
     gap: 12px;
-    padding: 16px 20px;
-    border-top: 1px solid rgba(20, 20, 19, 0.1);
-    background: rgba(0, 0, 0, 0.1);
+    padding: 12px 20px;
+    border-top: 1px solid var(--v-linea);
+    background: var(--v-superficie);
     border-bottom-left-radius: 8px;
     border-bottom-right-radius: 8px;
 }
 
 .heatmap-btn-secondary {
-    background: transparent;
-    border: 1px solid rgba(20, 20, 19, 0.1);
+    background: var(--v-superficie);
+    border: 1px solid var(--v-linea-campo);
     color: #141413;
     padding: 8px 16px;
     border-radius: 4px;
@@ -125,7 +126,7 @@
 }
 
 .heatmap-btn-secondary:hover {
-    background: rgba(20, 20, 19, 0.05);
+    background: var(--v-superficie-2);
 }
 
 .heatmap-btn-primary {
@@ -140,5 +141,5 @@
 }
 
 .heatmap-btn-primary:hover {
-    background: #507294;
+    background: var(--v-accion-hover);
 }

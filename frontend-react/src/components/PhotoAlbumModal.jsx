@@ -730,7 +730,7 @@ const PhotoAlbumModal = ({ isOpen, onClose, pinId, title = "Album de Fotos", pho
                                                         top: '4px',
                                                         right: '4px',
                                                         background: 'rgba(0,0,0,0.5)',
-                                                        color: 'rgba(20, 20, 19,0.8)',
+                                                        color: '#ffffff',
                                                         border: 'none',
                                                         borderRadius: '50%',
                                                         width: '20px',
@@ -802,7 +802,7 @@ const PhotoAlbumModal = ({ isOpen, onClose, pinId, title = "Album de Fotos", pho
                 <div style={{
                     position: (variant === 'panel' && window.innerWidth >= 768) ? 'absolute' : 'fixed',
                     top: 0, left: 0, right: 0, bottom: 0,
-                    background: 'rgba(255, 255, 255, 0.92)', zIndex: 99990,
+                    background: '#faf9f5', zIndex: 99990,
                     display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center'
                 }} onClick={() => setSelectedPhoto(null)}>
 
@@ -937,7 +937,7 @@ const PhotoAlbumModal = ({ isOpen, onClose, pinId, title = "Album de Fotos", pho
                                             e.stopPropagation();
                                         }}
                                         style={{
-                                            background: 'rgba(0,0,0,0.5)', border: '1px solid #cccac0', 
+                                            background: '#ffffff', border: '1px solid #cccac0', 
                                             color: '#141413', borderRadius: '4px', padding: '4px 8px', fontSize: '13px', width: '250px'
                                         }}
                                     />
@@ -983,25 +983,11 @@ const PhotoAlbumModal = ({ isOpen, onClose, pinId, title = "Album de Fotos", pho
 
             {/* 🔔 Toast Notification for Upload Status */}
             {toastMsg && (
-                <div style={{
-                    position: 'fixed',
-                    bottom: '80px',
-                    left: '50%',
-                    transform: 'translateX(-50%)',
-                    background: toastMsg.type === 'success' ? 'rgba(16, 185, 129, 0.95)' : 'rgba(239, 68, 68, 0.95)',
-                    color: '#141413',
-                    padding: '12px 24px',
-                    borderRadius: '12px',
-                    fontSize: '14px',
-                    fontWeight: '600',
-                    zIndex: 99999,
-                    boxShadow: '0 8px 32px rgba(0,0,0,0.3)',
-                    backdropFilter: 'blur(8px)',
-                    animation: 'fadeInUp 0.3s ease',
-                    pointerEvents: 'none',
-                    whiteSpace: 'nowrap'
+                <div className={`v-aviso ${toastMsg.type === 'success' ? 'v-aviso--exito' : 'v-aviso--error'}`} role="status" style={{
+                    position: 'fixed', top: 'auto', bottom: '80px', paddingRight: '14px',
+                    zIndex: 99999, pointerEvents: 'none', whiteSpace: 'nowrap'
                 }}>
-                    {toastMsg.text}
+                    <span>{toastMsg.text}</span>
                 </div>
             )}
         </div>

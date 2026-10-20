@@ -17,8 +17,8 @@ const BACKEND_URL = VITE_API_URL || (
 // "Topografía" del holograma) y se pueden extraer las topografías que falten
 // — mismo flujo de workitem que las secciones.
 const zonaBtnMini = {
-    height: 20, padding: '0 8px', background: 'transparent', color: '#8ecbff',
-    border: '1px solid #3aa0ff', borderRadius: 4, fontSize: 10.5, fontWeight: 700, cursor: 'pointer',
+    height: 20, padding: '0 8px', background: '#ffffff', color: '#507294',
+    border: '1px solid #507294', borderRadius: 4, fontSize: 10.5, fontWeight: 700, cursor: 'pointer',
 };
 
 function ZonasFrente({ scopeUrn, resolveProjectId }) {
@@ -105,10 +105,10 @@ function ZonasFrente({ scopeUrn, resolveProjectId }) {
     if (!zonas.length) return null;
     return (
         <div style={{
-            marginTop: 14, border: '1px solid rgba(255,255,255,0.10)', borderRadius: 6,
-            background: 'rgba(255,255,255,0.03)', padding: '10px 12px',
+            marginTop: 14, border: '1px solid #e8e6dc', borderRadius: 6,
+            background: '#faf9f5', padding: '10px 12px',
         }}>
-            <div style={{ fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#8a919c', fontWeight: 700, marginBottom: 4 }}>
+            <div style={{ fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#72706b', fontWeight: 700, marginBottom: 4 }}>
                 Zonas del frente ({zonas.length})
             </div>
             {zonas.map(z => {
@@ -116,20 +116,20 @@ function ZonasFrente({ scopeUrn, resolveProjectId }) {
                 const stale = sf && z.updated_at && String(sf.updated_at) < String(z.updated_at);
                 const b = busy[z.urn];
                 return (
-                    <div key={z.urn} style={{ padding: '6px 0', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+                    <div key={z.urn} style={{ padding: '6px 0', borderTop: '1px solid #e8e6dc' }}>
                         <div
-                            style={{ fontSize: 11.5, color: '#c8cdd6', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                            style={{ fontSize: 11.5, color: '#333330', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
                             title={z.display_name || z.urn}
                         >
                             {(z.display_name || `…${z.urn.slice(-10)}`).replace(/\.dwg$/i, '')}
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 3, fontSize: 10.5, flexWrap: 'wrap' }}>
-                            <span style={{ color: '#22c55e' }}>✓ Secciones {String(z.updated_at || '').slice(0, 10)}</span>
+                            <span style={{ color: '#667650' }}>✓ Secciones {String(z.updated_at || '').slice(0, 10)}</span>
                             {b ? (
-                                <span style={{ color: b.startsWith('Error') ? '#f87171' : '#3aa0ff' }}>{b}</span>
+                                <span style={{ color: b.startsWith('Error') ? '#b93535' : '#507294' }}>{b}</span>
                             ) : sf ? (
                                 <>
-                                    <span style={{ color: stale ? '#eab308' : '#22c55e' }} title={stale ? 'Las secciones son más nuevas que las topografías' : ''}>
+                                    <span style={{ color: stale ? '#734500' : '#667650' }} title={stale ? 'Las secciones son más nuevas que las topografías' : ''}>
                                         {stale ? '⚠' : '✓'} Topografías {String(sf.updated_at || '').slice(0, 10)}
                                     </span>
                                     {stale && (
@@ -312,7 +312,7 @@ const formatValue = (value, suffix = ' m') => (
 );
 
 const RoadIconSmall = ({ muted = false }) => (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={muted ? '#8b949e' : 'currentColor'} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={muted ? '#72706b' : 'currentColor'} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
         <path d="M6.5 21c2.6-5.2 4-11.5 4.4-18" />
         <path d="M15.2 22c.6-5.8 2.2-11.3 4.8-16.5" />
         <path d="m12.2 6.7 1.2 1.1" />
@@ -322,7 +322,7 @@ const RoadIconSmall = ({ muted = false }) => (
 );
 
 const ProfileIcon = ({ muted = false }) => (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={muted ? '#8b949e' : 'currentColor'} strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={muted ? '#72706b' : 'currentColor'} strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
         <path d="M3 17h18" />
         <path d="M5 15c3-7 6-7 9-2 2 3.2 3.8 3.4 5 1" />
         <circle cx="5" cy="15" r="1.2" />
@@ -367,26 +367,26 @@ const PropertyRow = ({ label, value }) => (
         gap: 12,
         minHeight: 38,
         padding: '0 12px 0 28px',
-        borderBottom: '1px solid rgba(255,255,255,0.06)',
+        borderBottom: '1px solid #e8e6dc',
         fontSize: 12
     }}>
-        <span style={{ color: '#cfd6df', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
-        <span style={{ color: '#f3f4f6', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{value}</span>
+        <span style={{ color: '#333330', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
+        <span style={{ color: '#141413', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{value}</span>
     </div>
 );
 
 const Section = ({ title, children, defaultOpen = true }) => {
     const [open, setOpen] = useState(defaultOpen);
     return (
-        <div style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+        <div style={{ borderBottom: '1px solid #e8e6dc' }}>
             <button
                 type="button"
                 onClick={() => setOpen(prev => !prev)}
                 style={{
                     width: '100%',
                     border: 0,
-                    background: 'rgba(255,255,255,0.05)',
-                    color: '#f0f0f0',
+                    background: '#f1f0e8',
+                    color: '#141413',
                     minHeight: 32,
                     padding: '0 12px',
                     display: 'flex',
@@ -407,9 +407,9 @@ const Section = ({ title, children, defaultOpen = true }) => {
 };
 
 const controlStyle = {
-    background: '#12151a',
-    border: '1px solid rgba(255,255,255,0.16)',
-    color: '#e5e7eb',
+    background: '#ffffff',
+    border: '1px solid #cccac0',
+    color: '#141413',
     borderRadius: 4,
     outline: 'none'
 };
@@ -417,7 +417,7 @@ const controlStyle = {
 const navButtonStyle = {
     border: 0,
     background: 'transparent',
-    color: '#9ca3af',
+    color: '#72706b',
     width: 26,
     height: 30,
     cursor: 'pointer',
@@ -1539,12 +1539,12 @@ const CivilToolsPanel = ({ activeModelUrn, models = [], docs = [], onClose }) =>
 
                 {/* Estado del archivo: qué hay extraído y qué falta (guía del flujo) */}
                 {(hasEjes || activeSectionsMeta) && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 10.5, margin: '-6px 2px -4px', color: '#8b95a5' }}>
-                        <span style={{ color: hasEjes ? '#7fd6a4' : '#8b95a5' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 10.5, margin: '-6px 2px -4px', color: '#72706b' }}>
+                        <span style={{ color: hasEjes ? '#667650' : '#72706b' }}>
                             {hasEjes ? `✓ Ejes (${alignmentData.length})` : 'Ejes: sin extraer'}
                         </span>
                         <span>·</span>
-                        <span style={{ color: activeSectionsMeta ? '#7fd6a4' : '#e0a63f' }}>
+                        <span style={{ color: activeSectionsMeta ? '#667650' : '#734500' }}>
                             {activeSectionsMeta
                                 ? `✓ Secciones (${String(activeSectionsMeta.updated_at || '').slice(0, 10)})`
                                 : 'Secciones: sin extraer'}
@@ -1585,8 +1585,8 @@ const CivilToolsPanel = ({ activeModelUrn, models = [], docs = [], onClose }) =>
                         style={{
                             height: 34,
                             border: '1px solid #3aa0ff',
-                            background: isExtracting ? '#3a3f47' : (hasEjes ? 'transparent' : '#0078d4'),
-                            color: (isExtracting || !hasEjes) ? '#fff' : '#8ecbff',
+                            background: isExtracting ? '#72706b' : (hasEjes ? 'transparent' : '#507294'),
+                            color: (isExtracting || !hasEjes) ? '#fff' : '#507294',
                             borderRadius: 4,
                             padding: '0 10px',
                             display: 'flex',
@@ -1612,8 +1612,8 @@ const CivilToolsPanel = ({ activeModelUrn, models = [], docs = [], onClose }) =>
                         style={{
                             height: 34,
                             border: '1px solid #3aa0ff',
-                            background: isExtractingSections ? '#3a3f47' : (secPrimary ? '#0078d4' : 'transparent'),
-                            color: (isExtractingSections || secPrimary) ? '#fff' : '#8ecbff',
+                            background: isExtractingSections ? '#72706b' : (secPrimary ? '#507294' : 'transparent'),
+                            color: (isExtractingSections || secPrimary) ? '#fff' : '#507294',
                             borderRadius: 4,
                             padding: '0 10px',
                             display: 'flex',
@@ -1637,7 +1637,7 @@ const CivilToolsPanel = ({ activeModelUrn, models = [], docs = [], onClose }) =>
                             height: 34,
                             border: '1px solid #7a4a4a',
                             background: 'transparent',
-                            color: '#d99',
+                            color: '#b93535',
                             borderRadius: 4,
                             padding: '0 9px',
                             cursor: 'pointer',
@@ -1687,9 +1687,9 @@ const CivilToolsPanel = ({ activeModelUrn, models = [], docs = [], onClose }) =>
                             : 'Fijar el/los ejes activos como BASE: se dibujarán automáticamente en cada carga del visor, sin abrir este panel'}
                         style={{
                             height: 34,
-                            border: `1px solid ${baseAxisPin ? '#f59e0b' : '#4a5568'}`,
-                            background: baseAxisPin ? 'rgba(245,158,11,0.18)' : 'transparent',
-                            color: baseAxisPin ? '#fbbf24' : '#9aa4b2',
+                            border: `1px solid ${baseAxisPin ? '#f59e0b' : '#cccac0'}`,
+                            background: baseAxisPin ? '#f1f0e8' : 'transparent',
+                            color: baseAxisPin ? '#734500' : '#72706b',
                             borderRadius: 4,
                             padding: '0 9px',
                             cursor: 'pointer',
@@ -1707,25 +1707,25 @@ const CivilToolsPanel = ({ activeModelUrn, models = [], docs = [], onClose }) =>
                             right: 0,
                             top: 38,
                             zIndex: 25,
-                            background: 'rgba(24, 27, 32, 0.98)',
-                            border: '1px solid rgba(255,255,255,0.16)',
+                            background: '#ffffff',
+                            border: '1px solid #cccac0',
                             borderRadius: 4,
-                            boxShadow: '0 12px 24px rgba(0,0,0,0.45)',
+                            boxShadow: 'var(--v-sombra-flotante)',
                             overflow: 'hidden'
                         }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '8px 10px', borderBottom: '1px solid rgba(255,255,255,0.08)', color: '#9ca3af' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '8px 10px', borderBottom: '1px solid #e8e6dc', color: '#72706b' }}>
                                 <SearchIcon />
                                 <input
                                     value={query}
                                     onChange={(e) => setQuery(e.target.value)}
                                     placeholder="Buscar..."
                                     autoFocus
-                                    style={{ border: 0, outline: 0, flex: 1, fontSize: 12, background: 'transparent', color: '#f3f4f6' }}
+                                    style={{ border: 0, outline: 0, flex: 1, fontSize: 12, background: 'transparent', color: '#141413' }}
                                 />
                             </div>
                             <div style={{ maxHeight: 300, overflowY: 'auto' }}>
                                 {alignmentTree.length === 0 ? (
-                                    <div style={{ padding: 16, color: '#9ca3af', fontSize: 12 }}>{emptyText}</div>
+                                    <div style={{ padding: 16, color: '#72706b', fontSize: 12 }}>{emptyText}</div>
                                 ) : alignmentTree.map(({ alignment, profiles }) => {
                                     const alignmentActive = activeAlignmentIds.includes(alignment.alignmentId);
                                     const primaryProfile = getPrimaryProfile(alignment);
@@ -1735,12 +1735,12 @@ const CivilToolsPanel = ({ activeModelUrn, models = [], docs = [], onClose }) =>
                                                 style={{
                                                     width: '100%',
                                                     border: 0,
-                                                    background: alignmentActive && !selectedProfile ? 'rgba(58,160,255,0.16)' : 'transparent',
+                                                    background: alignmentActive && !selectedProfile ? '#ecf0f1' : 'transparent',
                                                     padding: '8px 12px',
                                                     display: 'flex',
                                                     alignItems: 'center',
                                                     gap: 9,
-                                                    color: '#e5e7eb',
+                                                    color: '#141413',
                                                     fontSize: 12,
                                                     textAlign: 'left'
                                                 }}
@@ -1783,13 +1783,13 @@ const CivilToolsPanel = ({ activeModelUrn, models = [], docs = [], onClose }) =>
                                                     <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'left' }}>{alignment.alignmentId}</span>
                                                     {/* señales de curación: nº de secciones + tipo del eje */}
                                                     {(alignment.sampleLines?.length || 0) > 0 && (
-                                                        <span style={{ color: '#4ade80', fontSize: 10, flexShrink: 0 }}>{alignment.sampleLines.length} sec</span>
+                                                        <span style={{ color: '#667650', fontSize: 10, flexShrink: 0 }}>{alignment.sampleLines.length} sec</span>
                                                     )}
                                                     {alignment.alignmentType && alignment.alignmentType !== 'Centerline' && (
-                                                        <span style={{ color: '#f59e0b', fontSize: 10, flexShrink: 0 }}>{alignment.alignmentType}</span>
+                                                        <span style={{ color: '#734500', fontSize: 10, flexShrink: 0 }}>{alignment.alignmentType}</span>
                                                     )}
                                                     {primaryProfile && (
-                                                        <span style={{ color: '#8ab4f8', fontSize: 10 }}>{getProfileRole(primaryProfile) || 'Perfil'}</span>
+                                                        <span style={{ color: '#507294', fontSize: 10 }}>{getProfileRole(primaryProfile) || 'Perfil'}</span>
                                                     )}
                                                 </button>
                                             </div>
@@ -1806,20 +1806,20 @@ const CivilToolsPanel = ({ activeModelUrn, models = [], docs = [], onClose }) =>
                                                         style={{
                                                             width: '100%',
                                                             border: 0,
-                                                            background: profileActive ? 'rgba(58,160,255,0.16)' : 'transparent',
+                                                            background: profileActive ? '#ecf0f1' : 'transparent',
                                                             padding: '7px 12px 7px 34px',
                                                             display: 'flex',
                                                             alignItems: 'center',
                                                             gap: 9,
                                                             cursor: 'pointer',
-                                                            color: profileActive ? '#ffffff' : '#cfd6df',
+                                                            color: profileActive ? '#141413' : '#333330',
                                                             fontSize: 12,
                                                             textAlign: 'left'
                                                         }}
                                                     >
                                                         <ProfileIcon muted={!profileActive} />
                                                         <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{profile.name}</span>
-                                                        <span style={{ color: '#8b949e', fontSize: 10 }}>{getProfileRole(profile)}</span>
+                                                        <span style={{ color: '#72706b', fontSize: 10 }}>{getProfileRole(profile)}</span>
                                                     </button>
                                                 );
                                             })}
@@ -1835,8 +1835,8 @@ const CivilToolsPanel = ({ activeModelUrn, models = [], docs = [], onClose }) =>
                                         width: '100%',
                                         border: 0,
                                         background: 'transparent',
-                                        borderTop: '1px solid rgba(255,255,255,0.08)',
-                                        color: '#3aa0ff',
+                                        borderTop: '1px solid #e8e6dc',
+                                        color: '#507294',
                                         padding: '9px 12px',
                                         textAlign: 'right',
                                         cursor: 'pointer',
@@ -1859,9 +1859,9 @@ const CivilToolsPanel = ({ activeModelUrn, models = [], docs = [], onClose }) =>
                         style={{
                             width: 34,
                             height: 30,
-                            border: `1px solid ${stationLabelsVisible ? '#3aa0ff' : 'rgba(255,255,255,0.16)'}`,
-                            background: stationLabelsVisible ? 'rgba(58,160,255,0.16)' : '#12151a',
-                            color: stationLabelsVisible ? '#8ecbff' : '#9ca3af',
+                            border: `1px solid ${stationLabelsVisible ? '#507294' : '#cccac0'}`,
+                            background: stationLabelsVisible ? '#ecf0f1' : '#ffffff',
+                            color: stationLabelsVisible ? '#507294' : '#72706b',
                             borderRadius: 4,
                             display: 'flex',
                             alignItems: 'center',
@@ -1872,29 +1872,29 @@ const CivilToolsPanel = ({ activeModelUrn, models = [], docs = [], onClose }) =>
                     >
                         <RoadIconSmall muted={!stationLabelsVisible} />
                     </button>
-                    <div style={{ flex: 1, height: 1, background: 'rgba(255,255,255,0.06)' }} />
-                    <span style={{ color: '#8b949e', fontSize: 11 }}>
+                    <div style={{ flex: 1, height: 1, background: '#e8e6dc' }} />
+                    <span style={{ color: '#72706b', fontSize: 11 }}>
                         {alignmentData.length > 0 ? `${alignmentData.length} ejes / ${countVisibleProfiles(alignmentData)} perfiles utiles` : 'Sin datos civil cargados'}
                     </span>
                 </div>
 
                 {(isExtracting || extractMessage) && (
                     <div style={{
-                        border: `1px solid ${extractError ? 'rgba(248,113,113,0.45)' : 'rgba(58,160,255,0.24)'}`,
-                        background: extractError ? 'rgba(127,29,29,0.24)' : 'rgba(58,160,255,0.08)',
+                        border: `1px solid ${extractError ? '#b93535' : '#cccac0'}`,
+                        background: extractError ? '#ffffff' : '#ecf0f1',
                         borderRadius: 6,
                         padding: 10
                     }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: extractError ? '#fecaca' : '#bfdbfe', fontSize: 11 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: extractError ? '#b93535' : '#507294', fontSize: 11 }}>
                             {isExtracting && <span className="sfp-check-spinner" />}
                             <span style={{ flex: 1 }}>{extractMessage}</span>
                             <strong>{extractProgress}%</strong>
                         </div>
-                        <div style={{ height: 5, borderRadius: 99, overflow: 'hidden', background: 'rgba(255,255,255,0.12)', marginTop: 8 }}>
+                        <div style={{ height: 5, borderRadius: 99, overflow: 'hidden', background: '#e8e6dc', marginTop: 8 }}>
                             <div style={{
                                 height: '100%',
                                 width: `${Math.max(0, Math.min(100, extractProgress))}%`,
-                                background: extractError ? '#f87171' : '#3aa0ff',
+                                background: extractError ? '#b93535' : '#507294',
                                 transition: 'width 0.25s ease'
                             }} />
                         </div>
@@ -1904,9 +1904,9 @@ const CivilToolsPanel = ({ activeModelUrn, models = [], docs = [], onClose }) =>
                                 onClick={() => window.open(extractReportUrl, '_blank', 'noopener,noreferrer')}
                                 style={{
                                     marginTop: 8,
-                                    border: '1px solid rgba(248,113,113,0.45)',
+                                    border: '1px solid #b93535',
                                     background: 'transparent',
-                                    color: '#fecaca',
+                                    color: '#b93535',
                                     borderRadius: 4,
                                     padding: '5px 8px',
                                     cursor: 'pointer',
@@ -1920,8 +1920,8 @@ const CivilToolsPanel = ({ activeModelUrn, models = [], docs = [], onClose }) =>
                     </div>
                 )}
 
-                <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: 10 }}>
-                    <div style={{ color: '#f3f4f6', fontSize: 13, fontWeight: 700, marginBottom: 10 }}>P.K. actual</div>
+                <div style={{ borderTop: '1px solid #e8e6dc', paddingTop: 10 }}>
+                    <div style={{ color: '#141413', fontSize: 13, fontWeight: 700, marginBottom: 10 }}>P.K. actual</div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                         <button type="button" disabled={!selectedAlignment} onClick={() => handleStep(-10)} style={navButtonStyle}>{'<<'}</button>
                         <button type="button" disabled={!selectedAlignment} onClick={() => handleStep(-1)} style={navButtonStyle}>{'<'}</button>
@@ -1959,13 +1959,13 @@ const CivilToolsPanel = ({ activeModelUrn, models = [], docs = [], onClose }) =>
                         style={{
                             width: '100%',
                             marginTop: 12,
-                            accentColor: '#3aa0ff',
+                            accentColor: '#507294',
                             opacity: selectedAlignment ? 1 : 0.45
                         }}
                     />
 
                     {selectedAlignment && (
-                        <div style={{ display: 'flex', justifyContent: 'space-between', color: '#9ca3af', fontSize: 10, marginTop: 2 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', color: '#72706b', fontSize: 10, marginTop: 2 }}>
                             <span>{formatStation(stationRange.min)}</span>
                             <span>{formatStation(stationRange.max)}</span>
                         </div>
@@ -2022,32 +2022,32 @@ const CivilToolsPanel = ({ activeModelUrn, models = [], docs = [], onClose }) =>
                 {(sectionMessage || isExtractingSections || sectionJSON) && (
                     <div style={{
                         marginTop: 14,
-                        border: '1px solid rgba(255,255,255,0.10)',
+                        border: '1px solid #e8e6dc',
                         borderRadius: 6,
-                        background: 'rgba(255,255,255,0.03)',
+                        background: '#faf9f5',
                         padding: '10px 12px'
                     }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                             <span style={{
                                 width: 7, height: 7, borderRadius: '50%', flexShrink: 0,
-                                background: isExtractingSections ? '#3aa0ff' : sectionJSON ? '#22c55e' : '#8a919c'
+                                background: isExtractingSections ? '#507294' : sectionJSON ? '#667650' : '#72706b'
                             }} />
                             <span style={{
                                 fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase',
-                                color: '#8a919c', fontWeight: 700
+                                color: '#72706b', fontWeight: 700
                             }}>
                                 Secciones transversales
                             </span>
                         </div>
 
                         {isExtractingSections && (
-                            <div style={{ marginTop: 8, height: 3, borderRadius: 2, background: 'rgba(255,255,255,0.08)', overflow: 'hidden' }}>
-                                <div style={{ height: '100%', width: `${sectionProgress}%`, background: '#3aa0ff', transition: 'width 300ms ease' }} />
+                            <div style={{ marginTop: 8, height: 3, borderRadius: 2, background: '#e8e6dc', overflow: 'hidden' }}>
+                                <div style={{ height: '100%', width: `${sectionProgress}%`, background: '#507294', transition: 'width 300ms ease' }} />
                             </div>
                         )}
 
                         {sectionMessage && (
-                            <div style={{ marginTop: 7, fontSize: 11.5, color: '#c8cdd6', lineHeight: 1.4 }}>
+                            <div style={{ marginTop: 7, fontSize: 11.5, color: '#333330', lineHeight: 1.4 }}>
                                 {sectionMessage}
                             </div>
                         )}
@@ -2060,7 +2060,7 @@ const CivilToolsPanel = ({ activeModelUrn, models = [], docs = [], onClose }) =>
                                     width: '100%',
                                     height: 32,
                                     background: 'transparent',
-                                    color: '#8ecbff',
+                                    color: '#507294',
                                     border: '1px solid #3aa0ff',
                                     borderRadius: 5,
                                     fontWeight: 700,
@@ -2072,7 +2072,7 @@ const CivilToolsPanel = ({ activeModelUrn, models = [], docs = [], onClose }) =>
                                     gap: 8
                                 }}
                             >
-                                Visualizador 2D <span style={{ color: '#5d6672', fontWeight: 400 }}>· secciones y volúmenes</span>
+                                Visualizador 2D <span style={{ color: '#72706b', fontWeight: 400 }}>· secciones y volúmenes</span>
                             </button>
                         )}
                     </div>

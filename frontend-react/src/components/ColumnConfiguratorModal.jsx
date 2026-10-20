@@ -117,25 +117,14 @@ const ColumnConfiguratorModal = ({ open, onClose, availableColumns = [], selecte
     if (!open) return null;
 
     return ReactDOM.createPortal(
-        <div style={{
-            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-            background: 'rgba(0,0,0,0.5)', zIndex: 3000,
-            display: 'flex', alignItems: 'center', justifyContent: 'center'
-        }}>
-            <div style={{
-                background: '#f1f0e8', width: '900px', maxWidth: '95vw', height: '80vh', minHeight: '500px', maxHeight: '750px',
-                borderRadius: '4px', display: 'flex', flexDirection: 'column',
-                boxShadow: '0 10px 40px rgba(0,0,0,0.5)', border: '1px solid #e8e6dc',
-                color: '#141413', fontFamily: 'Artifakt Element, sans-serif'
-            }}>
+        <div className="v-velo" role="dialog" aria-modal="true" aria-label="Editar columnas"
+            onKeyDown={e => { if (e.key === 'Escape') { e.stopPropagation(); onClose(); } }} style={{ zIndex: 3000 }}>
+            <div className="v-caja" style={{ width: '900px', maxWidth: '95vw', height: '80vh', minHeight: '500px', maxHeight: '750px' }}>
 
                 {/* Header */}
-                <div style={{
-                    padding: '16px 20px', borderBottom: '1px solid #e8e6dc',
-                    display: 'flex', justifyContent: 'space-between', alignItems: 'center'
-                }}>
-                    <span style={{ fontWeight: 700, fontSize: '14px', letterSpacing: '0.5px', color: '#141413' }}>EDIT COLUMNS</span>
-                    <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#52524d', cursor: 'pointer' }}>
+                <div className="v-cabecera">
+                    <h2 className="v-titulo">Editar columnas</h2>
+                    <button className="v-cerrar" aria-label="Cerrar" onClick={onClose}>
                         <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
                             <path d="M3.47 3.47a.75.75 0 0 1 1.06 0L8 6.94l3.47-3.47a.75.75 0 1 1 1.06 1.06L9.06 8l3.47 3.47a.75.75 0 1 1-1.06 1.06L8 9.06l-3.47 3.47a.75.75 0 0 1-1.06-1.06L6.94 8 3.47 4.53a.75.75 0 0 1 0-1.06Z" />
                         </svg>
@@ -148,16 +137,10 @@ const ColumnConfiguratorModal = ({ open, onClose, availableColumns = [], selecte
                     {/* Top Row */}
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}>
                         <span style={{ fontSize: '12px', color: '#72706b' }}>
-                            {currentSelection.length} of {availableColumns.length} columns visible
+                            {currentSelection.length} de {availableColumns.length} columnas visibles
                         </span>
-                        <button
-                            onClick={handleReset}
-                            style={{
-                                background: 'transparent', color: '#507294', border: 'none',
-                                fontSize: '13px', cursor: 'pointer', fontWeight: 500, padding: 0
-                            }}
-                        >
-                            Select All
+                        <button className="v-enlace" onClick={handleReset}>
+                            Seleccionar todas
                         </button>
                     </div>
 
@@ -165,24 +148,21 @@ const ColumnConfiguratorModal = ({ open, onClose, availableColumns = [], selecte
 
                         {/* Left Column: Available */}
                         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-                            <span style={{ fontSize: '12px', fontWeight: 600, marginBottom: '8px', color: '#72706b' }}>Available Columns:</span>
+                            <span className="v-etiqueta" style={{ marginBottom: '8px' }}>Columnas disponibles</span>
                             <div style={{ position: 'relative', marginBottom: '8px' }}>
                                 <input
                                     type="text"
-                                    placeholder="Search columns..."
+                                    placeholder="Buscar columnas"
                                     value={searchTermAvailable}
                                     onChange={e => setSearchTermAvailable(e.target.value)}
-                                    style={{
-                                        width: '100%', padding: '6px 8px 6px 30px', background: '#ffffff', border: '1px solid #cccac0',
-                                        borderRadius: '2px', color: '#141413', fontSize: '13px', boxSizing: 'border-box'
-                                    }}
+                                    className="v-campo" style={{ paddingLeft: '30px' }}
                                 />
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#918f88" strokeWidth="2" style={{ position: 'absolute', left: '8px', top: '8px' }}>
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#72706b" strokeWidth="2" style={{ position: 'absolute', left: '10px', top: '9px' }}>
                                     <circle cx="11" cy="11" r="8" />
                                     <line x1="21" y1="21" x2="16.65" y2="16.65" />
                                 </svg>
                             </div>
-                            <div style={{ flex: 1, border: '1px solid #e8e6dc', borderRadius: '2px', overflowY: 'auto', background: '#ffffff' }}>
+                            <div className="v-lista" style={{ flex: 1 }}>
                                 {Object.keys(filteredGroups).sort().map(cat => {
                                     const props = filteredGroups[cat];
                                     const isExpanded = expandedCategories[cat] || searchTermAvailable.length > 0;
@@ -202,7 +182,7 @@ const ColumnConfiguratorModal = ({ open, onClose, availableColumns = [], selecte
                                                 </span>
                                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                                     <span style={{ color: '#72706b', fontSize: '11px' }}>
-                                                        {selectedCount} of {props.length}
+                                                        {selectedCount} de {props.length}
                                                     </span>
                                                     <input 
                                                         type="checkbox"
@@ -247,24 +227,21 @@ const ColumnConfiguratorModal = ({ open, onClose, availableColumns = [], selecte
 
                         {/* Right Column: Selected (Draggable) */}
                         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-                            <span style={{ fontSize: '12px', fontWeight: 600, marginBottom: '8px', color: '#72706b' }}>Visible Columns (drag to reorder):</span>
+                            <span className="v-etiqueta" style={{ marginBottom: '8px' }}>Columnas visibles (arrastra para ordenar)</span>
                             <div style={{ position: 'relative', marginBottom: '8px' }}>
                                 <input
                                     type="text"
-                                    placeholder="Search..."
+                                    placeholder="Buscar"
                                     value={searchTermSelected}
                                     onChange={e => setSearchTermSelected(e.target.value)}
-                                    style={{
-                                        width: '100%', padding: '6px 8px 6px 30px', background: '#ffffff', border: '1px solid #cccac0',
-                                        borderRadius: '2px', color: '#141413', fontSize: '13px', boxSizing: 'border-box'
-                                    }}
+                                    className="v-campo" style={{ paddingLeft: '30px' }}
                                 />
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#918f88" strokeWidth="2" style={{ position: 'absolute', left: '8px', top: '8px' }}>
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#72706b" strokeWidth="2" style={{ position: 'absolute', left: '10px', top: '9px' }}>
                                     <circle cx="11" cy="11" r="8" />
                                     <line x1="21" y1="21" x2="16.65" y2="16.65" />
                                 </svg>
                             </div>
-                            <div style={{ flex: 1, border: '1px solid #e8e6dc', borderRadius: '2px', overflowY: 'auto', background: '#ffffff' }}>
+                            <div className="v-lista" style={{ flex: 1 }}>
                                 {selectedObjects.map((item, idx) => (
                                     <div
                                         key={item.id}
@@ -282,8 +259,8 @@ const ColumnConfiguratorModal = ({ open, onClose, availableColumns = [], selecte
                                         }}
                                         onDragOver={(e) => e.preventDefault()}
                                         style={{
-                                            padding: '8px 12px', borderBottom: '1px solid #e8e6dc', fontSize: '13px',
-                                            display: 'flex', alignItems: 'center', background: '#f1f0e8', gap: '8px',
+                                            padding: '8px 8px 8px 12px', borderBottom: '1px solid #e8e6dc', fontSize: '13px',
+                                            display: 'flex', alignItems: 'center', background: '#ffffff', gap: '8px',
                                             cursor: 'move'
                                         }}
                                     >
@@ -295,10 +272,9 @@ const ColumnConfiguratorModal = ({ open, onClose, availableColumns = [], selecte
                                             <div style={{ color: '#141413', fontWeight: 500 }}>{item.name}</div>
                                             <div style={{ fontSize: '11px', color: '#72706b' }}>{item.category}</div>
                                         </div>
-                                        <button
+                                        <button className="v-icono"
                                             onClick={(e) => { e.stopPropagation(); handleRemove(item.id); }}
-                                            style={{ background: 'none', border: 'none', color: '#72706b', cursor: 'pointer', padding: '4px' }}
-                                            title="Remove"
+                                            title="Quitar" aria-label={`Quitar ${item.name}`}
                                         >
                                             <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" /></svg>
                                         </button>
@@ -306,7 +282,7 @@ const ColumnConfiguratorModal = ({ open, onClose, availableColumns = [], selecte
                                 ))}
                                 {selectedObjects.length === 0 && (
                                     <div style={{ padding: '20px', textAlign: 'center', color: '#72706b', fontStyle: 'italic', fontSize: '12px' }}>
-                                        No columns selected
+                                        Ninguna columna seleccionada
                                     </div>
                                 )}
                             </div>
@@ -316,21 +292,12 @@ const ColumnConfiguratorModal = ({ open, onClose, availableColumns = [], selecte
                 </div>
 
                 {/* Footer */}
-                <div style={{
-                    padding: '16px 20px', borderTop: '1px solid #e8e6dc',
-                    display: 'flex', justifyContent: 'flex-end', gap: '10px'
-                }}>
-                    <button onClick={onClose} style={{
-                        padding: '6px 16px', background: 'transparent', border: '1px solid #cccac0',
-                        color: '#141413', borderRadius: '4px', cursor: 'pointer', fontSize: '13px'
-                    }}>
-                        Cancel
+                <div className="v-pie">
+                    <button className="v-boton" onClick={onClose}>
+                        Cancelar
                     </button>
-                    <button onClick={handleSave} style={{
-                        padding: '6px 16px', background: '#507294', border: 'none',
-                        color: '#ffffff', borderRadius: '4px', cursor: 'pointer', fontSize: '13px', fontWeight: 600
-                    }}>
-                        Update
+                    <button className="v-boton v-boton--principal" onClick={handleSave}>
+                        Aplicar
                     </button>
                 </div>
 

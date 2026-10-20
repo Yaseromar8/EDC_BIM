@@ -8,8 +8,7 @@
     left: 0;
     right: 0;
     bottom: 0;
-    background: rgba(255, 255, 255, 0.6);
-    backdrop-filter: blur(4px);
+    background: var(--v-velo);
     z-index: 9999;
     display: flex;
     align-items: center;
@@ -32,12 +31,12 @@
     height: 85vh;
     max-width: 1400px;
     background: #ffffff;
-    border-radius: 12px;
+    border-radius: var(--v-radio);
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
-    border: 1px solid rgba(20, 20, 19, 0.08);
+    box-shadow: var(--v-sombra);
+    border: 1px solid var(--v-linea);
 }
 
 /* --- TOP BAR --- */
@@ -410,7 +409,7 @@
     left: 0;
     right: 0;
     bottom: 0;
-    background: rgba(0, 0, 0, 0.5);
+    background: var(--v-velo);
     z-index: 10001;
     display: flex;
     align-items: center;
@@ -418,28 +417,29 @@
 }
 
 .dm-modal {
-    background: #f1f0e8;
-    border-radius: 10px;
-    padding: 24px;
+    background: var(--v-superficie);
+    border-radius: var(--v-radio);
+    padding: 20px 24px;
     min-width: 360px;
-    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
-    border: 1px solid rgba(20, 20, 19, 0.1);
+    box-shadow: var(--v-sombra);
+    border: 1px solid var(--v-linea);
 }
 
 .dm-modal h3 {
     margin: 0 0 16px 0;
-    color: #333330;
-    font-size: 16px;
+    color: #141413;
+    font-size: 15px;
+    font-weight: 600;
 }
 
 .dm-modal input {
     width: 100%;
     padding: 10px 14px;
-    border: 1px solid rgba(20, 20, 19, 0.15);
-    border-radius: 6px;
-    background: rgba(20, 20, 19, 0.06);
-    color: #333330;
-    font-size: 14px;
+    border: 1px solid var(--v-linea-campo);
+    border-radius: var(--v-radio-control);
+    background: var(--v-superficie);
+    color: #141413;
+    font-size: 13px;
     outline: none;
     box-sizing: border-box;
     transition: border-color 0.15s;

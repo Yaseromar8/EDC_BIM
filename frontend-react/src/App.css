@@ -136,12 +136,10 @@ body,
     border-right: none !important;
     border-top: 1px solid rgba(20, 20, 19, 0.15);
     border-radius: 16px 16px 0 0;
-    background: rgba(255, 255, 255, 0.97) !important;
-    backdrop-filter: blur(12px) !important;
-    -webkit-backdrop-filter: blur(12px) !important;
+    background: var(--v-superficie) !important;
     z-index: 2000 !important;
     overflow-y: auto !important;
-    box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.4);
+    box-shadow: 0 -4px 16px rgb(20 20 19 / .12);
     transform: none !important;
     transition: none !important;
   }
@@ -278,13 +276,9 @@ body,
   min-width: 300px;
   max-width: 450px;
   height: calc(100vh - 48px);
-  /* Tandem-like dark semi-transparent background */
-  background-color: rgba(255, 255, 255, 0.92);
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
+  background-color: var(--v-superficie);
   color: #141413;
-  border-right: 1px solid rgba(20, 20, 19, 0.05);
-  border-right: 1px solid rgba(20, 20, 19, 0.08);
+  border-right: 1px solid var(--v-linea);
   overflow-y: hidden;
   padding: 10px;
   z-index: 900;
@@ -573,11 +567,9 @@ body,
 
 /* Dark Floating Mode (PiP for tracking panels) */
 .split-doc.dark-float:not(.parallel) {
-  background: rgba(255, 255, 255, 0.95);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(20, 20, 19, 0.12);
-  border-radius: 12px;
+  background: var(--v-superficie);
+  border: 1px solid var(--v-linea);
+  border-radius: var(--v-radio);
   width: 240px;
   height: 200px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(20, 20, 19, 0.05);
@@ -671,7 +663,7 @@ body,
 }
 
 .source-files {
-  background: rgba(255, 255, 255, 0.85);
+  background: var(--v-superficie);
   border: 1px solid rgba(20, 20, 19, 0.06);
   border-radius: 10px;
   padding: 12px;
@@ -788,7 +780,7 @@ body,
 }
 
 .filters-placeholder {
-  background: rgba(255, 255, 255, 0.85);
+  background: var(--v-superficie);
   border: 1px dashed rgba(20, 20, 19, 0.2);
   border-radius: 10px;
   padding: 16px;
@@ -945,7 +937,7 @@ body,
 .filters-block-empty {
   font-size: 12px;
   color: #72706b;
-  background: rgba(0, 0, 0, 0.2);
+  background: var(--v-superficie-2);
   border-radius: 8px;
   padding: 8px;
 }
@@ -1038,7 +1030,7 @@ body,
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(255, 255, 255, 0.6);
+  background: var(--v-velo);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1049,9 +1041,11 @@ body,
   width: 720px;
   max-width: 90vw;
   max-height: 90vh;
-  background: #ffffff;
-  border: 1px solid rgba(20, 20, 19, 0.08);
-  border-radius: 16px;
+  background: var(--v-superficie);
+  border: 1px solid var(--v-linea);
+  border-radius: var(--v-radio);
+  box-shadow: var(--v-sombra);
+  overflow: hidden;
   display: flex;
   flex-direction: column;
 }
@@ -1066,14 +1060,34 @@ body,
 
 .modal-header h3 {
   margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--v-texto);
+}
+
+.modal-header {
+  border-bottom: 1px solid var(--v-linea);
+}
+
+.modal-footer {
+  border-top: 1px solid var(--v-linea);
 }
 
 .modal-close {
   border: none;
   background: transparent;
-  color: #141413;
-  font-size: 24px;
+  color: var(--v-texto-3);
+  font-size: 22px;
+  line-height: 1;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--v-radio-control);
   cursor: pointer;
+}
+
+.modal-close:hover {
+  background: var(--v-superficie-2);
+  color: var(--v-texto);
 }
 
 .modal-body {
@@ -1085,7 +1099,7 @@ body,
 }
 
 .filters-config-overlay {
-  backdrop-filter: blur(2px);
+  background: var(--v-velo);
 }
 
 .filters-config-panel {
@@ -1190,7 +1204,7 @@ body,
   gap: 10px;
   align-items: flex-start;
   font-size: 12px;
-  background: rgba(0, 0, 0, 0.2);
+  background: var(--v-superficie-2);
   padding: 6px 8px;
   border-radius: 8px;
   cursor: pointer;
@@ -1314,10 +1328,10 @@ body,
 
 .modal-tree {
   border: 1px solid rgba(20, 20, 19, 0.08);
-  border-radius: 12px;
+  border-radius: var(--v-radio-control);
   padding: 12px;
   overflow: auto;
-  background: rgba(255, 255, 255, 0.8);
+  background: var(--v-superficie);
 }
 
 .modal-footer button {
@@ -1416,8 +1430,8 @@ body,
   width: 100%;
   padding: 8px;
   border-radius: 8px;
-  border: 1px solid rgba(20, 20, 19, 0.1);
-  background: rgba(255, 255, 255, 0.8);
+  border: 1px solid var(--v-linea-campo);
+  background: var(--v-superficie);
   color: #141413;
 }
 
@@ -1429,8 +1443,8 @@ body,
 
 .sprite-controls button {
   flex: 1;
-  border: 1px solid rgba(20, 20, 19, 0.2);
-  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid var(--v-linea-campo);
+  background: var(--v-superficie);
   color: #141413;
   padding: 6px 8px;
   border-radius: 8px;
@@ -1513,7 +1527,7 @@ body,
 
 .accordion-trigger {
   width: 100%;
-  background: rgba(255, 255, 255, 0.9);
+  background: var(--v-superficie);
   color: #141413;
   border: none;
   padding: 10px 12px;
@@ -1540,7 +1554,7 @@ body,
 }
 
 .accordion-body {
-  background: rgba(255, 255, 255, 0.9);
+  background: var(--v-superficie);
   padding: 10px;
 }
 
@@ -1565,7 +1579,7 @@ body,
   border-radius: 12px;
   padding: 12px;
   min-height: 200px;
-  background: rgba(255, 255, 255, 0.85);
+  background: var(--v-superficie);
 }
 
 .doc-preview-frame {
@@ -1960,12 +1974,11 @@ input[type='checkbox']:hover {
   gap: 8px;
   z-index: 2000;
   transition: all 0.3s ease;
-  background: rgba(48, 47, 46, 0.45);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  padding: 8px;
-  border-radius: 12px;
-  border: 1px solid rgba(20, 20, 19, 0.1);
+  background: var(--v-superficie);
+  box-shadow: var(--v-sombra-flotante);
+  padding: 6px;
+  border-radius: var(--v-radio);
+  border: 1px solid var(--v-linea);
 }
 
 .tracking-toolbar .secondary-btn {

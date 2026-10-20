@@ -18,9 +18,9 @@ import OrthoCanalTrial from './OrthoCanalTrial';
 const S = {
   panel: {
     position: 'fixed', top: 60, right: 12, width: 400, maxHeight: 'calc(100vh - 140px)',
-    background: 'rgba(255, 255, 255, 0.97)', color: '#333330', borderRadius: 12,
-    border: '1px solid #e8e6dc', zIndex: 60, display: 'flex', flexDirection: 'column',
-    fontSize: 13, boxShadow: '0 12px 40px rgba(0,0,0,0.5)', pointerEvents: 'auto',
+    background: 'var(--v-superficie)', color: '#333330', borderRadius: 'var(--v-radio)',
+    border: '1px solid var(--v-linea)', zIndex: 60, display: 'flex', flexDirection: 'column',
+    fontSize: 13, boxShadow: 'var(--v-sombra-flotante)', pointerEvents: 'auto',
   },
   cab: { display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', borderBottom: '1px solid #e8e6dc' },
   cuerpo: { padding: 12, overflowY: 'auto' },

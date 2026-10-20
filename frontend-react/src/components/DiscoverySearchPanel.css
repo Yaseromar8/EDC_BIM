@@ -220,7 +220,7 @@
 
 /* Agent Reasoning Styles */
 .agent-reasoning {
-    background: rgba(0, 0, 0, 0.2);
+    background: var(--v-superficie-2);
     border-radius: 8px;
     margin-bottom: 12px;
     border: 1px solid rgba(20, 20, 19, 0.05);

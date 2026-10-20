@@ -4729,18 +4729,9 @@ function App() {
 
                 {/* ⚠️ GPU reset: canvas negro → ofrecer recarga en vez de app "muerta" */}
                 {webglLost && (
-                  <div style={{
-                    position: 'absolute', top: '12px', left: '50%', transform: 'translateX(-50%)',
-                    background: 'rgba(127,29,29,0.97)', border: '1px solid #b91c1c', color: '#fee2e2',
-                    padding: '10px 18px', borderRadius: '9px', fontSize: '13px', fontWeight: 600,
-                    zIndex: 1300, display: 'flex', alignItems: 'center', gap: '12px',
-                    boxShadow: '0 4px 20px rgba(0,0,0,0.5)',
-                  }}>
-                    <span>⚠️ La tarjeta gráfica se reinició y el visor perdió el lienzo.</span>
-                    <button
-                      onClick={() => window.location.reload()}
-                      style={{ background: '#fff', border: 'none', color: '#7f1d1d', padding: '5px 14px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: 800 }}
-                    >
+                  <div className="v-aviso v-aviso--error" role="alert" style={{ zIndex: 1300 }}>
+                    <span>La tarjeta gráfica se reinició y el visor perdió el lienzo.</span>
+                    <button className="v-boton" onClick={() => window.location.reload()}>
                       Recargar visor
                     </button>
                   </div>
@@ -4748,51 +4739,16 @@ function App() {
 
                 {/* 🔒 Aviso de módulo sin permisos */}
                 {permToast && (
-                  <div style={{
-                    position: 'absolute', top: '12px', left: '50%', transform: 'translateX(-50%)',
-                    background: 'rgba(255, 255, 255, 0.97)', border: '1px solid #cccac0', color: '#e8d8b0',
-                    padding: '9px 18px', borderRadius: '9px', fontSize: '13px', fontWeight: 600,
-                    zIndex: 1200, boxShadow: '0 4px 20px rgba(0,0,0,0.45)', backdropFilter: 'blur(6px)',
-                  }}>
-                    {permToast}
+                  <div className="v-aviso v-aviso--atencion" role="status" style={{ zIndex: 1200, paddingRight: '14px' }}>
+                    <span>{permToast}</span>
                   </div>
                 )}
 
                 {/* PIN RELOCATE BANNER */}
                 {relocatingPin && (
-                  <div style={{
-                    position: 'absolute',
-                    top: '12px',
-                    left: '50%',
-                    transform: 'translateX(-50%)',
-                    background: 'rgba(106, 155, 204, 0.95)',
-                    color: '#141413',
-                    padding: '10px 24px',
-                    borderRadius: '10px',
-                    fontSize: '13px',
-                    fontWeight: 600,
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '12px',
-                    zIndex: 999,
-                    boxShadow: '0 4px 20px rgba(0,0,0,0.4)',
-                    backdropFilter: 'blur(8px)',
-                    animation: 'fadeIn 0.2s ease'
-                  }}>
-                    <span>📌 Haz clic en la nueva ubicación del pin</span>
-                    <button
-                      onClick={() => setRelocatingPin(null)}
-                      style={{
-                        background: 'rgba(20, 20, 19,0.2)',
-                        border: 'none',
-                        color: '#141413',
-                        padding: '4px 12px',
-                        borderRadius: '6px',
-                        cursor: 'pointer',
-                        fontSize: '12px',
-                        fontWeight: 600
-                      }}
-                    >
+                  <div className="v-aviso" role="status" style={{ zIndex: 999 }}>
+                    <span>Haz clic en la nueva ubicación del pin</span>
+                    <button className="v-boton" onClick={() => setRelocatingPin(null)}>
                       Cancelar
                     </button>
                   </div>
@@ -4834,21 +4790,14 @@ function App() {
                     setPinPrompt(null);
                   };
                   return (
-                    <div style={{
-                      position: 'absolute', inset: 0, zIndex: 1200,
-                      background: 'rgba(20,20,19,0.55)', backdropFilter: 'blur(3px)',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center'
-                    }} onClick={() => setPinPrompt(null)}>
-                      <div onClick={(e) => e.stopPropagation()} style={{
-                        width: 'min(380px, 90vw)', background: '#ffffff',
-                        border: '1px solid rgba(20, 20, 19,0.1)', borderRadius: '12px',
-                        padding: '20px', boxShadow: '0 12px 40px rgba(0,0,0,0.5)'
-                      }}>
+                    <div className="v-velo" role="dialog" aria-modal="true" aria-label={cfg.title}
+                      style={{ position: 'absolute', zIndex: 1200 }} onClick={() => setPinPrompt(null)}>
+                      <div className="v-caja" onClick={(e) => e.stopPropagation()} style={{ width: 'min(380px, 90vw)', padding: '20px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px' }}>
                           <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: cfg.accent }}></span>
-                          <span style={{ color: '#141413', fontSize: '14px', fontWeight: 700 }}>{cfg.title}</span>
+                          <h2 className="v-titulo">{cfg.title}</h2>
                         </div>
-                        <label style={{ display: 'block', color: '#72706b', fontSize: '12px', marginBottom: '6px' }}>{cfg.label}</label>
+                        <label htmlFor="pin-prompt-input" className="v-etiqueta" style={{ display: 'block', marginBottom: '6px' }}>{cfg.label}</label>
                         <input
                           id="pin-prompt-input"
                           autoFocus
@@ -4856,21 +4805,11 @@ function App() {
                           placeholder={cfg.placeholder}
                           onKeyDown={(e) => { if (e.key === 'Enter') confirm(); if (e.key === 'Escape') setPinPrompt(null); }}
                           onFocus={(e) => e.target.select()}
-                          style={{
-                            width: '100%', boxSizing: 'border-box', background: '#faf9f5',
-                            border: '1px solid rgba(20, 20, 19,0.15)', borderRadius: '8px',
-                            color: '#141413', padding: '9px 12px', fontSize: '13px', outline: 'none'
-                          }}
+                          className="v-campo"
                         />
                         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '16px' }}>
-                          <button onClick={() => setPinPrompt(null)} style={{
-                            background: 'transparent', border: '1px solid rgba(20, 20, 19,0.15)',
-                            color: '#72706b', padding: '7px 14px', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: 600
-                          }}>Cancelar</button>
-                          <button onClick={confirm} style={{
-                            background: cfg.accent, border: 'none', color: '#141413',
-                            padding: '7px 16px', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: 700
-                          }}>Crear</button>
+                          <button className="v-boton" onClick={() => setPinPrompt(null)}>Cancelar</button>
+                          <button className="v-boton v-boton--principal" onClick={confirm}>Crear</button>
                         </div>
                       </div>
                     </div>

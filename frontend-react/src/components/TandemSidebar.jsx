@@ -139,11 +139,9 @@ const TandemSidebar = ({
                 zIndex: 40,
                 display: isLogicallyVisible ? 'flex' : 'none', // Ocultamiento duro
                 flexShrink: 0,
-                // === Estética Tandem (Transparente + Glassmorphism) ===
-                backgroundColor: 'rgba(255, 255, 255, 0.65)', 
-                backdropFilter: 'blur(10px)',
-                WebkitBackdropFilter: 'blur(10px)', // Para safari
-                borderRight: '1px solid rgba(20, 20, 19,0.05)'
+                // Sólido: el cristal dejaba ver el modelo y la ortofoto detrás de los filtros
+                backgroundColor: 'var(--v-superficie)',
+                borderRight: '1px solid var(--v-linea)'
             }}
         >
             {/* Manija de Arrastre (Resizer Handle) */}

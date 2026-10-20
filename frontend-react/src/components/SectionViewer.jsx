@@ -809,32 +809,32 @@ const SectionViewer = ({ sectionsData, onClose, onSync, getModelSlice, alignment
     return createPortal(
         <div style={dockStyle}>
             {/* Título */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderBottom: '1px solid #23262d', background: '#202020', flexShrink: 0 }}>
-                <span style={{ fontSize: 13, fontWeight: 800, color: '#e6e8ec' }}>Sección transversal</span>
-                <span style={{ fontSize: 11, color: '#8a919c' }}>{station.alignmentId}</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderBottom: '1px solid #e8e6dc', background: '#ffffff', flexShrink: 0 }}>
+                <span style={{ fontSize: 15, fontWeight: 600, color: '#141413' }}>Sección transversal</span>
+                <span style={{ fontSize: 11, color: '#72706b' }}>{station.alignmentId}</span>
                 <div style={{ flex: 1 }} />
                 {/* Spinner de progresiva (estilo InfraWorks) */}
-                <div style={{ display: 'flex', alignItems: 'center', background: '#161616', border: '1px solid rgba(255,255,255,0.14)', borderRadius: 6, overflow: 'hidden' }}>
-                    <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 13, fontWeight: 700, color: '#e6e8ec', padding: '5px 10px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', background: '#ffffff', border: '1px solid #cccac0', borderRadius: 6, overflow: 'hidden' }}>
+                    <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 13, fontWeight: 700, color: '#141413', padding: '5px 10px' }}>
                         {formatStation(station.station)}
                     </span>
-                    <div style={{ display: 'flex', flexDirection: 'column', borderLeft: '1px solid rgba(255,255,255,0.14)' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', borderLeft: '1px solid #cccac0' }}>
                         <button onClick={() => goIndex(currentIndex + 1)} disabled={currentIndex >= stations.length - 1} style={spinBtn}>▲</button>
-                        <button onClick={() => goIndex(currentIndex - 1)} disabled={currentIndex === 0} style={{ ...spinBtn, borderTop: '1px solid rgba(255,255,255,0.14)' }}>▼</button>
+                        <button onClick={() => goIndex(currentIndex - 1)} disabled={currentIndex === 0} style={{ ...spinBtn, borderTop: '1px solid #cccac0' }}>▼</button>
                     </div>
                 </div>
                 <button onClick={onClose} style={{ ...btn(false), padding: '5px 9px' }} title="Cerrar">✕</button>
             </div>
 
             {/* Áreas + controles */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '7px 14px', borderBottom: '1px solid rgba(255,255,255,0.06)', background: '#1a1a1a', flexShrink: 0, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '7px 14px', borderBottom: '1px solid #e8e6dc', background: '#f1f0e8', flexShrink: 0, flexWrap: 'wrap' }}>
                 <span style={{ fontSize: 11.5 }}>
-                    <span style={{ color: '#ef4444', fontWeight: 700 }}>Área de desmonte:</span>{' '}
-                    <span style={{ fontFamily: 'IBM Plex Mono, monospace', color: '#e6e8ec' }}>{cutFill.cut.toFixed(3)} m²</span>
+                    <span style={{ color: '#b93535', fontWeight: 600 }}>Área de desmonte:</span>{' '}
+                    <span style={{ fontFamily: 'IBM Plex Mono, monospace', color: '#141413' }}>{cutFill.cut.toFixed(3)} m²</span>
                 </span>
                 <span style={{ fontSize: 11.5 }}>
-                    <span style={{ color: '#22c55e', fontWeight: 700 }}>Área de terraplén:</span>{' '}
-                    <span style={{ fontFamily: 'IBM Plex Mono, monospace', color: '#e6e8ec' }}>{cutFill.fill.toFixed(3)} m²</span>
+                    <span style={{ color: '#667650', fontWeight: 600 }}>Área de terraplén:</span>{' '}
+                    <span style={{ fontFamily: 'IBM Plex Mono, monospace', color: '#141413' }}>{cutFill.fill.toFixed(3)} m²</span>
                 </span>
                 <div style={{ flex: 1 }} />
                 <button onClick={() => pushToModel(station, { fly: true })} style={btn(true)} title="Volar la cámara del modelo a esta progresiva">◎ Volar</button>
@@ -1067,24 +1067,24 @@ const SectionViewer = ({ sectionsData, onClose, onSync, getModelSlice, alignment
                 </div>
             ) : mode === 'auditor' ? (
                 // ─── AUDITOR: comparación Dibujo vs Oficial de Civil ───
-                <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', background: '#191b1e', overflow: 'auto' }}>
-                    <div style={{ padding: '14px 18px 6px', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-                        <div style={{ fontSize: 13, fontWeight: 800, color: '#e6e8ec', marginBottom: 3 }}>
-                            🔎 Auditor de cantidades — PK {formatStation(station.station)}
+                <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', background: '#ffffff', overflow: 'auto' }}>
+                    <div style={{ padding: '14px 18px 6px', borderBottom: '1px solid #e8e6dc' }}>
+                        <div style={{ fontSize: 14, fontWeight: 600, color: '#141413', marginBottom: 3 }}>
+                            Auditor de cantidades — PK {formatStation(station.station)}
                         </div>
-                        <div style={{ fontSize: 11, color: '#8a919c', lineHeight: 1.55 }}>
-                            <span style={{ color: '#8ecbff' }}>Dibujo</span> = área del hatch (shoelace del contorno). <span style={{ color: '#4ade80' }}>Oficial</span> = MaterialSection.area del cadista (Civil). <span style={{ color: '#fbbf24' }}>Δ</span> = divergencia %.
+                        <div style={{ fontSize: 11, color: '#72706b', lineHeight: 1.55 }}>
+                            <span style={{ color: '#507294' }}>Dibujo</span> = área del hatch (shoelace del contorno). <span style={{ color: '#667650' }}>Oficial</span> = MaterialSection.area del cadista (Civil). <span style={{ color: '#734500' }}>Δ</span> = divergencia %.
                         </div>
                     </div>
                     <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: 'IBM Plex Mono, monospace', fontSize: 12 }}>
                         <thead>
-                            <tr style={{ background: '#1a1a1a', borderBottom: '1px solid rgba(255,255,255,0.10)' }}>
-                                <th style={{ padding: '10px 12px', textAlign: 'left', fontWeight: 700, color: '#8a919c' }}>Material</th>
-                                <th style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 700, color: '#8ecbff' }}>Dibujo (m²)</th>
-                                <th style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 700, color: '#4ade80' }}>Oficial Civil (m²)</th>
-                                <th style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 700, color: '#fbbf24' }}>Δ (m²)</th>
-                                <th style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 700, color: '#fbbf24' }}>Δ %</th>
-                                <th style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 700, color: '#8a919c' }}>OK</th>
+                            <tr style={{ background: '#f1f0e8', borderBottom: '1px solid #e8e6dc' }}>
+                                <th style={{ padding: '10px 12px', textAlign: 'left', fontWeight: 700, color: '#72706b' }}>Material</th>
+                                <th style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 700, color: '#507294' }}>Dibujo (m²)</th>
+                                <th style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 700, color: '#667650' }}>Oficial Civil (m²)</th>
+                                <th style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 700, color: '#734500' }}>Δ (m²)</th>
+                                <th style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 700, color: '#734500' }}>Δ %</th>
+                                <th style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 700, color: '#72706b' }}>OK</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -1093,24 +1093,24 @@ const SectionViewer = ({ sectionsData, onClose, onSync, getModelSlice, alignment
                                 const noDrawn = g.dibujo === 0;
                                 const green = g.pct <= 0.005;
                                 const yellow = !green && g.pct <= 0.02;
-                                const semColor = noOfficial || noDrawn ? '#8a919c' : green ? '#4ade80' : yellow ? '#fbbf24' : '#ef4444';
+                                const semColor = noOfficial || noDrawn ? '#72706b' : green ? '#667650' : yellow ? '#734500' : '#b93535';
                                 const semIcon = noOfficial || noDrawn ? '—' : green ? '●' : yellow ? '●' : '●';
                                 return (
-                                    <tr key={i} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-                                        <td style={{ padding: '9px 12px', color: '#d7dbe2' }}>
+                                    <tr key={i} style={{ borderBottom: '1px solid #e8e6dc' }}>
+                                        <td style={{ padding: '9px 12px', color: '#333330' }}>
                                             {g.color && <span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 2, background: g.color, marginRight: 8, verticalAlign: 'middle' }} />}
                                             {g.name}
                                         </td>
-                                        <td style={{ padding: '9px 12px', textAlign: 'right', color: g.dibujo > 0 ? '#c6ccd4' : '#4a4f57' }}>
+                                        <td style={{ padding: '9px 12px', textAlign: 'right', color: g.dibujo > 0 ? '#333330' : '#b0aea5' }}>
                                             {g.dibujo > 0 ? g.dibujo.toFixed(3) : '—'}
                                         </td>
-                                        <td style={{ padding: '9px 12px', textAlign: 'right', color: g.oficial > 0 ? '#c6ccd4' : '#4a4f57' }}>
+                                        <td style={{ padding: '9px 12px', textAlign: 'right', color: g.oficial > 0 ? '#333330' : '#b0aea5' }}>
                                             {g.oficial > 0 ? g.oficial.toFixed(3) : '—'}
                                         </td>
-                                        <td style={{ padding: '9px 12px', textAlign: 'right', color: noOfficial || noDrawn ? '#4a4f57' : semColor }}>
+                                        <td style={{ padding: '9px 12px', textAlign: 'right', color: noOfficial || noDrawn ? '#b0aea5' : semColor }}>
                                             {noOfficial || noDrawn ? '—' : (g.diff >= 0 ? '+' : '') + g.diff.toFixed(3)}
                                         </td>
-                                        <td style={{ padding: '9px 12px', textAlign: 'right', color: noOfficial || noDrawn ? '#4a4f57' : semColor }}>
+                                        <td style={{ padding: '9px 12px', textAlign: 'right', color: noOfficial || noDrawn ? '#b0aea5' : semColor }}>
                                             {noOfficial || noDrawn ? '—' : (g.pct * 100).toFixed(2) + '%'}
                                         </td>
                                         <td style={{ padding: '9px 12px', textAlign: 'center', color: semColor, fontSize: 14 }}>
@@ -1121,21 +1121,21 @@ const SectionViewer = ({ sectionsData, onClose, onSync, getModelSlice, alignment
                             })}
                         </tbody>
                     </table>
-                    <div style={{ padding: '10px 18px', fontSize: 11, color: '#7c8694', borderTop: '1px solid rgba(255,255,255,0.06)', display: 'flex', gap: 16 }}>
-                        <span><span style={{ color: '#4ade80' }}>●</span> ≤ 0.5%</span>
-                        <span><span style={{ color: '#fbbf24' }}>●</span> ≤ 2%</span>
-                        <span><span style={{ color: '#ef4444' }}>●</span> &gt; 2%</span>
+                    <div style={{ padding: '10px 18px', fontSize: 11, color: '#72706b', borderTop: '1px solid #e8e6dc', display: 'flex', gap: 16 }}>
+                        <span><span style={{ color: '#667650' }}>●</span> ≤ 0.5%</span>
+                        <span><span style={{ color: '#734500' }}>●</span> ≤ 2%</span>
+                        <span><span style={{ color: '#b93535' }}>●</span> &gt; 2%</span>
                         <span>—: solo una fuente disponible</span>
                     </div>
                 </div>
             ) : (
-                <div style={{ flex: 1, minHeight: 0, display: 'flex', background: '#191b1e' }}>
-                    <div style={{ width: 190, flexShrink: 0, borderRight: '1px solid rgba(255,255,255,0.06)', background: '#1a1a1a', padding: 10, overflowY: 'auto' }}>
+                <div style={{ flex: 1, minHeight: 0, display: 'flex', background: '#ffffff' }}>
+                    <div style={{ width: 190, flexShrink: 0, borderRight: '1px solid #e8e6dc', background: '#f1f0e8', padding: 10, overflowY: 'auto' }}>
                         {volumes.map((m, i) => (
                             <button key={`${m.alignmentId}:${m.material}`} onClick={() => setVolMaterial(i)}
-                                style={{ display: 'block', width: '100%', textAlign: 'left', padding: '7px 8px', borderRadius: 6, marginBottom: 5, cursor: 'pointer', border: volMaterial === i ? '1px solid #3aa0ff' : '1px solid rgba(255,255,255,0.07)', background: volMaterial === i ? 'rgba(58,160,255,0.12)' : 'transparent' }}>
-                                <div style={{ fontSize: 11.5, fontWeight: 700, color: '#d7dbe2' }}>{m.material}</div>
-                                <div style={{ fontSize: 10, color: '#8a919c', marginTop: 2, fontFamily: 'IBM Plex Mono, monospace' }}>
+                                style={{ display: 'block', width: '100%', textAlign: 'left', padding: '7px 8px', borderRadius: 6, marginBottom: 5, cursor: 'pointer', border: volMaterial === i ? '1px solid #507294' : '1px solid #e8e6dc', background: volMaterial === i ? '#ecf0f1' : 'transparent' }}>
+                                <div style={{ fontSize: 11.5, fontWeight: 700, color: '#333330' }}>{m.material}</div>
+                                <div style={{ fontSize: 10, color: '#72706b', marginTop: 2, fontFamily: 'IBM Plex Mono, monospace' }}>
                                     {m.total.toLocaleString('es-PE', { maximumFractionDigits: 1 })} m³
                                 </div>
                             </button>
@@ -1147,26 +1147,26 @@ const SectionViewer = ({ sectionsData, onClose, onSync, getModelSlice, alignment
                             return (
                                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11.5 }}>
                                     <thead>
-                                        <tr style={{ position: 'sticky', top: 0, background: '#202020', color: '#8a8f98', textTransform: 'uppercase', fontSize: 9.5, letterSpacing: '0.08em' }}>
+                                        <tr style={{ position: 'sticky', top: 0, background: '#ffffff', color: '#72706b', textTransform: 'uppercase', fontSize: 9.5, letterSpacing: '0.08em' }}>
                                             <th style={{ padding: '8px 12px', textAlign: 'left' }}>Progresiva</th>
                                             <th style={{ padding: '8px 12px', textAlign: 'right' }}>Área m²</th>
                                             <th style={{ padding: '8px 12px', textAlign: 'right' }}>Parcial m³</th>
                                             <th style={{ padding: '8px 12px', textAlign: 'right' }}>Acum. m³</th>
                                         </tr>
                                     </thead>
-                                    <tbody style={{ fontFamily: 'IBM Plex Mono, monospace', color: '#c8cdd6' }}>
+                                    <tbody style={{ fontFamily: 'IBM Plex Mono, monospace', color: '#333330' }}>
                                         {m.table.map((r) => (
-                                            <tr key={r.pk} style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }}>
-                                                <td style={{ padding: '6px 12px', color: '#8ecbff' }}>{formatStation(r.pk)}</td>
+                                            <tr key={r.pk} style={{ borderTop: '1px solid #e8e6dc' }}>
+                                                <td style={{ padding: '6px 12px', color: '#507294' }}>{formatStation(r.pk)}</td>
                                                 <td style={{ padding: '6px 12px', textAlign: 'right' }}>{r.area.toFixed(2)}</td>
                                                 <td style={{ padding: '6px 12px', textAlign: 'right' }}>{r.parcial.toFixed(2)}</td>
                                                 <td style={{ padding: '6px 12px', textAlign: 'right', fontWeight: 700 }}>{r.acum.toFixed(2)}</td>
                                             </tr>
                                         ))}
-                                        <tr style={{ borderTop: '2px solid rgba(255,255,255,0.14)', background: '#202020' }}>
-                                            <td style={{ padding: '8px 12px', fontWeight: 800, color: '#e6e8ec' }}>TOTAL</td>
+                                        <tr style={{ borderTop: '2px solid #cccac0', background: '#ffffff' }}>
+                                            <td style={{ padding: '8px 12px', fontWeight: 800, color: '#141413' }}>TOTAL</td>
                                             <td /><td />
-                                            <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 800, color: '#22c55e' }}>{m.total.toFixed(2)}</td>
+                                            <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 800, color: '#667650' }}>{m.total.toFixed(2)}</td>
                                         </tr>
                                     </tbody>
                                 </table>
@@ -1177,7 +1177,7 @@ const SectionViewer = ({ sectionsData, onClose, onSync, getModelSlice, alignment
             )}
 
             {/* Barra inferior: slider + relación + vistas + capas */}
-            <div style={{ padding: '8px 12px', background: '#202020', borderTop: '1px solid rgba(255,255,255,0.08)', flexShrink: 0 }}>
+            <div style={{ padding: '8px 12px', background: '#ffffff', borderTop: '1px solid #e8e6dc', flexShrink: 0 }}>
                 {/* Cinta de progresivas: un tick por sección extraída; clic = saltar */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                     <svg width="100%" height="34" style={{ flex: 1, display: 'block' }}>
@@ -1190,46 +1190,46 @@ const SectionViewer = ({ sectionsData, onClose, onSync, getModelSlice, alignment
                             const X = (st) => 8 + ((Number(st) - s0) / span) * 84; // % con margen
                             return (
                                 <>
-                                    <line x1="2%" y1="24" x2="98%" y2="24" stroke="#39424f" strokeWidth="1.5" />
+                                    <line x1="2%" y1="24" x2="98%" y2="24" stroke="#cccac0" strokeWidth="1.5" />
                                     {stations.map((st, i) => (
                                         <g key={i} style={{ cursor: 'pointer' }} onClick={() => goIndex(i)}>
                                             <rect x={`${X(st.station) - 1.2}%`} y="10" width="2.4%" height="24" fill="transparent" />
                                             <line x1={`${X(st.station)}%`} y1={i === currentIndex ? 15 : 19} x2={`${X(st.station)}%`} y2="29"
-                                                stroke={i === currentIndex ? '#8ecbff' : '#5b6572'} strokeWidth={i === currentIndex ? 3 : 1.5} />
+                                                stroke={i === currentIndex ? '#507294' : '#b0aea5'} strokeWidth={i === currentIndex ? 3 : 1.5} />
                                             <title>{formatStation(st.station)}</title>
                                         </g>
                                     ))}
-                                    <text x={`${X(stations[currentIndex].station)}%`} y="9" fill="#8ecbff" fontSize="10" fontWeight="700" fontFamily="IBM Plex Mono, monospace" textAnchor="middle">
+                                    <text x={`${X(stations[currentIndex].station)}%`} y="9" fill="#507294" fontSize="10" fontWeight="700" fontFamily="IBM Plex Mono, monospace" textAnchor="middle">
                                         {formatStation(stations[currentIndex].station)}
                                     </text>
                                 </>
                             );
                         })()}
                     </svg>
-                    <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 10.5, color: '#8a919c', flexShrink: 0 }}>
+                    <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 10.5, color: '#72706b', flexShrink: 0 }}>
                         {currentIndex + 1}/{stations.length}
                     </span>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 7, flexWrap: 'wrap' }}>
-                    <span style={{ fontSize: 10.5, color: '#8a919c' }}>Relación</span>
+                    <span style={{ fontSize: 10.5, color: '#72706b' }}>Relación</span>
                     {[1, 2, 4].map((a) => (
                         <button key={a} onClick={() => setAspect(a)} style={{ ...btn(aspect === a), padding: '3px 8px', fontSize: 11 }}>{a.toFixed(1)}</button>
                     ))}
-                    <span style={{ width: 1, height: 16, background: '#2a2f37' }} />
+                    <span style={{ width: 1, height: 16, background: '#e8e6dc' }} />
                     <button onClick={() => setMode('seccion')} style={{ ...btn(mode === 'seccion'), padding: '3px 10px', fontSize: 11 }}>Sección</button>
                     {volumes.length > 0 && (
                         <button onClick={() => setMode('volumenes')} style={{ ...btn(mode === 'volumenes'), padding: '3px 10px', fontSize: 11 }}>Volúmenes</button>
                     )}
                     {auditor.length > 0 && (
                         <button onClick={() => setMode('auditor')} title="Comparar cantidades: dibujo vs oficial de Civil" style={{ ...btn(mode === 'auditor'), padding: '3px 10px', fontSize: 11 }}>
-                            🔎 Auditor
+                            Auditor
                         </button>
                     )}
                     {mdlSlice.length > 0 && (
                         <button
                             onClick={() => setShowModel((p) => !p)}
                             title="Superponer el corte de los modelos 3D cargados en el visor (referencia visual)"
-                            style={{ ...btn(showModel), padding: '3px 10px', fontSize: 11, color: showModel ? '#00d5ff' : undefined }}
+                            style={{ ...btn(showModel), padding: '3px 10px', fontSize: 11 }}
                         >
                             Modelo 3D
                         </button>
@@ -1252,9 +1252,9 @@ const SectionViewer = ({ sectionsData, onClose, onSync, getModelSlice, alignment
                             const off = hidden.has(t.key);
                             return (
                                 <button key={t.key} onClick={() => toggle(t.key)}
-                                    style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '3px 8px', borderRadius: 5, border: '1px solid rgba(255,255,255,0.10)', background: 'transparent', cursor: 'pointer', opacity: off ? 0.38 : 1 }}>
+                                    style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '3px 8px', borderRadius: 5, border: '1px solid #e8e6dc', background: 'transparent', cursor: 'pointer', opacity: off ? 0.38 : 1 }}>
                                     <span style={{ width: 10, height: 10, borderRadius: 2, background: t.color }} />
-                                    <span style={{ fontSize: 10.5, color: '#d7dbe2' }}>{t.label}</span>
+                                    <span style={{ fontSize: 10.5, color: '#333330' }}>{t.label}</span>
                                 </button>
                             );
                         })}
@@ -1266,7 +1266,7 @@ const SectionViewer = ({ sectionsData, onClose, onSync, getModelSlice, alignment
     );
 };
 
-// Paleta de la interfaz principal del visor (grises neutros + acento #0078d4)
+// Marco de la ventana con el patrón de ventanas de View (tema-claude.css); el dibujo tiene su propio tema T
 const dockStyle = {
     position: 'fixed',
     top: 62,
@@ -1276,25 +1276,25 @@ const dockStyle = {
     zIndex: 9999,
     display: 'flex',
     flexDirection: 'column',
-    background: '#1e1e1e',
-    border: '1px solid rgba(255,255,255,0.08)',
-    borderRadius: 8,
+    background: 'var(--v-superficie)',
+    border: '1px solid var(--v-linea)',
+    borderRadius: 'var(--v-radio)',
     overflow: 'hidden',
-    boxShadow: '0 16px 40px rgba(0,0,0,0.55)',
+    boxShadow: 'var(--v-sombra)',
     fontFamily: 'inherit',
-    color: '#e0e0e0',
+    color: '#141413',
 };
 
 const spinBtn = {
-    border: 'none', background: 'transparent', color: '#9aa3ad', cursor: 'pointer',
+    border: 'none', background: 'transparent', color: '#72706b', cursor: 'pointer',
     fontSize: 8, lineHeight: '11px', padding: '1px 7px',
 };
 
 const btn = (primary, disabled) => ({
     padding: '5px 12px', borderRadius: 4, fontSize: 12, fontWeight: 600, cursor: disabled ? 'default' : 'pointer',
-    border: primary ? '1px solid #0078d4' : '1px solid rgba(255,255,255,0.12)',
-    background: primary ? 'rgba(0,120,212,0.18)' : 'transparent',
-    color: primary ? '#4db2ff' : '#c9ced4',
+    border: primary ? '1px solid #507294' : '1px solid #cccac0',
+    background: primary ? '#ecf0f1' : '#ffffff',
+    color: primary ? '#507294' : '#333330',
     opacity: disabled ? 0.4 : 1,
 });
 

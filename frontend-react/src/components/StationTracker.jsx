@@ -134,12 +134,12 @@ const StationTracker = ({ isVisible, onClose, markers, viewerRef }) => {
             left: `${position.x}px`,
             top: `${position.y}px`,
             width: '300px',
-            backgroundColor: 'rgba(30,30,30,0.96)',
-            border: '1px solid #444',
-            borderRadius: '8px',
-            boxShadow: '0 10px 30px rgba(0,0,0,0.6)',
+            backgroundColor: 'var(--v-superficie)',
+            border: '1px solid var(--v-linea)',
+            borderRadius: 'var(--v-radio)',
+            boxShadow: 'var(--v-sombra-flotante)',
             zIndex: 1000,
-            color: 'white',
+            color: '#141413',
             fontFamily: 'var(--a-font-sans)',
             overflow: 'hidden',
             userSelect: 'none'
@@ -149,37 +149,37 @@ const StationTracker = ({ isVisible, onClose, markers, viewerRef }) => {
                 onMouseDown={handleMouseDown}
                 style={{
                     padding: '10px 14px',
-                    backgroundColor: '#1a1a2e',
+                    backgroundColor: '#ffffff',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between',
                     cursor: 'grab',
-                    borderBottom: '1px solid #333'
+                    borderBottom: '1px solid #e8e6dc'
                 }}
             >
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" strokeWidth="2">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#507294" strokeWidth="2">
                         <path d="M21 16.5c0 0-4-6.5-12-6.5S3 14 3 14" /><path d="M3 17h18" /><path d="M3 14v4" /><path d="M21 14v4" />
                         <path d="M6 17v-1.5" /><path d="M9 17v-1.5" /><path d="M12 17v-1.5" /><path d="M15 17v-1.5" /><path d="M18 17v-1.5" />
                     </svg>
-                    <span style={{ fontSize: '12px', fontWeight: 700, color: '#E0E0E0', letterSpacing: '0.03em' }}>
+                    <span style={{ fontSize: '13px', fontWeight: 600, color: '#141413' }}>
                         Herramientas de Civil
                     </span>
                 </div>
-                <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#666', cursor: 'pointer', padding: 0, display: 'flex' }}>
+                <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#72706b', cursor: 'pointer', padding: 0, display: 'flex' }}>
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
                 </button>
             </div>
 
             {/* Track Selector */}
             {tracks.length > 1 && (
-                <div style={{ padding: '8px 14px', borderBottom: '1px solid #333' }}>
+                <div style={{ padding: '8px 14px', borderBottom: '1px solid #e8e6dc' }}>
                     <select
                         value={selectedTrack}
                         onChange={(e) => handleTrackChange(e.target.value)}
                         style={{
-                            width: '100%', background: '#222', border: '1px solid #444',
-                            color: 'white', padding: '6px 10px', borderRadius: '4px',
+                            width: '100%', background: '#ffffff', border: '1px solid #cccac0',
+                            color: '#141413', padding: '6px 10px', borderRadius: '4px',
                             fontSize: '12px', outline: 'none', cursor: 'pointer'
                         }}
                     >
@@ -191,25 +191,25 @@ const StationTracker = ({ isVisible, onClose, markers, viewerRef }) => {
             )}
 
             {/* P.K. Navigation */}
-            <div style={{ padding: '12px 14px', borderBottom: '1px solid #333' }}>
+            <div style={{ padding: '12px 14px', borderBottom: '1px solid #e8e6dc' }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-                    <span style={{ fontSize: '11px', color: '#3b82f6', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                    <span style={{ fontSize: '11px', color: '#507294', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                         P.K. actual
                     </span>
                     <div style={{ display: 'flex', gap: '2px' }}>
                         {/* Zoom to station */}
                         <button onClick={() => flyTo(currentMarker)} title="Zoom a estación"
-                            style={{ background: 'none', border: 'none', color: '#888', cursor: 'pointer', padding: '2px', display: 'flex' }}>
+                            style={{ background: 'none', border: 'none', color: '#72706b', cursor: 'pointer', padding: '2px', display: 'flex' }}>
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /><line x1="11" y1="8" x2="11" y2="14" /><line x1="8" y1="11" x2="14" y2="11" /></svg>
                         </button>
                         {/* Section cut */}
                         <button onClick={sectionCut} title="Corte transversal"
-                            style={{ background: 'none', border: 'none', color: '#888', cursor: 'pointer', padding: '2px', display: 'flex' }}>
+                            style={{ background: 'none', border: 'none', color: '#72706b', cursor: 'pointer', padding: '2px', display: 'flex' }}>
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 3H3v18h18V3zM3 12h18" /><path d="M12 3v18" strokeDasharray="2 2" /></svg>
                         </button>
                         {/* Clear section */}
                         <button onClick={clearSection} title="Limpiar corte"
-                            style={{ background: 'none', border: 'none', color: '#888', cursor: 'pointer', padding: '2px', display: 'flex' }}>
+                            style={{ background: 'none', border: 'none', color: '#72706b', cursor: 'pointer', padding: '2px', display: 'flex' }}>
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" /><line x1="15" y1="9" x2="9" y2="15" /><line x1="9" y1="9" x2="15" y2="15" /></svg>
                         </button>
                     </div>
@@ -220,10 +220,10 @@ const StationTracker = ({ isVisible, onClose, markers, viewerRef }) => {
                     <button onClick={() => navigate(-10)} title="-100m" style={navBtnStyle}>«</button>
                     <button onClick={() => navigate(-1)} title="-10m" style={navBtnStyle}>‹</button>
                     <div style={{
-                        flex: 1, textAlign: 'center', background: '#111',
-                        border: '1px solid #444', borderRadius: '4px', padding: '6px 8px',
+                        flex: 1, textAlign: 'center', background: '#f1f0e8',
+                        border: '1px solid #e8e6dc', borderRadius: '4px', padding: '6px 8px',
                         fontSize: '14px', fontWeight: 700, fontFamily: 'monospace',
-                        color: '#3b82f6', letterSpacing: '0.5px'
+                        color: '#507294', letterSpacing: '0.5px'
                     }}>
                         {currentMarker ? formatStation(currentMarker.station) : '--'}
                     </div>
@@ -232,8 +232,8 @@ const StationTracker = ({ isVisible, onClose, markers, viewerRef }) => {
                 </div>
 
                 {/* Progress Bar */}
-                <div style={{ marginTop: '8px', height: '3px', background: '#333', borderRadius: '2px', overflow: 'hidden' }}>
-                    <div style={{ width: `${progress}%`, height: '100%', background: '#3b82f6', borderRadius: '2px', transition: 'width 0.2s' }} />
+                <div style={{ marginTop: '8px', height: '3px', background: '#e8e6dc', borderRadius: '2px', overflow: 'hidden' }}>
+                    <div style={{ width: `${progress}%`, height: '100%', background: '#507294', borderRadius: '2px', transition: 'width 0.2s' }} />
                 </div>
 
                 {/* Direct Station Input */}
@@ -245,13 +245,13 @@ const StationTracker = ({ isVisible, onClose, markers, viewerRef }) => {
                         onKeyDown={(e) => e.key === 'Enter' && jumpToStation()}
                         placeholder="Ir a estación (m)"
                         style={{
-                            flex: 1, background: '#111', border: '1px solid #444',
-                            color: 'white', padding: '5px 8px', borderRadius: '4px',
+                            flex: 1, background: '#ffffff', border: '1px solid #cccac0',
+                            color: '#141413', padding: '5px 8px', borderRadius: '4px',
                             fontSize: '11px', outline: 'none'
                         }}
                     />
                     <button onClick={jumpToStation} style={{
-                        background: '#3b82f6', color: 'white', border: 'none',
+                        background: '#507294', color: 'white', border: 'none',
                         borderRadius: '4px', padding: '5px 10px', fontSize: '11px',
                         fontWeight: 600, cursor: 'pointer'
                     }}>
@@ -261,11 +261,11 @@ const StationTracker = ({ isVisible, onClose, markers, viewerRef }) => {
             </div>
 
             {/* Properties Panel */}
-            <div style={{ borderBottom: '1px solid #333' }}>
+            <div style={{ borderBottom: '1px solid #e8e6dc' }}>
                 <button
                     onClick={() => setShowProperties(!showProperties)}
                     style={{
-                        width: '100%', background: 'none', border: 'none', color: '#aaa',
+                        width: '100%', background: 'none', border: 'none', color: '#52524d',
                         padding: '8px 14px', fontSize: '11px', fontWeight: 600,
                         cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px',
                         textTransform: 'uppercase', letterSpacing: '0.5px'
@@ -283,7 +283,7 @@ const StationTracker = ({ isVisible, onClose, markers, viewerRef }) => {
                         <PropertyRow label="X (Abscisa)" value={`${currentMarker.x.toFixed(2)} m`} />
                         <PropertyRow label="Y (Ordenada)" value={`${currentMarker.y.toFixed(2)} m`} />
                         <PropertyRow label="Z (Alzado)" value={`${currentMarker.z.toFixed(2)} m`} />
-                        <div style={{ borderTop: '1px solid #333', marginTop: '8px', paddingTop: '8px' }}>
+                        <div style={{ borderTop: '1px solid #e8e6dc', marginTop: '8px', paddingTop: '8px' }}>
                             <PropertyRow label="Estación" value={`${currentMarker.station.toFixed(1)} m`} />
                             <PropertyRow label="Longitud Total" value={`${totalLength.toFixed(1)} m`} />
                             <PropertyRow label="Track" value={selectedTrack} />
@@ -293,7 +293,7 @@ const StationTracker = ({ isVisible, onClose, markers, viewerRef }) => {
             </div>
 
             {/* Footer Info */}
-            <div style={{ padding: '6px 14px', fontSize: '10px', color: '#555', textAlign: 'center' }}>
+            <div style={{ padding: '6px 14px', fontSize: '10px', color: '#72706b', textAlign: 'center' }}>
                 {trackMarkers.length} estaciones · cada 10m
             </div>
         </div>
@@ -303,13 +303,13 @@ const StationTracker = ({ isVisible, onClose, markers, viewerRef }) => {
 // --- Sub-components ---
 const PropertyRow = ({ label, value }) => (
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '3px 0' }}>
-        <span style={{ fontSize: '11px', color: '#888' }}>{label}</span>
-        <span style={{ fontSize: '12px', color: '#e0e0e0', fontFamily: 'monospace', fontWeight: 500 }}>{value}</span>
+        <span style={{ fontSize: '11px', color: '#72706b' }}>{label}</span>
+        <span style={{ fontSize: '12px', color: '#141413', fontFamily: 'monospace', fontWeight: 500 }}>{value}</span>
     </div>
 );
 
 const navBtnStyle = {
-    background: '#222', border: '1px solid #444', color: '#ccc',
+    background: '#ffffff', border: '1px solid #cccac0', color: '#333330',
     width: '30px', height: '30px', borderRadius: '4px',
     fontSize: '16px', fontWeight: 700, cursor: 'pointer',
     display: 'flex', alignItems: 'center', justifyContent: 'center',

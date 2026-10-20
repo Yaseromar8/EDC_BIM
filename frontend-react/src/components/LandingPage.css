@@ -512,8 +512,7 @@
 .acc-modal-overlay {
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.6);
-    backdrop-filter: blur(4px);
+    background: var(--v-velo);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -523,18 +522,18 @@
 .acc-modal {
     background: var(--acc-card-bg);
     border: 1px solid var(--acc-border);
-    border-radius: 6px;
-    padding: 28px 32px;
+    border-radius: var(--v-radio);
+    padding: 24px 28px;
     width: 420px;
     max-width: 90vw;
-    box-shadow: 0 12px 32px rgb(20 20 19 / .25);
+    box-shadow: var(--v-sombra);
     display: flex;
     flex-direction: column;
     gap: 10px;
 }
 
 .acc-modal h2 {
-    font-size: 18px;
+    font-size: 16px;
     font-weight: 600;
     color: var(--acc-text);
     margin: 0 0 4px 0;

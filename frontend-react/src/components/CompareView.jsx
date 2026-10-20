@@ -47,7 +47,7 @@ const S = {
     chipSide: { fontSize: 12, padding: '4px 10px', borderRadius: 6, background: T.panelSoft, border: T.borderSoft, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 300 },
     viewers: { flex: 1, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1, minHeight: 0, background: 'rgba(20, 20, 19,0.06)' },
     pane: { position: 'relative', background: '#faf9f5', overflow: 'hidden' },
-    paneTag: { position: 'absolute', top: 10, left: 12, zIndex: 5, fontSize: 11, fontWeight: 600, letterSpacing: '0.05em', padding: '3px 10px', borderRadius: 5, background: 'rgba(255, 255, 255, 0.75)', border: T.borderSoft },
+    paneTag: { position: 'absolute', top: 10, left: 12, zIndex: 5, fontSize: 11, fontWeight: 600, letterSpacing: '0.05em', padding: '3px 10px', borderRadius: 4, background: '#ffffff', border: T.borderSoft },
     statusBar: { padding: '5px 14px', fontSize: 12, color: T.muted, borderTop: T.borderSoft, background: T.panel },
     bottom: { borderTop: T.border, padding: '10px 14px', display: 'flex', gap: 16, alignItems: 'flex-start', maxHeight: 230, background: T.panel },
     pill: (color, active) => ({ display: 'flex', alignItems: 'center', gap: 7, cursor: 'pointer', fontSize: 12.5, padding: '6px 12px', borderRadius: 6, border: active ? `1px solid ${color}` : T.border, color: T.text, background: active ? 'rgba(20, 20, 19,0.04)' : 'transparent', whiteSpace: 'nowrap' }),
@@ -1128,7 +1128,7 @@ export default function CompareView({ BACKEND_URL, projectId, onExit }) {
                 ref={tipEl}
                 style={{
                     position: 'fixed', zIndex: 9500, pointerEvents: 'none', display: tip ? 'block' : 'none',
-                    background: 'rgba(255, 255, 255, 0.97)', border: T.border, borderRadius: T.radius,
+                    background: '#ffffff', border: T.border, borderRadius: T.radius, boxShadow: 'var(--v-sombra-flotante)',
                     padding: '7px 11px', maxWidth: 280, fontSize: 12,
                 }}
             >

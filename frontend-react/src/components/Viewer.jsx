@@ -4475,17 +4475,9 @@ const Viewer = ({
             />
 
             {avisoToken && (
-                <div
-                    role="status"
-                    style={{
-                        position: 'absolute', top: 12, left: '50%', transform: 'translateX(-50%)',
-                        zIndex: 40, background: '#3e2a12', color: '#ffd9a0',
-                        border: '1px solid #7a5320', borderRadius: 6,
-                        padding: '8px 14px', fontSize: 13, pointerEvents: 'none',
-                        boxShadow: '0 2px 10px rgba(0,0,0,.35)'
-                    }}
-                >
-                    {avisoToken}
+                <div className="v-aviso v-aviso--atencion" role="status"
+                    style={{ zIndex: 40, paddingRight: 14, pointerEvents: 'none' }}>
+                    <span>{avisoToken}</span>
                 </div>
             )}
 
@@ -4493,91 +4485,37 @@ const Viewer = ({
             {/* Sprite Context Menu */}
             {contextMenu && contextMenu.visible && (
                 <div
-                    className="viewer-context-menu"
-                    style={{
-                        position: 'fixed',
-                        left: contextMenu.x,
-                        top: contextMenu.y,
-                        background: 'rgba(30, 41, 59, 0.98)',
-                        backdropFilter: 'blur(12px)',
-                        border: '1px solid rgba(255, 255, 255, 0.1)',
-                        borderRadius: '8px',
-                        padding: '8px',
-                        zIndex: 10000,
-                        boxShadow: '0 8px 32px rgba(0, 0, 0, 0.4)'
-                    }}
+                    className="viewer-context-menu v-menu"
+                    role="menu"
+                    style={{ position: 'fixed', left: contextMenu.x, top: contextMenu.y, zIndex: 10000 }}
                     onClick={(e) => e.stopPropagation()}
                 >
                     {contextMenu.type === 'create' ? (
-                        <button
-                            onClick={handleCreateSpriteFromMenu}
-                            style={{
-                                width: '100%',
-                                padding: '10px 16px',
-                                background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)',
-                                color: 'white',
-                                border: 'none',
-                                borderRadius: '6px',
-                                cursor: 'pointer',
-                                fontSize: '14px',
-                                fontWeight: '600',
-                                display: 'flex',
-                                flexDirection: 'column',
-                                alignItems: 'center',
-                                gap: '4px',
-                                transition: 'all 0.2s ease'
-                            }}
-                            onMouseEnter={(e) => e.target.style.transform = 'translateY(-1px)'}
-                            onMouseLeave={(e) => e.target.style.transform = 'translateY(0)'}
-                        >
-                            Crear Sprite
-                            <small style={{ fontSize: '11px', opacity: 0.9 }}>Marcador 3D</small>
+                        <button className="v-menu__item" role="menuitem" onClick={handleCreateSpriteFromMenu}>
+                            Crear sprite
+                            <span className="v-menu__nota">Marcador 3D</span>
                         </button>
                     ) : (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                            <button
+                        <>
+                            <button className="v-menu__item" role="menuitem"
                                 onClick={() => {
                                     onSpriteSelect?.(contextMenu.sprite.id);
                                     setContextMenu(null);
                                 }}
-                                style={{
-                                    width: '100%',
-                                    padding: '8px 12px',
-                                    background: '#3b82f6',
-                                    color: 'white',
-                                    border: 'none',
-                                    borderRadius: '4px',
-                                    cursor: 'pointer',
-                                    fontSize: '13px',
-                                    fontWeight: '500',
-                                    textAlign: 'left'
-                                }}
                             >
-                                👁️ Ver {contextMenu.sprite.name}
+                                Ver {contextMenu.sprite.name}
                             </button>
-                            <button
+                            <button className="v-menu__item v-menu__item--peligro" role="menuitem"
                                 onClick={() => {
                                     if (window.confirm('¿Eliminar este sprite?')) {
                                         onSpriteDelete?.(contextMenu.sprite.id);
                                     }
                                     setContextMenu(null);
                                 }}
-                                style={{
-                                    width: '100%',
-                                    padding: '8px 12px',
-                                    background: '#ef4444',
-                                    color: 'white',
-                                    border: 'none',
-                                    borderRadius: '4px',
-                                    cursor: 'pointer',
-                                    fontSize: '13px',
-                                    fontWeight: '500',
-                                    textAlign: 'left'
-                                }}
                             >
-                                🗑️ Eliminar
+                                Eliminar
                             </button>
-                        </div>
+                        </>
                     )}
                 </div>
             )}

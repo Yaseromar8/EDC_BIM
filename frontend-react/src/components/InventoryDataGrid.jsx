@@ -1367,32 +1367,19 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
 
             {/* ═══════ TOTALS COLUMN PICKER MODAL ═══════ */}
             {totalsPickerOpen && (
-                <div 
-                    style={{
-                        position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-                        background: 'rgba(0,0,0,0.5)', zIndex: 200,
-                        display: 'flex', alignItems: 'flex-start', justifyContent: 'center',
-                        paddingTop: '10vh'
-                    }}
+                <div className="v-velo" role="dialog" aria-modal="true" aria-label="Totales por columna"
+                    style={{ zIndex: 200, alignItems: 'flex-start', paddingTop: '10vh' }}
                     onClick={(e) => { if (e.target === e.currentTarget) setTotalsPickerOpen(false); }}
                 >
-                    <div style={{
-                        background: '#f1f0e8', border: '1px solid #cccac0', borderRadius: '8px',
-                        boxShadow: '0 8px 32px rgba(0,0,0,0.6)', width: '380px', maxHeight: '70vh',
-                        display: 'flex', flexDirection: 'column', overflow: 'hidden'
-                    }}>
+                    <div className="v-caja" style={{ width: '380px', maxHeight: '70vh' }}>
                         {/* Header */}
-                        <div style={{ 
-                            padding: '16px 20px', borderBottom: '1px solid #cccac0', 
-                            display: 'flex', justifyContent: 'space-between', alignItems: 'center' 
-                        }}>
+                        <div className="v-cabecera">
                             <div>
-                                <div style={{ fontSize: '14px', fontWeight: 600, color: '#141413' }}>Column Totals</div>
-                                <div style={{ fontSize: '11px', color: '#72706b', marginTop: '2px' }}>Select columns to show sums in the footer</div>
+                                <h2 className="v-titulo">Totales por columna</h2>
+                                <div style={{ fontSize: '12px', color: '#72706b', marginTop: '2px' }}>Elige las columnas que se suman al pie</div>
                             </div>
-                            <button 
-                                onClick={() => setTotalsPickerOpen(false)} 
-                                style={{ background: 'none', border: 'none', color: '#72706b', cursor: 'pointer', padding: '4px' }}
+                            <button className="v-cerrar" aria-label="Cerrar"
+                                onClick={() => setTotalsPickerOpen(false)}
                             ><Icons.Close /></button>
                         </div>
 
@@ -1421,21 +1408,21 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
                                             cursor: hasNumericData ? 'pointer' : 'not-allowed',
                                             opacity: hasNumericData ? 1 : 0.35,
                                             borderBottom: '1px solid rgba(20, 20, 19,0.04)',
-                                            background: isSelected ? 'rgba(200, 216, 231, 0.08)' : 'transparent',
+                                            background: isSelected ? '#ecf0f1' : 'transparent',
                                             transition: 'background 0.15s'
                                         }}
-                                        onMouseEnter={e => { if (hasNumericData) e.currentTarget.style.background = isSelected ? 'rgba(200, 216, 231, 0.12)' : 'rgba(255,255,255,0.05)'; }}
-                                        onMouseLeave={e => { e.currentTarget.style.background = isSelected ? 'rgba(200, 216, 231, 0.08)' : 'transparent'; }}
+                                        onMouseEnter={e => { if (hasNumericData) e.currentTarget.style.background = isSelected ? '#ecf0f1' : '#f1f0e8'; }}
+                                        onMouseLeave={e => { e.currentTarget.style.background = isSelected ? '#ecf0f1' : 'transparent'; }}
                                     >
                                         <div style={{
                                             width: '18px', height: '18px', borderRadius: '3px',
-                                            border: isSelected ? '2px solid #6a9bcc' : '2px solid #cccac0',
+                                            border: isSelected ? '2px solid #507294' : '2px solid #b0aea5',
                                             background: isSelected ? '#507294' : 'transparent',
                                             display: 'flex', alignItems: 'center', justifyContent: 'center',
                                             flexShrink: 0, transition: 'all 0.15s'
                                         }}>
                                             {isSelected && (
-                                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#1d1d1c" strokeWidth="3">
+                                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="3">
                                                     <polyline points="20 6 9 17 4 12"></polyline>
                                                 </svg>
                                             )}
@@ -1444,11 +1431,11 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
                                             <div style={{ fontSize: '13px', color: '#141413', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{col.header}</div>
                                             {hasNumericData && (
                                                 <div style={{ fontSize: '10px', color: '#72706b', marginTop: '1px' }}>
-                                                    {sampleValues.length} numeric value{sampleValues.length !== 1 ? 's' : ''} detected
+                                                    {sampleValues.length} {sampleValues.length !== 1 ? 'valores numéricos' : 'valor numérico'}
                                                 </div>
                                             )}
                                             {!hasNumericData && (
-                                                <div style={{ fontSize: '10px', color: '#52524d', marginTop: '1px' }}>Non-numeric column</div>
+                                                <div style={{ fontSize: '10px', color: '#52524d', marginTop: '1px' }}>Columna no numérica</div>
                                             )}
                                         </div>
                                         {isSelected && (
@@ -1460,22 +1447,13 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
                         </div>
 
                         {/* Footer */}
-                        <div style={{ 
-                            padding: '12px 20px', borderTop: '1px solid #cccac0', 
-                            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                            background: 'rgba(0,0,0,0.2)'
-                        }}>
-                            <span style={{ fontSize: '11px', color: '#72706b' }}>
-                                {totalColumns.size} column{totalColumns.size !== 1 ? 's' : ''} selected
+                        <div className="v-pie" style={{ justifyContent: 'space-between' }}>
+                            <span style={{ fontSize: '12px', color: '#72706b' }}>
+                                {totalColumns.size} {totalColumns.size !== 1 ? 'columnas elegidas' : 'columna elegida'}
                             </span>
-                            <button 
+                            <button className="v-boton v-boton--principal"
                                 onClick={() => setTotalsPickerOpen(false)}
-                                style={{ 
-                                    background: '#507294', border: 'none', color: '#ffffff', 
-                                    padding: '6px 20px', borderRadius: '4px', fontSize: '12px', 
-                                    fontWeight: 600, cursor: 'pointer' 
-                                }}
-                            >Done</button>
+                            >Listo</button>
                         </div>
                     </div>
                 </div>
