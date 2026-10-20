@@ -16,7 +16,9 @@ export function useSustento(API, nodeId, ambito = 'documento') {
   const [respondidoPara, setRespondidoPara] = useState(null);
 
   useEffect(() => {
-    if (!API || !nodeId) return undefined;
+    // API='' usa el mismo origen (/api/...), como el resto del portal publicado.
+    // No significa que falte el backend: omitir la consulta dejaba `listo` en false.
+    if (!nodeId) return undefined;
     let vivo = true;
     apiFetch(`${API}/api/docs/sustento?node_id=${encodeURIComponent(nodeId)}&ambito=${ambito}`)
       .then(async r => {
@@ -35,7 +37,7 @@ export function useSustento(API, nodeId, ambito = 'documento') {
 
   // El circuito planilla ↔ plano va en DOS pestañas: al volver a esta, lo guardado en la otra ya cuenta.
   useEffect(() => {
-    if (!API || !nodeId) return undefined;
+    if (!nodeId) return undefined;
     const alVolver = () => { if (document.visibilityState === 'visible') setVuelta(n => n + 1); };
     document.addEventListener('visibilitychange', alVolver);
     return () => document.removeEventListener('visibilitychange', alVolver);
