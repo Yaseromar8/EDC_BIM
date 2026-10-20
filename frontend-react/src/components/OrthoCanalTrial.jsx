@@ -165,15 +165,72 @@ export default function OrthoCanalTrial({ scope, backendUrl, canPublish = false 
     const onStatus = (event) => {
       if (alive && event.detail?.scope === scope) {
         if (event.detail.error) setRemoteError(event.detail.error);
-        else { setRemoteError(''); setPublished({
+        else { setRemoteError(''); setPublished((previo) => ({
+          ...previo,
           active: event.detail.active, revision: event.detail.revision,
           published_at: event.detail.publishedAt,
-        }); }
+          ...(event.detail.reliefBlend != null ? { relief_blend: event.detail.reliefBlend } : {}),
+          ...(event.detail.directionalShade != null ? { directional_shade: event.detail.directionalShade } : {}),
+        })); }
       }
     };
     window.addEventListener('orthophoto-status', onStatus);
     return () => { alive = false; window.removeEventListener('orthophoto-status', onStatus); };
   }, [scope, backendUrl]);
+
+  // AJUSTES DE LA CAPA PUBLICADA (20-oct-2026): las barras arrancan con los valores publicados y
+  // mueven la capa de todos en vivo; «Guardar ajustes para todos» guarda solo eso, sin volver a subir
+  // los JPG. Con una vista previa local abierta, las barras siguen siendo de la vista previa.
+  const publicadoRelieve = published?.active && published.relief_blend != null
+    ? Math.round(published.relief_blend * 100) : null;
+  const publicadoSombra = published?.active && published.directional_shade != null
+    ? Math.round(published.directional_shade * 100) : null;
+  useEffect(() => {
+    if (publicadoRelieve == null || trial.active) return;
+    trial.reliefPercent = publicadoRelieve;
+    trial.shadePercent = publicadoSombra ?? trial.shadePercent;
+    publish();
+  }, [published?.revision, publicadoRelieve, publicadoSombra]);
+  const ajustarEnVivo = () => {
+    if (trial.active) return;   // la vista previa local ya se ajusta sola
+    window.dispatchEvent(new CustomEvent('orthophoto-ajuste-vivo', { detail: {
+      scope, reliefBlend: trial.reliefPercent / 100, directionalShade: trial.shadePercent / 100,
+    } }));
+  };
+  const ajustesCambiados = publicadoRelieve != null && !snapshot.active
+    && (snapshot.reliefPercent !== publicadoRelieve || snapshot.shadePercent !== publicadoSombra);
+
+  const guardarAjustes = async () => {
+    if (!ajustesCambiados || trial.busy) return;
+    trial.busy = true; trial.message = 'Guardando ajustes…'; publish();
+    try {
+      const response = await apiFetch(`${backendUrl}/api/orthophoto/${encodeURIComponent(scope)}/ajustes`, {
+        method: 'POST', body: JSON.stringify({
+          expected_revision: published.revision,
+          relief_blend: trial.reliefPercent / 100,
+          directional_shade: trial.shadePercent / 100,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
+      setPublished((previo) => ({ ...previo, ...data }));
+      trial.message = 'Ajustes guardados para todos. Las imágenes no se volvieron a subir.';
+      window.dispatchEvent(new CustomEvent('orthophoto-changed', { detail: { scope } }));
+    } catch (error) {
+      trial.message = `No se guardaron los ajustes: ${error.message}.`;
+    } finally {
+      trial.busy = false; publish();
+    }
+  };
+
+  const descartarAjustes = () => {
+    if (publicadoRelieve == null) return;
+    trial.reliefPercent = publicadoRelieve;
+    trial.shadePercent = publicadoSombra ?? trial.shadePercent;
+    trial.message = 'Ajustes descartados: vuelven los publicados.';
+    publish();
+    ajustarEnVivo();
+  };
 
   const pick = (part, event) => {
     const file = event.target.files?.[0] || null;
@@ -274,6 +331,7 @@ export default function OrthoCanalTrial({ scope, backendUrl, canPublish = false 
             trial.reliefPercent = Number(event.target.value);
             trial.overlay?.setReliefBlend(trial.reliefPercent / 100);
             publish();
+            ajustarEnVivo();
           }} />
       </label>
       <p style={{ margin: '0 0 8px', lineHeight: 1.4 }}>
@@ -283,17 +341,28 @@ export default function OrthoCanalTrial({ scope, backendUrl, canPublish = false 
         Sombreado de pendientes: {snapshot.shadePercent}%
         <input type="range" min="0" max="100" step="5" value={snapshot.shadePercent}
           aria-label="Sombreado direccional de pendientes"
-          disabled={snapshot.busy || snapshot.mode === 'cpu'}
+          disabled={snapshot.busy || (snapshot.active && snapshot.mode === 'cpu')}
           style={{ display: 'block', width: '100%' }}
           onChange={(event) => {
             trial.shadePercent = Number(event.target.value);
             trial.overlay?.setHillshadeStrength(trial.shadePercent / 100);
             publish();
+            ajustarEnVivo();
           }} />
       </label>
       <p style={{ margin: '0 0 8px', lineHeight: 1.4 }}>
         Acentúa las pendientes de la ortofoto según la malla; no simula sombras proyectadas.
       </p>
+      {publicadoRelieve != null && !snapshot.active && (
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
+          <button type="button" disabled={!ajustesCambiados || snapshot.busy}
+            style={{ background: ajustesCambiados ? '#141413' : undefined, color: ajustesCambiados ? '#fff' : undefined,
+              border: 0, borderRadius: 5, padding: '8px 10px' }}
+            onClick={guardarAjustes}>Guardar ajustes para todos</button>
+          <button type="button" disabled={!ajustesCambiados || snapshot.busy} onClick={descartarAjustes}>
+            Descartar</button>
+        </div>
+      )}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         <button type="button" disabled={snapshot.busy || !published || !!remoteError}
           style={{ background: '#2872c7', color: '#fff', border: 0, borderRadius: 5, padding: '8px 10px' }}

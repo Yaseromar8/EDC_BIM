@@ -88,6 +88,18 @@ export default function OrthoCanalLayer({ scope, backendUrl,
         if (!alive || requestAt !== requestSequence) return;
         const unchanged = manifest?.revision === data.revision && manifest?.active === data.active;
         if (unchanged && (!data.active || files || mounting)) return;
+        // SOLO CAMBIARON LOS AJUSTES (relieve/sombreado guardados sin subir fotos): mismas
+        // imágenes, así que no se vuelven a descargar ni a montar; se aplican en el acto.
+        const mismasImagenes = data.active && manifest?.active && files && overlay
+          && (data.imagenes_de || data.revision) === (manifest.imagenes_de || manifest.revision);
+        if (mismasImagenes) {
+          manifest = data;
+          overlay.setReliefBlend?.(data.relief_blend);
+          overlay.setHillshadeStrength?.(data.directional_shade);
+          announce({ active: true, revision: data.revision, publishedAt: data.published_at || null,
+            reliefBlend: data.relief_blend, directionalShade: data.directional_shade });
+          return;
+        }
         if (!unchanged) sequence += 1;
         const visualAt = sequence;
         if (!unchanged) dispose();
@@ -96,7 +108,8 @@ export default function OrthoCanalLayer({ scope, backendUrl,
         manifest = data;
         files = null;
         if (!unchanged) announce({ active: !!data.active, revision: data.revision,
-          publishedAt: data.published_at || null });
+          publishedAt: data.published_at || null,
+          reliefBlend: data.relief_blend, directionalShade: data.directional_shade });
         if (!data.active) return;
         const nextFiles = await Promise.all([
           fetchTile(backendUrl, data.north_path, scope,
@@ -117,6 +130,12 @@ export default function OrthoCanalLayer({ scope, backendUrl,
     };
 
     const onChanged = (event) => { if (event.detail?.scope === scope) refresh(); };
+    // Las barras del panel mueven la capa PUBLICADA en vivo; guardar es aparte.
+    const onAjusteVivo = (event) => {
+      if (event.detail?.scope !== scope || !overlay) return;
+      if (event.detail.reliefBlend != null) overlay.setReliefBlend?.(event.detail.reliefBlend);
+      if (event.detail.directionalShade != null) overlay.setHillshadeStrength?.(event.detail.directionalShade);
+    };
     const onReset = () => {
       sequence += 1;
       requestSequence += 1;
@@ -127,6 +146,7 @@ export default function OrthoCanalLayer({ scope, backendUrl,
       dispose();
     };
     window.addEventListener('orthophoto-changed', onChanged);
+    window.addEventListener('orthophoto-ajuste-vivo', onAjusteVivo);
     window.addEventListener('viewer-geometry-loaded', mount);
     window.addEventListener('ecd-frente-reset', onReset);
     const timer = setInterval(mount, 1500);
@@ -141,6 +161,7 @@ export default function OrthoCanalLayer({ scope, backendUrl,
       clearInterval(timer);
       clearInterval(refreshTimer);
       window.removeEventListener('orthophoto-changed', onChanged);
+      window.removeEventListener('orthophoto-ajuste-vivo', onAjusteVivo);
       window.removeEventListener('viewer-geometry-loaded', mount);
       window.removeEventListener('ecd-frente-reset', onReset);
       dispose();
