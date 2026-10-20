@@ -85,6 +85,11 @@ const ImportModelModal = ({ open, onClose, onLinkDocs, onUploadLocal, onExtractC
   const [selectedViewGuid, setSelectedViewGuid] = useState(null);
   const [viewDropdownOpen, setViewDropdownOpen] = useState(false);
   const [loadingViews, setLoadingViews] = useState(false);
+  // F1 · LA VISTA PRIMERO (docs/visor/10_VISTA_DEL_MODELO.md): se elige la vista y LUEGO se
+  // extrae el inventario con ella. Antes se extraía sin vista --el servidor tomaba «la de más
+  // elementos»-- y después se cargaba la elegida: inventario y dibujo de vistas distintas,
+  // elementos sin pieza y Filtros esperando para siempre (1_CANAL, 20-oct-2026).
+  const [eligiendoVista, setEligiendoVista] = useState(false);
 
   // Local file upload (FILE UPLOAD tab standalone)
   const [localFile, setLocalFile] = useState(null);
@@ -137,7 +142,7 @@ const ImportModelModal = ({ open, onClose, onLinkDocs, onUploadLocal, onExtractC
       setProgress(0); setProgressMsg('');
       setAccountMenuOpen(false); setProjectMenuOpen(false);
       setViewDropdownOpen(false);
-      setModelViews([]); setSelectedViewGuid(null); setLoadingViews(false);
+      setModelViews([]); setSelectedViewGuid(null); setLoadingViews(false); setEligiendoVista(false);
       setLocalFile(null); setLocalUploading(false); setLocalProgress(0);
       setLocalMsg(''); setErrorMsg('');
       setCivilMode(CIVIL_MODES.DATA_ONLY); setCivilProcessing(false);
@@ -198,7 +203,7 @@ const ImportModelModal = ({ open, onClose, onLinkDocs, onUploadLocal, onExtractC
     setExtracting(false); setExtractionDone(false); setProgress(0); setProgressMsg('');
     setCivilProcessing(false); setCivilProgress(0); setCivilMsg('');
     setErrorMsg('');
-    setModelViews([]); setSelectedViewGuid(null); pendingDocsRef.current = null;
+    setModelViews([]); setSelectedViewGuid(null); setEligiendoVista(false); pendingDocsRef.current = null;
   };
 
   // Fetch viewables after extraction completes
@@ -206,11 +211,17 @@ const ImportModelModal = ({ open, onClose, onLinkDocs, onUploadLocal, onExtractC
     setLoadingViews(true);
     try {
       const res = await apiFetch(`${BACKEND_URL}/api/inventory/viewables/${encodeURIComponent(urn)}`);
+      if (res.status === 202) {
+        setErrorMsg('Autodesk aún está procesando este archivo. Inténtalo de nuevo en unos minutos.');
+        return;
+      }
       const data = await res.json();
       if (data.views?.length > 0) {
         setModelViews(data.views);
         const def3D = data.views.find(v => v.is3D);
         setSelectedViewGuid(def3D ? def3D.guid : data.views[0].guid);
+      } else {
+        setErrorMsg('Este archivo no tiene vistas que mostrar todavía.');
       }
     } catch (e) {
       console.error('Error fetching viewables:', e);
@@ -258,8 +269,36 @@ const ImportModelModal = ({ open, onClose, onLinkDocs, onUploadLocal, onExtractC
     // Switch to FILE UPLOAD tab
     setActiveTab('UPLOAD');
     setUploadLabel(docName);
+    setErrorMsg('');
+
+    if (!isCadCivilSource(doc)) {
+      // Modelos: primero la vista (F1). La extracción la lanza «Import» con la vista elegida.
+      setEligiendoVista(true);
+      setProgress(0);
+      setProgressMsg('Elige la vista que quieres ver: el inventario se extraerá de esa misma vista.');
+      fetchViewables(toViewerUrn(doc.id || doc.urn));
+      return;
+    }
+
+    // CAD Civil (Visor + datos / Solo visor): como antes, se extrae y luego se elige la vista.
+    iniciarExtraccion({
+      alTerminar: (stData, urn) => {
+        setExtractionDone(true);
+        setProgressMsg(stData.reused_snapshot
+          ? 'Inventario guardado de esta version reactivado. Selecciona la vista para importar.'
+          : 'Metadata extraida. Selecciona la vista para importar.');
+        fetchViewables(urn);
+      },
+    });
+  };
+
+  // La extracción y su sondeo, comunes a los dos caminos. Con `vista`, el servidor extrae DE ESA
+  // vista y solo reutiliza un inventario guardado si salió de la misma (vista_del_modelo).
+  const iniciarExtraccion = async ({ vista = null, alTerminar }) => {
+    const doc = pendingDocsRef.current?.[0];
+    if (!doc) return;
     setExtracting(true); setExtractionDone(false);
-    setProgress(0); setProgressMsg('Conectando con Autodesk...');
+    setProgress(0); setProgressMsg('Conectando con Autodesk...'); setErrorMsg('');
 
     let urn = toViewerUrn(doc.id || doc.urn);
 
@@ -269,9 +308,10 @@ const ImportModelModal = ({ open, onClose, onLinkDocs, onUploadLocal, onExtractC
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           urn, target_urn: selectedProject ? selectedProject.id : urn,
-          // Importar de nuevo la MISMA version reutiliza su snapshot inmutable.
-          // Una version nueva sigue el camino normal de extraccion APS.
-          reuse_existing_snapshot: true
+          // Importar de nuevo la MISMA version reutiliza su snapshot inmutable
+          // (si salió de la misma vista). Una version nueva sigue el camino normal.
+          reuse_existing_snapshot: true,
+          ...(vista ? { view_guid: vista.guid, view_name: vista.name } : {}),
         })
       });
       if (!res.ok) {
@@ -292,20 +332,17 @@ const ImportModelModal = ({ open, onClose, onLinkDocs, onUploadLocal, onExtractC
               clearInterval(pollRef.current); pollRef.current = null;
               setProgress(100);
               setExtracting(false);
-              setExtractionDone(true);
-              setProgressMsg(stData.reused_snapshot
-                ? 'Inventario guardado de esta version reactivado. Selecciona la vista para importar.'
-                : 'Metadata extraida. Selecciona la vista para importar.');
               // Recarga reactiva de inventario y filtros
               window.__inventoryCache = null;
               window.dispatchEvent(new CustomEvent('inventory-needs-refresh'));
-              // Now fetch viewables to populate the view selector
-              fetchViewables(urn);
+              alTerminar?.(stData, urn);
             } else if (stData.status === 'error') {
               clearInterval(pollRef.current); pollRef.current = null;
               setExtracting(false);
               setProgressMsg('Error: ' + stData.message);
               setErrorMsg(stData.message || 'No se pudo extraer el inventario.');
+              // Con vista elegida se puede corregir y reintentar sin volver a buscar el archivo.
+              if (vista) setEligiendoVista(true);
             }
           }
         } catch (pollErr) {
@@ -317,6 +354,27 @@ const ImportModelModal = ({ open, onClose, onLinkDocs, onUploadLocal, onExtractC
       console.error(e);
       setErrorMsg('Error de conexión: ' + e.message);
     }
+  };
+
+  // «Import» con la vista elegida (F1): extrae DE ESA vista y, al terminar, vincula el modelo
+  // con la misma vista (GUID y nombre). Una sola extracción y de la vista que se va a ver.
+  const extraerConVista = () => {
+    const vista = modelViews.find(v => v.guid === selectedViewGuid);
+    if (!vista) return;
+    setEligiendoVista(false);
+    iniciarExtraccion({
+      vista,
+      alTerminar: () => {
+        const docs = pendingDocsRef.current || [];
+        const processedDocs = docs.map(doc => {
+          const b64Urn = toViewerUrn(doc.id || doc.urn);
+          return { ...doc, urn: b64Urn, id: b64Urn };
+        });
+        const enlace = onLinkDocs?.(processedDocs, true, vista.guid, vista.name);
+        onClose();
+        if (enlace?.catch) enlace.catch(e => console.error('[ImportModelModal] link error:', e));
+      },
+    });
   };
 
   // ── FINAL IMPORT: User selected view, now load model in viewer ──
@@ -338,13 +396,15 @@ const ImportModelModal = ({ open, onClose, onLinkDocs, onUploadLocal, onExtractC
           // CIERRE INMEDIATO: vincular + recargar inventario tarda segundos y el
           // modal ya no muestra nada útil en ese lapso (el progreso real se ve en
           // el panel MODELOS). Antes se quedaba abierto "colgado" hasta terminar.
-          const linkPromise = onLinkDocs?.(processedDocs, true, selectedViewGuid);
+          const linkPromise = onLinkDocs?.(processedDocs, true, selectedViewGuid,
+            modelViews.find(v => v.guid === selectedViewGuid)?.name || null);
           onClose();
           if (linkPromise?.catch) linkPromise.catch(e => console.error('[ImportModelModal] link error:', e));
           return;
         }
         if (shouldLoadViewer) {
-          await onLinkDocs?.(processedDocs, true, selectedViewGuid);
+          await onLinkDocs?.(processedDocs, true, selectedViewGuid,
+            modelViews.find(v => v.guid === selectedViewGuid)?.name || null);
         }
 
         if (shouldExtractCivil) {
@@ -428,7 +488,7 @@ const ImportModelModal = ({ open, onClose, onLinkDocs, onUploadLocal, onExtractC
 
   // Determine what state the FILE UPLOAD tab is in
   const isProcessing = extracting || localUploading || civilProcessing;
-  const showExtractionInDropzone = extracting || extractionDone;
+  const showExtractionInDropzone = extracting || extractionDone || eligiendoVista;
   const canImport = extractionDone && !loadingViews && !civilProcessing && (civilMode === CIVIL_MODES.DATA_ONLY || selectedViewGuid);
 
   return (
@@ -466,8 +526,8 @@ const ImportModelModal = ({ open, onClose, onLinkDocs, onUploadLocal, onExtractC
           <button className={`import-tab-btn ${activeTab === 'UPLOAD' ? 'active' : ''}`}
             onClick={() => !isProcessing && setActiveTab('UPLOAD')} disabled={isProcessing}>FILE UPLOAD</button>
           <button className={`import-tab-btn ${activeTab === 'DOCS' ? 'active' : ''}`}
-            onClick={() => !isProcessing && !extractionDone && setActiveTab('DOCS')}
-            disabled={isProcessing || extractionDone}>AUTODESK DOCS</button>
+            onClick={() => !isProcessing && !extractionDone && !eligiendoVista && setActiveTab('DOCS')}
+            disabled={isProcessing || extractionDone || eligiendoVista}>AUTODESK DOCS</button>
         </div>
 
         <div className="import-body-content">
@@ -558,7 +618,7 @@ const ImportModelModal = ({ open, onClose, onLinkDocs, onUploadLocal, onExtractC
               </div>
 
               {/* Selector de vista (solo cuando la extracción DOCS terminó y hay vistas reales) */}
-              {extractionDone && (!docsIsCivilCad || civilMode !== CIVIL_MODES.DATA_ONLY) && (
+              {(extractionDone || eligiendoVista) && (!docsIsCivilCad || civilMode !== CIVIL_MODES.DATA_ONLY) && (
               <div className="import-field">
                 <label className="import-label">Vista a importar:</label>
 
@@ -747,7 +807,7 @@ const ImportModelModal = ({ open, onClose, onLinkDocs, onUploadLocal, onExtractC
         <div className="import-footer">
           <button className="import-btn-cancel" onClick={() => {
             if (isProcessing) { cancelProcess(); return; }       // procesando: aborta (y purga si aplica), modal queda abierto
-            if (extractionDone) cancelProcess();                 // extraído sin importar: purga huérfanos antes de cerrar
+            if (extractionDone || eligiendoVista) cancelProcess(); // extraído sin importar: purga huérfanos antes de cerrar
             onClose();
           }}>Cancel</button>
 
@@ -757,6 +817,13 @@ const ImportModelModal = ({ open, onClose, onLinkDocs, onUploadLocal, onExtractC
               disabled={selectedDocs.length === 0}
               onClick={handleStartExtraction}>
               {selectedDocs.length > 0 ? `Import (${selectedDocs.length})` : 'Import'}
+            </button>
+          ) : eligiendoVista ? (
+            /* Modelo: vista elegida → extraer con ella e importar (F1) */
+            <button className="import-btn-primary"
+              disabled={!selectedViewGuid || loadingViews}
+              onClick={extraerConVista}>
+              Import
             </button>
           ) : extractionDone ? (
             /* FILE UPLOAD after extraction: final import with selected view */

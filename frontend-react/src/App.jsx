@@ -2775,6 +2775,12 @@ function App() {
       });
       if (res.ok) {
         const data = await res.json();
+        if (data.view_missing) {
+          // La vista elegida no existe en la versión nueva: el servidor NO cambió el modelo.
+          setUpdateCheckStatus(prev => ({ ...prev, [urn]: { status: 'error', message: data.message } }));
+          setTimeout(() => setUpdateCheckStatus(prev => { const n = { ...prev }; delete n[urn]; return n; }), 12000);
+          return;
+        }
         if (data.pending_translation) {
           // Versión nueva detectada pero aún traduciéndose en ACC → no cambiamos nada,
           // mostramos aviso y dejamos que reintente. Evita el update "que no trae datos".
@@ -2873,6 +2879,8 @@ function App() {
         up_to_date: () => ({ status: 'up_to_date' }),
         pending_translation: (r) => ({ status: 'pending', message: r.message || 'Traduciéndose en ACC…' }),
         no_acc_metadata: (r) => ({ status: 'error', message: r.message || 'Sin metadata ACC' }),
+        // La vista elegida no está en la versión nueva: el modelo se quedó en la suya (vista_del_modelo).
+        view_missing: (r) => ({ status: 'error', message: r.message || 'La vista elegida no está en la versión nueva' }),
         error: (r) => ({ status: 'error', message: r.message || 'Error' }),
       };
       setUpdateCheckStatus(prev => {
@@ -2936,7 +2944,7 @@ function App() {
     }
   }, [models, availableUpdates, updateAllBusy, selectedProject]);
 
-  const handleLinkDocs = useCallback(async (modelsInput, isGemelo = false, viewGuid = null) => {
+  const handleLinkDocs = useCallback(async (modelsInput, isGemelo = false, viewGuid = null, viewName = null) => {
     // Determine if input is array
     const models = Array.isArray(modelsInput) ? modelsInput : [modelsInput];
 
@@ -2962,7 +2970,9 @@ function App() {
               lastModifiedTime: newModelData.lastModifiedTime,
               projectId: newModelData.projectId, // ACC Project
               itemId: newModelData.itemId,
-              defaultViewGuid: viewGuid
+              defaultViewGuid: viewGuid,
+              // La vista por NOMBRE: el GUID cambia entre versiones (vista_del_modelo, docs/visor/10).
+              defaultViewName: viewName
             }
           })
         });
@@ -3001,7 +3011,8 @@ function App() {
           versionNumber: model.versionNumber,
           lastModifiedTime: model.lastModifiedTime,
           project: selectedProject.id,
-          defaultViewGuid: viewGuid
+          defaultViewGuid: viewGuid,
+          defaultViewName: viewName
         };
 
         const res = await apiFetch(`${BACKEND_URL}${endpoint}`, {
