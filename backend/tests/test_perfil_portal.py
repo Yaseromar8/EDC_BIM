@@ -196,7 +196,12 @@ def test_el_recorte_es_real(rutas_portal):
         sorted(rutas_revision ^ revision_cad))
     # 293 -> 295 (16-oct-2026): PATCH /api/pdf/markups/<id> (citas, fotos y sello de una marca)
     # y GET /api/pdf/citado-en (que marcas citan un documento). Las dos con guardia de recurso.
-    TECHO = 295
+    # 295 -> 297: POST /api/pdf/markups/<id>/llevar (marca a la versión vigente) y GET /api/pdf/citas-de
+    # (aviso al suprimir lo citado).
+    # 297 -> 300 (20-oct-2026): GET y POST /api/pdf/markups/<id>/observacion (levantar y leer la
+    # observación de documento de una marca, migración 37) y POST /api/issues/<id>/comentar (comentario
+    # que solo se añade). Producto documental del lector, con guardia de recurso las tres.
+    TECHO = 300
     sin_puente = [r for r in rutas_portal
                   if r not in puente_acc and r not in revision_cad]
     assert len(sin_puente) < TECHO, (

@@ -10,6 +10,7 @@ y base— igual que en los gaps anteriores:
     QUIEN CORRIGE NO VERIFICA SU PROPIA CORRECCIÓN
 """
 import io
+import re
 import os
 
 RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -46,11 +47,22 @@ def test_RED_LINE_NO_ES_ISSUE():
     assert 'flujo_de_redline' not in codigo
 
 
-def test_los_cuatro_tipos_son_una_lista_CERRADA():
-    """Configurarlos es GAP 11 GRANDE, y ese no se declara COMPLETE hoy."""
+def test_los_tipos_son_una_lista_CERRADA():
+    """Configurarlos es GAP 11 GRANDE, y ese no se declara COMPLETE hoy.
+
+    Eran cuatro. El 20-oct-2026 el propietario añadió OBSERVACION (observación de
+    documento, nace de una marca del lector), con su migración 37: la lista sigue
+    cerrada, y la del código tiene que ser EXACTAMENTE la del CHECK de la base.
+    """
     import flujo_de_issue as iss
-    assert set(iss.CODIGOS_TIPO) == {'PUNCH', 'NO_CONFORMIDAD', 'CALIDAD', 'SEGURIDAD'}
+    assert set(iss.CODIGOS_TIPO) == {'PUNCH', 'NO_CONFORMIDAD', 'CALIDAD', 'SEGURIDAD',
+                                     'OBSERVACION'}
     assert 'ck_issues_tipo' in _sql()
+    m37 = io.open(os.path.join(RAIZ, 'sql', '37_observacion_de_documento.sql'),
+                  encoding='utf-8').read()
+    check = re.search(r"CHECK \(tipo IN \(([^)]*)\)\)", m37)
+    assert check, 'la 37 debe volver a poner ck_issues_tipo'
+    assert set(re.findall(r"'([A-Z_]+)'", check.group(1))) == set(iss.CODIGOS_TIPO)
 
 
 def test_el_ciclo_es_detectar_corregir_verificar():

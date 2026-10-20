@@ -69,25 +69,29 @@ PUNCH = 'PUNCH'                    # observación de cierre / recepción
 NO_CONFORMIDAD = 'NO_CONFORMIDAD'  # punto no conforme de un protocolo
 CALIDAD = 'CALIDAD'                # defecto de calidad detectado en ejecución
 SEGURIDAD = 'SEGURIDAD'            # condición insegura
+OBSERVACION = 'OBSERVACION'        # observación sobre un documento, nacida de una marca (37)
 
 TIPOS = (
     (PUNCH,          'Punch / observación de cierre'),
     (NO_CONFORMIDAD, 'No conformidad de protocolo'),
     (CALIDAD,        'Calidad'),
     (SEGURIDAD,      'Seguridad'),
+    (OBSERVACION,    'Observación de documento'),
 )
 CODIGOS_TIPO = tuple(c for c, _ in TIPOS)
 
 # Los que EXIGEN responsable desde el nacimiento. Un punch o una no conformidad
 # sin nadie a quien reclamarle es un defecto que nadie va a corregir; una
 # observación de calidad o seguridad puede levantarse antes de saber de quién es.
-EXIGEN_RESPONSABLE = (PUNCH, NO_CONFORMIDAD)
+EXIGEN_RESPONSABLE = (PUNCH, NO_CONFORMIDAD, OBSERVACION)
 
 # Los que EXIGEN verificador DESIGNADO al nacer. En un PUNCH las tres personas
 # son distintas por naturaleza --registra quien recorre, corrige el contratista,
 # aprueba la supervision-- y dejar el verificador sin designar obligaria a
 # elegirlo despues, que es como el detector acababa heredando el cierre.
-EXIGEN_VERIFICADOR = (PUNCH,)
+# Una OBSERVACIÓN de documento nace de una marca: la verifica quien la marcó
+# (sabe qué pidió), y se ESCRIBE al nacer, como en la no conformidad de protocolo.
+EXIGEN_VERIFICADOR = (PUNCH, OBSERVACION)
 
 # Los que nacen ANCLADOS a un plano. Un punch se levanta recorriendo la obra
 # con la lámina en la mano: sin decir dónde, no se puede ir a corregirlo.

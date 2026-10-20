@@ -132,7 +132,9 @@ def catalogo():
         'tipos': [{'codigo': c, 'etiqueta': e,
                    'exige_responsable': c in iss.EXIGEN_RESPONSABLE,
                    'exige_ubicacion': c in iss.EXIGEN_UBICACION,
-                   'exige_verificador': c in iss.EXIGEN_VERIFICADOR}
+                   'exige_verificador': c in iss.EXIGEN_VERIFICADOR,
+                   # La observación de documento nace de una marca del lector (37).
+                   'solo_desde_marca': c == iss.OBSERVACION}
                   for c, e in iss.TIPOS],
         'estados': list(iss.ESTADOS),
         'vivos': list(iss.VIVOS),
@@ -199,6 +201,12 @@ def crear():
     if tipo not in iss.CODIGOS_TIPO:
         return jsonify({'error': 'Tipo desconocido.',
                         'admitidos': list(iss.CODIGOS_TIPO)}), 400
+    if tipo == iss.OBSERVACION:
+        # Nace de una MARCA del lector (POST /api/pdf/markups/<id>/observacion), que
+        # fija el documento, la versión y la hoja. Sin ese ancla no se sabría qué corregir.
+        return jsonify({'error': 'Una observación de documento se levanta desde una marca '
+                                 'del lector de documentos.',
+                        'code': 'OBSERVACION_DESDE_MARCA'}), 409
     titulo = (data.get('titulo') or '').strip()
     if not titulo:
         return jsonify({'error': 'El título es obligatorio.'}), 400
@@ -455,6 +463,31 @@ def anular(iid):
         conn.commit()
         log_activity(d['model_urn'], 'VOID', 'ISSUE', str(iid), d['codigo'],
                      _actor(), {'motivo': motivo_txt})
+        return jsonify(_leer(cur, iid))
+
+
+@issues_bp.route('/<int:iid>/comentar', methods=['POST'])
+def comentar(iid):
+    """Un comentario en el historial. SOLO SE AÑADE: nadie lo edita ni lo borra.
+
+    Lo que se dijo sobre un defecto es parte de su expediente. Comentar no mueve
+    el estado ni la pelota; lo puede hacer cualquiera con acceso a la obra.
+    """
+    corte = guardia_de_recurso('doc_issues', iid)
+    if corte:
+        return corte
+    texto = ((request.get_json(silent=True) or {}).get('texto') or '').strip()
+    if not texto:
+        return jsonify({'error': 'Escribe un comentario.'}), 400
+    if len(texto) > 2000:
+        return jsonify({'error': 'Como mucho 2.000 caracteres por comentario.'}), 400
+    with get_db_connection() as conn:
+        cur = conn.cursor()
+        d = _leer(cur, iid)
+        if not d:
+            return jsonify({'error': 'No existe.'}), 404
+        _historial(cur, iid, d['history'], 'commented', texto=texto)
+        conn.commit()
         return jsonify(_leer(cur, iid))
 
 
