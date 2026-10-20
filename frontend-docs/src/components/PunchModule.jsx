@@ -44,6 +44,7 @@ const COLOR_TIPO = {
   NO_CONFORMIDAD: { fondo: '#fbebeb', texto: '#b93535' },
   CALIDAD:        { fondo: '#ecf0f1', texto: '#507294' },
   SEGURIDAD:      { fondo: '#f7ece5', texto: '#9e5943' },
+  OBSERVACION:    { fondo: '#f1f0e8', texto: '#52524d' },
 };
 
 const CAJA = { border: '1px solid #e8e6dc', borderRadius: 6, boxSizing: 'border-box' };
@@ -696,7 +697,8 @@ function ModalLevantar({ API, urn, catalogo, miembros, planos, yo,
           <select value={f.tipo} onChange={e => setF(p => ({ ...p, tipo: e.target.value }))}
                   style={{ ...CAJA, flex: '0 0 210px', height: 36, padding: '0 8px',
                            fontSize: 13, background: '#fff' }}>
-            {(catalogo.tipos || []).map(t => (
+            {/* La observación de documento se levanta desde una marca del lector, no aquí (37). */}
+            {(catalogo.tipos || []).filter(t => !t.solo_desde_marca).map(t => (
               <option key={t.codigo} value={t.codigo}>{t.etiqueta}</option>
             ))}
           </select>

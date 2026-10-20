@@ -175,14 +175,24 @@ XMLHttpRequest.prototype.open = function (metodo, url, ...resto) {
 
 // EL AUTOR DE LAS MARCAS: el lector lo lee de `visor_user` (como en producción, donde coincide con el que
 // guarda el servidor). Solo en ESTA pestaña (sessionStorage): no se pisa una sesión real del mismo origen.
-const AUTOR_DEL_BANCO = (() => {
+// OBSERVACIÓN (20-oct-2026): los actos van por id. Con ?yo=6 la pestaña es Luis Paredes (el responsable
+// que se suele elegir) para probar «Declarar corregida»; sin nada, el banco (id 1), que la levanta y verifica.
+const MIEMBROS_DEL_BANCO = [
+    { id: 1, name: 'Banco', email: 'banco@local', empresa: 'Banco' },
+    { id: 5, name: 'Ana Torres', email: 'ana@obra.pe', empresa: 'Supervisión' },
+    { id: 6, name: 'Luis Paredes', email: 'luis@obra.pe', empresa: 'Contratista' },
+];
+const YO_DEL_BANCO = (() => {
     try {
         const real = JSON.parse(localStorage.getItem('visor_user') || 'null');
-        if (real?.name) return real.name;
-        sessionStorage.setItem('visor_user', JSON.stringify({ name: 'Banco', email: 'banco@local' }));
-    } catch { /* sin almacenamiento */ }
-    return 'Banco';
+        if (real?.name) return { id: real.id ?? 1, name: real.name, email: real.email || '' };
+        const pedido = MIEMBROS_DEL_BANCO.find(m => String(m.id) === new URLSearchParams(location.search).get('yo'));
+        const yo = pedido || MIEMBROS_DEL_BANCO[0];
+        sessionStorage.setItem('visor_user', JSON.stringify(yo));
+        return yo;
+    } catch { return MIEMBROS_DEL_BANCO[0]; }
 })();
+const AUTOR_DEL_BANCO = YO_DEL_BANCO.name;
 
 const original = window.fetch.bind(window);
 window.fetch = (url, opciones = {}) => {
@@ -347,11 +357,65 @@ window.fetch = (url, opciones = {}) => {
     // firmada a GCS la contesta el parche de XMLHttpRequest de más abajo.
     const fotosDelBanco = () => { try { return JSON.parse(localStorage.getItem('banco.fotos') || '[]'); } catch { return []; } };
     const docsConocidos = () => [...DOCS_ISO, ...OTROS_FORMATOS, ...window.__estado.files, ...fotosDelBanco()];
+    const NUM_DE_VERSION = { v1: 1, v2: 2 };
+    const versionDe = (m) => m.version_id || 'v2';      // las de antes de la 36: de la vigente
     const conEnlaces = (m) => {
         const docs = docsConocidos();
         const una = (id) => { const d = docs.find(x => x.id === id); return d ? { id, nombre: d.name } : { id, eliminado: true }; };
-        return { ...m, citas: ((m.style || {}).citas || []).map(una), fotos: ((m.style || {}).fotos || []).map(una) };
+        const obs = observaciones().filter(o => o.marca === m.id).pop();
+        return { ...m, version_id: versionDe(m), version_number: NUM_DE_VERSION[versionDe(m)] || null,
+                 observacion: obs ? resumenDe(obs) : null,
+                 citas: ((m.style || {}).citas || []).map(una), fotos: ((m.style || {}).fotos || []).map(una) };
     };
+    // ── OBSERVACIÓN DE DOCUMENTO (37): con la forma de routes/pdf_tools.py y routes/issues.py. Viven en
+    // localStorage 'banco.observaciones'. Para empezar de cero: localStorage.removeItem('banco.observaciones').
+    const observaciones = () => { try { return JSON.parse(localStorage.getItem('banco.observaciones') || '[]'); } catch { return []; } };
+    const guardarObs = (l) => { try { localStorage.setItem('banco.observaciones', JSON.stringify(l)); } catch { /* sin almacenamiento */ } };
+    const nombreDe = (id) => (MIEMBROS_DEL_BANCO.find(x => String(x.id) === String(id)) || (String(id) === String(YO_DEL_BANCO.id) ? YO_DEL_BANCO : {})).name || null;
+    const VIVOS = ['Abierto', 'Reabierto', 'Corregido'];
+    const hoyAAAAMMDD = () => new Date(Date.now() - 5 * 3600e3).toISOString().slice(0, 10);
+    const resumenDe = (o) => ({ id: String(o.id), codigo: o.codigo, estado: o.estado, titulo: o.titulo,
+        responsable_id: o.responsable_id, responsable: nombreDe(o.responsable_id),
+        verificador_id: o.verificador_id, verificador: nombreDe(o.verificador_id),
+        vence_en: o.vence_en, vencida: o.vence_en < hoyAAAAMMDD() && VIVOS.includes(o.estado), cerrada: !VIVOS.includes(o.estado) });
+    const detalleDe = (o) => ({ ...resumenDe(o), descripcion: o.descripcion, autor_id: o.autor_id, autor: nombreDe(o.autor_id),
+        evidencia_correccion: (o.evidencia_correccion || []).map(e => ({ ...e, nombre: (docsConocidos().find(d => d.id === e.id) || {}).name || e.nombre })),
+        historial: o.historial || [], autoverificacion: false, creado_en: o.creado_en });
+    const linea = (event, extra = {}) => ({ event, by: YO_DEL_BANCO.email || YO_DEL_BANCO.name, at: new Date().toISOString(), ...extra });
+    if (/\/api\/issues\/\d+\/(corregir|verificar|anular|comentar)/.test(u)) {
+        const [, id, acto] = u.match(/\/api\/issues\/(\d+)\/(\w+)/);
+        const lista = observaciones();
+        const o = lista.find(x => String(x.id) === id);
+        if (!o) return responder({ error: 'No existe.' }, 30, 404);
+        const yo = String(YO_DEL_BANCO.id);
+        const no = (msg, cod = 403) => responder({ error: msg }, 30, cod);
+        if (acto === 'comentar') {
+            if (!String(cuerpo.texto || '').trim()) return no('Escribe un comentario.', 400);
+            o.historial.push(linea('commented', { texto: String(cuerpo.texto).trim() }));
+        } else if (acto === 'corregir') {
+            if (!['Abierto', 'Reabierto'].includes(o.estado)) return no('Transición no válida.', 409);
+            if (String(o.responsable_id) !== yo) return no('Solo el responsable puede declarar que corrigió.');
+            if (!(cuerpo.evidencia || []).length) return no('Declarar corregido exige evidencia.', 409);
+            o.evidencia_correccion = [...(o.evidencia_correccion || []), ...cuerpo.evidencia.map(e => ({ id: e.documento, nombre: e.nombre, por: YO_DEL_BANCO.email, comentario: cuerpo.comentario || null }))];
+            o.estado = 'Corregido';
+            o.historial.push(linea('corrected', cuerpo.comentario ? { comentario: cuerpo.comentario } : {}));
+        } else if (acto === 'verificar') {
+            if (o.estado !== 'Corregido') return no('Transición no válida.', 409);
+            if (String(o.verificador_id) !== yo) return no('La verificación le corresponde al verificador designado.');
+            if (cuerpo.acepta === false && !String(cuerpo.motivo || '').trim()) return no('Rechazar exige un motivo.', 400);
+            o.estado = cuerpo.acepta === false ? 'Reabierto' : 'Verificado';
+            o.historial.push(linea(cuerpo.acepta === false ? 'reopened' : 'verified', cuerpo.motivo ? { motivo: cuerpo.motivo } : {}));
+        } else if (acto === 'anular') {
+            if (!['Abierto', 'Reabierto'].includes(o.estado)) return no('Transición no válida.', 409);
+            if (String(o.autor_id) !== yo) return no('Solo quien detectó el defecto puede anularlo.');
+            if (!String(cuerpo.motivo || '').trim()) return no('Anular exige un motivo.', 400);
+            o.estado = 'Anulado';
+            o.historial.push(linea('voided', { motivo: cuerpo.motivo }));
+        }
+        guardarObs(lista);
+        anotar(`observación ${o.codigo}: ${acto} → ${o.estado}`);
+        return responder({ id: String(o.id), estado: o.estado }, 50);
+    }
     if (u.includes('/api/docs/upload-url')) {
         return responder({ success: true, uploadUrl: 'https://banco-subida.local/put', gcs_urn: `banco/MULTIMEDIA/${cuerpo.filename}` }, 50);
     }
@@ -378,6 +442,18 @@ window.fetch = (url, opciones = {}) => {
         g.fillStyle = '#fff'; g.font = `${mini ? 14 : 40}px sans-serif`; g.fillText(f ? f.name : id, 12, mini ? 24 : 60);
         return new Promise(res => c.toBlob(b => res(new Response(b, { status: 200, headers: { 'Content-Type': 'image/png' } })), 'image/png'));
     }
+    if (u.includes('/api/pdf/citas-de')) {
+        const ids = decodeURIComponent((u.match(/[?&]ids=([^&]*)/) || [])[1] || '').split(',').filter(Boolean);
+        let todas = []; try { todas = JSON.parse(localStorage.getItem('banco.marcas') || '[]'); } catch { /* vacío */ }
+        const docs = docsConocidos();
+        const citas = {};
+        for (const id of ids) {
+            const ms = todas.filter(m => ((m.style || {}).citas || []).includes(id) || ((m.style || {}).fotos || []).includes(id));
+            if (ms.length) citas[id] = { nombre: (docs.find(d => d.id === id) || {}).name || id, marcas: ms.length,
+                                         planos: new Set(ms.map(m => m.node_id)).size };
+        }
+        return responder({ success: true, citas }, 40);
+    }
     if (u.includes('/api/pdf/citado-en')) {
         const nodo = decodeURIComponent((u.match(/[?&]node_id=([^&]+)/) || [])[1] || '');
         let todas = []; try { todas = JSON.parse(localStorage.getItem('banco.marcas') || '[]'); } catch { /* vacío */ }
@@ -385,29 +461,70 @@ window.fetch = (url, opciones = {}) => {
         const citas = todas.filter(m => ((m.style || {}).citas || []).includes(nodo) || ((m.style || {}).fotos || []).includes(nodo))
             .map(m => ({ marca: m.id, tipo: m.kind, pagina: m.page, plano: { id: m.node_id, nombre: (docs.find(d => d.id === m.node_id) || {}).name || 'plano.pdf' },
                          autor: m.created_by, fecha: m.created_at, publicado: !!m.publicado,
-                         como: ((m.style || {}).fotos || []).includes(nodo) ? 'foto' : 'referencia' }));
+                         como: ((m.style || {}).fotos || []).includes(nodo) ? 'foto' : 'referencia',
+                         version: { id: versionDe(m), numero: NUM_DE_VERSION[versionDe(m)] || null, vigente: versionDe(m) === 'v2' } }));
         return responder({ success: true, citas }, 40);
     }
     if (u.includes('/api/pdf/markups')) {
         const metodo = (opciones.method || 'GET').toUpperCase();
         let todas = []; try { todas = JSON.parse(localStorage.getItem('banco.marcas') || '[]'); } catch { /* vacío */ }
         const guardar = () => { try { localStorage.setItem('banco.marcas', JSON.stringify(todas)); } catch { /* sin almacenamiento */ } };
+        if (u.includes('/llevar')) {
+            const id = Number((u.match(/\/api\/pdf\/markups\/(\d+)/) || [])[1]);
+            const m = todas.find(x => x.id === id);
+            if (!m) return responder({ success: false, error: 'La marca no existe.' }, 30, 404);
+            if (versionDe(m) === 'v2') return responder({ success: false, error: 'Esta marca ya está en la versión vigente.' }, 30, 409);
+            const copia = { ...m, id: Date.now(), version_id: 'v2', llevada_de: m.id, created_by: AUTOR_DEL_BANCO,
+                            created_at: new Date().toISOString(), publicado: false };
+            todas.push(copia); guardar();
+            anotar(`marca ${id} llevada a la V2 como ${copia.id}`);
+            return responder({ success: true, id: copia.id, desde_version: NUM_DE_VERSION[versionDe(m)] }, 60);
+        }
+        const vivaDe = (id) => observaciones().find(o => o.marca === id && VIVOS.includes(o.estado));
+        if (u.includes('/observacion')) {
+            const id = Number((u.match(/\/api\/pdf\/markups\/(\d+)/) || [])[1]);
+            const m = todas.find(x => x.id === id);
+            if (!m) return responder({ success: false, error: 'La marca no existe.' }, 30, 404);
+            if (metodo === 'GET') {
+                const o = observaciones().filter(x => x.marca === id).pop();
+                return responder({ success: true, observacion: o ? detalleDe(o) : null }, 40);
+            }
+            if (m.created_by !== AUTOR_DEL_BANCO) return responder({ success: false, error: 'La observación la levanta quien dibujó la marca.' }, 30, 403);
+            if (!String(cuerpo.titulo || '').trim()) return responder({ success: false, error: 'Escribe qué hay que corregir.' }, 30, 400);
+            if (!cuerpo.responsable_id) return responder({ success: false, error: 'Elige a quién le toca corregir.' }, 30, 400);
+            if (String(cuerpo.responsable_id) === String(YO_DEL_BANCO.id)) return responder({ success: false, error: 'La verificas tú, que la detectaste: el responsable de corregir tiene que ser otra persona.' }, 30, 409);
+            if (!cuerpo.vence_en || cuerpo.vence_en < hoyAAAAMMDD()) return responder({ success: false, error: 'Pon una fecha límite que no esté en el pasado.' }, 30, 400);
+            if (vivaDe(id)) return responder({ success: false, error: `Esta marca ya tiene una observación abierta (${vivaDe(id).codigo}).` }, 30, 409);
+            const lista = observaciones();
+            const n = lista.length + 1;
+            const o = { id: 900 + n, codigo: `ISS-${String(n).padStart(3, '0')}`, estado: 'Abierto', marca: id,
+                        titulo: String(cuerpo.titulo).trim(), descripcion: cuerpo.descripcion || null,
+                        responsable_id: Number(cuerpo.responsable_id), verificador_id: YO_DEL_BANCO.id, autor_id: YO_DEL_BANCO.id,
+                        vence_en: cuerpo.vence_en, creado_en: new Date().toISOString(), evidencia_correccion: [],
+                        historial: [linea('detected', { codigo: `ISS-${String(n).padStart(3, '0')}`, tipo: 'OBSERVACION' })] };
+            lista.push(o); guardarObs(lista);
+            m.publicado = true; guardar();
+            anotar(`observación ${o.codigo} levantada desde la marca ${id} → ${nombreDe(o.responsable_id)}`);
+            return responder({ success: true, observacion: resumenDe(o), publicado: true }, 60, 201);
+        }
         // Antes que el alta: también es un POST.
         if (u.includes('/publicar')) {
             const id = Number((u.match(/\/api\/pdf\/markups\/(\d+)/) || [])[1]);
             const m = todas.find(x => x.id === id);
             if (!m) return responder({ success: false, error: 'La marca no existe.' }, 30, 404);
+            if (cuerpo.publicado === false && vivaDe(id)) return responder({ success: false, error: `La marca tiene la observación ${vivaDe(id).codigo} abierta: el responsable la necesita a la vista.` }, 30, 409);
             m.publicado = cuerpo.publicado !== false; guardar();
             return responder({ success: true, publicado: m.publicado }, 40);
         }
         if (metodo === 'POST') {
-            const m = { id: Date.now(), node_id: cuerpo.node_id, page: cuerpo.page, kind: cuerpo.kind, geometry: cuerpo.geometry,
+            const m = { id: Date.now(), node_id: cuerpo.node_id, version_id: cuerpo.version_id || 'v2', page: cuerpo.page, kind: cuerpo.kind, geometry: cuerpo.geometry,
                         style: cuerpo.style, text: cuerpo.text, created_by: AUTOR_DEL_BANCO, created_at: new Date().toISOString() };
             todas.push(m); guardar();
             return responder({ success: true, id: m.id }, 40);
         }
         if (metodo === 'DELETE') {
             const id = Number((u.match(/\/api\/pdf\/markups\/(\d+)/) || [])[1]);
+            if (vivaDe(id)) return responder({ success: false, error: `La marca tiene la observación ${vivaDe(id).codigo} abierta: anúlala o ciérrala antes de borrarla.` }, 30, 409);
             todas = todas.filter(m => m.id !== id); guardar();
             return responder({ success: true }, 30);
         }
@@ -421,12 +538,18 @@ window.fetch = (url, opciones = {}) => {
             if (cuerpo.fotos) m.style.fotos = [...new Set(cuerpo.fotos)];
             if (cuerpo.sello) m.style.sello = cuerpo.sello;
             if (cuerpo.angulo != null) m.geometry.ang = ((Number(cuerpo.angulo) % 360) + 360) % 360;
+            if (m.created_by !== AUTOR_DEL_BANCO) return responder({ success: false, error: 'Solo el autor de la marca puede cambiarla.' }, 30, 403);
             guardar();
             anotar(`marca ${id} editada: ${Object.keys(cuerpo).join(', ')}`);
             return responder({ success: true, markup: conEnlaces(m) }, 50);
         }
         const nodo = decodeURIComponent((u.match(/[?&]node_id=([^&]+)/) || [])[1] || '');
-        return responder({ success: true, markups: todas.filter(m => m.node_id === nodo).map(conEnlaces) }, 30);
+        const ver = decodeURIComponent((u.match(/[?&]version_id=([^&]+)/) || [])[1] || '');
+        const delDoc = todas.filter(m => m.node_id === nodo);
+        const otras = {};
+        if (ver) delDoc.filter(m => versionDe(m) !== ver).forEach(m => { otras[versionDe(m)] = (otras[versionDe(m)] || 0) + 1; });
+        return responder({ success: true, markups: delDoc.filter(m => !ver || versionDe(m) === ver).map(conEnlaces),
+                           en_otras_versiones: Object.entries(otras).map(([v, n]) => ({ version_id: v, version_number: NUM_DE_VERSION[v] || null, marcas: n })) }, 30);
     }
     if (u.includes('/api/pdf/calibration')) {
         const metodo = (opciones.method || 'GET').toUpperCase();
@@ -623,6 +746,10 @@ window.fetch = (url, opciones = {}) => {
         return responder({ success: true, data: {
             folders: hijas, files: esRaiz ? [...window.__estado.files] : aqui, current_node_id: esRaiz ? 'raiz' : `n-${ruta}`,
         } });
+    }
+    if (/\/api\/projects\/[^/]+\/miembros/.test(u)) {
+        const yaEsta = MIEMBROS_DEL_BANCO.some(m => String(m.id) === String(YO_DEL_BANCO.id));
+        return responder({ success: true, miembros: yaEsta ? MIEMBROS_DEL_BANCO : [YO_DEL_BANCO, ...MIEMBROS_DEL_BANCO.slice(1)] }, 40);
     }
     if (u.includes('/api/projects')) return responder({ success: true, data: [] });
     return responder({ success: true, data: [] });

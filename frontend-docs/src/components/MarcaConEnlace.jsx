@@ -7,6 +7,8 @@
  *   · Una marca cita documentos; el documento citado dice «Citado en» (ACC no tiene ese sentido).
  *   · El sello es una NOTA sobre la hoja: no cambia el estado del documento. La aprobación va por Revisiones.
  *   · Una cita no concede acceso: lo que no puedes abrir sale «sin acceso», sin nombre (lo filtra el servidor).
+ *   · La marca DIBUJA; lo que hay que corregir es una OBSERVACIÓN con responsable, plazo e historial
+ *     (ObservacionDeMarca, 20-oct-2026). La marca ya no lleva estado libre, asignados ni comentarios.
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -16,9 +18,11 @@ import { abrirDocumento, subirFoto } from '../utils/enlaceDeMarcas';
 import { confirmAction } from '../utils/confirm';
 import SelectorDeDocumento from './SelectorDeDocumento';
 import {
-  ESTADOS_DE_SELLO, estadoDeSello, CARPETA_DE_FOTOS, TOPE_FOTOS, TOPE_CITAS, esFoto,
-  textoDeCitas, citasPorPlano, etiquetaDeCita, siguienteAngulo, fechaCorta,
+  ESTADOS_DE_SELLO, estadoDeSello,
+  CARPETA_DE_FOTOS, TOPE_FOTOS, TOPE_CITAS, esFoto,
+  textoDeCitas, citasPorPlano, etiquetaDeCita, siguienteAngulo, fechaCorta, observacionViva,
 } from '../utils/marcasConEnlace';
+import ObservacionDeMarca, { EtiquetaDeObservacion } from './ObservacionDeMarca';
 import './MarcaConEnlace.css';
 
 const NOMBRE_DE_TIPO = {
@@ -46,16 +50,26 @@ const IcoGiro = ({ izq, ...p }) => <Ico {...p}>{izq
 function useImagen(API, id, variante = 'thumb') {
   const [url, setUrl] = useState(null);
   const [fallo, setFallo] = useState(false);
+  // SIN DIBUJAR EN LA PETICIÓN (regla del 14-oct-2026: 3 caídas por memoria con 6 usuarios). Nunca `gen=1`:
+  //  · la miniatura de 420 px la prepara la cola de UN hilo al subir; recién subida puede no existir aún,
+  //    así que se reintenta unas veces con pausa en vez de pedir que el servidor la dibuje;
+  //  · la de 1.600 px no se prepara al subir: si no existe, el visor enseña la de 420 px.
   useEffect(() => {
     if (!id) return undefined;
     let vivo = true;
     let creada = null;
-    const q = variante === 'thumb' ? '&thumb=1' : '&size=display';
-    apiFetch(`${API}/api/docs/proxy?id=${encodeURIComponent(id)}${q}`)
-      .then(r => (r.ok ? r.blob() : Promise.reject(new Error(String(r.status)))))
-      .then(b => { if (!vivo) return; creada = URL.createObjectURL(b); setUrl(creada); })
-      .catch(() => { if (vivo) setFallo(true); });
-    return () => { vivo = false; if (creada) URL.revokeObjectURL(creada); };
+    let espera = null;
+    const pedir = (q) => apiFetch(`${API}/api/docs/proxy?id=${encodeURIComponent(id)}${q}`)
+      .then(r => (r.ok ? r.blob() : Promise.reject(new Error(String(r.status)))));
+    const poner = (b) => { if (!vivo) return; creada = URL.createObjectURL(b); setUrl(creada); };
+    const miniatura = (intento) => pedir('&thumb=1').then(poner).catch(() => {
+      if (!vivo) return;
+      if (intento < 3) espera = setTimeout(() => miniatura(intento + 1), 4000 * (intento + 1));
+      else setFallo(true);
+    });
+    if (variante === 'thumb') miniatura(0);
+    else pedir('&size=display').then(poner).catch(() => { if (vivo) miniatura(0); });
+    return () => { vivo = false; clearTimeout(espera); if (creada) URL.revokeObjectURL(creada); };
   }, [API, id, variante]);
   return { url, fallo };
 }
@@ -109,7 +123,7 @@ function VisorDeFoto({ API, fotos, indice, onCerrar }) {
         </div>
       </div>
     </div>,
-    document.body,
+    document.fullscreenElement || document.body,
   );
 }
 
@@ -184,20 +198,32 @@ export function DialogoDeSello({ inicial, autor, editar = false, onAceptar, onCe
         </footer>
       </div>
     </div>,
-    document.body,
+    document.fullscreenElement || document.body,
   );
 }
 
 // ── El panel de una marca elegida ────────────────────────────────────────────
-export function PanelDeMarca({ API, obra, marca, esAutor, onCambio, onPublicar, onBorrar, onCerrar }) {
+export function PanelDeMarca({ API, obra, marca, esAutor, versionVigente = null, onLlevar = null,
+                              onCambio, onPublicar, onBorrar, onCerrar }) {
   const [subiendo, setSubiendo] = useState(0);
   const [eligiendo, setEligiendo] = useState(null);      // 'cita' | 'foto'
   const [viendo, setViendo] = useState(null);            // índice de la foto abierta
   const [editandoSello, setEditandoSello] = useState(false);
+  const [miembros, setMiembros] = useState([]);
   const entrada = useRef(null);
   const fotos = marca.fotos || [];
   const citas = marca.citas || [];
   const idsDe = (lista) => (lista || []).map(x => x.id);
+
+  useEffect(() => {
+    if (!obra) return undefined;
+    let vivo = true;
+    apiFetch(`${API}/api/projects/${encodeURIComponent(obra)}/miembros`)
+      .then(r => (r.ok ? r.json() : { miembros: [] }))
+      .then(d => { if (vivo) setMiembros(Array.isArray(d.miembros) ? d.miembros : []); })
+      .catch(() => { if (vivo) setMiembros([]); });
+    return () => { vivo = false; };
+  }, [API, obra]);
 
   const cambiar = useCallback(async (cuerpo, okMsg) => {
     try {
@@ -249,13 +275,31 @@ export function PanelDeMarca({ API, obra, marca, esAutor, onCambio, onPublicar, 
         <span className="mce-panel__ico">{marca.kind === 'foto' ? <IconoFoto /> : marca.kind === 'sello' ? <IconoSello /> : <IconoEnlace />}</span>
         <div className="mce-panel__tit">
           <b>{tipo}</b>
-          <small>{[marca.created_by, fechaCorta(marca.created_at)].filter(Boolean).join(' · ')}</small>
+          <small>{[marca.version_number ? `V${marca.version_number}` : '', marca.created_by, fechaCorta(marca.created_at)]
+            .filter(Boolean).join(' · ')}</small>
         </div>
-        <span className={`mce-estado${marca.publicado ? ' es-publicada' : ''}`}>{marca.publicado ? 'Publicada' : 'Borrador'}</span>
+        <EtiquetaDeObservacion obs={marca.observacion} />
         <button type="button" className="mce-icono" onClick={onCerrar} aria-label="Cerrar"><IcoQuitar /></button>
       </header>
 
       <div className="mce-panel__cuerpo">
+        {/* MARCAS POR VERSIÓN (36): de dónde viene una copia, y llevar a la vigente lo que sigue pendiente. */}
+        {marca.llevada_de && (
+          <p className="mce-nota mce-nota--version">Copia de una marca de una versión anterior: la original sigue allí.</p>
+        )}
+        {onLlevar && (
+          <section className="mce-sec mce-sec--version">
+            <p className="mce-version">Esta marca es de la <b>V{marca.version_number}</b>. Si la observación sigue
+              pendiente en la vigente, llévala: se copia como borrador tuyo y esta no cambia.</p>
+            <button type="button" className="mce-btn mce-btn--sec" onClick={onLlevar}>
+              Llevar a la vigente{versionVigente ? ` (V${versionVigente})` : ''}</button>
+          </section>
+        )}
+
+        {/* Lo que hay que corregir: una OBSERVACIÓN con responsable, plazo e historial. */}
+        <ObservacionDeMarca key={marca.id} API={API} obra={obra} marca={marca} esAutor={esAutor}
+          miembros={miembros} onCambio={onCambio} />
+
         {marca.kind === 'foto' && (
           <section className="mce-sec">
             <h3>Fotos <span>{fotos.length}</span></h3>
@@ -309,32 +353,41 @@ export function PanelDeMarca({ API, obra, marca, esAutor, onCambio, onPublicar, 
               {citas.map(c => (
                 <li key={c.id} className={c.nombre ? '' : 'es-tenue'}>
                   <IcoDoc size={15} />
-                  {c.nombre
-                    ? <button type="button" className="mce-cita" onClick={() => abrirDocumento(c.id)} title="Abrir en otra pestaña">
-                        {c.nombre}<IcoAbrir size={13} /></button>
-                    : <span className="mce-cita mce-cita--tenue">{etiquetaDeCita(c)}</span>}
+                  <div className="mce-cita-bloque">
+                    {c.nombre
+                      ? <button type="button" className="mce-cita" onClick={() => abrirDocumento(c.id)} title="Abrir en otra pestaña">
+                          {c.nombre}<IcoAbrir size={13} /></button>
+                      : <span className="mce-cita mce-cita--tenue">{etiquetaDeCita(c)}</span>}
+                  </div>
                   {esAutor && (
                     <button type="button" className="mce-icono mce-icono--peq" aria-label="Quitar la referencia"
-                      title="Quitar la referencia" onClick={() => cambiar({ citas: idsDe(citas).filter(x => x !== c.id) })}>
+                      title="Quitar la referencia"
+                      onClick={() => cambiar({ citas: idsDe(citas).filter(x => x !== c.id) })}>
                       <IcoQuitar size={13} /></button>
                   )}
                 </li>
               ))}
             </ul>
-          ) : <p className="mce-vacio">{textoDeCitas(0)}. Enlaza un informe, una especificación, otro plano…</p>}
+          ) : <p className="mce-vacio">{textoDeCitas(0)}. Enlaza un informe, una especificación o un plano relacionado.</p>}
           {esAutor && citas.length < TOPE_CITAS && (
-            <button type="button" className="mce-btn mce-btn--sec" onClick={() => setEligiendo('cita')}>+ Añadir referencia</button>
+            <div className="mce-acciones">
+              <button type="button" className="mce-btn mce-btn--sec" onClick={() => setEligiendo('cita')}>+ Añadir referencia</button>
+            </div>
           )}
         </section>
 
-        {!esAutor && <p className="mce-nota">Solo su autor puede cambiar esta marca.</p>}
       </div>
 
       {esAutor && (
         <footer className="mce-panel__pie">
-          <button type="button" className="mce-btn mce-btn--sec" onClick={onPublicar}>
+          <button type="button" className="mce-btn mce-btn--sec" onClick={onPublicar}
+            disabled={marca.publicado && observacionViva(marca.observacion)}
+            title={marca.publicado && observacionViva(marca.observacion) ? 'Tiene una observación abierta: el responsable la necesita a la vista' : undefined}>
             {marca.publicado ? 'Retirar de la obra' : 'Publicar'}</button>
-          <button type="button" className="mce-btn mce-btn--peligro" onClick={async () => {
+          <button type="button" className="mce-btn mce-btn--peligro"
+            disabled={observacionViva(marca.observacion)}
+            title={observacionViva(marca.observacion) ? 'Tiene una observación abierta: anúlala o ciérrala antes' : undefined}
+            onClick={async () => {
             const ok = await confirmAction({
               title: `¿Borrar esta ${tipo.toLowerCase()}?`,
               message: marca.kind === 'foto'
@@ -347,13 +400,14 @@ export function PanelDeMarca({ API, obra, marca, esAutor, onCambio, onPublicar, 
         </footer>
       )}
 
-      {eligiendo && (
+      {eligiendo && createPortal(
         <SelectorDeDocumento API={API} project={{ id: obra, model_urn: obra }}
           titulo={eligiendo === 'foto' ? 'Elegir una foto de la obra' : 'Añadir una referencia'}
           ayuda={eligiendo === 'foto'
             ? 'Elige una foto que ya esté en la obra. No se copia: la marca la cita.'
             : 'Elige el documento que esta marca cita. No se copia ni se mueve, y quien no pueda abrirlo no verá su nombre.'}
-          onElegir={alElegirDocumento} onCerrar={() => setEligiendo(null)} />
+          onElegir={alElegirDocumento} onCerrar={() => setEligiendo(null)} />,
+        document.fullscreenElement || document.body,
       )}
       {viendo != null && (() => {
         // Solo se recorren las fotos que se pueden abrir; `viendo` es el id de la pulsada.
@@ -367,7 +421,7 @@ export function PanelDeMarca({ API, obra, marca, esAutor, onCambio, onPublicar, 
           onCerrar={() => setEditandoSello(false)} />
       )}
     </aside>,
-    document.body,
+    document.querySelector('.pdf-viewer .pdf-body') || document.querySelector('.file-viewer-content') || document.body,
   );
 }
 
@@ -413,11 +467,13 @@ export function CitadoEn({ API, file }) {
               <div className="mce-citado__plano"><IcoDoc size={14} />{g.plano.nombre}</div>
               {g.marcas.map(m => (
                 <button key={m.marca} type="button" role="menuitem" className="mce-citado__marca"
-                  onClick={() => { setAbierto(false); abrirDocumento(g.plano.id, { pagina: m.pagina, marca: m.marca }); }}>
+                  onClick={() => { setAbierto(false); abrirDocumento(g.plano.id, { pagina: m.pagina, marca: m.marca,
+                    version: m.version && !m.version.vigente ? m.version.id : null }); }}>
                   <span>{m.como === 'foto'
                     ? 'Foto marcada en el plano'
                     : `Referencia desde ${(NOMBRE_DE_TIPO[m.tipo] || 'una marca').toLowerCase()}`} · pág. {m.pagina}</span>
-                  <small>{[m.autor, fechaCorta(m.fecha), m.publicado ? '' : 'borrador'].filter(Boolean).join(' · ')}</small>
+                  <small>{[m.version?.numero ? `V${m.version.numero}${m.version.vigente ? ' vigente' : ''}` : '',
+                    m.autor, fechaCorta(m.fecha), m.publicado ? '' : 'borrador'].filter(Boolean).join(' · ')}</small>
                 </button>
               ))}
             </div>

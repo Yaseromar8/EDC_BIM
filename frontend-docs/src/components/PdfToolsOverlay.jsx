@@ -6,6 +6,7 @@ import toast from 'react-hot-toast';
 import { API } from '../utils/helpers';
 import { apiFetch } from '../utils/apiFetch';
 import { PanelDeMarca, DialogoDeSello } from './MarcaConEnlace';
+import { estadoDeObservacion } from '../utils/marcasConEnlace';
 import { estadoDeSello, marcaDeLaDireccion, fechaCorta } from '../utils/marcasConEnlace';
 
 // El sello mide lo mismo EN LA HOJA (puntos PDF), como un sello de goma: al alejar el plano se hace pequeño
@@ -55,7 +56,8 @@ function cloudPath(x, y, w, h) {
   return `M ${x} ${y}` + seg(x, y, x2, y) + seg(x2, y, x2, y2) + seg(x2, y2, x, y2) + seg(x, y2, x, y) + ' Z';
 }
 
-export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, tool, setTool, color, userName }) {
+export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, tool, setTool, color, userName,
+                                         versionDeLasMarcas = null, versionVigente = null, onIrAVersion = null }) {
   const [markups, setMarkups] = useState([]);          // todos los del documento
   const [calibrations, setCalibrations] = useState({}); // { page: {units_per_pdf, display_unit} }
   const [draft, setDraft] = useState(null);            // figura en construcción
@@ -64,6 +66,12 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
   const [recalibrar, setRecalibrar] = useState(false);  // «Cambiar» la escala ya fijada
   const [elegida, setElegida] = useState(null);         // id de la marca abierta en su panel
   const [selloEn, setSelloEn] = useState(null);         // { p } donde se colocará un sello
+  const [enOtras, setEnOtras] = useState([]);           // [{ version_id, version_number, marcas }]
+  // LAS MARCAS SON DE LA VERSIÓN QUE SE MIRA (migración 36). Sin versión (enlace compartido, banco viejo),
+  // como antes: todas las del documento.
+  const versionId = versionDeLasMarcas?.id || null;
+  const vigenteId = versionVigente?.id || null;
+  const enVigente = !versionId || !vigenteId || String(versionId) === String(vigenteId);
   const marcaPedida = useRef(marcaDeLaDireccion(window.location.search).marca);
   const svgRef = useRef(null);
   const draftRef = useRef(null);
@@ -85,13 +93,16 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
     // mirando. Una redlinea sobre el plano equivocado no es una demora, es un
     // error: el pestillo descarta lo que llega cuando ya no es de este nodo.
     let vigente = true;
-    apiFetch(`${API}/api/pdf/markups?node_id=${nodeId}`).then(r => r.json())
+    setEnOtras([]);
+    const deVersion = versionId ? `&version_id=${encodeURIComponent(versionId)}` : '';
+    apiFetch(`${API}/api/pdf/markups?node_id=${nodeId}${deVersion}`).then(r => r.json())
       // Una respuesta «success» sin lista no puede dejar `markups` en undefined:
       // el render hace `markups.filter` y la página entera se quedaba en blanco.
       .then(d => {
         if (!vigente || !d.success) return;
         const lista = Array.isArray(d.markups) ? d.markups : [];
         setMarkups(lista);
+        setEnOtras(Array.isArray(d.en_otras_versiones) ? d.en_otras_versiones : []);
         // Llegada desde «Citado en»: la marca pedida se abre en su panel (PDFViewer ya fue a su página).
         const pedida = marcaPedida.current;
         if (pedida && lista.some(m => String(m.id) === String(pedida))) setElegida(Number(pedida) || pedida);
@@ -100,7 +111,7 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
     apiFetch(`${API}/api/pdf/calibration?node_id=${nodeId}`).then(r => r.json())
       .then(d => { if (vigente && d.success) setCalibrations(d.calibrations || {}); }).catch(() => {});
     return () => { vigente = false; };
-  }, [nodeId]);
+  }, [nodeId, versionId]);
 
   // ── Transformaciones ──
   const toPdf = useCallback((e) => {
@@ -120,12 +131,14 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
   const saveMarkup = async (kind, geometry, text = null, extra = {}) => {
     const style = { color, ...extra };
     const local = { id: `tmp_${Date.now()}`, page, kind, geometry, style, text, created_by: userName,
-                    created_at: new Date().toISOString(), publicado: false, citas: [], fotos: [], _unsaved: true };
+                    created_at: new Date().toISOString(), publicado: false, citas: [], fotos: [], _unsaved: true,
+                    version_id: versionId, version_number: versionDeLasMarcas?.version_number ?? null };
     setMarkups(prev => [...prev, local]);
     try {
       const r = await apiFetch(`${API}/api/pdf/markups`, {
         method: 'POST',
-        body: JSON.stringify({ node_id: nodeId, model_urn: projectPrefix, page, kind, geometry, style, text, user: userName })
+        body: JSON.stringify({ node_id: nodeId, model_urn: projectPrefix, page, kind, geometry, style, text, user: userName,
+                               version_id: versionId })
       });
       if (r.status === 404) throw new Error('endpoint-404');
       const d = await r.json();
@@ -165,6 +178,18 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
       if (!r.ok || !d.success) throw new Error(d.error || 'No se pudo publicar.');
       setMarkups(prev => prev.map(x => x.id === m.id ? { ...x, publicado: d.publicado } : x));
       toast.success(d.publicado ? 'Publicada: la ve toda la obra' : 'Retirada: vuelve a ser solo tuya');
+    } catch (e) { toast.error(e.message); }
+  };
+
+  // «Llevar a la vigente»: copia la marca (borrador, de quien la lleva) en la versión vigente y va allí a verla.
+  const llevarMarca = async (m) => {
+    try {
+      const r = await apiFetch(`${API}/api/pdf/markups/${m.id}/llevar`, { method: 'POST' });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok || !d.success) throw new Error(d.error || 'No se pudo llevar la marca.');
+      toast.success(`Copiada a la V${versionVigente?.version_number ?? ''} como borrador. La de la V${m.version_number ?? d.desde_version} no cambia.`);
+      setElegida(null);
+      if (onIrAVersion && vigenteId) { marcaPedida.current = d.id; onIrAVersion(vigenteId); }
     } catch (e) { toast.error(e.message); }
   };
 
@@ -457,22 +482,57 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
   const renderEnlaces = () => pageMarkups.map(m => {
     const n = (m.citas || []).length;
     const esElegida = m.id === elegida;
-    if (!n && !esElegida) return null;
+    const obs = m.observacion;
+    if (!n && !esElegida && !obs) return null;
     const k = cajaDe(m);
     if (!k) return null;
+    const ancho = n > 9 ? 34 : 28;
+    const alto = 16;
+    const enBordeSup = k.y < alto + 6;
+    const sinSitioDer = k.x2 + ancho + 4 > vpInfo.w;
+    const bx = Math.max(4, Math.min(
+      enBordeSup || sinSitioDer ? k.x2 - ancho - 4 : k.x2 + 2,
+      vpInfo.w - ancho - 4,
+    ));
+    const by = enBordeSup ? Math.max(4, k.y + 4) : k.y - alto - 2;
+    const hx = Math.max(2, k.x - 6);
+    const hy = Math.max(2, k.y - 6);
+    const hw = Math.min(vpInfo.w - 2, k.x2 + 6) - hx;
+    const hh = Math.min(vpInfo.h - 2, k.y2 + 6) - hy;
     return (
-      <g key={`enl-${m.id}`} style={{ pointerEvents: 'none' }}>
-        {esElegida && <rect x={k.x - 6} y={k.y - 6} width={k.x2 - k.x + 12} height={k.y2 - k.y + 12} rx="4"
-          fill="none" stroke="#6a9bcc" strokeWidth="1.5" strokeDasharray="5 3" />}
+      <g key={`enl-${m.id}`}>
+        {esElegida && <rect x={hx} y={hy} width={Math.max(0, hw)} height={Math.max(0, hh)} rx="4"
+          fill="none" stroke="#6a9bcc" strokeWidth="1.5" strokeDasharray="5 3" style={{ pointerEvents: 'none' }} />}
         {n > 0 && (
-          <g transform={`translate(${k.x2 + 2} ${k.y - 16})`}>
-            <rect width={n > 9 ? 34 : 28} height="16" rx="8" fill="#fff" stroke="#507294" strokeWidth="1" />
+          <g transform={`translate(${bx} ${by})`}
+            style={{ pointerEvents: tocable ? 'all' : 'none', cursor: tool === 'erase' ? 'not-allowed' : tool === 'pan' ? 'pointer' : 'default' }}
+            onClick={tocable ? alTocar(m) : undefined}>
+            <rect width={ancho} height={alto} rx="8" fill="#fff" stroke="#507294" strokeWidth="1" />
             <g transform="translate(4 2.5) scale(0.46)" fill="none" stroke="#507294" strokeWidth="2.6" strokeLinecap="round">
               <path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1" /><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1" />
             </g>
-            <text x="18" y="11.6" fontSize="10" fontWeight="600" fill="#507294" fontFamily="'IBM Plex Mono', monospace">{n}</text>
+            <text x="18" y="11.6" fontSize="10" fontWeight="600" fill="#507294" fontFamily="'IBM Plex Mono', monospace" style={{ pointerEvents: 'none' }}>{n}</text>
           </g>
         )}
+        {obs && (() => {
+          // OBSERVACIÓN (37): «ISS-012 · Abierta» bajo la marca, con la barra del color de su estado.
+          const est = estadoDeObservacion(obs.estado);
+          const texto = `${obs.codigo} · ${obs.vencida ? 'Vencida' : est.etiqueta}`;
+          const anchoE = Math.round(texto.length * 6.1) + 16;
+          const ex = Math.max(4, Math.min(k.x, vpInfo.w - anchoE - 4));
+          const ey = k.y2 + 22 > vpInfo.h ? Math.max(4, k.y - 22) : k.y2 + 4;
+          return (
+            <g transform={`translate(${ex} ${ey})`}
+              style={{ pointerEvents: tocable ? 'all' : 'none', cursor: tool === 'pan' ? 'pointer' : 'default' }}
+              onClick={tocable ? alTocar(m) : undefined}>
+              <title>{`${obs.titulo || ''}${obs.responsable ? ` — ${obs.responsable}` : ''}`}</title>
+              <rect width={anchoE} height="18" rx="3" fill="#fff" stroke={obs.vencida ? '#b93535' : '#cccac0'} strokeWidth="1" />
+              <rect x="0.5" y="0.5" width="4" height="17" rx="2" fill={est.color} />
+              <text x="10" y="12.6" fontSize="10.5" fontWeight="500" fill={obs.vencida ? '#b93535' : '#141413'}
+                fontFamily="'IBM Plex Sans', sans-serif" style={{ pointerEvents: 'none' }}>{texto}</text>
+            </g>
+          );
+        })()}
       </g>
     );
   });
@@ -503,10 +563,29 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
         {renderDraft()}
       </svg>
 
+      {/* MARCAS DE OTRAS VERSIONES (36): en la vigente, cuántas hay en las anteriores y un salto para verlas;
+          en una anterior, que lo que se ve es de esa versión. Discreto, arriba al centro. */}
+      {(enOtras.length > 0 || !enVigente) && !calibAsk && (
+        <div className="marcas-version" role="status">
+          {!enVigente
+            ? <span>Marcas de la <b>V{versionDeLasMarcas?.version_number}</b>, que no es la vigente.</span>
+            : <span>{enOtras.reduce((s, v) => s + v.marcas, 0) === 1 ? 'Hay 1 marca' : `Hay ${enOtras.reduce((s, v) => s + v.marcas, 0)} marcas`} en versiones anteriores:</span>}
+          {enOtras.map(v => (
+            <button key={v.version_id} type="button" disabled={!onIrAVersion} onClick={() => onIrAVersion?.(v.version_id)}
+              title={`Ver la V${v.version_number} con sus marcas`}>
+              V{v.version_number} <small>{v.marcas}</small>
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* El panel de la marca elegida: referencias, fotos, sello, publicar y borrar. */}
       {marcaElegida && (
         <PanelDeMarca key={marcaElegida.id} API={API} obra={projectPrefix} marca={marcaElegida}
           esAutor={!!userName && marcaElegida.created_by === userName}
+          versionVigente={versionVigente?.version_number ?? null}
+          onLlevar={vigenteId && marcaElegida.version_id && String(marcaElegida.version_id) !== String(vigenteId)
+            ? () => llevarMarca(marcaElegida) : null}
           onCambio={(nueva) => setMarkups(prev => prev.map(x => x.id === nueva.id ? { ...x, ...nueva } : x))}
           onPublicar={() => publicarMarkup(marcaElegida)}
           onBorrar={() => { setElegida(null); deleteMarkup(marcaElegida); }}

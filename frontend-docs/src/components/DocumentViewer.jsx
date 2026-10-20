@@ -925,6 +925,10 @@ export default function DocumentViewer({
               alEscritorio={esPdfDeEscritorio && !isShared ? abrirEnEscritorio : null}
               appEscritorio={appEscritorio}
               nodeId={isShared ? null : file.id} projectPrefix={projectPrefix}
+              // Las marcas son de la VERSIÓN que se mira (migración 36).
+              versionDeLasMarcas={isShared ? null : vv} versionVigente={isShared ? null : (versionHistory[0] || null)}
+              onIrAVersion={isShared || !setViewedVersionInfo ? null
+                : (id) => { const v = versionHistory.find(x => String(x.id) === String(id)); if (v) setViewedVersionInfo(v); }}
               onClose={onClose || (() => window.close())}
               onVersionClick={!isShared && setShowVersions
                 ? () => setShowVersions(!showVersions) : null}

@@ -1,6 +1,8 @@
 // Banco de las reglas de foto, sello y referencias: node frontend-docs/pruebas/marcasConEnlace.prueba.mjs
 import {
-  ESTADOS_DE_SELLO, estadoDeSello, esFoto, nombreParaSubir, textoDeCitas, citasPorPlano,
+  ESTADOS_DE_SELLO, estadoDeSello, ESTADOS_DE_OBSERVACION, estadoDeObservacion, observacionViva,
+  accionesDeObservacion, aQuienLeToca, fechaLimitePorDefecto, fechaDeDia, textoDelEvento,
+  esFoto, nombreParaSubir, textoDeCitas, citasPorPlano,
   etiquetaDeCita, conMarca, marcaDeLaDireccion, siguienteAngulo,
 } from '../src/utils/marcasConEnlace.js';
 
@@ -16,6 +18,38 @@ test('los estados del sello son los del servidor y ninguno es «Aprobado»', () 
   if (ESTADOS_DE_SELLO.some(e => /aprob/i.test(e.etiqueta))) throw new Error('un sello no aprueba');
   igual(estadoDeSello('observado').etiqueta, 'Observado');
   igual(estadoDeSello('inventado').codigo, 'revisado');
+});
+
+test('la observación usa los actos de la incidencia, en femenino y con colores D-24', () => {
+  igual(ESTADOS_DE_OBSERVACION.map(e => e.codigo), ['Abierto', 'Reabierto', 'Corregido', 'Verificado', 'Anulado']);
+  igual(estadoDeObservacion('Corregido').etiqueta, 'Corregida');
+  igual(estadoDeObservacion('inventado').codigo, 'Abierto');
+  const D24 = ['#d97757', '#b93535', '#6a9bcc', '#64744e', '#b0aea5'];
+  if (ESTADOS_DE_OBSERVACION.some(e => !D24.includes(e.color))) throw new Error('color fuera de D-24');
+  if (!observacionViva({ estado: 'Corregido' }) || observacionViva({ estado: 'Verificado' }) || observacionViva(null)) {
+    throw new Error('viva = Abierta, Reabierta o Corregida');
+  }
+});
+
+test('cada acto es de quien le toca: corrige el responsable, verifica quien la levantó', () => {
+  const obs = { estado: 'Abierto', responsable_id: 9, verificador_id: 7, autor_id: 7 };
+  igual(accionesDeObservacion(obs, 9), { corregir: true, verificar: false, anular: false });
+  igual(accionesDeObservacion(obs, '7'), { corregir: false, verificar: false, anular: true });
+  igual(accionesDeObservacion({ ...obs, estado: 'Corregido' }, 7), { corregir: false, verificar: true, anular: false });
+  igual(accionesDeObservacion({ ...obs, estado: 'Corregido' }, 9), { corregir: false, verificar: false, anular: false });
+  igual(accionesDeObservacion({ ...obs, estado: 'Verificado' }, 7), { corregir: false, verificar: false, anular: false });
+  igual(accionesDeObservacion(obs, null), { corregir: false, verificar: false, anular: false });
+  igual(aQuienLeToca({ estado: 'Reabierto', responsable: 'Luis' }), 'Corregir: Luis');
+  igual(aQuienLeToca({ estado: 'Corregido', verificador: 'Ana' }), 'Verificar: Ana');
+});
+
+test('fecha límite por defecto a 7 días y fechas de día sin corrimiento', () => {
+  igual(fechaLimitePorDefecto(new Date(2026, 9, 28)), '2026-11-04');
+  igual(fechaLimitePorDefecto(new Date(2026, 11, 30), 3), '2027-01-02');
+  if (!/15/.test(fechaDeDia('2099-01-15'))) throw new Error(fechaDeDia('2099-01-15'));
+  igual(fechaDeDia('mal'), '');
+  igual(textoDelEvento({ event: 'reopened' }), 'Rechazó la corrección y la reabrió');
+  igual(textoDelEvento({ event: 'raro' }), 'Cambio');
 });
 
 test('qué es una foto', () => {

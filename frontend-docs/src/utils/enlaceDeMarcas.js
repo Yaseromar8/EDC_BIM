@@ -17,7 +17,9 @@ export function obraDeLaDireccion() {
 export function abrirDocumento(documento, extra = {}) {
   const obra = obraDeLaDireccion();
   if (!obra || !documento) { toast.error('No se pudo saber la obra para abrir el documento.'); return; }
-  window.open(window.location.pathname + conMarca(conArchivos(window.location.search, { obra, documento }), extra),
+  // Con `version`, el documento se abre en ESA versión (una marca de la V1 se ve sobre la V1).
+  const { version = null, ...resto } = extra;
+  window.open(window.location.pathname + conMarca(conArchivos(window.location.search, { obra, documento, version }), resto),
     `lda-${documento}`);
 }
 

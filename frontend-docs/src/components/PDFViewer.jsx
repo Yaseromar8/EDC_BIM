@@ -424,6 +424,8 @@ function cronoFin(extra) {
 
 export default function PDFViewer({ url, preparando = false,
   alEscritorio = null, appEscritorio = null, fileName = 'documento.pdf', nodeId = null, projectPrefix = '',
+  // MARCAS POR VERSIÓN (36): la versión que se mira, la vigente y cómo saltar a otra.
+  versionDeLasMarcas = null, versionVigente = null, onIrAVersion = null,
                                     versionLabel = null, versionInfo = null, versionId = null, hideTitle = false,
                                     onClose = null, onVersionClick = null,
                                     hermanos = [], onAbrirHermano = null,
@@ -2480,7 +2482,8 @@ export default function PDFViewer({ url, preparando = false,
                 {nodeId && (
                   <PdfToolsOverlay vpInfo={vpInfo} page={currentPage} nodeId={nodeId}
                     projectPrefix={projectPrefix} tool={tool} setTool={setTool}
-                    color={markupColor} userName={userName} />
+                    color={markupColor} userName={userName}
+                    versionDeLasMarcas={versionDeLasMarcas} versionVigente={versionVigente} onIrAVersion={onIrAVersion} />
                 )}
               </div>
             </div>

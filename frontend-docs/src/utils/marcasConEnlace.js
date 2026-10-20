@@ -18,6 +18,77 @@ export function estadoDeSello(codigo) {
   return ESTADOS_DE_SELLO.find(e => e.codigo === codigo) || ESTADOS_DE_SELLO[0];
 }
 
+// ── OBSERVACIÓN DE DOCUMENTO (20-oct-2026, migración 37) ─────────────────────────────────────────────
+// La marca DIBUJA; lo que hay que corregir es una OBSERVACIÓN: una incidencia con responsable, quien verifica,
+// fecha límite e historial. Sus estados son los ACTOS de la incidencia (flujo_de_issue.ESTADOS), dichos en
+// femenino porque se habla de «la observación». Colores de la lista cerrada D-24.
+// Estudio y decisión: docs/ux/MARCAS_REVISION_LO_PROFESIONAL.md (opción A).
+export const ESTADOS_DE_OBSERVACION = [
+  { codigo: 'Abierto',    etiqueta: 'Abierta',    color: '#d97757' },   // Orange: le toca al responsable
+  { codigo: 'Reabierto',  etiqueta: 'Reabierta',  color: '#b93535' },   // Error: se rechazó la corrección
+  { codigo: 'Corregido',  etiqueta: 'Corregida',  color: '#6a9bcc' },   // Blue: le toca a quien verifica
+  { codigo: 'Verificado', etiqueta: 'Verificada', color: '#64744e' },   // cerrada
+  { codigo: 'Anulado',    etiqueta: 'Anulada',    color: '#b0aea5' },   // cerrada sin defecto
+];
+
+export function estadoDeObservacion(codigo) {
+  return ESTADOS_DE_OBSERVACION.find(e => e.codigo === codigo) || ESTADOS_DE_OBSERVACION[0];
+}
+
+export function observacionViva(obs) {
+  return !!obs && ['Abierto', 'Reabierto', 'Corregido'].includes(obs.estado);
+}
+
+// Qué ACTOS puede hacer esta persona ahora. Lo decide el servidor; esto solo evita ofrecer botones que van a
+// devolver 403. Corrige el responsable; verifica (o reabre) quien verifica; anula quien la levantó.
+export function accionesDeObservacion(obs, usuarioId) {
+  const yo = usuarioId == null ? null : String(usuarioId);
+  const es = (id) => yo != null && id != null && String(id) === yo;
+  const est = obs?.estado;
+  return {
+    corregir: es(obs?.responsable_id) && (est === 'Abierto' || est === 'Reabierto'),
+    verificar: es(obs?.verificador_id) && !es(obs?.responsable_id) && est === 'Corregido',
+    anular: es(obs?.autor_id ?? obs?.verificador_id) && (est === 'Abierto' || est === 'Reabierto'),
+  };
+}
+
+// A quién le toca: lo que se lee en la tarjeta sin abrir nada.
+export function aQuienLeToca(obs) {
+  if (!obs) return '';
+  if (obs.estado === 'Abierto' || obs.estado === 'Reabierto') return obs.responsable ? `Corregir: ${obs.responsable}` : 'Corregir';
+  if (obs.estado === 'Corregido') return obs.verificador ? `Verificar: ${obs.verificador}` : 'Verificar';
+  return 'Cerrada';
+}
+
+// La fecha límite que se propone: dentro de 7 días, en AAAA-MM-DD (lo que pide <input type="date">).
+export function fechaLimitePorDefecto(hoy = new Date(), dias = 7) {
+  const d = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate() + dias);
+  const dos = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${dos(d.getMonth() + 1)}-${dos(d.getDate())}`;
+}
+
+// «15 ene 2099» desde AAAA-MM-DD sin que la zona horaria la corra un día.
+export function fechaDeDia(aaaammdd) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(aaaammdd || ''));
+  if (!m) return '';
+  return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]))
+    .toLocaleDateString('es-PE', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+// Una línea del historial, en palabras. Los comentarios se pintan aparte, con su texto.
+const EVENTOS = {
+  detected: 'Levantó la observación',
+  corrected: 'La declaró corregida',
+  verified: 'Verificó la corrección y la cerró',
+  reopened: 'Rechazó la corrección y la reabrió',
+  voided: 'La anuló',
+  commented: 'Comentó',
+  self_verify_allowed: 'Autorizó la autoverificación',
+};
+export function textoDelEvento(h) {
+  return EVENTOS[h?.event] || 'Cambio';
+}
+
 // Las fotos se suben a la carpeta de medios de la obra (la misma que usa Multimedia): son DOCUMENTOS, con
 // versión, permisos y auditoría, y la marca las cita.
 export const CARPETA_DE_FOTOS = 'MULTIMEDIA/';

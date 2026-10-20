@@ -78,7 +78,7 @@ export default function SelectorDeDocumento({ API, project, titulo, ayuda,
     <div onClick={onCerrar}
          style={{ position: 'fixed', inset: 0, background: 'rgba(20,20,19,.45)',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  zIndex: 1100 }}>
+                  zIndex: 1000002 }}>
       <div onClick={e => e.stopPropagation()}
            style={{ background: '#fff', borderRadius: 10, padding: 22, width: 560,
                     maxWidth: '94vw', maxHeight: '82vh', display: 'flex',

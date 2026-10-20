@@ -23,24 +23,28 @@
 .mce-icono:focus-visible { outline: 2px solid #6a9bcc; }
 .mce-icono--peq { width: 22px; height: 22px; }
 
-/* ── Panel de la marca (a la derecha, sobre el lector) ── */
-/* El lector (.file-viewer-overlay) vive en z-index 999999: el panel va justo encima
-   (1000000), por debajo de la confirmación (1000001); el diálogo del sello y el visor, encima de todo. */
+/* ── Panel de la marca (acoplado al costado derecho del lector, como en ACC) ── */
+/* Dentro de .pdf-body nace justo debajo del cajetín superior (top: 0) hasta abajo (bottom: 0).
+   Si se monta fuera (.file-viewer-overlay vive en z-index 999999), cae en position: fixed pegado al borde derecho. */
 .mce-panel {
-  position: fixed; top: 112px; right: 16px; z-index: 1000000; width: 340px;
-  max-height: calc(100vh - 136px); display: flex; flex-direction: column;
-  background: #fff; border: 1px solid #e8e6dc; border-radius: 8px;
-  box-shadow: 0 8px 28px rgba(20, 20, 19, .14);
+  position: fixed; top: 55px; right: 0; bottom: 0; z-index: 1000000; width: 340px;
+  max-height: none; display: flex; flex-direction: column;
+  background: #fff; border: none; border-left: 1px solid #e8e6dc; border-radius: 0;
+  box-shadow: -4px 0 18px rgba(20, 20, 19, .08);
 }
-.mce-panel__cab { display: flex; align-items: center; gap: 10px; padding: 12px 12px 12px 14px; border-bottom: 1px solid #e8e6dc; }
+.pdf-body > .mce-panel, .file-viewer-content > .mce-panel {
+  position: absolute; top: 0; right: 0; bottom: 0; z-index: 35;
+}
+.mce-panel__cab { display: flex; align-items: center; gap: 10px; padding: 12px 12px 12px 14px; border-bottom: 1px solid #e8e6dc; flex-shrink: 0; background: #faf9f5; }
 .mce-panel__ico { width: 30px; height: 30px; border-radius: 6px; background: #f1f0e8; color: #52524d; display: flex; align-items: center; justify-content: center; flex: none; }
 .mce-panel__tit { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .mce-panel__tit b { font-size: 14px; font-weight: 600; }
 .mce-panel__tit small { font-size: 12px; color: #72706b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .mce-estado { font-size: 11.5px; font-weight: 500; color: #734500; background: #f9eeda; border-radius: 4px; padding: 2px 7px; }
 .mce-estado.es-publicada { color: #64744e; background: #e0e3d7; }
-.mce-panel__cuerpo { padding: 4px 14px 14px; overflow-y: auto; }
-.mce-panel__pie { display: flex; justify-content: space-between; gap: 8px; padding: 10px 14px; border-top: 1px solid #e8e6dc; }
+
+.mce-panel__cuerpo { flex: 1; min-height: 0; padding: 4px 14px 14px; overflow-y: auto; }
+.mce-panel__pie { display: flex; justify-content: space-between; gap: 8px; padding: 10px 14px; border-top: 1px solid #e8e6dc; flex-shrink: 0; background: #faf9f5; }
 
 .mce-sec { padding: 12px 0; border-bottom: 1px solid #f1f0e8; }
 .mce-sec:last-of-type { border-bottom: none; }
@@ -68,9 +72,25 @@
 .mce-citas { list-style: none; margin: 0 0 10px; padding: 0; }
 .mce-citas li { display: flex; align-items: center; gap: 8px; padding: 6px 0; color: #52524d; border-top: 1px solid #f1f0e8; }
 .mce-citas li:first-child { border-top: none; }
-.mce-cita { flex: 1; min-width: 0; display: inline-flex; align-items: center; gap: 6px; border: none; background: none; padding: 0; text-align: left; font: 500 13px/1.35 var(--a-font-sans); color: #507294; cursor: pointer; overflow: hidden; }
+.mce-cita-bloque { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.mce-cita { min-width: 0; display: inline-flex; align-items: center; gap: 6px; border: none; background: none; padding: 0; text-align: left; font: 500 13px/1.35 var(--a-font-sans); color: #507294; cursor: pointer; overflow: hidden; }
 .mce-cita:hover { text-decoration: underline; }
 .mce-cita--tenue { color: #72706b; font-weight: 400; cursor: default; font-style: italic; }
+
+/* Comentarios */
+.mce-coms { list-style: none; margin: 0 0 10px; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.mce-com { padding: 8px 10px; border-radius: 6px; background: #faf9f5; border: 1px solid #e8e6dc; }
+.mce-com__cab { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+.mce-com__cab b { font-size: 12px; font-weight: 600; color: #141413; }
+.mce-com__cab small { font-size: 11px; color: #72706b; margin-right: auto; }
+.mce-com__txt { margin: 0; font-size: 12.5px; line-height: 1.45; color: #333330; white-space: pre-wrap; word-break: break-word; }
+.mce-com-form { display: flex; flex-direction: column; gap: 6px; }
+.mce-com-form textarea {
+  width: 100%; box-sizing: border-box; font: 12.5px/1.4 var(--a-font-sans); color: #141413;
+  border: 1px solid #cccac0; border-radius: 6px; padding: 7px 9px; resize: vertical; background: #fff;
+}
+.mce-com-form textarea:focus { outline: 2px solid #6a9bcc; outline-offset: -1px; border-color: #6a9bcc; }
+.mce-com-form__pie { display: flex; justify-content: flex-end; }
 
 /* ── El sello ── */
 .mce-sello {
@@ -98,8 +118,8 @@
 .mce-campo { display: flex; flex-direction: column; gap: 6px; border: none; padding: 0; margin: 0; font-size: 12px; color: #52524d; font-weight: 500; }
 .mce-campo legend { padding: 0; margin-bottom: 6px; }
 .mce-campo small { font-weight: 400; color: #72706b; }
-.mce-campo input, .mce-campo textarea { font: 13px/1.4 var(--a-font-sans); color: #141413; border: 1px solid #cccac0; border-radius: 6px; padding: 8px 10px; resize: vertical; }
-.mce-campo input:focus, .mce-campo textarea:focus { outline: 2px solid #6a9bcc; outline-offset: -1px; border-color: #6a9bcc; }
+.mce-campo input, .mce-campo textarea, .mce-campo select { font: 13px/1.4 var(--a-font-sans); color: #141413; border: 1px solid #cccac0; border-radius: 6px; padding: 8px 10px; resize: vertical; }
+.mce-campo input:focus, .mce-campo textarea:focus, .mce-campo select:focus { outline: 2px solid #6a9bcc; outline-offset: -1px; border-color: #6a9bcc; }
 .mce-opcion { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 6px; font-weight: 400; color: #141413; cursor: pointer; }
 .mce-opcion:hover { background: #f1f0e8; }
 .mce-opcion.es-elegida { background: #ecf0f1; }
@@ -133,6 +153,65 @@
 .mce-citado__marca small { color: #72706b; font-size: 11.5px; }
 
 @media (max-width: 720px) {
-  .mce-panel { top: auto; bottom: 12px; right: 12px; left: 12px; width: auto; max-height: 60vh; }
+  .mce-panel, .pdf-body > .mce-panel, .file-viewer-content > .mce-panel {
+    top: auto; bottom: 0; right: 0; left: 0; width: auto; max-height: 60vh;
+    border-left: none; border-top: 1px solid #e8e6dc;
+  }
   .mce-dialogo__cuerpo { grid-template-columns: 1fr; }
 }
+
+/* ── Marcas por versión (migración 36) ── */
+.marcas-version {
+  position: absolute; top: 12px; left: 50%; transform: translateX(-50%); z-index: 40;
+  display: flex; align-items: center; gap: 6px; padding: 5px 6px 5px 12px; white-space: nowrap;
+  background: #faf9f5; border: 1px solid #cccac0; border-radius: 6px; color: #333330;
+  font: 12.5px/1.3 var(--a-font-sans); box-shadow: 0 2px 8px rgba(20, 20, 19, .08);
+}
+.marcas-version button {
+  display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 8px; border-radius: 4px;
+  border: 1px solid #c8d8e7; background: #ecf0f1; color: #507294; font: 600 12px var(--a-font-sans); cursor: pointer;
+}
+.marcas-version button:hover:not(:disabled) { background: #e6ecef; }
+.marcas-version button small { font-weight: 400; color: #52524d; font-family: var(--a-font-mono); }
+.mce-sec--version { padding-top: 10px; }
+.mce-version { margin: 0 0 10px; font-size: 12.5px; line-height: 1.5; color: #333330; }
+.mce-nota--version { margin: 10px 0 0; }
+
+/* ── Observación de documento (20-oct-2026, migración 37) ──
+   Sobria: una barra del color del estado (D-24), texto y datos. Nada de píldoras ni brillos. */
+.mce-obs-etq {
+  display: inline-flex; align-items: center; gap: 6px; flex: none; height: 24px; padding: 0 8px 0 0;
+  border: 1px solid #e8e6dc; border-radius: 4px; background: #fff; font-size: 11.5px; color: #333330; overflow: hidden;
+}
+.mce-obs-etq i { width: 4px; align-self: stretch; }
+.mce-obs-etq span { font-family: var(--a-font-mono); font-size: 11px; color: #52524d; }
+.mce-obs-etq b { font-weight: 500; }
+.mce-obs-cab { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+.mce-obs-cab small { font-size: 11.5px; color: #72706b; margin-left: auto; }
+.mce-obs-estado { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 500; color: #141413; }
+.mce-obs-estado i { width: 4px; height: 14px; border-radius: 2px; background: var(--estado); }
+.mce-obs-vencida { font-size: 11px; font-weight: 600; color: #b93535; border: 1px solid #b93535; border-radius: 3px; padding: 0 5px; }
+.mce-obs-titulo { margin: 0 0 6px; font-size: 13.5px; font-weight: 500; line-height: 1.4; color: #141413; }
+.mce-obs-datos { display: grid; grid-template-columns: 96px 1fr; gap: 4px 10px; margin: 10px 0 0; font-size: 12.5px; }
+.mce-obs-datos dt { color: #72706b; }
+.mce-obs-datos dd { margin: 0; color: #141413; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.mce-obs-datos dd.es-vencida { color: #b93535; font-weight: 500; }
+.mce-obs-evidencia { margin-top: 12px; padding: 8px 10px; border: 1px solid #e8e6dc; border-radius: 6px; background: #faf9f5; display: flex; flex-direction: column; gap: 4px; }
+.mce-obs-evidencia > b, .mce-obs-acto > b, .mce-obs-hilo > b { font-size: 12px; font-weight: 600; color: #52524d; }
+.mce-obs-hilo > b span { font-weight: 400; color: #72706b; margin-left: 4px; }
+.mce-obs-form { display: flex; flex-direction: column; gap: 10px; }
+.mce-obs-acto { margin-top: 12px; padding: 10px; border: 1px solid #e8e6dc; border-radius: 6px; display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+.mce-obs-acto textarea {
+  width: 100%; box-sizing: border-box; font: 12.5px/1.4 var(--a-font-sans); color: #141413;
+  border: 1px solid #cccac0; border-radius: 6px; padding: 7px 9px; resize: vertical; background: #fff;
+}
+.mce-obs-acto textarea:focus { outline: 2px solid #6a9bcc; outline-offset: -1px; border-color: #6a9bcc; }
+.mce-obs-acto .mce-acciones { margin-top: 0; }
+.mce-obs-hilo { margin-top: 14px; display: flex; flex-direction: column; gap: 8px; }
+.mce-obs-historial { margin-top: 12px; font-size: 12px; color: #52524d; }
+.mce-obs-historial summary { cursor: pointer; font-weight: 600; }
+.mce-obs-historial summary span { font-weight: 400; color: #72706b; margin-left: 4px; }
+.mce-obs-historial ol { list-style: none; margin: 8px 0 0; padding: 0 0 0 10px; border-left: 2px solid #e8e6dc; display: flex; flex-direction: column; gap: 8px; }
+.mce-obs-historial li { display: flex; flex-direction: column; gap: 1px; }
+.mce-obs-historial li > span { color: #141413; }
+.mce-obs-historial li > small { color: #72706b; font-size: 11px; }

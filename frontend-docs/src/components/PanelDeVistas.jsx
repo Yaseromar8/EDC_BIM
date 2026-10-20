@@ -11,25 +11,23 @@
 import React, { useState } from 'react';
 import { COLECCIONES, VISTAS_DE_SERIE, describirFiltros } from '../utils/vistasDeArchivos';
 
-const LLAVE_PLEGADO = 'alephia.vistas.plegado';
-
-function leerPlegado() {
-  try { return localStorage.getItem(LLAVE_PLEGADO) === '1'; } catch { return false; }
-}
-
 export default function PanelDeVistas({ recuentos, hayPlan, activa, propias, onElegir, onBorrar }) {
-  const [plegado, setPlegado] = useState(leerPlegado);
-  const plegar = () => setPlegado((p) => {
-    try { localStorage.setItem(LLAVE_PLEGADO, p ? '0' : '1'); } catch { /* sin almacén, solo esta vez */ }
-    return !p;
-  });
+  // SIEMPRE EMPIEZA CONTRAÍDO (20-oct-2026, el propietario): el árbol de carpetas es lo primero. Ya no se
+  // recuerda abierto de una visita a otra; se abre y se cierra dentro de la visita.
+  const [plegado, setPlegado] = useState(true);
+  const plegar = () => setPlegado(p => !p);
   const deSerie = VISTAS_DE_SERIE.filter(v => !v.soloConPlan || hayPlan);
   const esActiva = (tipo, id) => activa && activa.tipo === tipo && activa.id === id;
+  const nombreDeLaActiva = !activa ? '' : (activa.nombre || (activa.tipo === 'serie'
+    ? VISTAS_DE_SERIE.find(v => v.clave === activa.id)?.etiqueta
+    : (propias || []).find(v => v.id === activa.id)?.nombre) || '');
 
   return (
     <nav className="vistas" aria-label="Vistas">
       <button type="button" className="vistas__titulo" onClick={plegar} aria-expanded={!plegado}>
         <span>Vistas</span>
+        {/* Contraído con una vista aplicada: su nombre, para que no se pierda qué está filtrando la tabla. */}
+        {plegado && activa && <small className="vistas__activa">{nombreDeLaActiva}</small>}
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
           strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"
           style={{ rotate: plegado ? '-90deg' : '0deg' }}>
