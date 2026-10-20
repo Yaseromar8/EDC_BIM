@@ -21,11 +21,18 @@ digital_twin_bp = Blueprint('digital_twin', __name__)
 def _is_model_translated(urn, token):
     """True si el modelo esta traducido (manifest status 'success').
     Solo devuelve False cuando el manifest dice claramente que NO esta listo;
-    ante error/duda devuelve True (fail-open) para no bloquear flujos validos."""
+    ante error/duda devuelve True (fail-open) para no bloquear flujos validos.
+
+    404 NO ES UNA DUDA (20-oct-2026): es Autodesk diciendo que esa version no tiene
+    manifiesto, o sea que no hay nada traducido. Tomarlo como «listo» hizo que
+    Actualizar cambiara un modelo de 1_CANAL a una v5 sin traducir: el visor no
+    podia abrirla (manifest 404) y la extraccion fallo con el mismo 404."""
     try:
         r = requests.get(
             f"https://developer.api.autodesk.com/modelderivative/v2/designdata/{urn}/manifest",
             headers={'Authorization': f'Bearer {token}'}, timeout=12)
+        if r.status_code == 404:
+            return False
         if not r.ok:
             return True
         return (r.json() or {}).get('status') == 'success'

@@ -115,6 +115,34 @@ def get_job(job_id):
 
 APS_MD_URL = "https://developer.api.autodesk.com/modelderivative/v2/designdata"
 
+# LLAMADAS A AUTODESK CON PLAZO (20-oct-2026).
+# Sin `timeout`, una petición que Autodesk no contesta deja el hilo esperando PARA SIEMPRE: el
+# trabajo se queda en «intento 1», el frente queda bloqueado (409) porque el modelo ya apunta a la
+# versión nueva, y ni «Reextraer» entra, porque el hilo colgado sigue reteniendo el modelo. Visto en
+# producción con el RVT más pesado de 1_DRENAJE. Ahora cada llamada tiene plazo (10 s para conectar,
+# 120 s sin recibir nada) y se reintenta con pausa ante cortes, plazos vencidos, 429 y 5xx. Si aun
+# así no contesta, la extracción FALLA con su motivo: un error se ve y se reintenta; un cuelgue no.
+APS_PLAZO = (10, 120)
+APS_REINTENTABLES = (429, 500, 502, 503, 504)
+
+
+def _aps(metodo, url, intentos=3, **kw):
+    kw.setdefault('timeout', APS_PLAZO)
+    ultimo = None
+    for i in range(intentos):
+        try:
+            resp = requests.request(metodo, url, **kw)
+        except (requests.Timeout, requests.ConnectionError) as e:
+            ultimo = e
+            print(f"[Extractor] Autodesk sin respuesta ({type(e).__name__}), intento {i + 1}/{intentos}: {url[:120]}")
+        else:
+            if resp.status_code not in APS_REINTENTABLES or i == intentos - 1:
+                return resp
+            print(f"[Extractor] Autodesk {resp.status_code}, intento {i + 1}/{intentos}: {url[:120]}")
+        if i < intentos - 1:
+            time.sleep(5 * (i + 1))
+    raise ultimo
+
 # =====================================================================
 # NORMALIZACIÓN DE CATEGORÍAS REVIT (ES → EN)
 # Revit exporta categorías en el idioma del template del proyecto.
@@ -383,7 +411,7 @@ def extract_metadata_task(urn, target_urn, job_id, purge_source_urns=None, scope
         headers = {'Authorization': f'Bearer {token}'}
         
         print(f"[Extractor] Fase 1 - GET {uid_url}")
-        resp = requests.get(uid_url, headers=headers)
+        resp = _aps('GET', uid_url, headers=headers)
         print(f"[Extractor] Fase 1 - Status: {resp.status_code}")
         
         if resp.status_code != 200:
@@ -495,7 +523,7 @@ def extract_metadata_task(urn, target_urn, job_id, purge_source_urns=None, scope
                     'pagination': {'limit': PAGE_SIZE, 'offset': offset}
                 }
                 for attempt in range(20):
-                    resp = requests.post(query_url, headers={**headers, 'Content-Type': 'application/json'}, json=payload)
+                    resp = _aps('POST', query_url, headers={**headers, 'Content-Type': 'application/json'}, json=payload)
                     if resp.status_code == 202:
                         pct = 40 + int((page * PAGE_SIZE) / max(1, PAGE_SIZE * 10) * 20)
                         set_job(job_id, {'status': 'pending', 'progress': min(pct, 65), 'message': f'Esperando respuesta de Autodesk (intento {attempt+1})...'})
@@ -529,7 +557,7 @@ def extract_metadata_task(urn, target_urn, job_id, purge_source_urns=None, scope
             collection = None
             max_retries = 30
             for attempt in range(max_retries):
-                resp = requests.get(prop_url, headers=headers)
+                resp = _aps('GET', prop_url, headers=headers)
                 print(f"[Extractor] Fase 2 (GET fallback) - Intento {attempt+1}/{max_retries}: status={resp.status_code}")
                 if resp.status_code == 202:
                     pct = 40 + int((attempt / max_retries) * 25)
@@ -546,9 +574,18 @@ def extract_metadata_task(urn, target_urn, job_id, purge_source_urns=None, scope
 
         # Fase 2.1: Extracción Árbol Jerárquico (Para Herencia Tipo->Instancia)
         set_job(job_id, {'status': 'pending', 'progress': 70, 'message': 'Descargando árbol jerárquico (Fusión Semántica)...'})
-        hier_url = f"{APS_MD_URL}/{urn}/metadata/{guid}"
+        # `forceget=true`: por encima de 20 MB Autodesk responde 413 si no se le pide expresamente; y
+        # mientras prepara el árbol responde 202, que antes se tomaba como respuesta (y fallaba con
+        # INCOMPLETE_APS_HIERARCHY). Los dos casos solo aparecen con modelos grandes.
+        hier_url = f"{APS_MD_URL}/{urn}/metadata/{guid}?forceget=true"
         print(f"[Extractor] Fase 2.1 - GET {hier_url}")
-        hier_resp = requests.get(hier_url, headers=headers)
+        for intento_arbol in range(36):
+            hier_resp = _aps('GET', hier_url, headers=headers)
+            if hier_resp.status_code != 202:
+                break
+            set_job(job_id, {'status': 'pending', 'progress': 70,
+                             'message': f'Autodesk prepara el árbol del modelo (intento {intento_arbol + 1})...'})
+            time.sleep(5)
         hier_resp.raise_for_status()
         hierarchy_payload = hier_resp.json()
         hierarchy_data = hierarchy_payload.get('data') if isinstance(hierarchy_payload, dict) else None
@@ -988,7 +1025,7 @@ def get_model_viewables(urn):
         headers = {'Authorization': f'Bearer {token}'}
         
         print(f"[Viewables] Fetching: {url}")
-        resp = requests.get(url, headers=headers)
+        resp = requests.get(url, headers=headers, timeout=30)
         
         if resp.status_code == 202:
             return jsonify({'views': [], 'message': 'Model still processing'}), 202
