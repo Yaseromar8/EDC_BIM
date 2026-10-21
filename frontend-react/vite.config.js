@@ -43,10 +43,10 @@ export default defineConfig(({ command }) => ({
       output: {
         // Separar librerías pesadas: el navegador parsea menos JS para pintar
         // la primera pantalla (xlsx/jspdf se descargan solo al usarse).
+        // Excel y jsPDF se importan solo al usarse (import dinámico). Forzarlos aquí en trozos propios
+        // hacía que Vite los precargara en CADA apertura de View (~225 KB): docs/rendimiento/01 §H6.
         manualChunks: {
           vendor: ['react', 'react-dom'],
-          xlsx: ['xlsx'],
-          pdf: ['jspdf'],
         },
       },
     },

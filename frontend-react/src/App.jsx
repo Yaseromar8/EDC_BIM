@@ -1200,16 +1200,27 @@ function App() {
     // roto) y al backend le llegaba una peticion inutil por invitado y por
     // lustro. Se corta en el origen.
     if (isSharedMode) return undefined;
+    // Cada 30 s, y cada 60 s con la pestaña oculta (antes 5 s siempre: con 20 usuarios eran ~4 escrituras
+    // por segundo en la base, docs/rendimiento/01 §H2). Oculta NO se apaga: quien trabaja en Revit con el
+    // navegador detrás sigue necesitando que el plugin encuentre su frente. El servidor da por presente
+    // a quien latió en los últimos 150 s. Al volver a la pestaña, late al momento.
     let stop = false;
+    let timer = null;
     const beat = () => {
       apiFetch(`${BACKEND_URL}/api/link/web-presence`, {
         method: 'POST',
         body: JSON.stringify({ project: pid }),
       }).catch(() => { /* sin sesión o backend caído: no pasa nada */ });
     };
+    const programar = () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => { if (stop) return; beat(); programar(); }, document.hidden ? 60000 : 30000);
+    };
+    const alVolver = () => { if (!document.hidden && !stop) { beat(); programar(); } };
     beat();
-    const id = setInterval(() => { if (!stop) beat(); }, 5000);
-    return () => { stop = true; clearInterval(id); };
+    programar();
+    document.addEventListener('visibilitychange', alVolver);
+    return () => { stop = true; clearTimeout(timer); document.removeEventListener('visibilitychange', alVolver); };
   }, [selectedProject?.id, isSharedMode]);
 
 

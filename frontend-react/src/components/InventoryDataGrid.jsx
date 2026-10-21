@@ -1,7 +1,6 @@
 import { INVENTORY_IDENTITY_FORMAT, INVENTORY_INTERNAL_KEYS, withInventoryIdentity, inventoryRowKey, inventoryRowForViewer, inventoryEditPayload, inventoryBulkPayload, resolveInventoryTargets, updateInventoryRows, requireInventoryResponse, markInventoryRevision } from '../lib/inventoryIdentity';
 import React, { useState, useEffect, useRef, useCallback, memo, useMemo } from 'react';
 import { urlInventario, enlaceCompartido } from '../utils/enlaceCompartido';
-import * as XLSX from 'xlsx';
 import { filterInventoryRows, refineInventorySelection } from '../lib/filtersCore.js';
 import { openInventoryFilterPopout } from '../lib/inventoryFilterPopout.js';
 import { apiFetch } from '../utils/apiFetch';
@@ -588,6 +587,8 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
     }, [selectedColumnKeys, allPropertyKeys]);
 
     const handleExportExcel = useCallback(async () => {
+        // Solo al exportar: la librería de Excel (~95 KB) ya no viaja en cada apertura de View.
+        const XLSX = await import('xlsx');
         if (!flattenedData.length || !columns.length) return;
         
         // Formatear la data para el Excel — VALORES NUMÉRICOS SIN UNIDAD
