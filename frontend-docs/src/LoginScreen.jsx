@@ -17,7 +17,7 @@ import { permiteAccesoLocal } from './utils/accesoLocal';
 // Esta era la unica copia que no. El respaldo nativo se queda: el APK de campo
 // no tiene origen propio al que caer.
 const BACKEND_URL = Capacitor.isNativePlatform()
-    ? 'https://visor-ecd-backend.onrender.com'
+    ? 'https://visor-ecd-backend-va.onrender.com'
     : (import.meta.env.VITE_BACKEND_URL
         || (window.location.hostname === 'localhost' ? 'http://localhost:3000' : ''));
 

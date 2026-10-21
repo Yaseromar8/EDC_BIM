@@ -29,11 +29,11 @@ export const DOCS_URL = import.meta.env.VITE_DOCS_URL
 export const VISOR_DOCS_SHORTCUT = false;
 
 const BACKEND_URL = (typeof window !== 'undefined' && window.Capacitor?.isNativePlatform?.())
-  ? 'https://visor-ecd-backend.onrender.com'
+  ? 'https://visor-ecd-backend-va.onrender.com'
   : (import.meta.env.VITE_BACKEND_URL
     || (typeof window !== 'undefined' && window.location.hostname === 'localhost'
       ? 'http://localhost:3000'
-      : 'https://visor-ecd-backend.onrender.com'));
+      : 'https://visor-ecd-backend-va.onrender.com'));
 
 /**
  * Vuelve al Hub sin volver a iniciar sesión: pide un ticket SSO de un solo uso

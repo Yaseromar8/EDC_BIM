@@ -156,7 +156,7 @@ export default function NativeARView({ onExit }) {
         || (window.__mainViewer || window.NOP_VIEWER)?.model?.getData()?.urn
         || null;
       if (!proy?.id || !urn) { openNativeAr(base); return; }
-      const BACKEND = 'https://visor-ecd-backend.onrender.com'; // camino solo-APK
+      const BACKEND = 'https://visor-ecd-backend-va.onrender.com'; // camino solo-APK
       const [rp, rg] = await Promise.all([
         apiFetch(`${BACKEND}/api/geo/control-points?project=${encodeURIComponent(proy.id)}`),
         apiFetch(`${BACKEND}/api/geo/georef?project=${encodeURIComponent(proy.id)}&urn=${encodeURIComponent(urn)}`),

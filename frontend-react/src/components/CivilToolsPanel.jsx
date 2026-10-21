@@ -7,7 +7,7 @@ const { VITE_API_URL } = import.meta.env;
 const BACKEND_URL = VITE_API_URL || (
     typeof window !== 'undefined' && window.location.hostname === 'localhost'
         ? 'http://localhost:3000'
-        : 'https://visor-ecd-backend.onrender.com'
+        : 'https://visor-ecd-backend-va.onrender.com'
 );
 
 // ── Zonas del frente (varios DWG sobre el MISMO eje) ────────────────────────

@@ -20,7 +20,7 @@ COMO SE USA (las credenciales van por ENTORNO, no por argumento)
 Un argumento en la linea de ordenes queda en el historial del terminal y en la
 lista de procesos. Por eso van por entorno:
 
-    set ECD_URL=https://visor-ecd-backend.onrender.com
+    set ECD_URL=https://visor-ecd-backend-va.onrender.com
     set ECD_CORREO_A=...      &  set ECD_CLAVE_A=...
     set ECD_CORREO_B=...      &  set ECD_CLAVE_B=...
     set ECD_OBRA_A=...        &  set ECD_OBRA_B=...
@@ -48,7 +48,7 @@ except ImportError:
     print('Falta el paquete `requests`. Instalalo o ejecuta desde el venv.')
     sys.exit(2)
 
-URL = (os.getenv('ECD_URL') or 'https://visor-ecd-backend.onrender.com').rstrip('/')
+URL = (os.getenv('ECD_URL') or 'https://visor-ecd-backend-va.onrender.com').rstrip('/')
 TIEMPO = 30
 
 

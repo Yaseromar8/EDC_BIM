@@ -37,7 +37,14 @@
 services:
 
   # ---------------------------------------------------------------------------
-  # 1 · EL BACKEND  ·  https://visor-ecd-backend.onrender.com
+  # 1 · EL BACKEND DE OREGON  ·  https://visor-ecd-backend.onrender.com  ·  EN RETIRADA
+  #     21-oct-2026: el backend vivo es visor-ecd-backend-va (Virginia, en
+  #     "Ungrouped Services"; /api/health = commit desplegado). Este de Oregon
+  #     seguia encendido con codigo viejo (cdf78375) contra la MISMA base; las
+  #     dos reglas /api/* de los sitios estaticos y todo el codigo apuntan ya a
+  #     Virginia (docs/rendimiento/01). Se suspende en el panel cuando nada lo
+  #     llame; este bloque queda como registro hasta borrarlo. Lo de abajo
+  #     describe Oregon tal como se observo el 4-sep-2026.
   #     serviceId observado: srv-d4cn0124d50c73d9ns70
   #     Vive dentro del proyecto "My project" / entorno "Production", no en
   #     "Ungrouped Services" como los dos frontends. Buscarlo ahi.
@@ -109,7 +116,7 @@ services:
       # alephia.com.pe/api/... que en visor-ecd-portal.onrender.com/api/...
       - type: rewrite
         source: /api/*
-        destination: https://visor-ecd-backend.onrender.com/api/*
+        destination: https://visor-ecd-backend-va.onrender.com/api/*   # observado en el panel el 21-oct-2026
       - type: rewrite
         source: /*
         destination: /index.html
@@ -147,7 +154,7 @@ services:
     routes:
       - type: rewrite
         source: /api/*
-        destination: https://visor-ecd-backend.onrender.com/api/*
+        destination: https://visor-ecd-backend-va.onrender.com/api/*   # observado en el panel el 21-oct-2026
       - type: rewrite
         source: /*
         destination: /index.html

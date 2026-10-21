@@ -3,7 +3,7 @@ import { Capacitor } from '@capacitor/core';
 import DocumentViewer from './DocumentViewer';
 
 const API = Capacitor.isNativePlatform()
-  ? 'https://visor-ecd-backend.onrender.com'
+  ? 'https://visor-ecd-backend-va.onrender.com'
   : (import.meta.env.VITE_BACKEND_URL || '');
 
 export default function SharedViewer({ shareId }) {

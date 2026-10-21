@@ -35,7 +35,7 @@ except ImportError:
     print('Falta el paquete `requests`. Ejecuta desde el venv del backend.')
     sys.exit(2)
 
-URL = (os.getenv('ECD_URL') or 'https://visor-ecd-backend.onrender.com').rstrip('/')
+URL = (os.getenv('ECD_URL') or 'https://visor-ecd-backend-va.onrender.com').rstrip('/')
 TIEMPO = 45
 
 # La obra de prueba, con sus DOS identificadores: el canonico (rutas de

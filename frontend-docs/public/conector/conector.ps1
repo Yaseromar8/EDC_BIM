@@ -48,7 +48,7 @@ try {
   if (-not $url -or -not $nombre) { exit }
 
   $anfitrion = ([uri]$url).Host
-  $permitidos = @('storage.googleapis.com', 'visor-ecd-backend.onrender.com', 'api.alephia.com.pe')
+  $permitidos = @('storage.googleapis.com', 'visor-ecd-backend-va.onrender.com', 'api.alephia.com.pe')
   if ($permitidos -notcontains $anfitrion) { exit }
 
   $nombre  = ($nombre -replace '[\\/:*?"<>|]', '_')

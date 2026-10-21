@@ -6,7 +6,7 @@
 import { Capacitor } from '@capacitor/core';
 
 export const API = Capacitor.isNativePlatform()
-  ? 'https://visor-ecd-backend.onrender.com'
+  ? 'https://visor-ecd-backend-va.onrender.com'
   : (import.meta.env.VITE_BACKEND_URL || '');
 
 // URL del Visor. VACÍA si nadie la configura, y eso APAGA la ficha "Visor 3D"

@@ -41,7 +41,7 @@ function Thumb({ pdf, pageNum, active, onClick }) {
     );
 }
 
-const BACKEND_URL = (typeof window !== 'undefined' && window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()) ? 'https://visor-ecd-backend.onrender.com' : (import.meta.env.VITE_BACKEND_URL || (typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3000' : 'https://visor-ecd-backend.onrender.com'));
+const BACKEND_URL = (typeof window !== 'undefined' && window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()) ? 'https://visor-ecd-backend-va.onrender.com' : (import.meta.env.VITE_BACKEND_URL || (typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3000' : 'https://visor-ecd-backend-va.onrender.com'));
 
 export default function PdfReader({ url: urlPedida, fileName = 'documento.pdf' }) {
     // pdf.js descarga el documento por su cuenta y NO manda cabecera de

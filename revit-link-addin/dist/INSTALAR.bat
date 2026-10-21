@@ -30,7 +30,7 @@ set "CFGDIR=%AppData%\ECDLink"
 if not exist "%CFGDIR%\config.json" (
     mkdir "%CFGDIR%" 2>nul
     (
-        echo backendUrl=https://visor-ecd-backend.onrender.com
+        echo backendUrl=https://visor-ecd-backend-va.onrender.com
         echo project=
         echo token=
     ) > "%CFGDIR%\config.json"
