@@ -153,6 +153,64 @@ el navegador los revalida en cada apertura (responde 304, ~200 ms por fichero) y
 
 ---
 
+## 4 bis · Hecho (20-oct-2026)
+
+### Fase 1 (commits `a637068f` backend y `e276112e` visor)
+
+- **P1 · Inventario por revisión.**
+  - Banco con la función real, 20 usuarios y 8 hilos: antes 246 s, p95 113 s, 20 consultas pesadas y pico de 1.454 MB.
+  - Después: 12,8 s, 1 consulta y 259 MB.
+- **P2 · CORS:** permiso previo recordado 2 h.
+- **P3 · Presencia:** cada 30 s (60 s con la pestaña oculta), una fila por usuario y ventana de 150 s.
+- **P5 · Carga:** Excel y jsPDF solo al usarse.
+- **P6 · Reinicio de gunicorn:** cada 2000 peticiones, con dispersión 300.
+
+### Fase 2
+
+**Medición (H7).** `backend/medicion.py`:
+- `Server-Timing: app;dur=…` en cada respuesta;
+- `Timing-Allow-Origin` solo para los orígenes de CORS_ORIGINS;
+- una línea `LENTO <método> <regla> -> <estado> en <ms>` en el registro para cada petición de más de 1500 ms (`MEDICION_LENTO_MS`), con la regla de la ruta, nunca identificadores.
+
+**`check-updates` (H4).** Antes preguntaba a Autodesk modelo a modelo, en serie, y lo repetía cada usuario cada 5 min. Ahora:
+- las preguntas van en paralelo, hasta 6 a la vez;
+- la respuesta se comparte 2 min por obra;
+- la clave incluye la versión registrada de cada modelo;
+- una respuesta con errores de Autodesk no se comparte.
+
+Medido en producción: abriendo el frente coincidía con `earthworks-mesh` en el único proceso (2,9 s y 2,85 s). `earthworks-mesh` sola tarda 0,6–0,7 s y ya tenía caché propia.
+
+**Tailwind congelado (P7), en View y en Docs.** El CDN de pruebas (146 KB, compilador en el navegador) se cambia por el CSS exacto que generaba, en `src/tailwind-congelado.css`:
+- Mismos parámetros: Tailwind 3.4.17, los mismos plugins y la misma configuración.
+- Mismas clases: las del código y las de los scripts del visor de Autodesk.
+- Comprobado en producción cambiando el CDN por el fichero en caliente y comparando el estilo calculado de cada elemento.
+
+| App | Pantalla | Elementos | Diferencias |
+|---|---|---|---|
+| View | Visor | 979 | 0 |
+| View | Filtros + Inventario | 13.334 | 0 |
+| View | Configurar filtros | 13.503 | 0 |
+| View | Tras pulsar Medir | 13.334 | 0 |
+| Docs | Proyectos | 417 | 0 |
+| Docs | Carpeta con planos | 718 | 0 |
+| Docs | Lector de un plano | 915 | 0 (*) |
+
+(*) La única diferencia es la escala de la marca animada `pdf-marca-respira`, que cambia en cada medición.
+
+Además, el polyfill de AR queda fijado en la versión 2.0.3, en lugar de `@latest`.
+
+**No hecho, a propósito:**
+- **Inventario como fichero en GCS.** Con P1 y P6 el inventario se arma una vez por versión y solo se pierde al desplegar. Moverlo a GCS obliga a cambiar también el flujo del navegador (lectura de Inventory) para ganar poco. Se reconsidera si el registro `LENTO` muestra `/api/inventory` con frecuencia.
+- **Prueba de carga real.** No hay una copia de pruebas del backend. El banco en proceso (§P1) mide la misma función; la prueba con 20 usuarios simulados queda para cuando exista esa copia. Nunca contra producción.
+
+### Fase 3 · Infraestructura: decisión
+
+No se toca hasta tener una semana de datos con la Fase 1 y la Fase 2 desplegadas: `Server-Timing` desde el navegador y las líneas `LENTO` en el registro de Render. Solo si las rutas siguen lentas con 10–20 usuarios, por orden de coste:
+
+1. **Dos procesos de gunicorn en el mismo plan.** Ahora es posible porque P1 bajó el pico de memoria del inventario. Uno atascado no bloquea al otro. Duplica las cachés en memoria.
+2. **Llevar la preparación pesada a trabajos aparte en Cloud Run** (inventario, láminas).
+3. **Subir de plan o acercar la región.** Render no tiene Sudamérica. Hoy el nodo de Cloudflare en Lima ya termina la conexión segura cerca del usuario (`CF-RAY …-LIM`).
+
 ## 5 · Lo que NO se hizo, a propósito
 
 - Ninguna prueba de carga contra producción.

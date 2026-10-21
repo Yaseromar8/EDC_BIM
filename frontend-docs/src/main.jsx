@@ -6,6 +6,8 @@ import { ConfirmHost } from './utils/confirm.jsx'
 import { IdoneidadHost } from './utils/idoneidad.jsx'
 import { instalarTooltips } from '../../design/ui/tooltips.js'
 import { AvisosHost } from './utils/avisos.jsx'
+// El último: ocupa el lugar del <style> que insertaba el CDN de Tailwind, tras el CSS de la app.
+import './tailwind-congelado.css'
 
 // Tooltips propios para todo `title` del portal (UI polish F5): mismo
 // retardo, mismo estilo y también con el teclado. Ver design/ui/tooltips.js.

@@ -24,32 +24,11 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet" />
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap"
     rel="stylesheet" />
-  <script src="https://cdn.tailwindcss.com?plugins=forms,typography,container-queries"></script>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
-  <script>
-    tailwind.config = {
-      darkMode: "class",
-      theme: {
-        extend: {
-          colors: {
-            primary: "#1473e6",
-            "background-light": "#ffffff",
-            "background-dark": "#1e1e1e",
-          },
-          fontFamily: {
-            display: ["IBM Plex Sans", "sans-serif"],
-          },
-          borderRadius: {
-            DEFAULT: "4px",
-            'full': '9999px',
-          },
-        },
-      },
-    };
-  </script>
+  <!-- Tailwind ya no se carga del CDN de pruebas: su CSS vive congelado en src/tailwind-congelado.css. -->
   <title>ALEPHIA View</title>
   <!-- WebXR Polyfill -->
-  <script src="https://cdn.jsdelivr.net/npm/webxr-polyfill@latest/build/webxr-polyfill.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/webxr-polyfill@2.0.3/build/webxr-polyfill.min.js"></script>
   <script>
     window.polyfill = new WebXRPolyfill();
   </script>

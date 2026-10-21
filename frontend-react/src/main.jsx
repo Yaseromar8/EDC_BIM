@@ -3,6 +3,8 @@ import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.jsx'
 import ErrorBoundary from './components/ErrorBoundary.jsx'
+// El último: ocupa el lugar del <style> que insertaba el CDN de Tailwind, tras el CSS de la app.
+import './tailwind-congelado.css'
 
 // Sello de LIVE-RELOAD: solo en modo desarrollo (dev server). En el APK de
 // obra vite compila con DEV=false y el sello desaparece — antes era un texto
