@@ -2877,7 +2877,18 @@ def preparar_miniaturas():
     # «sin vista previa» sin que nadie supiera por que.
     from file_system_db import gcs_executor
     import gcs_manager as _gcs
-    prueba = _gcs.get_or_create_thumbnail(urns[0], 420)[0]
+    # Con la obra entera se prueba con varios planos: uno solo puede estar roto
+    # (fichero que ya no esta en el almacen, o de mas de 120 MB) y no debe frenar
+    # a los demas. Solo si fallan TODOS es el servidor el que no sabe dibujar.
+    # Medido el 21-oct-2026: PQT8_TALARA, 2.061 PDF, el primero fallo y freno 1.588.
+    candidatos = urns[:_PRUEBAS_ANTES_DE_RENDIRSE] if data.get('completa') else urns[:1]
+    prueba = None
+    for candidato in candidatos:
+        prueba = _gcs.get_or_create_thumbnail(candidato, 420)[0]
+        if prueba:
+            break
+        logger.warning('[preparar] la miniatura de prueba de %s fallo: %s',
+                       candidato, _gcs.ULTIMO_ERROR_RASTER or 'sin motivo')
     if not prueba:
         return jsonify({
             'success': False,
@@ -2898,6 +2909,9 @@ def preparar_miniaturas():
 
     _encolar_miniaturas(urns[1:])
     return jsonify({'success': True, 'encolados': len(urns)})
+
+
+_PRUEBAS_ANTES_DE_RENDIRSE = 10
 
 
 def _contar_pendientes(urns):

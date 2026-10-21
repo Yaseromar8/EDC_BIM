@@ -152,3 +152,57 @@ def test_contar_dice_cuantos_faltan_sin_preparar_nada(entorno, monkeypatch):
     assert doc._contar_pendientes([a, b, c]) == {
         'total': 3, 'sin_vista_previa': 1, 'sin_mosaico': 2, 'pendientes': 2, 'interrumpidos': 1}
     assert hechas == [], 'contar no prepara nada'
+
+
+@pytest.fixture
+def ruta(monkeypatch):
+    """La ruta real con la obra de 2.061 PDF reducida a cuatro y el almacen simulado."""
+    import contextlib
+    from flask import Flask
+    import db
+
+    urns = [URN.replace('A-101', n) for n in ('ROTO', 'A-2', 'A-3', 'A-4')]
+
+    class _Cursor:
+        def execute(self, *a):
+            pass
+
+        def fetchall(self):
+            return [(u,) for u in urns]
+
+    class _Conn:
+        def cursor(self):
+            return _Cursor()
+
+    rotos, encolados = set(), []
+    monkeypatch.setattr(db, 'get_db_connection', lambda: contextlib.nullcontext(_Conn()))
+    monkeypatch.setattr(doc, 'verify_project_access', lambda user, urn: True)
+    monkeypatch.setattr(gcs_manager, 'get_or_create_thumbnail',
+                        lambda u, px=420, *a, **k: (None, None) if u in rotos else (b'x', 'image/jpeg'))
+    monkeypatch.setattr(doc, '_encolar_preparacion_completa', lambda us: encolados.extend(us) or len(us))
+    app = Flask(__name__)
+
+    def pedir():
+        with app.test_request_context('/api/docs/miniaturas/preparar', method='POST',
+                                      json={'model_urn': 'proyectos/OBRA', 'completa': True}):
+            r = doc.preparar_miniaturas()
+            cuerpo, codigo = (r[0], r[1]) if isinstance(r, tuple) else (r, r.status_code)
+            return codigo, cuerpo.get_json()
+
+    return urns, rotos, encolados, pedir
+
+
+def test_un_plano_roto_no_frena_la_obra(ruta):
+    urns, rotos, encolados, pedir = ruta
+    rotos.add(urns[0])          # 21-oct-2026: el primero de PQT8 fallo y freno 1.588
+    codigo, cuerpo = pedir()
+    assert codigo == 200 and cuerpo['success'] is True
+    assert encolados == urns
+
+
+def test_si_fallan_todos_es_el_servidor_y_no_arranca(ruta):
+    urns, rotos, encolados, pedir = ruta
+    rotos.update(urns)
+    codigo, cuerpo = pedir()
+    assert codigo == 500 and cuerpo['code'] == 'RASTER_FALLA'
+    assert encolados == []
