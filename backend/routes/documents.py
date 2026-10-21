@@ -2865,6 +2865,13 @@ def preparar_miniaturas():
         return jsonify({'success': True, 'encolados': 0,
                         'aviso': 'Esta obra no tiene PDF.'})
 
+    if data.get('contar'):
+        # SOLO CONTAR (21-oct-2026): cuantos PDF de la obra aun no tienen vista
+        # previa o mosaico, sin preparar nada. Para decidir antes de lanzar la
+        # preparacion completa y para ver su avance. Solo mira si existen los
+        # objetos en el almacen (sin bajarlos), varios a la vez.
+        return jsonify({'success': True, **_contar_pendientes(urns)})
+
     # LA PRIMERA SE HACE EN DIRECTO, y su resultado se cuenta. Encolar 45
     # fracasos silenciosos fue exactamente lo que dejo la cuadricula en
     # «sin vista previa» sin que nadie supiera por que.
@@ -2880,8 +2887,126 @@ def preparar_miniaturas():
                                      'desconocido (¿el PDF supera 120 MB?)'),
         }), 500
 
+    if data.get('completa'):
+        # LA PREPARACION DE LA OBRA ENTERA (14-oct-2026): miniatura, vista previa
+        # y mosaico de cada PDF que no los tenga, DE UNO EN UNO (la cola de un
+        # hilo y el turno de dibujo del proceso). Es lo que deja los planos
+        # antiguos como si se hubieran subido hoy, sin que abrirlos ponga al
+        # servidor a dibujar. La primera miniatura ya se hizo arriba.
+        nuevos = _encolar_preparacion_completa(urns)
+        return jsonify({'success': True, 'encolados': nuevos, 'total': len(urns)})
+
     _encolar_miniaturas(urns[1:])
     return jsonify({'success': True, 'encolados': len(urns)})
+
+
+def _contar_pendientes(urns):
+    """{total, sin_vista_previa, sin_mosaico, pendientes, interrumpidos} de esos PDF."""
+    from gcs_manager import get_storage_client, nombre_de_vista_previa
+    import mosaicos_almacen
+    bucket = get_storage_client().bucket(os.environ.get('GCS_BUCKET_NAME'))
+
+    def mirar(urn):
+        vista = bucket.blob(nombre_de_vista_previa(urn)).exists()
+        mosaico = bucket.blob(mosaicos_almacen.nombre_manifiesto(urn)).exists()
+        return vista, mosaico, _preparacion_interrumpida(bucket, urn)
+
+    with _ThreadPoolExecutor(max_workers=_MIRADAS_A_LA_VEZ) as pool:
+        estados = list(pool.map(mirar, urns))
+    return {
+        'total': len(urns),
+        'sin_vista_previa': sum(1 for v, _m, _i in estados if not v),
+        'sin_mosaico': sum(1 for _v, m, _i in estados if not m),
+        'pendientes': sum(1 for v, m, _i in estados if not (v and m)),
+        'interrumpidos': sum(1 for _v, _m, i in estados if i),
+    }
+
+
+# ── LA PREPARACION COMPLETA DE UNA OBRA ──────────────────────────────────────
+#
+# Cada PDF es UN trabajo de la cola de un hilo: miniatura, vista previa y
+# mosaico, en ese orden. Antes de empezar se deja una MARCA en el almacen y se
+# quita al terminar. Si el proceso muere a mitad (un plano que pasa de los 2 GB
+# de la instancia: 14-oct-2026), la marca se queda, y la siguiente preparacion
+# SALTA ese plano en vez de volver a tumbar el servidor: se anota y se cuenta.
+# Pasado `_MARCA_CADUCA_S` se vuelve a intentar.
+
+_SUFIJO_MARCA = '__preparando'
+_MARCA_CADUCA_S = 7 * 24 * 3600
+
+
+def _marca_de_preparacion(bucket, urn):
+    return bucket.blob(urn + _SUFIJO_MARCA)
+
+
+def _preparacion_interrumpida(bucket, urn, ahora=None):
+    """¿Hay una marca reciente de una preparacion que no termino?"""
+    import time as _t
+    marca = _marca_de_preparacion(bucket, urn)
+    try:
+        if not marca.exists():
+            return False
+        marca.reload()
+        creada = marca.time_created.timestamp() if marca.time_created else 0
+    except Exception:
+        return False
+    return ((ahora or _t.time()) - creada) < _MARCA_CADUCA_S
+
+
+def _preparar_un_pdf(bucket, urn):
+    """Miniatura, vista previa y mosaico de UN PDF, con su marca de seguridad."""
+    from gcs_manager import get_or_create_thumbnail, crear_vista_previa
+    import mosaicos_almacen
+    if _preparacion_interrumpida(bucket, urn):
+        logger.warning('[preparar] se salta %s: la vez anterior no termino '
+                       '(el proceso cayo con este plano)', urn)
+        return 'saltado'
+    marca = _marca_de_preparacion(bucket, urn)
+    try:
+        marca.upload_from_string(b'', content_type='text/plain')
+    except Exception as e:
+        logger.error('[preparar] sin marca para %s: %s', urn, e)
+    logger.info('[preparar] %s', urn)
+    try:
+        get_or_create_thumbnail(urn, 420)
+        crear_vista_previa(urn)
+        mosaicos_almacen.preparar(urn)
+        return 'hecho'
+    finally:
+        # Un error se COMPORTA (se registra y se sigue): solo una caida del
+        # proceso deja la marca puesta, que es justo lo que se quiere detectar.
+        try:
+            marca.delete()
+        except Exception:
+            pass
+
+
+def _encolar_preparacion_completa(urns):
+    """Encola un trabajo por PDF y devuelve cuantos entraron. Vuelve al instante:
+    la marca de cada plano la mira su trabajo cuando le toca, no la peticion
+    (con miles de PDF, mirarlas aqui pasaria del tiempo de la peticion)."""
+    from gcs_manager import get_storage_client
+    bucket = get_storage_client().bucket(os.environ.get('GCS_BUCKET_NAME'))
+    nuevos = 0
+    for urn in urns:
+        marca = 'completa:' + urn
+        with _CANDADO_MINIATURAS:
+            if marca in _MINIATURAS_ENCOLADAS:
+                continue
+            _MINIATURAS_ENCOLADAS.add(marca)
+        nuevos += 1
+
+        def trabajo(u=urn, m=marca):
+            try:
+                _preparar_un_pdf(bucket, u)
+            except Exception as e:
+                logger.error('[preparar] %s: %s', u, str(e)[:160])
+            finally:
+                with _CANDADO_MINIATURAS:
+                    _MINIATURAS_ENCOLADAS.discard(m)
+
+        _COLA_MINIATURAS.submit(trabajo)
+    return nuevos
 
 
 # ── LA VISTA PREVIA LEGIBLE DE UNA LAMINA ───────────────────────────────────
