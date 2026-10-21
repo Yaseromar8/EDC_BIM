@@ -40,6 +40,18 @@ def _check_project_access(project):
 
 _TABLES_READY = False
 
+# PRESENCIA DE LA WEB (20-oct-2026, docs/rendimiento/01 §H2). El visor latía cada 5 s, también con la pestaña
+# oculta, y todos los usuarios de una obra escribían LA MISMA fila (project, 'web'): con 20 personas, ~4
+# escrituras por segundo que se bloqueaban entre sí, y el último en latir pisaba el user_id del resto (el
+# plugin de un usuario podía no encontrar su frente). Ahora cada usuario late su propia fila, agent
+# 'web:<id>' (sin migración: la clave sigue siendo (project, agent)), cada 30 s (60 s con la pestaña oculta),
+# y el servidor da por presente a quien latió en los últimos _VENTANA_WEB_S segundos.
+_VENTANA_WEB_S = 150
+
+
+def _agente_web(uid):
+    return f"web:{uid}" if uid else "web"
+
 
 @solo_con_ddl
 def _ensure_tables():
@@ -186,10 +198,11 @@ def link_status():
         )
         rows = cur.fetchall()
     agents = {r[0]: float(r[1]) for r in rows}
+    web = min((edad for agente, edad in agents.items() if agente == 'web' or agente.startswith('web:')), default=9999)
     return jsonify({
         "success": True,
         "revit_connected": agents.get('revit', 9999) < 10,
-        "web_connected": agents.get('web', 9999) < 10,
+        "web_connected": web < _VENTANA_WEB_S,
     }), 200
 
 
@@ -218,17 +231,18 @@ def web_presence():
     from db import get_db_connection
     with get_db_connection() as conn:
         cur = conn.cursor()
+        uid = _current_user_id()
         cur.execute("""
-            INSERT INTO link_presence (project, agent, user_id, last_seen) VALUES (%s, 'web', %s, NOW())
+            INSERT INTO link_presence (project, agent, user_id, last_seen) VALUES (%s, %s, %s, NOW())
             ON CONFLICT (project, agent) DO UPDATE SET last_seen = NOW(), user_id = EXCLUDED.user_id
-        """, (project, _current_user_id()))
+        """, (project, _agente_web(uid), uid))
         conn.commit()
     return jsonify({"success": True}), 200
 
 
 @link_bp.route('/api/link/active-frentes', methods=['GET'])
 def active_frentes():
-    """Frentes donde este usuario tiene el visor abierto (heartbeat < 15 s). El
+    """Frentes donde este usuario tiene el visor abierto (latido en los últimos _VENTANA_WEB_S s). El
     plugin llama esto para engancharse solo al frente abierto, sin escribirlo."""
     _ensure_tables()
     uid = _current_user_id()
@@ -238,16 +252,17 @@ def active_frentes():
         if uid:
             cur.execute("""
                 SELECT project FROM link_presence
-                WHERE agent = 'web' AND last_seen > NOW() - INTERVAL '15 seconds'
-                  AND (user_id = %s OR user_id IS NULL)
-                ORDER BY last_seen DESC
-            """, (uid,))
+                WHERE last_seen > NOW() - make_interval(secs => %s)
+                  AND (agent = %s OR (agent = 'web' AND (user_id = %s OR user_id IS NULL)))
+                GROUP BY project ORDER BY max(last_seen) DESC
+            """, (_VENTANA_WEB_S, _agente_web(uid), uid))
         else:
             cur.execute("""
                 SELECT project FROM link_presence
-                WHERE agent = 'web' AND last_seen > NOW() - INTERVAL '15 seconds'
-                ORDER BY last_seen DESC
-            """)
+                WHERE last_seen > NOW() - make_interval(secs => %s)
+                  AND (agent = 'web' OR agent LIKE 'web:%%')
+                GROUP BY project ORDER BY max(last_seen) DESC
+            """, (_VENTANA_WEB_S,))
         rows = cur.fetchall()
     frentes = [r[0] for r in rows]
     return jsonify({"success": True, "frentes": frentes, "active": frentes[0] if frentes else None}), 200

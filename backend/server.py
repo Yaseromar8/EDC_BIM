@@ -40,12 +40,16 @@ app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024 * 1024  # 2GB (Failsafe para 
 # en produccion para restringir a tus dominios. Sin la variable, queda abierto (*)
 # para no romper en desarrollo.
 _cors_env = os.getenv('CORS_ORIGINS', '').strip()
+# El permiso previo (OPTIONS) se recuerda 2 h. Sin max_age, Chrome lo guarda 5 s: View llama al backend
+# desde otro dominio con Authorization, y casi cada llamada pagaba antes un viaje extra (~160–260 ms medidos)
+# y el servidor recibía el doble de peticiones (docs/rendimiento/01 §H3). 7200 s es el techo de Chrome.
+_CORS_MAX_AGE = 7200
 if _cors_env:
     _cors_origins = [o.strip() for o in _cors_env.split(',') if o.strip()]
-    CORS(app, resources={r"/*": {"origins": _cors_origins}})
+    CORS(app, resources={r"/*": {"origins": _cors_origins}}, max_age=_CORS_MAX_AGE)
     print(f"[security] CORS restringido a: {_cors_origins}")
 else:
-    CORS(app, resources={r"/*": {"origins": "*"}})
+    CORS(app, resources={r"/*": {"origins": "*"}}, max_age=_CORS_MAX_AGE)
     print("[security] CORS abierto (*). Define CORS_ORIGINS para restringir en produccion.")
 
 # UN SECRETO CORTO ES PEOR QUE NO PONER NINGUNO, Y HAY QUE DECIRLO FUERTE.

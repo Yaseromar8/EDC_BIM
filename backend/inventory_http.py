@@ -7,6 +7,9 @@ The share route may provide a server-resolved scope; a query parameter cannot.
 import gzip
 import hashlib
 import json
+import os
+import threading
+from collections import OrderedDict
 
 from flask import Response, current_app, g, jsonify, request
 
@@ -192,23 +195,116 @@ def _ensure_no_hidden_legacy_user_data(conn, scopes):
                 raise IdentityError("LEGACY_USER_DATA_PENDING")
 
 
+# ── Inventario «una vez por revisión» (20-oct-2026, docs/rendimiento/01 §P1) ──
+# Medido en producción: el inventario del Canal (19.889 filas, 66,5 MB) tardaba 8,4 s hasta el primer
+# byte, casi todo gzip nivel 9 sobre el cuerpo entero, y cada petición pedía ~340 MB. Se repetía para
+# cada usuario aunque nada hubiera cambiado: 3–4 a la vez tras «Actualizar modelos» bastaban para un
+# OOM en 2 GB. Ahora el cuerpo comprimido se guarda por (scopes, include_props) junto con la clave de
+# su estado; mientras la clave no cambie, todos reciben esos mismos bytes. La autorización y la
+# comprobación de lectura (_read_scopes, _ensure_readable) siguen corriendo en CADA petición.
+# Si llegan varias a la vez sin caché, solo una construye; las demás esperan y reutilizan.
+_GZIP_NIVEL = 6  # nivel 9 costaba ~4× más CPU por un 7 % menos de bytes
+_CACHE_MAX_BYTES = int(os.getenv("INVENTORY_CACHE_MB", "128")) * 1024 * 1024
+_cache = OrderedDict()  # (scopes, include_props) -> (clave_de_estado, cuerpo_gzip)
+_cache_bytes = 0
+_cache_lock = threading.Lock()
+_construcciones = {}  # (scopes, include_props) -> threading.Lock: una sola construcción a la vez
+
+
+def _revision_state(conn, scopes):
+    """Lo que ya publica /api/inventory/version: el navegador decide su caché con esto."""
+    with conn.cursor() as cursor:
+        cursor.execute("""SELECT scope_id,source_lineage,active_urn,generation
+            FROM inventory_identity_b1.sources WHERE scope_id=ANY(%s)
+            ORDER BY scope_id,source_lineage""", (scopes,))
+        states = cursor.fetchall()
+        cursor.execute("""SELECT count(*),max(o.updated_at) FROM inventory_identity_b1.occurrences o
+            JOIN inventory_identity_b1.sources s USING(scope_id,source_lineage)
+            WHERE o.scope_id=ANY(%s) AND o.source_urn=s.active_urn""", (scopes,))
+        count, last_updated = cursor.fetchone()
+        cursor.execute("SELECT max(updated_at) FROM inventory_identity_b1.user_data WHERE scope_id=ANY(%s)", (scopes,))
+        user_updated = cursor.fetchone()[0]
+    revision = hashlib.sha256(json.dumps([IDENTITY_FORMAT, states, str(last_updated), str(user_updated)],
+                                         sort_keys=True, default=str).encode()).hexdigest()
+    return count, user_updated, revision
+
+
+def _clave_de_cache(conn, scopes, include_props):
+    """Más estricta que la revisión del navegador: añade cuántas filas de usuario hay (un borrado no
+    mueve max(updated_at)) y qué instantáneas son visibles (las lee get_inventory)."""
+    _count, _user_updated, revision = _revision_state(conn, scopes)
+    with conn.cursor() as cursor:
+        cursor.execute("SELECT count(*) FROM inventory_identity_b1.user_data WHERE scope_id=ANY(%s)", (scopes,))
+        user_rows = cursor.fetchone()[0]
+        cursor.execute("""SELECT count(*), count(*) FILTER (WHERE read_visible)
+            FROM inventory_identity_b1.snapshots WHERE scope_id=ANY(%s)""", (scopes,))
+        snapshots = cursor.fetchone()
+    return (revision, user_rows, tuple(snapshots), tuple(scopes), include_props)
+
+
+def _cache_get(ranura, clave):
+    with _cache_lock:
+        guardado = _cache.get(ranura)
+        if guardado and guardado[0] == clave:
+            _cache.move_to_end(ranura)
+            return guardado[1]
+    return None
+
+
+def _cache_put(ranura, clave, cuerpo):
+    global _cache_bytes
+    with _cache_lock:
+        anterior = _cache.pop(ranura, None)
+        if anterior:
+            _cache_bytes -= len(anterior[1])
+        if len(cuerpo) > _CACHE_MAX_BYTES:
+            return
+        _cache[ranura] = (clave, cuerpo)
+        _cache_bytes += len(cuerpo)
+        while _cache_bytes > _CACHE_MAX_BYTES and _cache:
+            _, (_, viejo) = _cache.popitem(last=False)
+            _cache_bytes -= len(viejo)
+
+
+def _construir_cuerpo(scopes, include_props):
+    with get_db_connection() as conn:
+        repo = InventoryIdentityRepository(conn)
+        rows = [row for scope in scopes for row in repo.get_inventory(
+            scope, allowed_scopes=scopes, include_props=include_props)]
+    cuerpo = json.dumps(rows, ensure_ascii=False, separators=(",", ":"), default=str).encode("utf-8")
+    del rows  # el pico era tener filas, JSON y gzip vivos a la vez
+    return gzip.compress(cuerpo, compresslevel=_GZIP_NIVEL)
+
+
 def read_inventory_request(*, forced_scope=None):
     try:
         include_props = request.args.get("include_props", "true").lower() == "true"
         with get_db_connection() as conn:
             scopes = _read_scopes(conn, forced_scope)
             _ensure_readable(conn, scopes)
-            repo = InventoryIdentityRepository(conn)
-            rows = [row for scope in scopes for row in repo.get_inventory(
-                scope, allowed_scopes=scopes, include_props=include_props)]
-        body = json.dumps(rows, ensure_ascii=False, separators=(",", ":"), default=str).encode("utf-8")
-        response = Response(gzip.compress(body) if "gzip" in request.accept_encodings else body,
+            clave = _clave_de_cache(conn, scopes, include_props)
+        # La conexión vuelve al pool antes de esperar a otra construcción.
+        ranura = (tuple(scopes), include_props)
+        cuerpo = _cache_get(ranura, clave)
+        origen = "hit"
+        if cuerpo is None:
+            with _cache_lock:
+                cerrojo = _construcciones.setdefault(ranura, threading.Lock())
+            with cerrojo:
+                cuerpo = _cache_get(ranura, clave)  # otra petición pudo construirlo mientras esperábamos
+                if cuerpo is None:
+                    cuerpo = _construir_cuerpo(scopes, include_props)
+                    _cache_put(ranura, clave, cuerpo)
+                    origen = "miss"
+        acepta_gzip = "gzip" in request.accept_encodings
+        response = Response(cuerpo if acepta_gzip else gzip.decompress(cuerpo),
                             content_type="application/json; charset=utf-8")
-        if "gzip" in request.accept_encodings:
+        if acepta_gzip:
             response.headers["Content-Encoding"] = "gzip"
         response.headers["Vary"] = "Accept-Encoding"
         response.headers["Cache-Control"] = "private, no-store"
         response.headers["X-Inventory-Identity"] = IDENTITY_FORMAT
+        response.headers["X-Inventory-Cache"] = origen
         return response
     except IdentityError as exc:
         return identity_error_response(exc)
@@ -221,19 +317,7 @@ def inventory_version_request(*, forced_scope=None):
         with get_db_connection() as conn:
             scopes = _read_scopes(conn, forced_scope)
             _ensure_readable(conn, scopes)
-            with conn.cursor() as cursor:
-                cursor.execute("""SELECT scope_id,source_lineage,active_urn,generation
-                    FROM inventory_identity_b1.sources WHERE scope_id=ANY(%s)
-                    ORDER BY scope_id,source_lineage""", (scopes,))
-                states = cursor.fetchall()
-                cursor.execute("""SELECT count(*),max(o.updated_at) FROM inventory_identity_b1.occurrences o
-                    JOIN inventory_identity_b1.sources s USING(scope_id,source_lineage)
-                    WHERE o.scope_id=ANY(%s) AND o.source_urn=s.active_urn""", (scopes,))
-                count, last_updated = cursor.fetchone()
-                cursor.execute("SELECT max(updated_at) FROM inventory_identity_b1.user_data WHERE scope_id=ANY(%s)", (scopes,))
-                user_updated = cursor.fetchone()[0]
-        revision = hashlib.sha256(json.dumps([IDENTITY_FORMAT, states, str(last_updated), str(user_updated)],
-                                             sort_keys=True, default=str).encode()).hexdigest()
+            count, user_updated, revision = _revision_state(conn, scopes)
         # Existing clients compare these three keys; include pointer/generation in
         # last_updated so same-count version switches cannot keep a stale cache.
         return jsonify({"count": count, "last_updated": revision,
