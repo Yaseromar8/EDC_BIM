@@ -203,6 +203,30 @@ Además, el polyfill de AR queda fijado en la versión 2.0.3, en lugar de `@late
 - **Inventario como fichero en GCS.** Con P1 y P6 el inventario se arma una vez por versión y solo se pierde al desplegar. Moverlo a GCS obliga a cambiar también el flujo del navegador (lectura de Inventory) para ganar poco. Se reconsidera si el registro `LENTO` muestra `/api/inventory` con frecuencia.
 - **Prueba de carga real.** No hay una copia de pruebas del backend. El banco en proceso (§P1) mide la misma función; la prueba con 20 usuarios simulados queda para cuando exista esa copia. Nunca contra producción.
 
+### Fase 3 · Preparar dos procesos sin coste (hecho, sin encender)
+
+Auditoría del estado que el backend guarda en la memoria del proceso. Con dos procesos de gunicorn la memoria no se comparte: lo que un proceso guarda, el otro no lo ve.
+
+| Estado | Con dos procesos | Qué se hizo |
+|---|---|---|
+| Extracción del inventario (`EXTRACTION_JOBS`) | ya se guardaba también en Postgres | nada |
+| **Design Automation de Civil** (`UPLOAD_KEYS`, `RESULT_OBJECTS`) | **fallaba**: la clave para cerrar la subida del resultado vivía solo en memoria. Ya fallaba **hoy** si el proceso se reiniciaba a mitad del trabajo, y con `--max-requests 300` pasaba a menudo | migración **39** `da_trabajos`; el cierre se reclama de forma atómica (`UPDATE … RETURNING`) para que dos procesos no cierren dos veces; sin la tabla funciona como antes |
+| Importación de WhatsApp | trabajo solo en memoria | no se toca: lee de una carpeta del propio servidor, es una herramienta local |
+| `MAP_JOBS` | no se usa | nada |
+| Cachés (sesión, permisos, inventario, malla, actualizaciones) | cada proceso tiene la suya; más memoria, mismo resultado | nada |
+| Evitar extracciones duplicadas (`_EXTRACTING_KEYS`) | dos procesos podrían extraer a la vez el mismo modelo | nada: las escrituras ya se serializan en Postgres por obra (`pg_advisory_xact_lock`); sería trabajo perdido, no datos dañados |
+| Limitador de peticiones | sin Redis, cada proceso cuenta aparte | ya documentado en `server.py`: sigue frenando la fuerza bruta |
+
+**Memoria.** Un proceso recién arrancado ocupa unos 248 MB (medido en local). Dos serían unos 500 MB en reposo, más los picos: cada proceso construye su inventario una sola vez, unos 260 MB. Cabe en 2 GB, pero sin mucho margen.
+
+**Sin interruptor, a propósito.** Se probó `--workers ${GUNICORN_PROCESOS:-1}`, pero la prueba `test_un_solo_worker_y_varios_hilos` protege la decisión de un solo proceso (las caídas de memoria de agosto). No se adapta la prueba: pasar a dos procesos será un cambio explícito, con su propio commit y con datos. Un interruptor en el panel apenas ahorraba nada, porque cambiar una variable en Render también reinicia el servicio.
+
+**Antes de proponer dos procesos:**
+1. migración 39 aplicada;
+2. Fases 1 y 2 desplegadas;
+3. una semana de registros `LENTO`;
+4. mirar la memoria en el panel de Render.
+
 ### Fase 3 · Infraestructura: decisión
 
 No se toca hasta tener una semana de datos con la Fase 1 y la Fase 2 desplegadas: `Server-Timing` desde el navegador y las líneas `LENTO` en el registro de Render. Solo si las rutas siguen lentas con 10–20 usuarios, por orden de coste:

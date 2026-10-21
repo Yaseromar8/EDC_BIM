@@ -656,6 +656,17 @@ TABLAS = [
         "extraido_en" timestamp with time zone DEFAULT now(),
         PRIMARY KEY (scope_id, source_urn)
         )
+    """),
+    # Trabajos de Design Automation (Civil 3D) en curso: la clave para cerrar la subida del resultado
+    # sobrevive a un reinicio y la ve cualquier proceso (sql/39, docs/rendimiento/01 Fase 3).
+    ("da_trabajos", """
+        CREATE TABLE IF NOT EXISTS "da_trabajos" (
+        "workitem_id" text NOT NULL,
+        "upload_key" text,
+        "object_name" text NOT NULL,
+        "creado" timestamp with time zone DEFAULT now(),
+        PRIMARY KEY (workitem_id)
+        )
     """),]
 
 

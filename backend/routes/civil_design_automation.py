@@ -9,10 +9,65 @@ from perimetro_de_obra import guardia_de_obra
 
 civil_da_bp = Blueprint('civil_da_bp', __name__)
 
-# Global dictionary to store uploadKeys for OSS v2 signeds3upload completion
-# Key: workitem_id, Value: uploadKey
+# Trabajos lanzados: workitem_id -> uploadKey (para cerrar la subida firmada del resultado) y -> nombre del
+# objeto resultado. Vivían SOLO aquí: un reinicio del proceso entre el lanzamiento y el final perdía la clave
+# y la extracción no terminaba nunca; con dos procesos fallaría la mitad de las veces. Ahora se guardan
+# también en Postgres (da_trabajos, sql/39) y la memoria queda como atajo del mismo proceso.
+# docs/rendimiento/01 Fase 3.
 UPLOAD_KEYS = {}
 RESULT_OBJECTS = {}
+
+
+def _recordar_trabajo(workitem_id, upload_key, object_name):
+    if upload_key:
+        UPLOAD_KEYS[workitem_id] = upload_key
+    RESULT_OBJECTS[workitem_id] = object_name
+    try:
+        from db import get_db_connection
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            cur.execute("""INSERT INTO da_trabajos (workitem_id, upload_key, object_name) VALUES (%s, %s, %s)
+                           ON CONFLICT (workitem_id) DO UPDATE
+                           SET upload_key = EXCLUDED.upload_key, object_name = EXCLUDED.object_name""",
+                        (workitem_id, upload_key, object_name))
+            cur.execute("DELETE FROM da_trabajos WHERE creado < NOW() - INTERVAL '1 day'")
+            conn.commit()
+    except Exception as e:  # sin la tabla (migración 39 sin aplicar) sigue como antes, solo en memoria
+        print(f"[Design Automation] No se guardó el trabajo en la base: {e}")
+
+
+def _nombre_del_resultado(workitem_id):
+    nombre = RESULT_OBJECTS.get(workitem_id)
+    if nombre or not workitem_id:
+        return nombre
+    try:
+        from db import get_db_connection
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            cur.execute("SELECT object_name FROM da_trabajos WHERE workitem_id = %s", (workitem_id,))
+            fila = cur.fetchone()
+            return fila[0] if fila else None
+    except Exception:
+        return None
+
+
+def _reclamar_clave_de_subida(workitem_id):
+    """Devuelve la clave para cerrar la subida UNA sola vez, aunque dos procesos lo pidan a la vez: en la
+    base, el UPDATE ... RETURNING solo entrega la clave al primero."""
+    en_memoria = UPLOAD_KEYS.pop(workitem_id, None)
+    try:
+        from db import get_db_connection
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            cur.execute("""UPDATE da_trabajos SET upload_key = NULL
+                           WHERE workitem_id = %s AND upload_key IS NOT NULL
+                           RETURNING upload_key""", (workitem_id,))
+            fila = cur.fetchone()
+            conn.commit()
+            # Sin fila: un trabajo lanzado antes de existir la tabla, que solo conoce este proceso.
+            return fila[0] if fila else en_memoria
+    except Exception:
+        return en_memoria  # sin la tabla: el comportamiento de siempre
 
 # Configuración básica de APS (Deben estar en variables de entorno)
 APS_CLIENT_ID = os.environ.get('APS_CLIENT_ID', 'TU_CLIENT_ID')
@@ -261,10 +316,8 @@ def extract_alignment():
         wi_data = resp.json()
         workitem_id = wi_data.get('id')
         
-        # Save upload_key if we have one, so we can complete it later
-        if upload_key:
-            UPLOAD_KEYS[workitem_id] = upload_key
-        RESULT_OBJECTS[workitem_id] = result_object_name
+        # Guardar la clave de subida y el resultado para cerrarla al terminar (memoria + base)
+        _recordar_trabajo(workitem_id, upload_key, result_object_name)
 
         return jsonify({
             "status": "In Progress",
@@ -453,9 +506,7 @@ def extract_sections_test():
         wi_data = resp.json()
         workitem_id = wi_data.get('id')
         
-        if upload_key:
-            UPLOAD_KEYS[workitem_id] = upload_key
-        RESULT_OBJECTS[workitem_id] = result_object_name
+        _recordar_trabajo(workitem_id, upload_key, result_object_name)
         
         with open('da_debug_sections.txt', 'a') as f:
             f.write(f"WORKITEM_ID {workitem_id}\n")
@@ -875,14 +926,14 @@ def get_alignment_result():
         # sirve, asi que el nombre era la unica puerta, y estaba abierta.
         #
         # Ahora el nombre sale SOLO del registro que lleva el propio servidor al
-        # lanzar el trabajo (RESULT_OBJECTS). Quien no tenga un identificador de
-        # trabajo valido no descarga nada.
-        object_name = RESULT_OBJECTS.get(workitem_id) if workitem_id else None
+        # lanzar el trabajo (memoria y tabla da_trabajos). Quien no tenga un
+        # identificador de trabajo valido no descarga nada.
+        object_name = _nombre_del_resultado(workitem_id) if workitem_id else None
         if not object_name:
-            # El registro vive en memoria del proceso (RESULT_OBJECTS), asi que
-            # un reinicio -- y este servicio se duerme por inactividad -- lo
-            # vacia y dejaria sin resultado a un trabajo legitimo ya lanzado.
-            # Por eso se sigue aceptando el nombre del cliente, PERO solo si
+            # Sin registro (trabajo anterior a la tabla da_trabajos, o la tabla
+            # aún sin crear) un reinicio dejaría sin resultado a un trabajo
+            # legitimo ya lanzado. Por eso se sigue aceptando el nombre del
+            # cliente, PERO solo si
             # tiene exactamente la forma que genera el servidor: el prefijo y un
             # UUID de 32 caracteres hexadecimales. Cualquier otro nombre se
             # rechaza.
@@ -951,11 +1002,11 @@ def get_workitem_status(workitem_id):
                     except Exception:
                         pass
                 
-                upload_key = UPLOAD_KEYS.pop(workitem_id, None)
+                upload_key = _reclamar_clave_de_subida(workitem_id)
                 if upload_key:
                     from routes.digital_twin import get_app_bucket_key
                     my_bucket = get_app_bucket_key()
-                    object_name = RESULT_OBJECTS.get(workitem_id, 'alignment_result.json')
+                    object_name = _nombre_del_resultado(workitem_id) or 'alignment_result.json'
                     complete_url = f"https://developer.api.autodesk.com/oss/v2/buckets/{my_bucket}/objects/{object_name}/signeds3upload"
                     comp_resp = requests.post(complete_url, headers={'Authorization': f'Bearer {token}', 'Content-Type': 'application/json'}, json={"uploadKey": upload_key})
                     print("[Design Automation] Completed S3 Upload:", comp_resp.status_code, comp_resp.text)
