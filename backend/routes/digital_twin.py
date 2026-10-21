@@ -1500,6 +1500,77 @@ def relink_model_route():
     return jsonify({"error": "Target model not found"}), 404
 
 
+# ¿Hay versiones nuevas en ACC? (20-oct-2026, docs/rendimiento/01 §H4). Medido: 2,6 s al abrir el frente,
+# porque preguntaba a Autodesk modelo a modelo, una o dos llamadas cada uno, en serie; y TODOS los usuarios
+# lo pedían al abrir y luego cada 5 min, aunque la respuesta es la misma para toda la obra. Ahora las
+# llamadas van en paralelo y el resultado se comparte 2 min por obra. La clave incluye la versión
+# registrada de cada modelo: al actualizar uno, la próxima consulta vuelve a preguntar.
+_ACTUALIZACIONES_TTL_S = 120
+_actualizaciones_cache = {}  # (proyecto, modelos) -> (instante, updates)
+_actualizaciones_lock = threading.Lock()
+_actualizaciones_en_curso = {}  # clave -> threading.Lock (una sola consulta a Autodesk a la vez)
+
+
+def _comprobar_modelo(model, headers):
+    pid = model.get('projectId')
+    iid = model.get('itemId')
+    if not pid or not iid:
+        return {
+            'model_id': model.get('id'),
+            'name': model.get('name'),
+            'has_update': False,
+            'reason': 'no_acc_metadata',
+            'current_version': model.get('versionNumber'),
+        }
+    try:
+        url = f"https://developer.api.autodesk.com/data/v1/projects/{pid}/items/{iid}"
+        resp = requests.get(url, headers=headers, timeout=10)
+        if not resp.ok:
+            return {
+                'model_id': model.get('id'),
+                'name': model.get('name'),
+                'has_update': False,
+                'reason': f'api_error_{resp.status_code}',
+                'current_version': model.get('versionNumber'),
+            }
+
+        item_data = resp.json()
+        latest_version_id = item_data['data']['relationships']['tip']['data']['id']
+        current_version_id = model.get('versionId')
+
+        has_update = latest_version_id != current_version_id
+
+        # Extract version number from latest_version_id if possible
+        latest_version_num = None
+        if has_update:
+            try:
+                v_url = f"https://developer.api.autodesk.com/data/v1/projects/{pid}/versions/{urllib.parse.quote(latest_version_id, safe='')}"
+                v_resp = requests.get(v_url, headers=headers, timeout=10)
+                if v_resp.ok:
+                    v_data = v_resp.json()
+                    latest_version_num = v_data.get('data', {}).get('attributes', {}).get('versionNumber')
+            except Exception:
+                pass
+
+        return {
+            'model_id': model.get('id'),
+            'name': model.get('name'),
+            'has_update': has_update,
+            'current_version': model.get('versionNumber'),
+            'latest_version': latest_version_num,
+            'urn': model.get('urn'),
+        }
+    except Exception as model_err:
+        print(f"[check-updates] Error checking {model.get('name')}: {model_err}")
+        return {
+            'model_id': model.get('id'),
+            'name': model.get('name'),
+            'has_update': False,
+            'reason': 'exception',
+            'current_version': model.get('versionNumber'),
+        }
+
+
 @digital_twin_bp.route('/api/config/project/check-updates', methods=['POST'])
 def check_model_updates():
     """Verifica si hay versiones nuevas disponibles en ACC para los modelos del proyecto.
@@ -1515,77 +1586,35 @@ def check_model_updates():
     if not project_models:
         return jsonify({'updates': []})
 
+    clave = (app_project_id, tuple((m.get('id'), m.get('versionId'), m.get('projectId'), m.get('itemId'))
+                                   for m in project_models))
+    ahora = time.monotonic()
+    with _actualizaciones_lock:
+        guardado = _actualizaciones_cache.get(clave)
+        if guardado and ahora - guardado[0] < _ACTUALIZACIONES_TTL_S:
+            return jsonify({'updates': guardado[1]})
+        cerrojo = _actualizaciones_en_curso.setdefault(clave, threading.Lock())
+
     try:
-        token, error = get_internal_token()
-        if error or not token:
-            return jsonify({'error': 'Auth failed'}), 500
+        with cerrojo:
+            with _actualizaciones_lock:  # otra petición pudo responder mientras esperábamos
+                guardado = _actualizaciones_cache.get(clave)
+                if guardado and time.monotonic() - guardado[0] < _ACTUALIZACIONES_TTL_S:
+                    return jsonify({'updates': guardado[1]})
+            token, error = get_internal_token()
+            if error or not token:
+                return jsonify({'error': 'Auth failed'}), 500
 
-        headers = {'Authorization': f'Bearer {token}'}
-        updates = []
+            headers = {'Authorization': f'Bearer {token}'}
+            from concurrent.futures import ThreadPoolExecutor
+            with ThreadPoolExecutor(max_workers=min(6, len(project_models))) as pool:
+                updates = list(pool.map(lambda m: _comprobar_modelo(m, headers), project_models))
 
-        for model in project_models:
-            pid = model.get('projectId')
-            iid = model.get('itemId')
-            if not pid or not iid:
-                updates.append({
-                    'model_id': model.get('id'),
-                    'name': model.get('name'),
-                    'has_update': False,
-                    'reason': 'no_acc_metadata',
-                    'current_version': model.get('versionNumber'),
-                })
-                continue
-
-            try:
-                url = f"https://developer.api.autodesk.com/data/v1/projects/{pid}/items/{iid}"
-                resp = requests.get(url, headers=headers, timeout=10)
-                if not resp.ok:
-                    updates.append({
-                        'model_id': model.get('id'),
-                        'name': model.get('name'),
-                        'has_update': False,
-                        'reason': f'api_error_{resp.status_code}',
-                        'current_version': model.get('versionNumber'),
-                    })
-                    continue
-
-                item_data = resp.json()
-                latest_version_id = item_data['data']['relationships']['tip']['data']['id']
-                current_version_id = model.get('versionId')
-
-                has_update = latest_version_id != current_version_id
-
-                # Extract version number from latest_version_id if possible
-                latest_version_num = None
-                if has_update:
-                    try:
-                        v_url = f"https://developer.api.autodesk.com/data/v1/projects/{pid}/versions/{urllib.parse.quote(latest_version_id, safe='')}"
-                        v_resp = requests.get(v_url, headers=headers, timeout=10)
-                        if v_resp.ok:
-                            v_data = v_resp.json()
-                            latest_version_num = v_data.get('data', {}).get('attributes', {}).get('versionNumber')
-                    except Exception:
-                        pass
-
-                updates.append({
-                    'model_id': model.get('id'),
-                    'name': model.get('name'),
-                    'has_update': has_update,
-                    'current_version': model.get('versionNumber'),
-                    'latest_version': latest_version_num,
-                    'urn': model.get('urn'),
-                })
-            except Exception as model_err:
-                print(f"[check-updates] Error checking {model.get('name')}: {model_err}")
-                updates.append({
-                    'model_id': model.get('id'),
-                    'name': model.get('name'),
-                    'has_update': False,
-                    'reason': 'exception',
-                    'current_version': model.get('versionNumber'),
-                })
-
-        return jsonify({'updates': updates})
+            with _actualizaciones_lock:
+                # Una respuesta con errores de Autodesk no se comparte: el siguiente vuelve a preguntar.
+                if not any(u.get('reason', '').startswith(('api_error', 'exception')) for u in updates):
+                    _actualizaciones_cache[clave] = (time.monotonic(), updates)
+            return jsonify({'updates': updates})
 
     except Exception as e:
         traceback.print_exc()

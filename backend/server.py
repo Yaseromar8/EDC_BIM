@@ -52,6 +52,10 @@ else:
     CORS(app, resources={r"/*": {"origins": "*"}}, max_age=_CORS_MAX_AGE)
     print("[security] CORS abierto (*). Define CORS_ORIGINS para restringir en produccion.")
 
+# Tiempo de servidor por petición (Server-Timing) y registro de las lentas: docs/rendimiento/01 §H7.
+from medicion import init_medicion
+init_medicion(app)
+
 # UN SECRETO CORTO ES PEOR QUE NO PONER NINGUNO, Y HAY QUE DECIRLO FUERTE.
 # La postura da la variable por puesta a partir de 16 caracteres, pero
 # `_pimienta()` y `_secreto()` aceptan CUALQUIER valor no vacio. Con un secreto
