@@ -133,3 +133,27 @@ Lo nuestro extrae lo mismo; lo que nos falta es ese orden en la pantalla.
 
 Lo que **no** se puede distinguir hoy con nuestros datos: ejemplar frente a tipo (la fusión y LMV los
 mezclan). Tandem lo separa porque lo lee de otra fuente; se deja anotado, no se promete.
+
+## 7 · Aplicado (23-oct-2026, en local) · nombre propio: «Planilla»
+
+Decisión del propietario: no copiar los nombres de Tandem. El módulo se llama **Planilla** (barra lateral,
+título del panel y de la ventana aparte) y los textos visibles son nuestros: Seguir el 3D, Filtrar selección,
+Exportar Excel, Sumas, Id. elemento, Abrir en otra ventana. Las claves internas, eventos y la configuración
+guardada no cambian.
+
+Sin tocar la extracción ni ningún dato:
+- `lib/inventoryCatalogo.js` (19/19): por campo, nombre limpio, grupo, unidad, % con dato y clase
+  (propio · útil · mismo valor en todos · casi sin datos · interno). Drenaje: catálogo en ~0,4 s.
+- `SelectorDeCampo.jsx`: buscador sin tildes por nombre, grupo o unidad; secciones Planilla · Con más datos ·
+  grupos de Revit; «grupo · % con dato» bajo cada campo; teclado. Sustituye a la lista nativa del navegador
+  en el filtro, en «Añadir nivel» y en «Agrupar por». Los internos (`__category__`, `__node__`) no se ofrecen.
+- «Editar columnas»: «Planilla» en lugar de «Standard», grupos por cantidad de campos con dato, % con dato
+  por campo y los de poco uso atenuados (no escondidos).
+
+**Fallo previo arreglado de paso:** Escape no funcionaba en ningún panel de View con el visor abierto.
+`Viewer.jsx` (desde marzo) corta todos los Escape de la página para que Autodesk no «muestre todo»; ahora deja
+pasar los que nacen en un panel marcado `data-escape-propio` (la Planilla), que los consume y no llegan al
+visor. Medido: en la Planilla, Escape cierra el desplegable del campo, luego el filtro, y cierra Agrupar; en el
+lienzo 3D el visor sigue quedándose con Escape como antes. (La tecla de la extensión de Chrome no llega a la
+página: se probó con eventos de teclado en la propia página.)
+

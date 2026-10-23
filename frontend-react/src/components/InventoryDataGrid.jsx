@@ -8,6 +8,8 @@ import ColumnConfiguratorModal from './ColumnConfiguratorModal';
 import { leerInventoryConfig, fijarInventoryConfig, columnasParaElGrid, columnasDesdeElGrid } from '../lib/inventoryConfig';
 import * as Tabla from '../lib/inventoryTabla';
 import { libroDeLaTabla } from '../lib/inventoryExport';
+import { catalogoDeCampos } from '../lib/inventoryCatalogo';
+import SelectorDeCampo, { ListaDeCampos } from './SelectorDeCampo';
 import { Capacitor } from '@capacitor/core';
 
 const ROW_HEIGHT = 25; // Tandem SlickGrid: 25px per row (from DOM top:25px)
@@ -117,10 +119,11 @@ const ToolBtn = ({ icon, onClick, active, title, badge }) => (
 
 // ── Filtros avanzados del embudo ────────────────────────────────────────────
 const { NOMBRE_OPERADOR, NOMBRE_CALCULO_LARGO } = Tabla;
+const GRUPO_NO_AGRUPABLE = ['Name'];
 // Campos compactos con los tokens de la ventana (tema-claude.css: --v-*).
 const campoInput = { font: 'inherit', fontSize: '12px', height: '28px', border: '1px solid var(--v-linea-campo)', borderRadius: 'var(--v-radio-control)', padding: '0 6px', background: 'var(--v-superficie)', color: 'var(--v-texto)', minWidth: 0 };
 
-const FiltroAvanzado = ({ filtro, setFiltro, campos, muestra, onClose }) => {
+const FiltroAvanzado = ({ filtro, setFiltro, catalogo, muestra, onClose }) => {
     const tipoDe = useCallback((campo) => campo ? Tabla.tipoDeColumna(muestra, campo).tipo : 'texto', [muestra]);
     const poner = (i, cambio) => setFiltro(f => ({ ...f, reglas: f.reglas.map((r, j) => j === i ? { ...r, ...cambio } : r) }));
     const quitar = (i) => setFiltro(f => ({ ...f, reglas: f.reglas.filter((_, j) => j !== i) }));
@@ -140,7 +143,6 @@ const FiltroAvanzado = ({ filtro, setFiltro, campos, muestra, onClose }) => {
                 <span style={{ flex: 1 }} />
                 <button onClick={onClose} aria-label="Cerrar" className="v-cerrar"><Icons.Close /></button>
             </div>
-            <datalist id="inventario-campos">{campos.map(c => <option key={c} value={c} />)}</datalist>
             {reglas.map((r, i) => {
                 const tipo = tipoDe(r.campo);
                 const ops = Tabla.OPERADORES[tipo] || Tabla.OPERADORES.texto;
@@ -148,8 +150,8 @@ const FiltroAvanzado = ({ filtro, setFiltro, campos, muestra, onClose }) => {
                 const sinValor = op === 'vacio' || op === 'no_vacio';
                 return (
                     <div key={i} style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1.6fr) 150px minmax(0,1fr) 24px', gap: '6px', alignItems: 'center' }}>
-                        <input list="inventario-campos" aria-label="Campo" placeholder="Campo" value={r.campo}
-                            onChange={e => { if (!filtro.reglas.length) setFiltro(f => ({ ...f, reglas: [{ campo: e.target.value, op: 'contiene', valor: '' }] })); else poner(i, { campo: e.target.value }); }} style={campoInput} />
+                        <SelectorDeCampo catalogo={catalogo} valor={r.campo} etiqueta="Campo"
+                            onElegir={c => { if (!filtro.reglas.length) setFiltro(f => ({ ...f, reglas: [{ campo: c, op: 'contiene', valor: '' }] })); else poner(i, { campo: c }); }} />
                         <select aria-label="Operador" value={op} onChange={e => poner(i, { op: e.target.value })} style={campoInput} disabled={!filtro.reglas.length}>
                             {ops.map(o => <option key={o} value={o}>{NOMBRE_OPERADOR[o]}</option>)}
                         </select>
@@ -315,16 +317,15 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
     const [calculosElegidos, setCalculosElegidos] = useState({}); // campo → cálculo | 'ninguno'
     const [menuCabecera, setMenuCabecera] = useState(null); // {campo, x, y}
     const [menuPie, setMenuPie] = useState(null); // {campo, x, y}
-    // Escape cierra cualquier menú o panel de la tabla abierto.
-    useEffect(() => {
-        if (!menuCabecera && !menuPie && !filtroAbierto && !groupMenuOpen) return;
-        const alPulsar = e => {
-            if (e.key !== 'Escape') return;
-            setMenuCabecera(null); setMenuPie(null); setFiltroAbierto(false); setGroupMenuOpen(false);
-        };
-        window.addEventListener('keydown', alPulsar);
-        return () => window.removeEventListener('keydown', alPulsar);
-    }, [menuCabecera, menuPie, filtroAbierto, groupMenuOpen]);
+    // Escape cierra el menú abierto de la Planilla. Se atiende en la raíz del
+    // panel (data-escape-propio): Viewer.jsx corta todos los Escape de la página
+    // para que Autodesk no vuelva a mostrar lo oculto, salvo los que nacen aquí.
+    // Aquí se consumen, así que tampoco llegan al visor.
+    const alPulsarEscape = useCallback(e => {
+        if (e.key !== 'Escape') return;
+        e.stopPropagation();
+        setMenuCabecera(null); setMenuPie(null); setFiltroAbierto(false); setGroupMenuOpen(false);
+    }, []);
 
     const parseNumericCell = (val) => {
         if (typeof val === 'number') return val;
@@ -524,7 +525,7 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
             });
 
             let preferredOrder = ['Name', 'Material', 'Status', 'Vaciado_Nro', 'Level', 'Tandem Category', 'Rooms', 'Dimensions', 'Categoría', 'Nivel base'];
-            const cols = [{ key: 'dbId', header: 'EXT ID', width: 280 }];
+            const cols = [{ key: 'dbId', header: 'Id. elemento', width: 280 }];
             
             const extractedCols = Array.from(allProps);
             const orderedCols = [];
@@ -605,7 +606,7 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
                     });
                     
                     const preferredOrder = ['Name', 'Material', 'Status', 'Vaciado_Nro', 'Level', 'Tandem Category', 'Rooms', 'Dimensions', 'Categoría', 'Nivel base'];
-                    const cols = [{ key: 'dbId', header: 'EXT ID', width: 280 }];
+                    const cols = [{ key: 'dbId', header: 'Id. elemento', width: 280 }];
                     
                     const extractedCols = Array.from(allProps);
                     const orderedCols = [];
@@ -683,7 +684,7 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
         keysToShow.forEach(p => {
             cols.push({ key: p, header: Tabla.etiquetaDeColumna(p), width: p === 'Name' ? 240 : 170 });
         });
-        cols.push({ key: 'dbId', header: 'EXT ID', width: 280 });
+        cols.push({ key: 'dbId', header: 'Id. elemento', width: 280 });
         setColumns(cols);
     }, [selectedColumnKeys, allPropertyKeys]);
 
@@ -779,6 +780,9 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
         () => Tabla.filtrar(flattenedData, filtroTabla),
         [flattenedData, filtroTabla]);
     const reglasActivas = Tabla.contarReglas(filtroTabla);
+    // Qué es cada campo y cuánto dato tiene (filtro, agrupar, columnas). Sobre
+    // todas las filas cargadas, no sobre las filtradas: no cambia al filtrar.
+    const catalogo = useMemo(() => catalogoDeCampos(rawData, allPropertyKeys || []), [rawData, allPropertyKeys]);
     const niveles = useMemo(() => [groupByKey, ...nivelesExtra].filter(Boolean), [groupByKey, nivelesExtra]);
 
     // Tipo de cada columna visible, por muestra (con 700 columnas y 20.000
@@ -906,23 +910,23 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
 
     // ESTILO GENERAL DE LA APP:
     return (
-        <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: '#faf9f5', color: '#333330', fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif', opacity: 0.95 }}>
+        <div data-escape-propio onKeyDown={alPulsarEscape} style={{ height: '100%', display: 'flex', flexDirection: 'column', background: '#faf9f5', color: '#333330', fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif', opacity: 0.95 }}>
             
             {/* Header / Tabs - Top Level (Como Tandem) */}
             <div style={{ display: 'flex', background: '#ffffff', height: '35px', alignItems: 'flex-end', padding: '0 20px', borderBottom: '1px solid #e8e6dc', justifyContent: 'space-between' }}>
                 <div style={{ display: 'flex', alignItems: 'flex-end', gap: '20px' }}>
                     <div style={{ fontSize: '11px', textTransform: 'uppercase', color: '#52524d', fontWeight: 600, paddingBottom: '10px', letterSpacing: '0.8px' }}>
-                        Inventory
+                        Planilla
                     </div>
                 </div>
 
                 {/* Window Controls (Undock / Close) */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '15px', paddingBottom: '8px' }}>
-                    <button style={{ background:'none', border:'none', color:'#72706b', cursor:'pointer' }} title="Open in a new window" onClick={() => {
+                    <button style={{ background:'none', border:'none', color:'#72706b', cursor:'pointer' }} title="Abrir en otra ventana" onClick={() => {
                         openInventoryFilterPopout({ host:window,scopeId:activeModelUrn,columns,
                             assetsOnly:showAssetsOnly,selection:activeSelectionFilter||isolatedExtIds,onClose });
                     }}><Icons.Undock/></button>
-                    <button style={{ background:'none', border:'none', color:'#72706b', cursor:'pointer' }} onClick={() => onClose ? onClose() : window.dispatchEvent(new CustomEvent('close-inventory'))} title="Close panel"><Icons.Close/></button>
+                    <button style={{ background:'none', border:'none', color:'#72706b', cursor:'pointer' }} onClick={() => onClose ? onClose() : window.dispatchEvent(new CustomEvent('close-inventory'))} title="Cerrar"><Icons.Close/></button>
                 </div>
             </div>
 
@@ -944,7 +948,7 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
                         {filtroAbierto && (
                             <>
                                 <div style={{ position: 'fixed', inset: 0, zIndex: 60 }} onClick={() => setFiltroAbierto(false)} />
-                                <FiltroAvanzado filtro={filtroTabla} setFiltro={setFiltroTabla} campos={allPropertyKeys || []}
+                                <FiltroAvanzado filtro={filtroTabla} setFiltro={setFiltroTabla} catalogo={catalogo}
                                     muestra={flattenedData.length > 1500 ? flattenedData.filter((_, i) => i % Math.ceil(flattenedData.length / 1500) === 0) : flattenedData}
                                     onClose={() => setFiltroAbierto(false)} />
                             </>
@@ -984,10 +988,8 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
                                                     </span>
                                                 ))}
                                             </div>
-                                            <select aria-label="Añadir un nivel de agrupación" className="v-campo" value="" onChange={e => { if (e.target.value) { setNivelesExtra(n => [...n, e.target.value]); setCollapsedGroups(new Set()); } }} style={{ height: '28px', fontSize: '12px' }}>
-                                                <option value="">+ Añadir nivel…</option>
-                                                {(allPropertyKeys || []).filter(k => !niveles.includes(k)).map(k => <option key={k} value={k}>{Tabla.etiquetaDeColumna(k)}</option>)}
-                                            </select>
+                                            <SelectorDeCampo catalogo={catalogo} valor="" placeholder="+ Añadir nivel…" etiqueta="Añadir un nivel de agrupación" excluir={niveles} ancho={340}
+                                                onElegir={c => { setNivelesExtra(n => [...n, c]); setCollapsedGroups(new Set()); }} />
                                             <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', color: 'var(--v-texto)' }}>
                                                 <input type="checkbox" checked={totalesPorGrupo} onChange={e => setTotalesPorGrupo(e.target.checked)} style={{ accentColor: 'var(--v-accion)' }} />
                                                 Totales en cada grupo
@@ -1009,12 +1011,10 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
                                         </button>
                                     )}
                                     <div style={{ height: '1px', background: 'var(--v-linea)', margin: '4px 0' }} />
-                                    {(allPropertyKeys || []).filter(k => k !== detectedGroupKey && k !== 'Name').map(k => (
-                                        <button key={k} role="menuitemradio" aria-checked={groupByKey === k} className="v-menu__item"
-                                            onClick={() => { setGroupByKey(k); setNivelesExtra([]); setCollapsedGroups(new Set()); setGroupMenuOpen(false); }}
-                                            style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'block', lineHeight: '32px', ...(groupByKey === k ? { background: 'var(--alephia-selected-bg, #ECF0F1)', color: 'var(--v-accion)' } : {}) }}
-                                        >{Tabla.etiquetaDeColumna(k)}</button>
-                                    ))}
+                                    <div style={{ padding: '4px 2px 0' }}>
+                                        <ListaDeCampos catalogo={catalogo} valor={groupByKey} excluir={GRUPO_NO_AGRUPABLE} alto={230} autoFocus={!groupByKey}
+                                            onElegir={k => { setGroupByKey(k); setNivelesExtra([]); setCollapsedGroups(new Set()); setGroupMenuOpen(false); }} />
+                                    </div>
                                 </div>
                             </>
                         )}
@@ -1041,7 +1041,7 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
                     </label>
                     <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
                         <input type="checkbox" checked={followSelection} onChange={(e) => setFollowSelection(e.target.checked)} style={{ accentColor: '#6a9bcc' }} />
-                        Follow selection
+                        Seguir el 3D
                     </label>
                 </div>
 
@@ -1087,9 +1087,9 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
                                         }}
                                         onMouseEnter={e => { e.currentTarget.style.color = '#141413'; e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.08)'; }}
                                         onMouseLeave={e => { e.currentTarget.style.color = '#72706b'; e.currentTarget.style.backgroundColor = 'transparent'; }}
-                                        title="Sync inventory with selection (3D + checkboxes)"
+                                        title="Dejar en la tabla solo lo seleccionado (3D y casillas)"
                                     >
-                                        <Icons.Sync /> Sync ({mergedSyncIds.size})
+                                        <Icons.Sync /> Filtrar selección ({mergedSyncIds.size})
                                     </button>
                                 ) : (
                                     <>
@@ -1123,15 +1123,15 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
                                                     e.currentTarget.style.backgroundColor = 'transparent';
                                                 }
                                             }}
-                                            title={(mergedSyncIds && !isSyncDisabled) ? "Update filter with new selection" : "Table is currently filtered"}
+                                            title={(mergedSyncIds && !isSyncDisabled) ? "Actualizar con la selección nueva" : "La tabla está filtrada por la selección"}
                                         >
-                                            {(mergedSyncIds && !isSyncDisabled) ? <Icons.Sync /> : <Icons.Filter />} Filtered ({filterSize})
+                                            {(mergedSyncIds && !isSyncDisabled) ? <Icons.Sync /> : <Icons.Filter />} Filtrado ({filterSize})
                                         </button>
                                         {activeSelectionFilter !== null && (
                                             <button
                                                 onClick={() => setActiveSelectionFilter(null)}
                                                 style={{ background: 'none', border: 'none', color: '#72706b', cursor: 'pointer', padding: '4px', display: 'flex', borderRadius: '4px', transition: 'all 0.2s' }}
-                                                title="Clear Selection Filter"
+                                                title="Quitar el filtro de selección"
                                                 onMouseEnter={e => { e.currentTarget.style.color = '#ef5350'; e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.08)'; }}
                                                 onMouseLeave={e => { e.currentTarget.style.color = '#72706b'; e.currentTarget.style.backgroundColor = 'transparent'; }}
                                             >
@@ -1149,22 +1149,22 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
                         onMouseEnter={e => { e.currentTarget.style.color = '#141413'; e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.08)'; }}
                         onMouseLeave={e => { e.currentTarget.style.color = '#52524d'; e.currentTarget.style.backgroundColor = 'transparent'; }}
                     >
-                        <Icons.ExportAction /> Export Excel
+                        <Icons.ExportAction /> Exportar Excel
                     </button>
                     <button 
                         onClick={() => setTotalsPickerOpen(true)}
                         style={{ background: 'none', border: '1px solid #cccac0', color: totalColumns.size > 0 ? '#507294' : '#52524d', padding: '4px 10px', fontSize: '11.5px', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', transition: 'all 0.2s' }}
                         onMouseEnter={e => { e.currentTarget.style.color = '#141413'; e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.08)'; }}
                         onMouseLeave={e => { e.currentTarget.style.color = totalColumns.size > 0 ? '#6a9bcc' : '#cccac0'; e.currentTarget.style.backgroundColor = 'transparent'; }}
-                        title="Configure Column Totals"
+                        title="Elegir las columnas que se suman"
                     >
-                        <Icons.Sigma /> Totals {totalColumns.size > 0 ? `(${totalColumns.size})` : ''}
+                        <Icons.Sigma /> Sumas {totalColumns.size > 0 ? `(${totalColumns.size})` : ''}
                     </button>
                     {totalColumns.size > 0 && (
                         <button 
                             onClick={() => setTotalColumns(new Set())}
                             style={{ background: 'none', border: 'none', color: '#72706b', cursor: 'pointer', padding: '4px', display: 'flex', borderRadius: '4px', transition: 'all 0.2s' }}
-                            title="Clear Totals"
+                            title="Quitar las sumas"
                             onMouseEnter={e => { e.currentTarget.style.color = '#ef5350'; e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.08)'; }}
                             onMouseLeave={e => { e.currentTarget.style.color = '#72706b'; e.currentTarget.style.backgroundColor = 'transparent'; }}
                         >
@@ -1238,7 +1238,7 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
                             const fieldName = (isNew ? bulkNewField : bulkField).trim();
                             const fieldValue = bulkValue.trim();
                             if (bulkAssigning || !fieldValue || !fieldName) return;
-                            if (isNew && (fieldName.toLowerCase() === 'dbId'.toLowerCase() || fieldName === 'EXT ID')) {
+                            if (isNew && (fieldName.toLowerCase() === 'dbId'.toLowerCase() || fieldName === 'EXT ID' || fieldName === 'Id. elemento')) {
                                 alert('Ese nombre está reservado. Elige otro.');
                                 return;
                             }
@@ -1292,7 +1292,7 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
                     <button
                         onClick={() => { setCheckedIds(new Set()); setLocalSelIds(null); }}
                         style={{ background: 'none', border: 'none', color: '#72706b', cursor: 'pointer', padding: '4px', display: 'flex', borderRadius: '4px' }}
-                        title="Clear selection"
+                        title="Quitar la selección"
                     >
                         <Icons.Close />
                     </button>
@@ -1540,6 +1540,7 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
                 open={columnConfigOpen}
                 onClose={() => setColumnConfigOpen(false)}
                 availableColumns={allPropertyKeys}
+                catalogo={catalogo}
                 selectedColumns={selectedColumnKeys || allPropertyKeys}
                 onUpdate={(newCols) => {
                     const todas = newCols.length === allPropertyKeys.length;

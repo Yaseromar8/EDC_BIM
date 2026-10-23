@@ -2691,6 +2691,9 @@ const Viewer = ({
         // We want Esc to ONLY clear selection.
         const handleKeyDown = (event) => {
             if (event.key === 'Escape') {
+                // Un panel que gestiona su propio Escape (la Planilla) lo recibe:
+                // cortarlo aquí dejaba Escape muerto en todos sus menús.
+                if (event.target?.closest?.('[data-escape-propio]')) return;
                 // 1. Block APS Viewer default (which shows all hidden items)
                 event.stopImmediatePropagation();
 

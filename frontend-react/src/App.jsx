@@ -4411,10 +4411,10 @@ function App() {
                 data-test-id="nav-item-inventory"
                 className={`rail-button ${inventoryTabOpen ? 'active' : ''}`}
                 onClick={() => setInventoryTabOpen(prev => !prev)}
-                title="Inventory"
+                title="Planilla"
               >
                 <InventoryIcon />
-                <span className="rail-label" style={{ fontWeight: 700 }}>Inventory</span>
+                <span className="rail-label" style={{ fontWeight: 700 }}>Planilla</span>
               </button>
             </div>
 
@@ -4470,10 +4470,10 @@ function App() {
               type="button"
               className={`rail-button ${inventoryTabOpen ? 'active' : ''}`}
               onClick={() => setInventoryTabOpen(prev => !prev)}
-              title="Inventory"
+              title="Planilla"
             >
               <InventoryIcon />
-              <span className="rail-label" style={{ fontWeight: 700 }}>Inventory</span>
+              <span className="rail-label" style={{ fontWeight: 700 }}>Planilla</span>
             </button>
           </nav>
         )}

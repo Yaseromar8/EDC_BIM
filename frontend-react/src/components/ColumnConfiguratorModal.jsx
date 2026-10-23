@@ -1,7 +1,11 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import ReactDOM from 'react-dom';
+import { partesDeClave, notaDeCampo, compararFichas, GRUPO_PROPIO } from '../lib/inventoryCatalogo';
 
-const ColumnConfiguratorModal = ({ open, onClose, availableColumns = [], selectedColumns = [], onUpdate }) => {
+// Sin tildes ni mayúsculas, como el resto de buscadores de la Planilla.
+const plano = s => String(s ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+
+const ColumnConfiguratorModal = ({ open, onClose, availableColumns = [], selectedColumns = [], onUpdate, catalogo = null }) => {
     const [currentSelection, setCurrentSelection] = useState([]);
     const [searchTermAvailable, setSearchTermAvailable] = useState('');
     const [searchTermSelected, setSearchTermSelected] = useState('');
@@ -17,30 +21,38 @@ const ColumnConfiguratorModal = ({ open, onClose, availableColumns = [], selecte
         }
     }, [open, selectedColumns]);
 
-    // Group available columns by category (simulated from key name patterns)
+    // Por grupo (el de Revit, o «Planilla» para los campos propios). Con el
+    // catálogo (lib/inventoryCatalogo) cada campo sabe cuánto dato tiene: dentro
+    // del grupo van primero los que tienen más y al final, atenuados, los que
+    // valen lo mismo en todos o casi nunca tienen dato. No se esconde ninguno.
+    const fichaDe = (col) => (catalogo && catalogo.get(col)) || { clave: col, ...partesDeClave(col), unidad: '', clase: 'util', conDato: 0 };
     const groupedColumns = useMemo(() => {
         const groups = {};
         availableColumns.forEach(col => {
-            // Try to extract category from "Category::Name" format, fallback to "Properties"
-            let cat = 'Properties';
-            if (col.includes('::')) {
-                cat = col.split('::')[0];
-            } else if (['Name', 'Material', 'Status', 'dbId', 'model_urn'].includes(col)) {
-                cat = 'Standard';
-            }
+            const f = fichaDe(col);
+            if (f.clase === 'interno') return; // claves de servicio: no se ofrecen
+            const cat = f.grupo || GRUPO_PROPIO;
             if (!groups[cat]) groups[cat] = [];
-            groups[cat].push({ id: col, name: col.includes('::') ? col.split('::')[1] : col });
+            groups[cat].push({ id: col, name: f.nombre, ficha: f });
         });
+        if (catalogo) Object.values(groups).forEach(l => l.sort((a, b) => compararFichas(a.ficha, b.ficha)));
         return groups;
-    }, [availableColumns]);
+    }, [availableColumns, catalogo]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    // La Planilla primero; luego los grupos con más campos con dato.
+    const ordenDeGrupos = (cats) => [...cats].sort((a, b) => {
+        if (a === GRUPO_PROPIO || b === GRUPO_PROPIO) return (b === GRUPO_PROPIO) - (a === GRUPO_PROPIO);
+        const utiles = c => (groupedColumns[c] || []).filter(p => p.ficha.clase === 'util').length;
+        return (utiles(b) - utiles(a)) || a.localeCompare(b, 'es');
+    });
 
     const filteredGroups = useMemo(() => {
         if (!searchTermAvailable) return groupedColumns;
         const result = {};
-        const lowerTerm = searchTermAvailable.toLowerCase();
+        const lowerTerm = plano(searchTermAvailable);
         Object.keys(groupedColumns).forEach(cat => {
-            const matchesCategory = cat.toLowerCase().includes(lowerTerm);
-            const matchingProps = groupedColumns[cat].filter(p => p.name.toLowerCase().includes(lowerTerm));
+            const matchesCategory = plano(cat).includes(lowerTerm);
+            const matchingProps = groupedColumns[cat].filter(p => plano(p.name).includes(lowerTerm));
             if (matchesCategory || matchingProps.length > 0) {
                 result[cat] = matchesCategory ? groupedColumns[cat] : matchingProps;
             }
@@ -52,14 +64,13 @@ const ColumnConfiguratorModal = ({ open, onClose, availableColumns = [], selecte
 
     const selectedObjects = useMemo(() => {
         return currentSelection.map((id) => {
-            const displayName = id.includes('::') ? id.split('::')[1] : id;
-            const category = id.includes('::') ? id.split('::')[0] : 'Standard';
-            return { id, name: displayName, category };
+            const f = fichaDe(id);
+            return { id, name: f.nombre + (f.unidad ? ` (${f.unidad})` : ''), category: f.grupo || GRUPO_PROPIO };
         }).filter(item => {
             if (!searchTermSelected) return true;
-            return item.name.toLowerCase().includes(searchTermSelected.toLowerCase());
+            return plano(item.name).includes(plano(searchTermSelected));
         });
-    }, [currentSelection, searchTermSelected]);
+    }, [currentSelection, searchTermSelected, catalogo]); // eslint-disable-line react-hooks/exhaustive-deps
 
     const handleAdd = (propId) => {
         if (!currentSelection.includes(propId)) {
@@ -174,7 +185,7 @@ const ColumnConfiguratorModal = ({ open, onClose, availableColumns = [], selecte
                                 </svg>
                             </div>
                             <div className="v-lista" style={{ flex: 1 }}>
-                                {Object.keys(filteredGroups).sort().map(cat => {
+                                {ordenDeGrupos(Object.keys(filteredGroups)).map(cat => {
                                     const props = filteredGroups[cat];
                                     const isExpanded = expandedCategories[cat] || searchTermAvailable.length > 0;
                                     const selectedCount = props.filter(p => currentSelection.includes(p.id)).length;
@@ -216,15 +227,17 @@ const ColumnConfiguratorModal = ({ open, onClose, availableColumns = [], selecte
                                                                 key={prop.id}
                                                                 onClick={() => !isAdded && handleAdd(prop.id)}
                                                                 style={{
-                                                                    padding: '6px 12px 6px 24px', fontSize: '12px',
+                                                                    padding: '5px 12px 5px 24px', fontSize: '12px',
                                                                     color: isAdded ? '#52524d' : '#52524d',
                                                                     cursor: isAdded ? 'default' : 'pointer',
-                                                                    display: 'flex', alignItems: 'center', transition: 'background 0.1s'
+                                                                    display: 'flex', alignItems: 'center', gap: '8px', transition: 'background 0.1s',
+                                                                    opacity: prop.ficha.clase === 'raro' || prop.ficha.clase === 'constante' ? 0.6 : 1
                                                                 }}
                                                                 onMouseEnter={e => !isAdded && (e.currentTarget.style.background = '#e8e6dc')}
                                                                 onMouseLeave={e => !isAdded && (e.currentTarget.style.background = 'transparent')}
                                                             >
-                                                                <span>{isAdded ? '✓ ' : '+ '} {prop.name}</span>
+                                                                <span style={{ flex: 1, minWidth: 0 }}>{isAdded ? '✓ ' : '+ '} {prop.name}{prop.ficha.unidad ? <span style={{ color: '#72706b' }}> ({prop.ficha.unidad})</span> : null}</span>
+                                                                {catalogo && <span style={{ fontSize: '11px', color: '#72706b', whiteSpace: 'nowrap' }}>{notaDeCampo(prop.ficha)}</span>}
                                                             </div>
                                                         );
                                                     })}
