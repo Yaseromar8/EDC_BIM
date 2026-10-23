@@ -105,6 +105,12 @@ const ColumnConfiguratorModal = ({ open, onClose, availableColumns = [], selecte
         setCurrentSelection([...availableColumns]);
     };
 
+    // Quitar todas: para montar una configuración propia sin desmarcar 700
+    // columnas una a una. Se deja «Name» para que la tabla nunca quede vacía.
+    const handleClear = () => {
+        setCurrentSelection(availableColumns.includes('Name') ? ['Name'] : []);
+    };
+
     const handleSort = () => {
         let _list = [...currentSelection];
         const draggedItemContent = _list.splice(dragItem.current, 1)[0];
@@ -139,9 +145,14 @@ const ColumnConfiguratorModal = ({ open, onClose, availableColumns = [], selecte
                         <span style={{ fontSize: '12px', color: '#72706b' }}>
                             {currentSelection.length} de {availableColumns.length} columnas visibles
                         </span>
-                        <button className="v-enlace" onClick={handleReset}>
-                            Seleccionar todas
-                        </button>
+                        <span style={{ display: 'flex', gap: '16px' }}>
+                            <button className="v-enlace" onClick={handleClear}>
+                                Quitar todas
+                            </button>
+                            <button className="v-enlace" onClick={handleReset}>
+                                Seleccionar todas
+                            </button>
+                        </span>
                     </div>
 
                     <div style={{ display: 'flex', flex: 1, gap: '20px', overflow: 'hidden' }}>

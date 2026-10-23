@@ -6,6 +6,8 @@ import { openInventoryFilterPopout } from '../lib/inventoryFilterPopout.js';
 import { apiFetch } from '../utils/apiFetch';
 import ColumnConfiguratorModal from './ColumnConfiguratorModal';
 import { leerInventoryConfig, fijarInventoryConfig, columnasParaElGrid, columnasDesdeElGrid } from '../lib/inventoryConfig';
+import * as Tabla from '../lib/inventoryTabla';
+import { libroDeLaTabla } from '../lib/inventoryExport';
 import { Capacitor } from '@capacitor/core';
 
 const ROW_HEIGHT = 25; // Tandem SlickGrid: 25px per row (from DOM top:25px)
@@ -85,10 +87,11 @@ const Icons = {
 };
 
 // Tool Button Component
-const ToolBtn = ({ icon, onClick, active, title }) => (
+const ToolBtn = ({ icon, onClick, active, title, badge }) => (
     <button
         onClick={onClick}
         title={title}
+        aria-label={title}
         style={{
             background: active ? '#e8e6dc' : 'transparent',
             border: 'none',
@@ -103,13 +106,72 @@ const ToolBtn = ({ icon, onClick, active, title }) => (
         }}
         onMouseEnter={(e) => { e.currentTarget.style.color = '#141413'; e.currentTarget.style.background = '#e8e6dc'; }}
         onMouseLeave={(e) => {
-            e.currentTarget.style.color = active ? '#6a9bcc' : '#918f88';
-            e.currentTarget.style.background = active ? '#333330' : 'transparent';
+            e.currentTarget.style.color = active ? '#507294' : '#72706b';
+            e.currentTarget.style.background = active ? '#e8e6dc' : 'transparent';
         }}
     >
         {icon}
+        {badge ? <span style={{ marginLeft: '3px', fontSize: '11px', fontWeight: 600 }}>({badge})</span> : null}
     </button>
 );
+
+// ── Filtros avanzados del embudo ────────────────────────────────────────────
+const { NOMBRE_OPERADOR, NOMBRE_CALCULO_LARGO } = Tabla;
+// Campos compactos con los tokens de la ventana (tema-claude.css: --v-*).
+const campoInput = { font: 'inherit', fontSize: '12px', height: '28px', border: '1px solid var(--v-linea-campo)', borderRadius: 'var(--v-radio-control)', padding: '0 6px', background: 'var(--v-superficie)', color: 'var(--v-texto)', minWidth: 0 };
+
+const FiltroAvanzado = ({ filtro, setFiltro, campos, muestra, onClose }) => {
+    const tipoDe = useCallback((campo) => campo ? Tabla.tipoDeColumna(muestra, campo).tipo : 'texto', [muestra]);
+    const poner = (i, cambio) => setFiltro(f => ({ ...f, reglas: f.reglas.map((r, j) => j === i ? { ...r, ...cambio } : r) }));
+    const quitar = (i) => setFiltro(f => ({ ...f, reglas: f.reglas.filter((_, j) => j !== i) }));
+    const añadir = () => setFiltro(f => ({ ...f, reglas: [...f.reglas, { campo: '', op: 'contiene', valor: '' }] }));
+    const reglas = filtro.reglas.length ? filtro.reglas : [{ campo: '', op: 'contiene', valor: '' }];
+    const textoFecha = '(AAAAMMDD)';
+    return (
+        <div role="dialog" aria-label="Filtros de la tabla" className="v-menu" style={{ position: 'absolute', top: '34px', left: 0, zIndex: 61, width: '660px', maxWidth: '90vw', padding: '12px', display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '12px', color: 'var(--v-texto-2)' }}
+            onKeyDown={e => { if (e.key === 'Escape') { e.stopPropagation(); onClose(); } }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <strong style={{ fontSize: '13px', color: 'var(--v-texto)' }}>Filtros de la tabla</strong>
+                <span className="v-menu__nota">Cumplir</span>
+                <select aria-label="Cómo se combinan las condiciones" className="v-campo" value={filtro.modo} onChange={e => setFiltro(f => ({ ...f, modo: e.target.value }))} style={{ width: 'auto', height: '28px' }}>
+                    <option value="y">todas (Y)</option>
+                    <option value="o">alguna (O)</option>
+                </select>
+                <span style={{ flex: 1 }} />
+                <button onClick={onClose} aria-label="Cerrar" className="v-cerrar"><Icons.Close /></button>
+            </div>
+            <datalist id="inventario-campos">{campos.map(c => <option key={c} value={c} />)}</datalist>
+            {reglas.map((r, i) => {
+                const tipo = tipoDe(r.campo);
+                const ops = Tabla.OPERADORES[tipo] || Tabla.OPERADORES.texto;
+                const op = ops.includes(r.op) ? r.op : ops[0];
+                const sinValor = op === 'vacio' || op === 'no_vacio';
+                return (
+                    <div key={i} style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1.6fr) 150px minmax(0,1fr) 24px', gap: '6px', alignItems: 'center' }}>
+                        <input list="inventario-campos" aria-label="Campo" placeholder="Campo" value={r.campo}
+                            onChange={e => { if (!filtro.reglas.length) setFiltro(f => ({ ...f, reglas: [{ campo: e.target.value, op: 'contiene', valor: '' }] })); else poner(i, { campo: e.target.value }); }} style={campoInput} />
+                        <select aria-label="Operador" value={op} onChange={e => poner(i, { op: e.target.value })} style={campoInput} disabled={!filtro.reglas.length}>
+                            {ops.map(o => <option key={o} value={o}>{NOMBRE_OPERADOR[o]}</option>)}
+                        </select>
+                        {sinValor ? <span style={{ color: '#72706b' }}>—</span> : (
+                            <div style={{ display: 'flex', gap: '4px', minWidth: 0 }}>
+                                <input aria-label="Valor" placeholder={tipo === 'fecha' ? textoFecha : 'Valor'} value={r.valor ?? ''} onChange={e => poner(i, { valor: e.target.value })} style={{ ...campoInput, flex: 1 }} disabled={!filtro.reglas.length} />
+                                {op === 'entre' && <input aria-label="Hasta" placeholder="y" value={r.valor2 ?? ''} onChange={e => poner(i, { valor2: e.target.value })} style={{ ...campoInput, flex: 1 }} />}
+                            </div>
+                        )}
+                        <button onClick={() => quitar(i)} aria-label="Quitar condición" className="v-cerrar" style={{ width: '24px', height: '24px' }} disabled={!filtro.reglas.length}><Icons.Close /></button>
+                    </div>
+                );
+            })}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <button onClick={añadir} className="v-enlace" style={{ fontSize: '12px' }}>+ Condición</button>
+                <button onClick={() => setFiltro({ modo: 'y', reglas: [] })} className="v-enlace" style={{ fontSize: '12px' }}>Quitar filtros</button>
+                <span style={{ flex: 1 }} />
+                <span className="v-menu__nota">Sin tildes ni mayúsculas · números con su unidad · fechas {textoFecha}</span>
+            </div>
+        </div>
+    );
+};
 
 // Componente Row estable
 const InventoryRow = memo(({ row, columns, index, onRowClick, isHighlighted, top, onCellEdit, isChecked, onToggleCheck }) => {
@@ -149,10 +211,13 @@ const InventoryRow = memo(({ row, columns, index, onRowClick, isHighlighted, top
                 let cellVal = row[col.key];
                 let isEditing = editingCol === col.key;
                 let displayText = (cellVal !== undefined && cellVal !== null && cellVal !== '(Unassigned)') ? String(cellVal) : '';
+                // Solo el aspecto (m², m³, fechas, números a la derecha); el valor no cambia.
+                const celda = col.key === 'dbId' || col.key === 'Name' ? { texto: displayText, numero: false } : Tabla.textoDeCelda(displayText);
                 return (
-                    <div 
-                        key={col.key} 
-                        style={{ width: col.width, flexShrink: 0, padding: isEditing?'0':'0 12px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', borderRight: '1px solid #e8e6dc', height: '100%', display: 'flex', alignItems: 'center' }} 
+                    <div
+                        key={col.key}
+                        title={celda.texto !== displayText ? displayText : undefined}
+                        style={{ width: col.width, flexShrink: 0, padding: isEditing?'0':'0 12px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', borderRight: '1px solid #e8e6dc', height: '100%', display: 'flex', alignItems: 'center', justifyContent: celda.numero ? 'flex-end' : 'flex-start', fontVariantNumeric: celda.numero ? 'tabular-nums' : undefined }}
                         onDoubleClick={(e) => {
                             // TANDEM PARITY: Solo permitimos editar propiedades extendidas de Facility (Data gemelo), los datos Nativos de Revit son READ-ONLY (Volumen, Area, etc).
                             // Por enlace compartido se MIRA, no se edita. Sin esto la
@@ -175,7 +240,7 @@ const InventoryRow = memo(({ row, columns, index, onRowClick, isHighlighted, top
                                     if(e.key==='Enter') e.currentTarget.blur();
                                     else if(e.key==='Escape') setEditingCol(null);
                                 }} onClick={e => e.stopPropagation()} />
-                        ) : displayText}
+                        ) : celda.texto}
                     </div>
                 )
             })}
@@ -197,9 +262,15 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
     const [highlightedDbId, setHighlightedDbId] = useState(null);
     const [scrollTop, setScrollTop] = useState(0);
     const [containerHeight, setContainerHeight] = useState(0);
-    const [activeTab, setActiveTab] = useState('General');
+    // Sin pestañas: «Tickets» (mantenimiento en Tandem) no tenía contenido aquí y
+    // se retiró el 23-oct; las observaciones no están ligadas a elementos.
     const [followSelection, setFollowSelection] = useState(true);
     const [showAssetsOnly, setShowAssetsOnly] = useState(() => leerInventoryConfig().assetsOnly);
+    // «Solo con metrado» sustituye a «Assets only» en la barra: en un modelo de
+    // Revit todo es ejemplar y aquel no quitaba nada. assetsOnly sigue leyéndose
+    // de las vistas guardadas (inventoryConfig, CLOSED) y solo se enseña si viene
+    // marcado, para poder desmarcarlo. Este, como el resto de la Fase T, es de sesión.
+    const [soloConMetrado, setSoloConMetrado] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
     const [inventoryError, setInventoryError] = useState(null);
     const [inventoryRevision, setInventoryRevision] = useState(0);
@@ -230,6 +301,30 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
     const [collapsedGroups, setCollapsedGroups] = useState(() => new Set());
     const groupInitRef = useRef(false); // auto-activar SubZona una sola vez
     const displayListRef = useRef([]); // para el scroll de "follow selection"
+
+    // ── Tabla (lib/inventoryTabla, 23-oct-2026) ─────────────────────────────
+    // Filtros avanzados del embudo (antes no hacía nada), orden por cabecera,
+    // niveles de agrupación y el cálculo de cada columna en el pie. Refinan lo
+    // que ya deja pasar Filters; no lo sustituyen. Por ahora viven en la
+    // sesión: guardarlos en la vista toca Saved Views (CLOSED) y va aparte.
+    const [filtroTabla, setFiltroTabla] = useState({ modo: 'y', reglas: [] });
+    const [filtroAbierto, setFiltroAbierto] = useState(false);
+    const [orden, setOrden] = useState([]); // [{campo, dir}]
+    const [nivelesExtra, setNivelesExtra] = useState([]); // niveles 2, 3… (el 1 es groupByKey)
+    const [totalesPorGrupo, setTotalesPorGrupo] = useState(false);
+    const [calculosElegidos, setCalculosElegidos] = useState({}); // campo → cálculo | 'ninguno'
+    const [menuCabecera, setMenuCabecera] = useState(null); // {campo, x, y}
+    const [menuPie, setMenuPie] = useState(null); // {campo, x, y}
+    // Escape cierra cualquier menú o panel de la tabla abierto.
+    useEffect(() => {
+        if (!menuCabecera && !menuPie && !filtroAbierto && !groupMenuOpen) return;
+        const alPulsar = e => {
+            if (e.key !== 'Escape') return;
+            setMenuCabecera(null); setMenuPie(null); setFiltroAbierto(false); setGroupMenuOpen(false);
+        };
+        window.addEventListener('keydown', alPulsar);
+        return () => window.removeEventListener('keydown', alPulsar);
+    }, [menuCabecera, menuPie, filtroAbierto, groupMenuOpen]);
 
     const parseNumericCell = (val) => {
         if (typeof val === 'number') return val;
@@ -417,7 +512,10 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
                                 if (val !== '' || !row.hasOwnProperty(pName) || row[pName] === '') {
                                     row[pName] = val;
                                 }
-                                allProps.add(pName);
+                                // Igual que lib/inventoryNormalizers: la clave con
+                                // categoría es la identidad y nunca se pisa.
+                                row[catName + '::' + pName] = val;
+                                allProps.add(catName + '::' + pName);
                             });
                         }
                     });
@@ -460,7 +558,7 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
                 const { mappedData, cols, orderedCols } = window.__inventoryCache[activeModelUrn];
                 console.log(`[Inventory] ⚡ Cache hit for ${activeModelUrn} — ${mappedData.length} items loaded instantly`);
                 if (!isMounted) return;
-                setAllPropertyKeys(orderedCols);
+                setAllPropertyKeys(Tabla.columnasSinDuplicados(orderedCols));
                 setColumns(cols);
                 setRawData(mappedData);
                 setFlattenedData(mappedData);
@@ -539,7 +637,7 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
                 window.__inventoryCache[activeModelUrn] = { ...result, identityFormat: INVENTORY_IDENTITY_FORMAT };
                 console.log(`[Inventory] 📦 First load for ${activeModelUrn} — ${result.mappedData.length} items cached for instant re-open`);
 
-                setAllPropertyKeys(result.orderedCols);
+                setAllPropertyKeys(Tabla.columnasSinDuplicados(result.orderedCols));
                 setColumns(result.cols);
                 setRawData(result.mappedData);
                 setFlattenedData(result.mappedData);
@@ -559,8 +657,9 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
         return () => { isMounted = false; };
     }, [activeModelUrn, inventoryRevision]);
 
-    // Global membership comes exclusively from FilterResult, even with the
-    // panel closed. Sync and Assets only refine that result locally.
+    // Global membership comes from FilterResult, even with the panel closed.
+    // Sin predicados se conservan las hojas comprobadas sin fragmentos; un
+    // unresolved real sigue pendiente. Sync y Assets only refinan localmente.
     useEffect(() => {
         const applyAssetsFilter = (data) => {
             if (!showAssetsOnly) return data;
@@ -579,99 +678,15 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
     useEffect(() => {
         if (allPropertyKeys.length === 0) return;
         const keysToShow = selectedColumnKeys || allPropertyKeys;
-        const cols = [{ key: 'dbId', header: 'EXT ID', width: 280 }];
+        // Primero el nombre legible; el identificador interno va al final.
+        const cols = [];
         keysToShow.forEach(p => {
-            cols.push({ key: p, header: p, width: p === 'Name' ? 240 : 160 });
+            cols.push({ key: p, header: Tabla.etiquetaDeColumna(p), width: p === 'Name' ? 240 : 170 });
         });
+        cols.push({ key: 'dbId', header: 'EXT ID', width: 280 });
         setColumns(cols);
     }, [selectedColumnKeys, allPropertyKeys]);
 
-    const handleExportExcel = useCallback(async () => {
-        // Solo al exportar: la librería de Excel (~95 KB) ya no viaja en cada apertura de View.
-        const XLSX = await import('xlsx');
-        if (!flattenedData.length || !columns.length) return;
-        
-        // Formatear la data para el Excel — VALORES NUMÉRICOS SIN UNIDAD
-        // Esto permite sumar/operar directamente en Excel sin errores de texto.
-        const stripUnitsAndParse = (raw) => {
-            if (raw === null || raw === undefined || raw === '') return raw;
-            const s = String(raw).trim();
-            if (s === '') return '';
-            // Preservar valores de pulgadas (ej. 3/8", 1") como texto puro para evitar que Excel reciba solo el primer dígito
-            if (s.endsWith('"')) return s;
-            // Extraer solo la parte numérica: dígitos, punto, coma, signo negativo
-            // Ejemplos: "4.520 m³" → 4.52, "88.070 m" → 88.07, "260.89 m^3" → 260.89
-            //           "10 kg" → 10, "1,234.56 m2" → 1234.56, "-3.5 °C" → -3.5
-            const cleaned = s.replace(/,/g, ''); // Eliminar comas de miles
-            const match = cleaned.match(/^(-?\d+\.?\d*)/); // Extraer número del inicio
-            if (match) {
-                // Verificar que hay texto NO-numérico después (unidad) O es solo número
-                const rest = cleaned.slice(match[0].length).trim();
-                // Si el resto está vacío o empieza con letra/símbolo (unidad), es un número con unidad
-                if (rest === '' || /^[a-zA-Z°^µ²³\/]/.test(rest)) {
-                    const parsed = parseFloat(match[1]);
-                    if (!isNaN(parsed)) return parsed;
-                }
-            }
-            return raw; // No es numérico, devolver tal cual (texto puro)
-        };
-
-        const dataForExcel = flattenedData.map(row => {
-            const rowData = {};
-            columns.forEach(c => {
-                const val = row[c.key];
-                rowData[c.header] = (typeof val === 'string') ? stripUnitsAndParse(val) : val;
-            });
-            return rowData;
-        });
-
-        // Si hay columnas de totales, añadimos una fila al final
-        if (totalColumns.size > 0) {
-            const totalsRow = {};
-            columns.forEach((c, index) => {
-                if (index === 0) {
-                    totalsRow[c.header] = "Σ Totals";
-                } else if (totalColumns.has(c.key)) {
-                    let sum = 0;
-                    flattenedData.forEach(r => {
-                        const v = parseNumericCell(r[c.key]);
-                        if (v !== null) sum += v;
-                    });
-                    totalsRow[c.header] = Math.round(sum * 100) / 100;
-                } else {
-                    totalsRow[c.header] = "";
-                }
-            });
-            dataForExcel.push(totalsRow);
-        }
-
-        const worksheet = XLSX.utils.json_to_sheet(dataForExcel);
-        const workbook = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(workbook, worksheet, "Inventory");
-
-        const fileName = `Asset_Inventory_${new Date().toISOString().slice(0,10)}.xlsx`;
-
-        // CAPACITOR NATIVE: Guardar en carpeta Descargas usando Filesystem
-        if (Capacitor.isNativePlatform()) {
-            try {
-                const { Filesystem, Directory } = await import('@capacitor/filesystem');
-                const xlsxData = XLSX.write(workbook, { bookType: 'xlsx', type: 'base64' });
-                await Filesystem.writeFile({
-                    path: fileName,
-                    data: xlsxData,
-                    directory: Directory.Documents,
-                    recursive: true
-                });
-                alert(`Archivo guardado: ${fileName}`);
-            } catch (err) {
-                console.error('[Export] Error guardando en dispositivo:', err);
-                // Fallback: intentar descarga web
-                XLSX.writeFile(workbook, fileName);
-            }
-        } else {
-            XLSX.writeFile(workbook, fileName);
-        }
-    }, [flattenedData, columns, totalColumns]);
 
     // (A) Tabla -> Visor
     const handleRowClick = useCallback((rowExtId, rowUrn, rowKey) => {
@@ -759,39 +774,115 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
         }
     }, [detectedGroupKey]);
 
-    const GROUP_NONE = '(Sin valor)';
-    const groupValueOf = useCallback((row, key) => {
-        let v = row[key];
-        if (Array.isArray(v)) v = v.filter(Boolean).join(', ');
-        v = (v === null || v === undefined) ? '' : String(v).trim();
-        return v === '' ? GROUP_NONE : v;
-    }, []);
+    // Filtros del embudo y orden, sobre lo que ya deja pasar Filters.
+    const filasFiltradas = useMemo(
+        () => Tabla.filtrar(flattenedData, filtroTabla),
+        [flattenedData, filtroTabla]);
+    const reglasActivas = Tabla.contarReglas(filtroTabla);
+    const niveles = useMemo(() => [groupByKey, ...nivelesExtra].filter(Boolean), [groupByKey, nivelesExtra]);
 
-    // Lista de render: intercala cabeceras de grupo entre las filas (colapsables).
-    const displayList = useMemo(() => {
-        if (!groupByKey) return flattenedData.map(row => ({ type: 'data', row }));
-        const groups = new Map();
-        for (const row of flattenedData) {
-            const v = groupValueOf(row, groupByKey);
-            if (!groups.has(v)) groups.set(v, []);
-            groups.get(v).push(row);
+    // Tipo de cada columna visible, por muestra (con 700 columnas y 20.000
+    // filas, leerlo todo cada vez sería caro y el tipo no cambia por eso).
+    const tiposColumna = useMemo(() => {
+        const paso = Math.max(1, Math.ceil(flattenedData.length / 1500));
+        const muestra = paso === 1 ? flattenedData : flattenedData.filter((_, i) => i % paso === 0);
+        const t = {};
+        for (const col of columns) if (col.key !== 'dbId') t[col.key] = Tabla.tipoDeColumna(muestra, col.key);
+        return t;
+    }, [flattenedData, columns]);
+
+    // El cálculo de cada columna: el elegido, o «Σ» si estaba en los totales
+    // de la vista guardada, o el de por defecto según el dato.
+    const calculos = useMemo(() => {
+        const c = {};
+        for (const col of columns) {
+            if (col.key === 'dbId') continue;
+            const elegido = calculosElegidos[col.key];
+            if (elegido === 'ninguno') continue;
+            const t = tiposColumna[col.key] || {};
+            const calc = elegido || (totalColumns.has(col.key) ? 'suma' : Tabla.calculoPorDefecto(col.key, t.tipo, t.unidad));
+            if (calc) c[col.key] = calc;
         }
-        const names = Array.from(groups.keys()).sort((a, b) => {
-            if (a === GROUP_NONE) return 1;
-            if (b === GROUP_NONE) return -1;
-            return a.localeCompare(b, undefined, { numeric: true });
+        return c;
+    }, [columns, calculosElegidos, tiposColumna, totalColumns]);
+
+    // «Solo con metrado»: fuera lo que no tiene cantidad en ninguna columna Σ.
+    const camposSuma = useMemo(() => Object.keys(calculos).filter(k => calculos[k] === 'suma'), [calculos]);
+    const filasTabla = useMemo(
+        () => Tabla.ordenar(soloConMetrado ? Tabla.conMetrado(filasFiltradas, camposSuma) : filasFiltradas, orden),
+        [filasFiltradas, soloConMetrado, camposSuma, orden]);
+
+    // Excel = lo que se ve: mismas filas (Filters + filtros de la tabla + «Solo
+    // con metrado»), mismo orden y grupos, mismas columnas y los cálculos del pie.
+    // Las hojas las prepara lib/inventoryExport.js (probado sin navegador).
+    const handleExportExcel = useCallback(async () => {
+        if (!filasTabla.length || !columns.length) return;
+        // Solo al exportar: la librería de Excel (~95 KB) no viaja en cada apertura de View.
+        const XLSX = await import('xlsx');
+        const hojas = libroDeLaTabla({
+            filas: filasTabla, columnas: columns, tipos: tiposColumna, calculos, niveles,
+            criterios: { filtroTabla, soloConMetrado, camposSuma, orden, totalTrasFilters: flattenedData.length },
         });
-        const list = [];
-        for (const name of names) {
-            const rows = groups.get(name);
-            list.push({ type: 'group', value: name, count: rows.length });
-            if (!collapsedGroups.has(name)) {
-                for (const row of rows) list.push({ type: 'data', row });
+        const workbook = XLSX.utils.book_new();
+        for (const hoja of hojas) {
+            const ws = XLSX.utils.aoa_to_sheet(hoja.filas, { cellDates: true, dateNF: 'dd/mm/yyyy' });
+            ws['!cols'] = hoja.anchos.map(wch => ({ wch }));
+            if (hoja.filtroHasta) {
+                ws['!autofilter'] = { ref: XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: hoja.filtroHasta - 1, c: hoja.filas[0].length - 1 } }) };
             }
+            XLSX.utils.book_append_sheet(workbook, ws, hoja.nombre);
         }
-        return list;
-    }, [flattenedData, groupByKey, collapsedGroups, groupValueOf]);
+        const ahora = new Date();
+        const fileName = `Inventario_${ahora.getFullYear()}-${String(ahora.getMonth() + 1).padStart(2, '0')}-${String(ahora.getDate()).padStart(2, '0')}.xlsx`;
+
+        // CAPACITOR NATIVE: Guardar en carpeta Descargas usando Filesystem
+        if (Capacitor.isNativePlatform()) {
+            try {
+                const { Filesystem, Directory } = await import('@capacitor/filesystem');
+                const xlsxData = XLSX.write(workbook, { bookType: 'xlsx', type: 'base64', cellDates: true });
+                await Filesystem.writeFile({
+                    path: fileName,
+                    data: xlsxData,
+                    directory: Directory.Documents,
+                    recursive: true
+                });
+                alert(`Archivo guardado: ${fileName}`);
+            } catch (err) {
+                console.error('[Export] Error guardando en dispositivo:', err);
+                // Fallback: intentar descarga web
+                XLSX.writeFile(workbook, fileName, { cellDates: true });
+            }
+        } else {
+            XLSX.writeFile(workbook, fileName, { cellDates: true });
+        }
+    }, [filasTabla, columns, tiposColumna, calculos, niveles, filtroTabla, soloConMetrado, camposSuma, orden, flattenedData.length]);
+
+    const totalesPie = useMemo(() => {
+        const r = {};
+        for (const [campo, calc] of Object.entries(calculos)) r[campo] = Tabla.calcular(filasTabla, campo, calc);
+        return r;
+    }, [filasTabla, calculos]);
+
+    // Lista de render: grupos (varios niveles, plegables), filas y, si se
+    // piden, los totales de cada grupo.
+    const displayList = useMemo(() => {
+        if (!niveles.length) return filasTabla.map(row => ({ type: 'data', row, nivel: 0 }));
+        const grupos = Tabla.agrupar(filasTabla, niveles, totalesPorGrupo ? calculos : {});
+        return Tabla.aplanar(grupos, collapsedGroups, totalesPorGrupo).map(it => (
+            it.tipo === 'fila' ? { type: 'data', row: it.fila, nivel: it.nivel }
+                : { type: it.tipo === 'grupo' ? 'group' : 'groupTotals', grupo: it.grupo }));
+    }, [filasTabla, niveles, collapsedGroups, totalesPorGrupo, calculos]);
     displayListRef.current = displayList;
+
+    const alternarOrden = useCallback((campo, añadir) => {
+        setOrden(prev => {
+            const actual = prev.find(o => o.campo === campo);
+            const siguiente = !actual ? { campo, dir: 'asc' } : actual.dir === 'asc' ? { campo, dir: 'desc' } : null;
+            if (!añadir) return siguiente ? [siguiente] : [];
+            const resto = prev.filter(o => o.campo !== campo);
+            return siguiente ? (actual ? prev.map(o => o.campo === campo ? siguiente : o) : [...resto, siguiente]) : resto;
+        });
+    }, []);
 
     const visibleRows = useMemo(() => {
         if (displayList.length === 0 || containerHeight === 0) return [];
@@ -820,28 +911,8 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
             {/* Header / Tabs - Top Level (Como Tandem) */}
             <div style={{ display: 'flex', background: '#ffffff', height: '35px', alignItems: 'flex-end', padding: '0 20px', borderBottom: '1px solid #e8e6dc', justifyContent: 'space-between' }}>
                 <div style={{ display: 'flex', alignItems: 'flex-end', gap: '20px' }}>
-                    <div style={{ fontSize: '11px', textTransform: 'uppercase', color: '#52524d', fontWeight: 600, paddingBottom: '10px', letterSpacing: '0.8px', borderRight: '1px solid #cccac0', paddingRight: '20px' }}>
+                    <div style={{ fontSize: '11px', textTransform: 'uppercase', color: '#52524d', fontWeight: 600, paddingBottom: '10px', letterSpacing: '0.8px' }}>
                         Inventory
-                    </div>
-                    {/* Tabs */}
-                    <div style={{ display: 'flex', gap: '1px' }}>
-                        {['General', 'Tickets'].map(tab => (
-                            <div 
-                                key={tab}
-                                onClick={() => setActiveTab(tab)}
-                                style={{
-                                    padding: '8px 16px',
-                                    fontSize: '13px',
-                                    color: activeTab === tab ? '#141413' : '#72706b',
-                                    borderBottom: activeTab === tab ? '2px solid #6a9bcc' : '2px solid transparent',
-                                    cursor: 'pointer',
-                                    transition: 'color 0.2s',
-                                    marginBottom: '-1px'
-                                }}
-                            >
-                                {tab}
-                            </div>
-                        ))}
                     </div>
                 </div>
 
@@ -867,43 +938,82 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
             {/* Toolbar (Filters, Columns, Group rows...) */}
             <div style={{ display: 'flex', background: '#ffffff', minHeight: '36px', alignItems: 'center', padding: '0 12px', borderBottom: checkedIds.size > 0 ? 'none' : '1px solid #e8e6dc', gap: '12px' }}>
                 <div style={{ display: 'flex', alignItems: 'center' }}>
-                    <ToolBtn icon={<Icons.Filter />} />
-                    <ToolBtn icon={<Icons.Columns />} onClick={() => setColumnConfigOpen(true)} />
+                    <div style={{ position: 'relative' }}>
+                        <ToolBtn icon={<Icons.Filter />} onClick={() => setFiltroAbierto(o => !o)} active={reglasActivas > 0 || filtroAbierto}
+                            badge={reglasActivas || null} title={reglasActivas ? `Filtros de la tabla (${reglasActivas})` : 'Filtros de la tabla'} />
+                        {filtroAbierto && (
+                            <>
+                                <div style={{ position: 'fixed', inset: 0, zIndex: 60 }} onClick={() => setFiltroAbierto(false)} />
+                                <FiltroAvanzado filtro={filtroTabla} setFiltro={setFiltroTabla} campos={allPropertyKeys || []}
+                                    muestra={flattenedData.length > 1500 ? flattenedData.filter((_, i) => i % Math.ceil(flattenedData.length / 1500) === 0) : flattenedData}
+                                    onClose={() => setFiltroAbierto(false)} />
+                            </>
+                        )}
+                    </div>
+                    <ToolBtn icon={<Icons.Columns />} onClick={() => setColumnConfigOpen(true)} title="Columnas" />
                     <div style={{ position: 'relative' }}>
                         <ToolBtn
                             icon={<Icons.Group />}
-                            onClick={() => setGroupMenuOpen(o => !o)}
+                            onClick={e => {
+                                // Abre hacia donde haya sitio: con el panel bajo, hacia arriba.
+                                const r = e.currentTarget.getBoundingClientRect();
+                                const abajo = window.innerHeight - r.bottom - 12, arriba = r.top - 12;
+                                setGroupMenuOpen(o => o ? false : (abajo >= 380 || abajo >= arriba ? { arriba: false, alto: Math.min(380, abajo) } : { arriba: true, alto: Math.min(380, arriba) }));
+                            }}
                             active={!!groupByKey}
-                            title={groupByKey ? `Agrupado por ${groupByKey}` : 'Agrupar filas'}
+                            badge={niveles.length > 1 ? niveles.length : null}
+                            title={groupByKey ? `Agrupado por ${niveles.join(' › ')}` : 'Agrupar filas'}
                         />
                         {groupMenuOpen && (
                             <>
                                 <div style={{ position: 'fixed', inset: 0, zIndex: 60 }} onClick={() => setGroupMenuOpen(false)} />
-                                <div style={{
-                                    position: 'absolute', top: '30px', left: 0, zIndex: 61, minWidth: '240px', maxHeight: '340px', overflowY: 'auto',
-                                    background: '#ffffff', border: '1px solid #e8e6dc', borderRadius: '6px', boxShadow: '0 8px 24px rgba(0,0,0,.5)', padding: '6px'
+                                <div className="v-menu" role="menu" aria-label="Agrupar filas" style={{
+                                    position: 'absolute', ...(groupMenuOpen.arriba ? { bottom: '30px' } : { top: '30px' }), left: 0, zIndex: 61, minWidth: '260px', maxHeight: `${groupMenuOpen.alto}px`, overflowY: 'auto'
                                 }}>
-                                    <div style={{ fontSize: '10.5px', color: '#72706b', textTransform: 'uppercase', letterSpacing: '.5px', padding: '4px 8px' }}>Agrupar por</div>
-                                    <div
-                                        onClick={() => { setGroupByKey(null); setGroupMenuOpen(false); }}
-                                        style={{ padding: '6px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '12.5px', color: !groupByKey ? '#507294' : '#52524d', background: !groupByKey ? 'rgba(106,155,204,.12)' : 'transparent' }}
-                                    >Sin agrupar</div>
-                                    {detectedGroupKey && (
-                                        <div
-                                            onClick={() => { setGroupByKey(detectedGroupKey); setCollapsedGroups(new Set()); setGroupMenuOpen(false); }}
-                                            style={{ padding: '6px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '12.5px', display: 'flex', alignItems: 'center', gap: '6px', color: groupByKey === detectedGroupKey ? '#507294' : '#52524d', background: groupByKey === detectedGroupKey ? 'rgba(106,155,204,.12)' : 'transparent' }}
-                                        >
-                                            <span style={{ fontSize: '9px', fontWeight: 700, background: '#507294', color: '#ffffff', padding: '1px 5px', borderRadius: '3px' }}>AUTO</span>
-                                            {detectedGroupKey}
+                                    {groupByKey && (
+                                        <div style={{ padding: '4px 6px 8px', borderBottom: '1px solid var(--v-linea)', marginBottom: '4px', display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '12px', color: 'var(--v-texto-2)' }}>
+                                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', alignItems: 'center' }}>
+                                                {niveles.map((k, i) => (
+                                                    <span key={k} style={{ display: 'flex', alignItems: 'center', gap: '2px', padding: '0 2px 0 8px', height: '24px', border: '1px solid var(--v-linea)', borderRadius: 'var(--v-radio-control)', background: 'var(--v-superficie-2)', color: 'var(--v-texto)' }}>
+                                                        {i + 1} · {Tabla.etiquetaDeColumna(k)}
+                                                        <button aria-label={`Quitar el nivel ${k}`} className="v-cerrar" style={{ width: '20px', height: '20px' }} onClick={() => {
+                                                            if (i === 0) { setGroupByKey(nivelesExtra[0] || null); setNivelesExtra(nivelesExtra.slice(1)); }
+                                                            else setNivelesExtra(nivelesExtra.filter((_, j) => j !== i - 1));
+                                                            setCollapsedGroups(new Set());
+                                                        }}><Icons.Close /></button>
+                                                    </span>
+                                                ))}
+                                            </div>
+                                            <select aria-label="Añadir un nivel de agrupación" className="v-campo" value="" onChange={e => { if (e.target.value) { setNivelesExtra(n => [...n, e.target.value]); setCollapsedGroups(new Set()); } }} style={{ height: '28px', fontSize: '12px' }}>
+                                                <option value="">+ Añadir nivel…</option>
+                                                {(allPropertyKeys || []).filter(k => !niveles.includes(k)).map(k => <option key={k} value={k}>{Tabla.etiquetaDeColumna(k)}</option>)}
+                                            </select>
+                                            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', color: 'var(--v-texto)' }}>
+                                                <input type="checkbox" checked={totalesPorGrupo} onChange={e => setTotalesPorGrupo(e.target.checked)} style={{ accentColor: 'var(--v-accion)' }} />
+                                                Totales en cada grupo
+                                            </label>
                                         </div>
                                     )}
-                                    <div style={{ height: '1px', background: '#e8e6dc', margin: '4px 0' }} />
+                                    <div className="v-menu__nota" style={{ textTransform: 'uppercase', letterSpacing: '.5px', padding: '4px 10px' }}>Agrupar por</div>
+                                    <button role="menuitemradio" aria-checked={!groupByKey} className="v-menu__item"
+                                        onClick={() => { setGroupByKey(null); setNivelesExtra([]); setGroupMenuOpen(false); }}
+                                        style={!groupByKey ? { background: 'var(--alephia-selected-bg, #ECF0F1)', color: 'var(--v-accion)' } : undefined}
+                                    >Sin agrupar</button>
+                                    {detectedGroupKey && (
+                                        <button role="menuitemradio" aria-checked={groupByKey === detectedGroupKey} className="v-menu__item"
+                                            onClick={() => { setGroupByKey(detectedGroupKey); setNivelesExtra([]); setCollapsedGroups(new Set()); setGroupMenuOpen(false); }}
+                                            style={groupByKey === detectedGroupKey ? { background: 'var(--alephia-selected-bg, #ECF0F1)', color: 'var(--v-accion)' } : undefined}
+                                        >
+                                            <span className="v-menu__nota" style={{ border: '1px solid var(--v-linea-campo)', borderRadius: '3px', padding: '0 4px' }}>sugerido</span>
+                                            {Tabla.etiquetaDeColumna(detectedGroupKey)}
+                                        </button>
+                                    )}
+                                    <div style={{ height: '1px', background: 'var(--v-linea)', margin: '4px 0' }} />
                                     {(allPropertyKeys || []).filter(k => k !== detectedGroupKey && k !== 'Name').map(k => (
-                                        <div
-                                            key={k}
-                                            onClick={() => { setGroupByKey(k); setCollapsedGroups(new Set()); setGroupMenuOpen(false); }}
-                                            style={{ padding: '6px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '12.5px', color: groupByKey === k ? '#507294' : '#52524d', background: groupByKey === k ? 'rgba(106,155,204,.12)' : 'transparent', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
-                                        >{k}</div>
+                                        <button key={k} role="menuitemradio" aria-checked={groupByKey === k} className="v-menu__item"
+                                            onClick={() => { setGroupByKey(k); setNivelesExtra([]); setCollapsedGroups(new Set()); setGroupMenuOpen(false); }}
+                                            style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'block', lineHeight: '32px', ...(groupByKey === k ? { background: 'var(--alephia-selected-bg, #ECF0F1)', color: 'var(--v-accion)' } : {}) }}
+                                        >{Tabla.etiquetaDeColumna(k)}</button>
                                     ))}
                                 </div>
                             </>
@@ -915,9 +1025,19 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
                 
                 {/* View Options */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '16px', fontSize: '12.5px', color: '#52524d' }}>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
-                        <input type="checkbox" checked={showAssetsOnly} onChange={(e) => setShowAssetsOnly(e.target.checked)} style={{ accentColor: '#6a9bcc' }} />
-                        Assets only
+                    {showAssetsOnly && (
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
+                            <input type="checkbox" checked={showAssetsOnly} onChange={(e) => setShowAssetsOnly(e.target.checked)} style={{ accentColor: '#6a9bcc' }} />
+                            Assets only
+                        </label>
+                    )}
+                    <label
+                        title={camposSuma.length
+                            ? `Oculta las filas sin cantidad (distinta de 0) en ninguna de las columnas que se suman: ${camposSuma.map(Tabla.etiquetaDeColumna).join(', ')}`
+                            : 'No hay columnas que se sumen (Σ) en la tabla: añade una columna de cantidad para usarlo'}
+                        style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: camposSuma.length ? 'pointer' : 'default', opacity: camposSuma.length ? 1 : 0.5 }}>
+                        <input type="checkbox" checked={soloConMetrado} disabled={!camposSuma.length} onChange={(e) => setSoloConMetrado(e.target.checked)} style={{ accentColor: '#6a9bcc' }} />
+                        Solo con metrado
                     </label>
                     <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
                         <input type="checkbox" checked={followSelection} onChange={(e) => setFollowSelection(e.target.checked)} style={{ accentColor: '#6a9bcc' }} />
@@ -1182,7 +1302,7 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
 
             {/* Sub-header Summary */}
             <div style={{ padding: '6px 12px', background: '#ffffff', fontSize: '11px', color: '#72706b', borderBottom: '1px solid #e8e6dc', display: 'flex', justifyContent: 'space-between' }}>
-                 <span>Showing {flattenedData.length.toLocaleString()} items {window._lastHasActiveFilters ? '(Filtered)' : ''}</span>
+                 <span>{filasTabla.length.toLocaleString('es-PE')} filas{reglasActivas || soloConMetrado ? ` de ${flattenedData.length.toLocaleString('es-PE')}` : ''}{reglasActivas ? ` (filtros de la tabla: ${reglasActivas})` : ''}{soloConMetrado ? ' · solo con metrado' : ''}{orden.length ? ` · ordenado por ${orden.map(o => o.campo + (o.dir === 'asc' ? ' ▲' : ' ▼')).join(', ')}` : ''}</span>
             </div>
             
             {/* ═══ UNIFIED SCROLL CONTAINER (horizontal + vertical) ═══ */}
@@ -1227,27 +1347,28 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
                                 title={checkedIds.size === flattenedData.length ? 'Deselect all' : `Select all ${flattenedData.length} items`}
                             />
                         </div>
-                        {columns.map(col => (
-                            <div 
-                                key={col.key} 
-                                style={{ 
-                                    width: col.width, 
-                                    flexShrink: 0,
-                                    padding: '0 12px', 
-                                    overflow: 'hidden', 
-                                    textOverflow: 'ellipsis', 
-                                    whiteSpace: 'nowrap',
-                                    textAlign: 'left',
-                                    height: '100%',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    borderRight: '1px solid #e8e6dc',
-                                    position: 'relative'
-                                }}
-                            >
-                                {col.header}
-                            </div>
-                        ))}
+                        {columns.map(col => {
+                            const o = orden.findIndex(x => x.campo === col.key);
+                            const dir = o >= 0 ? orden[o].dir : null;
+                            return (
+                                <button
+                                    key={col.key}
+                                    onClick={e => alternarOrden(col.key, e.shiftKey)}
+                                    onContextMenu={e => { e.preventDefault(); setMenuCabecera({ campo: col.key, x: e.clientX, y: e.clientY }); }}
+                                    title={`${col.header} · clic: ordenar · Mayús+clic: añadir criterio · clic derecho: más`}
+                                    style={{
+                                        width: col.width, flexShrink: 0, padding: '0 12px', overflow: 'hidden', whiteSpace: 'nowrap',
+                                        textAlign: 'left', height: '100%', display: 'flex', alignItems: 'center', gap: '4px',
+                                        borderRight: '1px solid #e8e6dc', position: 'relative', background: 'transparent', border: 'none',
+                                        borderRightStyle: 'solid', borderRightWidth: '1px', borderRightColor: '#e8e6dc',
+                                        font: 'inherit', fontWeight: 600, color: dir ? '#507294' : '#333330', cursor: 'pointer'
+                                    }}
+                                >
+                                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{col.header}</span>
+                                    {dir && <span aria-hidden="true">{dir === 'asc' ? '▲' : '▼'}{orden.length > 1 ? o + 1 : ''}</span>}
+                                </button>
+                            );
+                        })}
                     </div>
 
                     {/* Virtualised Data Grid */}
@@ -1271,28 +1392,45 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
                             </div>
                             <span style={{ color: '#72706b', fontSize: '12px', letterSpacing: '0.5px' }}>Loading inventory data...</span>
                         </div>
+                    ) : flattenedData.length > 0 && displayList.length === 0 ? (
+                        <div style={{ padding: '40px 20px', color: '#52524d', textAlign: 'center', fontSize: '13px' }}>
+                            Ninguna fila cumple los filtros de la tabla. <button onClick={() => setFiltroTabla({ modo: 'y', reglas: [] })} style={{ background: 'none', border: 'none', color: '#507294', cursor: 'pointer', font: 'inherit' }}>Quitar filtros</button>
+                        </div>
                     ) : flattenedData.length > 0 ? (
                         <div style={{ height: `${totalHeight}px`, position: 'relative' }}>
                             {visibleRows.map(({ index, item, top }) => item.type === 'group' ? (
                                 <div
-                                    key={`grp-${item.value}`}
+                                    key={`grp-${item.grupo.clave}`}
                                     onClick={() => setCollapsedGroups(prev => {
                                         const next = new Set(prev);
-                                        if (next.has(item.value)) next.delete(item.value); else next.add(item.value);
+                                        if (next.has(item.grupo.clave)) next.delete(item.grupo.clave); else next.add(item.grupo.clave);
                                         return next;
                                     })}
                                     style={{
                                         position: 'absolute', top: `${top}px`, left: 0, height: `${ROW_HEIGHT}px`,
                                         width: `${totalContentWidth}px`, display: 'flex', alignItems: 'center', gap: '8px',
-                                        padding: '0 12px', boxSizing: 'border-box', cursor: 'pointer',
-                                        background: '#ffffff', borderBottom: '1px solid #e8e6dc', borderTop: '1px solid #e8e6dc',
+                                        padding: `0 12px 0 ${12 + item.grupo.nivel * 18}px`, boxSizing: 'border-box', cursor: 'pointer',
+                                        background: item.grupo.nivel ? '#fdfdfb' : '#ffffff', borderBottom: '1px solid #e8e6dc', borderTop: '1px solid #e8e6dc',
                                         color: '#52524d', fontSize: '12px', fontWeight: 700, zIndex: 1
                                     }}
-                                    title={`${groupByKey}: ${item.value}`}
+                                    title={`${item.grupo.campo}: ${item.grupo.valor}`}
                                 >
-                                    <span style={{ display: 'inline-block', transform: collapsedGroups.has(item.value) ? 'rotate(-90deg)' : 'none', transition: 'transform .1s', color: '#507294' }}>▾</span>
-                                    <span style={{ color: '#507294' }}>{item.value}</span>
-                                    <span style={{ color: '#72706b', fontWeight: 500 }}>· {item.count}</span>
+                                    <span style={{ display: 'inline-block', transform: collapsedGroups.has(item.grupo.clave) ? 'rotate(-90deg)' : 'none', transition: 'transform .1s', color: '#507294' }}>▾</span>
+                                    <span style={{ color: '#507294' }}>{item.grupo.valor}</span>
+                                    <span style={{ color: '#72706b', fontWeight: 500 }}>· {item.grupo.n}</span>
+                                </div>
+                            ) : item.type === 'groupTotals' ? (
+                                <div key={`tot-${item.grupo.clave}`} style={{
+                                    position: 'absolute', top: `${top}px`, left: 0, height: `${ROW_HEIGHT}px`, width: `${totalContentWidth}px`,
+                                    display: 'flex', alignItems: 'center', boxSizing: 'border-box', background: '#f5f4ef',
+                                    borderBottom: '1px solid #e8e6dc', fontSize: '11.5px', fontWeight: 600, color: '#333330'
+                                }}>
+                                    <div style={{ width: '40px', flexShrink: 0, textAlign: 'center', color: '#72706b' }}>{item.grupo.n}</div>
+                                    {columns.map(col => (
+                                        <div key={col.key} style={{ width: col.width, flexShrink: 0, padding: '0 12px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                            {Tabla.textoDeResultado(item.grupo.totales[col.key])}
+                                        </div>
+                                    ))}
                                 </div>
                             ) : (
                                 <InventoryRow
@@ -1316,39 +1454,86 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
                     )}
 
                     {/* FOOTER TOTALS ROW (inside scroll container so it scrolls horizontally with data) */}
-                    {totalColumns.size > 0 && flattenedData.length > 0 && (
-                        <div style={{ 
-                            display: 'flex', 
-                            background: 'repeating-linear-gradient(45deg, #ffffff, #ffffff 10px, #ffffff 10px, #ffffff 20px)',
-                            borderTop: '1px solid #e8e6dc',
-                            alignItems: 'center', fontSize: '12px', fontWeight: 600, color: '#507294', flexShrink: 0, height: '34px',
+                    {/* PIE: recuento y el cálculo de cada columna (clic para cambiarlo) */}
+                    {flattenedData.length > 0 && (
+                        <div style={{
+                            display: 'flex', background: '#f5f4ef', borderTop: '1px solid #cccac0',
+                            alignItems: 'center', fontSize: '12px', fontWeight: 600, color: '#333330', flexShrink: 0, height: '30px',
                             position: 'sticky', bottom: 0, zIndex: 2
                         }}>
-                            <div style={{ width: '40px', flexShrink: 0, borderRight: '1px solid #e8e6dc', display: 'flex', justifyContent: 'center' }}>
-                                Σ
+                            <div title="Filas en la tabla" style={{ width: '40px', flexShrink: 0, borderRight: '1px solid #e8e6dc', textAlign: 'center', fontSize: '11px' }}>
+                                {filasTabla.length.toLocaleString('es-PE')}
                             </div>
                             {columns.map(col => {
-                                if (!totalColumns.has(col.key)) {
-                                    return <div key={col.key} style={{ width: col.width, flexShrink: 0, padding: '0 12px', borderRight: '1px solid #e8e6dc' }} />;
-                                }
-                                const sum = flattenedData.reduce((acc, row) => {
-                                    const val = parseNumericCell(row[col.key]);
-                                    return acc + (val || 0);
-                                }, 0);
-                                
+                                const r = totalesPie[col.key];
+                                const texto = Tabla.textoDeResultado(r);
+                                const aviso = r && r.sinDato && r.calculo !== 'recuento' && r.calculo !== 'distintos' ? `${r.sinDato} sin dato numérico` : '';
                                 return (
-                                    <div key={col.key} style={{ 
-                                        width: col.width, flexShrink: 0, padding: '0 12px', 
-                                        borderRight: '1px solid #e8e6dc', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' 
-                                    }}>
-                                        {sum.toLocaleString(undefined, { maximumFractionDigits: 2 })}
-                                    </div>
+                                    <button key={col.key}
+                                        onClick={e => col.key !== 'dbId' && setMenuPie({ campo: col.key, x: e.clientX, y: e.clientY })}
+                                        title={col.key === 'dbId' ? '' : `${col.header}: ${texto || 'sin cálculo'}${aviso ? ' · ' + aviso : ''} · clic para cambiar el cálculo`}
+                                        style={{
+                                            width: col.width, flexShrink: 0, padding: '0 12px', height: '100%', textAlign: texto ? 'right' : 'left', fontVariantNumeric: 'tabular-nums',
+                                            background: 'transparent', border: 'none', borderRight: '1px solid #e8e6dc', font: 'inherit', fontWeight: 600,
+                                            color: texto ? '#141413' : '#b0aea5', cursor: col.key === 'dbId' ? 'default' : 'pointer',
+                                            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'
+                                        }}>
+                                        {texto}
+                                    </button>
                                 );
                             })}
                         </div>
-            )}
+                    )}
                 </div>{/* close inner minWidth wrapper */}
             </div>{/* close outer scroll container */}
+
+            {/* Menú de la cabecera (clic derecho) */}
+            {menuCabecera && (() => {
+                const c = menuCabecera.campo;
+                const item = (texto, accion, deshabilitado = false) => (
+                    <button key={texto} role="menuitem" disabled={deshabilitado} className="v-menu__item" onClick={() => { accion(); setMenuCabecera(null); }}
+                        style={deshabilitado ? { color: 'var(--v-texto-3)', opacity: .6, cursor: 'default' } : undefined}>{texto}</button>
+                );
+                return (
+                    <>
+                        <div style={{ position: 'fixed', inset: 0, zIndex: 300 }} onClick={() => setMenuCabecera(null)} onContextMenu={e => { e.preventDefault(); setMenuCabecera(null); }} />
+                        <div role="menu" aria-label={`Columna ${Tabla.etiquetaDeColumna(c)}`} className="v-menu" style={{ position: 'fixed', left: Math.min(menuCabecera.x, window.innerWidth - 240), top: Math.min(menuCabecera.y, window.innerHeight - 300), zIndex: 301, width: '230px' }}>
+                            {item('Ordenar ascendente', () => setOrden([{ campo: c, dir: 'asc' }]))}
+                            {item('Ordenar descendente', () => setOrden([{ campo: c, dir: 'desc' }]))}
+                            {item('Quitar el orden', () => setOrden(o => o.filter(x => x.campo !== c)), !orden.some(x => x.campo === c))}
+                            <div style={{ height: '1px', background: 'var(--v-linea)', margin: '4px 0' }} />
+                            {item('Agrupar por esta columna', () => { setGroupByKey(c); setNivelesExtra([]); setCollapsedGroups(new Set()); }, c === 'dbId')}
+                            {item('Añadir como subnivel', () => { setNivelesExtra(n => [...n, c]); setCollapsedGroups(new Set()); }, !groupByKey || niveles.includes(c) || c === 'dbId')}
+                            {item('Filtrar por esta columna', () => { setFiltroTabla(f => ({ ...f, reglas: [...f.reglas, { campo: c, op: 'contiene', valor: '' }] })); setFiltroAbierto(true); }, c === 'dbId')}
+                            <div style={{ height: '1px', background: 'var(--v-linea)', margin: '4px 0' }} />
+                            {item('Ocultar columna', () => {
+                                const actuales = (selectedColumnKeys || allPropertyKeys).filter(k => k !== c);
+                                setSelectedColumnKeys(actuales);
+                                fijarInventoryConfig({ columns: columnasDesdeElGrid(actuales, allPropertyKeys) });
+                            }, c === 'dbId')}
+                        </div>
+                    </>
+                );
+            })()}
+
+            {/* Menú del pie: el cálculo de la columna */}
+            {menuPie && (
+                <>
+                    <div style={{ position: 'fixed', inset: 0, zIndex: 300 }} onClick={() => setMenuPie(null)} />
+                    <div role="menu" aria-label="Cálculo de la columna" className="v-menu" style={{ position: 'fixed', left: Math.min(menuPie.x, window.innerWidth - 210), top: Math.max(8, menuPie.y - 270), zIndex: 301, width: '200px' }}>
+                        <div className="v-menu__nota" style={{ textTransform: 'uppercase', letterSpacing: '.5px', padding: '4px 10px' }}>Cálculo</div>
+                        {[...Tabla.CALCULOS, 'ninguno'].map(calc => {
+                            const actual = (calculos[menuPie.campo] || 'ninguno') === calc;
+                            return (
+                                <button key={calc} role="menuitemradio" aria-checked={actual} className="v-menu__item" onClick={() => { setCalculosElegidos(p => ({ ...p, [menuPie.campo]: calc })); setMenuPie(null); }}
+                                    style={actual ? { background: 'var(--alephia-selected-bg, #ECF0F1)', color: 'var(--v-accion)' } : undefined}>
+                                    {calc === 'ninguno' ? 'Sin cálculo' : NOMBRE_CALCULO_LARGO[calc]}
+                                </button>
+                            );
+                        })}
+                    </div>
+                </>
+            )}
 
             {/* Column Editor Modal */}
             <ColumnConfiguratorModal

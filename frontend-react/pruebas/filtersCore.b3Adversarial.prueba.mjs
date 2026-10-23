@@ -135,7 +135,7 @@ await check('popout: mismo dbId en dos Sources no resalta el ajeno', async () =>
         recorrer(f.host.__inventoryPopup.document.body);
         return salida.filter(nodo => nodo.dataset?.rowKey);
     };
-    const resaltadas = () => todasLasFilas().filter(fila => fila.style?.background === '#2a4a8a');
+    const resaltadas = () => todasLasFilas().filter(fila => fila.style?.background === '#ECF0F1');
     const filas = resaltadas();
     assert.equal(filas.length <= 1, true, 'se resaltó más de una fila');
     if (filas.length === 1) assert.equal(filas[0].dataset.rowKey, deM1.rowKey,

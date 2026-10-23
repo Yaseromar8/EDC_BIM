@@ -15,7 +15,7 @@ export function openInventoryFilterPopout({host,scopeId,columns,assetsOnly,selec
     host.__inventoryPopup=popup;
     const doc=popup.document;
     doc.open();
-    doc.write('<!doctype html><html><head><title>Inventory — BIM Visor</title><style>html,body{height:100%;overflow:hidden}body{margin:0;background:#16161a;color:#eee;font:13px system-ui;display:flex;flex-direction:column}header{display:flex;justify-content:space-between;padding:10px;flex:none}p{padding:0 10px;flex:none}.inventory-scroll{overflow:auto;overflow-anchor:none;flex:1;min-height:0;max-height:2400px}table{border-spacing:0;table-layout:fixed;min-width:100%}th,td{box-sizing:border-box;height:28px;padding:0 10px;border-right:1px solid #333;border-bottom:1px solid #333;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:27px}th{position:sticky;top:0;background:#24242a;z-index:1}tr[data-row-key]:hover{background:#303b50}tr.spacer td{padding:0;border:0;line-height:0}button{cursor:pointer}</style></head><body></body></html>');
+    doc.write('<!doctype html><html><head><title>Inventory — BIM Visor</title><style>html,body{height:100%;overflow:hidden}body{margin:0;background:#FAF9F5;color:#141413;font:13px "IBM Plex Sans",system-ui,sans-serif;display:flex;flex-direction:column}header{display:flex;justify-content:space-between;padding:10px;flex:none}p{padding:0 10px;flex:none}.inventory-scroll{overflow:auto;overflow-anchor:none;flex:1;min-height:0;max-height:2400px}table{border-spacing:0;table-layout:fixed;min-width:100%}th,td{box-sizing:border-box;height:28px;padding:0 10px;border-right:1px solid #E8E6DC;border-bottom:1px solid #E8E6DC;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:27px}th{position:sticky;top:0;background:#F1F0E8;color:#333330;font-weight:600;z-index:1}td{color:#52524D}.inventory-scroll{background:#FFFFFF}tr[data-row-key]:hover{background:#F1F0E8}tr.spacer td{padding:0;border:0;line-height:0}header{background:#302F2E;color:#FAF9F5;align-items:center}p{color:#72706B}button{cursor:pointer;font:inherit;font-size:12px;height:28px;padding:0 12px;border:1px solid #52524D;border-radius:4px;background:transparent;color:#FAF9F5}button:hover{background:#52524D}</style></head><body></body></html>');
     doc.close();
     const header=doc.createElement('header'),title=doc.createElement('strong'),dock=doc.createElement('button');
     title.textContent='Inventory';dock.textContent='Volver al visor';header.append(title,dock);
@@ -38,7 +38,7 @@ export function openInventoryFilterPopout({host,scopeId,columns,assetsOnly,selec
         frame=null;
     };
     const paintHighlight=()=>{
-        for(const row of tbody.children) row.style.background=row.dataset.rowKey===highlightedKey?'#2a4a8a':'';
+        for(const row of tbody.children) row.style.background=row.dataset.rowKey===highlightedKey?'#ECF0F1':'';
     };
     const clearRows=()=>{
         cancelFrame();rows=[];targets.clear();rowIndices.clear();renderedResult=null;

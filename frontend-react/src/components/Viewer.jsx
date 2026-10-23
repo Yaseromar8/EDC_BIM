@@ -3,6 +3,7 @@ import { installPivotUnderPointer } from '../utils/pivotUnderPointer';
 import { installForwardWheelZoom, forwardWheelDirectionForScope } from '../utils/forwardWheelZoom';
 import { mountFiltersRuntime } from '../lib/filterRuntimeBridge.js';
 import { viewerElementKey } from '../lib/filtersCore.js';
+import { irAElementos } from '../lib/irAElemento.js';
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import './viewer.css';
 import './IconMarkup.css'; // Add this line
@@ -1799,11 +1800,15 @@ const Viewer = ({
 
             if (targetModel) {
                 console.log(`[Viewer-Select] Seleccionando dbIds: ${dbIds} en URN: ${urn.slice(-15)}`);
-                viewer.setAggregateSelection([{ model: targetModel, ids: dbIds }]);
+                // Una fila es UN elemento: se vacía la selección de los demás modelos
+                // en la misma llamada (un solo evento). Con solo el modelo destino,
+                // lo elegido antes en otro modelo seguía seleccionado y se acumulaba.
+                viewer.setAggregateSelection(models.map(m => ({ model: m, ids: m === targetModel ? dbIds : [] })));
                 
                 // Si 'followCamera' no fue enviado explicitly como 'false', movemos la cámara.
                 if (e.detail.followCamera !== false) {
-                    viewer.fitToView(dbIds, targetModel);
+                    // Encuadre en la parte del visor que se ve (Inventory tapa la de abajo).
+                    irAElementos(viewer, targetModel, dbIds);
                 }
             } else {
                 console.warn(`[Viewer-Select] Modelo no encontrado para URN: ${urn}`);

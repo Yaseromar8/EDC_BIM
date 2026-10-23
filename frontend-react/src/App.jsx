@@ -4924,7 +4924,7 @@ function App() {
 
               {/* INVENTORY DATA GRID - Overlay Panel (Tandem Style) */}
               {inventoryTabOpen && (
-                <div className="inventory-overlay-panel" style={{
+                <div className="inventory-overlay-panel" data-tapa-visor style={{
                   position: 'absolute',
                   bottom: 0,
                   left: panelVisible && activePanel && activePanel !== 'views' && activePanel !== 'inventory'
