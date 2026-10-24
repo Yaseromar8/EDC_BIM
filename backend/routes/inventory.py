@@ -236,7 +236,7 @@ def sanitize_urn(urn):
     urn = urn.replace('+', '-').replace('/', '_').rstrip('=')
     return urn
 
-def _extraction_source_context(conn, urn, target_urn, scope_hint=None):
+def _extraction_source_context(conn, urn, target_urn, scope_hint=None, puede_entrar=None, compartir=False):
     """Identidad demostrable y destino exacto; no afirma propiedad APS de un URN nuevo.
 
     La admision previa al vinculo se conserva para DOCS: un Source nunca
@@ -255,6 +255,14 @@ def _extraction_source_context(conn, urn, target_urn, scope_hint=None):
     entre las obras que el registro YA conoce para ese linaje, y la sesion
     tiene que poder entrar en el (lo comprueba la ruta con `authorize_scope`).
     Un frente que no este registrado para el linaje no cambia nada.
+
+    COMPARTIR un documento con OTRA obra (24-oct-2026, decision del propietario: el
+    frente de interferencias necesita el modelo HD 011264@011268, que ya es de
+    PQT8_TALARA). Se admite solo si quien lo pide PUEDE ENTRAR en una obra donde el
+    documento ya esta vinculado: eso es la prueba de autoridad sobre el modelo, no
+    una declaracion del cliente. `puede_entrar(frente) -> bool` la da la ruta con la
+    sesion; `compartir=True` lo pasa la ruta al hilo, que ya no tiene sesion, despues
+    de haberlo comprobado. Sin una de las dos, la regla de antes sigue intacta.
     """
     from db import resolve_project_id
     from inventory_identity import IdentityError, source_identity
@@ -302,7 +310,9 @@ def _extraction_source_context(conn, urn, target_urn, scope_hint=None):
         if not project_id:
             raise IdentityError('PROJECT_UNRESOLVED')
         if known_projects and project_id not in known_projects:
-            raise IdentityError('SOURCE_PROJECT_CONFLICT')
+            duenas = sorted({entry[0] for entry in related})
+            if not (compartir or (puede_entrar and any(puede_entrar(s) for s in duenas))):
+                raise IdentityError('SOURCE_PROJECT_CONFLICT')
         authorization_scopes = [target_urn]
     exact = [entry for entry in related
              if entry[0] == target_urn and entry[3] == normalized]
@@ -316,7 +326,8 @@ def _extraction_source_context(conn, urn, target_urn, scope_hint=None):
             'item_id': item_id, 'project_id': project_id,
             'authorization_scopes': authorization_scopes,
             'registered_source': bool(related),
-            'linked_in_scope': any(entry[0] == target_urn for entry in related)}
+            'linked_in_scope': any(entry[0] == target_urn for entry in related),
+            'compartido': target_urn != '__cmp__' and bool(known_projects) and project_id not in known_projects}
 
 
 def _aps_collection(response):
@@ -374,7 +385,7 @@ def _misma_vista(a, b):
 
 
 def extract_metadata_task(urn, target_urn, job_id, purge_source_urns=None, scope_hint=None,
-                          reuse_existing_snapshot=False, vista_pedida=None):
+                          reuse_existing_snapshot=False, vista_pedida=None, compartir=False):
     """ Tarea en segundo plano para extraer metadata de Autodesk.
 
     purge_source_urns: Sources de OTRO linaje que se retiran (sin borrar historia)
@@ -405,7 +416,7 @@ def extract_metadata_task(urn, target_urn, job_id, purge_source_urns=None, scope
         from db import get_db_connection
         from inventory_identity import InventoryIdentityRepository, IdentityError, source_identity
         with get_db_connection() as conn:
-            source_context = _extraction_source_context(conn, urn, target_urn, scope_hint=scope_hint)
+            source_context = _extraction_source_context(conn, urn, target_urn, scope_hint=scope_hint, compartir=compartir)
             urn = source_context['source_urn']
             # LA VISTA MANDA (vista_del_modelo). El inventario guardado de esta versión solo se
             # reutiliza si salió de la MISMA vista que se pide; si no se sabe de cuál salió (anterior
@@ -1041,7 +1052,14 @@ def start_extraction():
         with get_db_connection() as conn:
             if target_urn != '__cmp__':
                 authorize_scope(conn, target_urn)
-            context = _extraction_source_context(conn, urn, target_urn, scope_hint=scope_hint)
+
+            def puede_entrar(frente):
+                try:
+                    authorize_scope(conn, frente)
+                    return True
+                except IdentityError:
+                    return False
+            context = _extraction_source_context(conn, urn, target_urn, scope_hint=scope_hint, puede_entrar=puede_entrar)
             if reuse_existing_snapshot and context['linked_in_scope']:
                 return jsonify({'error': 'El modelo ya esta vinculado al frente.',
                                 'code': 'MODEL_ALREADY_LINKED'}), 409
@@ -1071,6 +1089,9 @@ def start_extraction():
     task_kwargs = {'scope_hint': scope_hint}
     if reuse_existing_snapshot:
         task_kwargs['reuse_existing_snapshot'] = True
+    if context.get('compartido'):
+        # Ya comprobado arriba con la sesion: puede entrar en una obra donde el documento esta.
+        task_kwargs['compartir'] = True
     # La vista elegida en la ventana de importar: se extrae CON ELLA (vista_del_modelo).
     vista_nombre = str(data.get('view_name') or '').strip() or None
     vista_guid = str(data.get('view_guid') or '').strip() or None

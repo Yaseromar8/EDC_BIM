@@ -143,6 +143,7 @@ export function libroDeLaTabla({ filas, columnas, tipos = {}, calculos = {}, niv
         ['Exportado', c.fecha instanceof Date ? c.fecha : new Date()],
         ...(c.ambito ? [['Ámbito', c.ambito]] : []),
         ['Filas exportadas', Number.isFinite(c.totalTrasFilters) ? `${filas.length} de ${c.totalTrasFilters} (tras Filters)` : filas.length],
+        ...(c.busqueda ? [['Búsqueda', `${c.busqueda.split(/\r?\n/).filter(l => l.trim()).join(' | ')}${c.campoBusqueda ? ` (solo en ${T.etiquetaDeColumna(c.campoBusqueda)})` : ''}`]] : []),
         ['Filtros de la tabla', filtroTexto || 'ninguno'],
         ['Solo con metrado', c.soloConMetrado ? `sí · cantidad ≠ 0 en ${(c.camposSuma || []).map(T.etiquetaDeColumna).join(', ')}` : 'no'],
         ['Orden', (c.orden || []).length ? c.orden.map(o => `${T.etiquetaDeColumna(o.campo)} ${o.dir === 'desc' ? '↓' : '↑'}`).join(', ') : 'el del modelo'],

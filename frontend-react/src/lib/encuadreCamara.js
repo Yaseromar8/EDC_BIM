@@ -63,25 +63,51 @@ export function zonaLibre(lienzo, tapas = []) {
  *
  *   ocupacion    fracción del lado corto de la zona libre que ocupa el diámetro
  *   radioMinimo  radio por debajo del cual no se acerca más (contexto)
+ *   puntos       (opcional) [[x,y,z]…]: en vez de la esfera, el rectángulo que esos
+ *                puntos ocupan VISTOS DESDE ESTA CÁMARA. Un conjunto repartido mirado
+ *                en diagonal ocupa en pantalla mucho menos que su esfera (24-oct-2026,
+ *                Drenaje: cuatro losas en 45 × 35 m quedaban en un tercio de la
+ *                pantalla con `ocupacion` 0,75). Con los puntos, ancho y alto llenan
+ *                `ocupacion` de la zona libre, cada uno en su eje.
  *
  * Devuelve { objetivo, posicion, arriba, distancia, altoVisible }.
  */
 export function vistaDeEncuadre({
     centro, radio, direccion, arriba, fovVertical, lienzo, libre,
-    ocupacion = 0.6, radioMinimo = 0,
+    ocupacion = 0.6, radioMinimo = 0, puntos = null,
 }) {
-    const r = Math.max(radio || 0, radioMinimo || 0, 1e-9);
     const libreAlto = libre.abajo - libre.arriba, libreAncho = libre.der - libre.izq;
-    // Alto del mundo que cabe en el lienzo entero para que el diámetro ocupe
-    // `ocupacion` del lado corto de la zona libre (en px, ancho y alto valen igual).
-    const altoVisible = (2 * r / ocupacion) * lienzo.alto / Math.min(libreAlto, libreAncho);
-    const tanMedio = Math.tan((fovVertical * Math.PI / 180) / 2);
-    const distancia = altoVisible / (2 * tanMedio);
-    const mundoPorPx = altoVisible / lienzo.alto;
-
     const d = unitario(direccion);
     const derecha = unitario(cruz(d, arriba));
     const arribaPantalla = unitario(cruz(derecha, d));
+    const punto = (u, v) => u[0] * v[0] + u[1] * v[1] + u[2] * v[2];
+
+    let altoVisible;
+    if (puntos && puntos.length) {
+        // Rectángulo de los puntos en el plano de la pantalla (y su fondo, para el centro).
+        let minA = Infinity, maxA = -Infinity, minB = Infinity, maxB = -Infinity, minC = Infinity, maxC = -Infinity;
+        for (const q of puntos) {
+            const a = punto(q, derecha), b = punto(q, arribaPantalla), c = punto(q, d);
+            minA = Math.min(minA, a); maxA = Math.max(maxA, a);
+            minB = Math.min(minB, b); maxB = Math.max(maxB, b);
+            minC = Math.min(minC, c); maxC = Math.max(maxC, c);
+        }
+        const minimo = 2 * (radioMinimo || 0);
+        const ancho = Math.max(maxA - minA, minimo, 1e-9), alto = Math.max(maxB - minB, minimo, 1e-9);
+        // Mundo por píxel para que el ancho quepa en `ocupacion` del ancho libre y el alto
+        // en `ocupacion` del alto libre: manda el que más pide.
+        const mundoPorPxNecesario = Math.max(alto / (ocupacion * libreAlto), ancho / (ocupacion * libreAncho));
+        altoVisible = mundoPorPxNecesario * lienzo.alto;
+        centro = suma(suma(escala(derecha, (minA + maxA) / 2), escala(arribaPantalla, (minB + maxB) / 2)), escala(d, (minC + maxC) / 2));
+    } else {
+        const r = Math.max(radio || 0, radioMinimo || 0, 1e-9);
+        // Alto del mundo que cabe en el lienzo entero para que el diámetro ocupe
+        // `ocupacion` del lado corto de la zona libre (en px, ancho y alto valen igual).
+        altoVisible = (2 * r / ocupacion) * lienzo.alto / Math.min(libreAlto, libreAncho);
+    }
+    const tanMedio = Math.tan((fovVertical * Math.PI / 180) / 2);
+    const distancia = altoVisible / (2 * tanMedio);
+    const mundoPorPx = altoVisible / lienzo.alto;
 
     // El centro del elemento tiene que caer en el centro de la zona libre, no
     // en el del lienzo: se desplaza el punto al que mira la cámara.

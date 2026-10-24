@@ -316,7 +316,13 @@ const ImportModelModal = ({ open, onClose, onLinkDocs, onUploadLocal, onExtractC
       });
       if (!res.ok) {
         const error = await res.json().catch(() => ({}));
-        throw new Error(error.error || error.code || 'No se pudo iniciar la extraccion');
+        // La respuesta del servidor no es un fallo de conexión: se dice qué pasa.
+        const MENSAJES = {
+          SOURCE_PROJECT_CONFLICT: 'Este modelo ya está vinculado en otra obra en la que no tienes acceso. Pide acceso a esa obra, o que lo vincule alguien que esté en las dos.',
+          MODEL_ALREADY_LINKED: 'El modelo ya está vinculado a este frente.',
+          FORBIDDEN_SCOPE: 'No tienes acceso a esta obra.',
+        };
+        throw Object.assign(new Error(MENSAJES[error.code] || error.error || error.code || 'No se pudo iniciar la extraccion'), { delServidor: true });
       }
       const { job_id } = await res.json();
 
@@ -352,7 +358,7 @@ const ImportModelModal = ({ open, onClose, onLinkDocs, onUploadLocal, onExtractC
     } catch (e) {
       setExtracting(false); setProgress(0);
       console.error(e);
-      setErrorMsg('Error de conexión: ' + e.message);
+      setErrorMsg(e.delServidor ? e.message : 'Error de conexión: ' + e.message);
     }
   };
 

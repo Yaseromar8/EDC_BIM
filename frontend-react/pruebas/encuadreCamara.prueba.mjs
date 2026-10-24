@@ -3,6 +3,7 @@ import * as E from '../src/lib/encuadreCamara.js';
 
 let total = 0, fallos = 0;
 const ok = (nombre, cond) => { total++; if (!cond) fallos++; console.log(`  ${cond ? 'ok  ' : 'FALLA'} ${nombre}`); };
+const titulo = t => { console.log(''); console.log(t); };
 const cerca = (a, b, tol = 0.5) => Math.abs(a - b) <= tol;
 
 // El caso medido en el banco: lienzo 48–812 px de alto, 2.048 de ancho, panel
@@ -63,6 +64,28 @@ for (let i = 0; i < 200; i++) {
     if (!(cerca(pi[0], 1024, 1e-3) && cerca(pi[1], 262, 1e-3)) || !vi.posicion.every(Number.isFinite)) todasBien = false;
 }
 ok('200 direcciones de cámara: el centro siempre en el centro libre', todasBien);
+
+titulo('CONJUNTO REPARTIDO (ajuste a lo que se ve, no a la esfera)');
+// Cuatro losas de Drenaje en 45 × 35 m (medidas el 24-oct-2026), muy planas, vistas en diagonal.
+const losas = [];
+for (const [cx, cy] of [[0, 0], [45000, -23000], [-4500, 11000], [-12000, 600]]) {
+    for (const X of [cx - 3500, cx + 3500]) for (const Y of [cy - 3000, cy + 3000]) for (const Z of [0, 250]) losas.push([X, Y, Z]);
+}
+const conPuntos = E.vistaDeEncuadre({ ...camaraIso, lienzo, libre, ocupacion: 0.75, puntos: losas });
+let radioEsfera = 0;
+const medio = losas.reduce((m, q) => m.map((c, i) => c + q[i] / losas.length), [0, 0, 0]);
+for (const q of losas) radioEsfera = Math.max(radioEsfera, Math.hypot(q[0] - medio[0], q[1] - medio[1], q[2] - medio[2]));
+const conEsfera = E.vistaDeEncuadre({ centro: medio, radio: radioEsfera, ...camaraIso, lienzo, libre, ocupacion: 0.75 });
+ok('se acerca más que con la esfera', conPuntos.distancia < conEsfera.distancia * 0.8);
+const px = losas.map(q => E.proyectar(q, conPuntos, lienzo));
+const anchoPx = Math.max(...px.map(q => q[0])) - Math.min(...px.map(q => q[0]));
+const altoPx = Math.max(...px.map(q => q[1])) - Math.min(...px.map(q => q[1]));
+ok('el conjunto llena el 75 % de la zona libre en el eje que manda, sin salirse', cerca(Math.max(anchoPx / (0.75 * 2048), altoPx / (0.75 * 524)), 1, 0.01));
+const cxPx = (Math.max(...px.map(q => q[0])) + Math.min(...px.map(q => q[0]))) / 2;
+const cyPx = (Math.max(...px.map(q => q[1])) + Math.min(...px.map(q => q[1]))) / 2;
+ok('el rectángulo del conjunto queda centrado en la zona libre', cerca(cxPx, 1024, 1) && cerca(cyPx, 262, 1));
+const unPunto = E.vistaDeEncuadre({ ...camaraIso, lienzo, libre, ocupacion: 0.75, puntos: [centro], radioMinimo: 500 });
+ok('un solo punto se enseña con el contexto mínimo', Number.isFinite(unPunto.distancia) && unPunto.distancia > 0);
 
 console.log(`\n${total - fallos}/${total} ${fallos ? 'CON FALLOS' : 'en verde'}\n`);
 process.exit(fallos ? 1 : 0);

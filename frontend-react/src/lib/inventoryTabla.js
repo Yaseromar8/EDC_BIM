@@ -203,14 +203,17 @@ export const CALCULOS = ['suma', 'promedio', 'minimo', 'maximo', 'recuento', 'di
 // cantidades (m, m², m³, kg…) se suman. Un número sin unidad solo se suma si el
 // nombre dice que es una cantidad; si no, no se calcula nada (podría ser un código).
 const ES_POSICION = /elev|cota|altura|nivel|desfase|offset|coordenad|progresiva|\bpk\b|pendiente|slope|grade|rotaci|angulo|ángulo/i;
-const ES_CANTIDAD = /cantidad|count|metrado|peso|weight|mass|volum|area|área|longitud|length|largo|perimetro|perímetro|espesor|thickness/i;
+const ES_CANTIDAD = /cantidad|count|metrado|peso|weight|mass|volum|area|área|longitud|length|largo|perimetro|perímetro/i;
+// Medidas del elemento (diámetro, espesor, ancho…) y magnitudes de flujo: se
+// promedian. Sumar el diámetro de cinco tubos (Σ 5.000 mm) no significa nada.
+const ES_MEDIDA = /di[aá]metro|diameter|radio|radius|tama[nñ]o|size|espesor|grosor|thickness|ancho|anchura|width|profundidad|depth|aspereza|roughness|velocidad|velocity|presi[oó]n|pressure|fricci[oó]n|friction|flujo|flow|caudal|p[eé]rdida|loss|carga/i;
 
 export function calculoPorDefecto(campo, tipo, unidad) {
     if (tipo !== 'numero') return null;
     // Solo el nombre de la propiedad, no su categoría: «Cotas › Volumen» es un
     // volumen aunque la categoría se llame «Cotas».
     const nombre = String(campo).split(/›|::/).pop();
-    if (ES_POSICION.test(nombre)) return 'promedio';
+    if (ES_POSICION.test(nombre) || ES_MEDIDA.test(nombre)) return 'promedio';
     if (unidad) return 'suma';
     return ES_CANTIDAD.test(nombre) ? 'suma' : null;
 }
@@ -344,6 +347,16 @@ export function conMetrado(filas, campos) {
         const v = leerValor(f[c]);
         return v.tipo === 'numero' && v.num !== 0;
     }));
+}
+
+// ── Selección ───────────────────────────────────────────────────────────────
+
+/** Mayús + clic: las claves entre `desde` y `hasta` (ambas incluidas) en el orden visible. */
+export function tramo(lista, desde, hasta) {
+    const i = lista.indexOf(desde), j = lista.indexOf(hasta);
+    if (j < 0) return [];
+    if (i < 0) return [hasta];
+    return lista.slice(Math.min(i, j), Math.max(i, j) + 1);
 }
 
 // ── Columnas ────────────────────────────────────────────────────────────────

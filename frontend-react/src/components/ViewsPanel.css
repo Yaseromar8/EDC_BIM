@@ -204,6 +204,43 @@
 .view-name-text {
     color: #507294;
     font-size: 13px;
+    flex: 1;
+    min-width: 0;
+    margin-right: 8px;
+}
+
+/* Acciones de una vista EN FILA (antes, sin estilo, se apilaban en columna): compartir a la
+   vista y lo que cambia o borra la vista dentro de «⋯». */
+.view-item-actions {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    flex-shrink: 0;
+    position: relative;
+}
+.view-item-actions .more-btn {
+    width: 26px;
+    height: 26px;
+    justify-content: center;
+    border-radius: 4px;
+}
+.view-menu-fondo {
+    position: fixed;
+    inset: 0;
+    z-index: 20;
+    cursor: default;
+}
+.view-menu {
+    position: absolute;
+    top: 30px;
+    right: 0;
+    z-index: 21;
+    min-width: 230px;
+}
+.view-menu-sep {
+    height: 1px;
+    background: var(--v-linea, #e8e6dc);
+    margin: 4px 0;
 }
 
 .more-btn {

@@ -109,6 +109,14 @@ ok('dos categorías con el mismo nombre son dos columnas', T.columnasSinDuplicad
 ok('etiqueta con categoría', T.etiquetaDeColumna('Cotas::Área') === 'Cotas › Área');
 ok('etiqueta sin categoría', T.etiquetaDeColumna('Name') === 'Name');
 ok('calculoPorDefecto mira solo el nombre también con ::', T.calculoPorDefecto('Cotas::Volumen', 'numero', 'm³') === 'suma' && T.calculoPorDefecto('Restricciones::Elevación', 'numero', 'm') === 'promedio');
+ok('diámetros, espesores y tamaños se promedian, no se suman', T.calculoPorDefecto('Cotas::Diámetro interno', 'numero', 'mm') === 'promedio' && T.calculoPorDefecto('Construcción::Grosor predeterminado', 'numero', 'm') === 'promedio' && T.calculoPorDefecto('Cotas::Tamaño', 'numero', 'mm') === 'promedio');
+ok('la longitud, el área y el volumen se siguen sumando', T.calculoPorDefecto('Cotas::Longitud', 'numero', 'm') === 'suma' && T.calculoPorDefecto('Cotas::Área', 'numero', 'm²') === 'suma' && T.calculoPorDefecto('Cotas::Volumen', 'numero', 'm³') === 'suma');
+
+console.log('\nSELECCIÓN CON MAYÚS');
+ok('tramo hacia abajo', igual(T.tramo(['a', 'b', 'c', 'd', 'e'], 'b', 'd'), ['b', 'c', 'd']));
+ok('tramo hacia arriba', igual(T.tramo(['a', 'b', 'c', 'd', 'e'], 'd', 'b'), ['b', 'c', 'd']));
+ok('sin ancla visible: solo la fila pulsada', igual(T.tramo(['a', 'b'], 'z', 'b'), ['b']));
+ok('fila pulsada que no está: nada', igual(T.tramo(['a', 'b'], 'a', 'z'), []));
 
 console.log('\nSOLO CON METRADO');
 const conYSin = [{ N: 'losa', V: '1.2 m^3', A: '' }, { N: 'eje', V: '', A: null }, { N: 'cero', V: '0.000 m^3', A: '0 m^2' }, { N: 'muro', V: null, A: '4.112 m^2' }, { N: 'texto', V: 'N/A', A: '' }];

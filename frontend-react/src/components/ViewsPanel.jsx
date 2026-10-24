@@ -47,6 +47,12 @@ const TrashIcon = () => (
     </svg>
 );
 
+const MasIcon = () => (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+        <circle cx="5" cy="12" r="1.8"></circle><circle cx="12" cy="12" r="1.8"></circle><circle cx="19" cy="12" r="1.8"></circle>
+    </svg>
+);
+
 const CheckIcon = () => (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
         <polyline points="20 6 9 17 4 12"></polyline>
@@ -61,6 +67,9 @@ const ViewsPanel = ({ onSaveView, onLoadView, onDeleteView, onPedirEnlace, onAct
     // copiado al portapapeles fallaba, el enlace se perdia. Ahora las dos
     // cosas pasan en la propia fila, donde el usuario ya esta mirando.
     const [borrando, setBorrando] = useState(null);   // id de la vista a confirmar
+    // Las acciones que cambian o borran una vista van en un menú «⋯», no en fila junto a
+    // compartir: con tres iconos pegados era fácil pulsar la papelera queriendo guardar.
+    const [menuDe, setMenuDe] = useState(null);
     const [enlaceDe, setEnlaceDe] = useState(null);   // id de la vista compartida
     const [copiado, setCopiado] = useState(false);
     // El enlace ya no se puede escribir aquí: hay que pedirlo. Mientras llega,
@@ -202,29 +211,38 @@ const ViewsPanel = ({ onSaveView, onLoadView, onDeleteView, onPedirEnlace, onAct
                             <div className="view-item-actions">
                                 <button
                                     className={`more-btn${enlaceDe === view.id ? ' esta-activo' : ''}`}
-                                    onClick={(e) => handleShare(view, e)}
+                                    onClick={(e) => { setMenuDe(null); handleShare(view, e); }}
                                     title="Compartir esta vista"
-                                    style={{ marginRight: '6px' }}
                                 >
                                     <ShareIcon />
                                 </button>
-                                {onActualizarVista && view.schemaVersion === 2 && (
-                                    <button
-                                        className="more-btn"
-                                        onClick={(e) => { e.stopPropagation(); onActualizarVista(view); }}
-                                        title="Actualizar esta vista con el estado actual"
-                                        style={{ marginRight: '6px' }}
-                                    >
-                                        <SaveIcon />
-                                    </button>
-                                )}
                                 <button
-                                    className="more-btn es-peligro"
-                                    onClick={(e) => { e.stopPropagation(); setEnlaceDe(null); setBorrando(view.id); }}
-                                    title="Eliminar esta vista"
+                                    className={`more-btn${menuDe === view.id ? ' esta-activo' : ''}`}
+                                    onClick={(e) => { e.stopPropagation(); setMenuDe(m => (m === view.id ? null : view.id)); }}
+                                    title="Más acciones"
+                                    aria-haspopup="menu"
+                                    aria-expanded={menuDe === view.id}
                                 >
-                                    <TrashIcon />
+                                    <MasIcon />
                                 </button>
+                                {menuDe === view.id && (
+                                    <>
+                                        <div className="view-menu-fondo" onClick={(e) => { e.stopPropagation(); setMenuDe(null); }} />
+                                        <div className="v-menu view-menu" role="menu" onClick={(e) => e.stopPropagation()}>
+                                            {onActualizarVista && view.schemaVersion === 2 && (
+                                                <button type="button" role="menuitem" className="v-menu__item"
+                                                    onClick={() => { setMenuDe(null); onActualizarVista(view); }}>
+                                                    <SaveIcon /> Actualizar con lo que ves ahora
+                                                </button>
+                                            )}
+                                            <div className="view-menu-sep" />
+                                            <button type="button" role="menuitem" className="v-menu__item v-menu__item--peligro"
+                                                onClick={() => { setMenuDe(null); setEnlaceDe(null); setBorrando(view.id); }}>
+                                                <TrashIcon /> Eliminar…
+                                            </button>
+                                        </div>
+                                    </>
+                                )}
                             </div>
                         </div>
 

@@ -15,6 +15,14 @@ import { zonaLibre, vistaDeEncuadre } from './encuadreCamara.js';
 // midiera 1 m: sin contexto alrededor no se sabe dónde está.
 const RADIO_MINIMO_M = 0.5;
 
+// DISTANCIA PRUDENTE (propietario, 24-oct-2026: «que no nos lleve directo a la zona,
+// sino a una distancia prudente, para luego acercarnos»; y después «que se acerque un poco
+// más»). Una pieza ocupa la mitad del lado corto de la zona visible: se ve ella y lo que la
+// rodea. Un CONJUNTO repartido por la obra ocupa el 75 %: las marcas numeradas ya dicen
+// dónde está cada pieza, así que el margen de contexto sobra.
+const OCUPACION_PRUDENTE = 0.5;
+export const OCUPACION_CONJUNTO = 0.75;
+
 function cajaDe(model, dbIds) {
     const THREE = window.THREE;
     const arbol = model.getInstanceTree?.();
@@ -34,11 +42,33 @@ function tapasDelVisor() {
 }
 
 export function irAElementos(viewer, model, dbIds) {
+    return irAConjunto(viewer, [{ model, dbIds }]);
+}
+
+/**
+ * Lo mismo para un CONJUNTO de elementos de uno o varios modelos (una partida de la
+ * Planilla reúne piezas de varios RVT): se encuadra la caja que los contiene a todos.
+ * `items` = [{ model, dbIds }].
+ */
+export function irAConjunto(viewer, items, { ocupacion = OCUPACION_PRUDENTE } = {}) {
+    const validos = (items || []).filter(x => x?.model && x.dbIds?.length);
+    if (!validos.length) return;
+    const model = validos[0].model;
+    const dbIds = validos[0].dbIds;
     try {
-        const caja = !model?.is2d?.() && cajaDe(model, dbIds);
+        const THREE = window.THREE;
+        let caja = null;
+        const esquinas = [];
+        for (const x of validos) {
+            const c = !x.model?.is2d?.() && cajaDe(x.model, x.dbIds);
+            if (!c) continue;
+            caja = caja ? caja.union(c.clone()) : c.clone();
+            // Las 8 esquinas de cada pieza: el encuadre se ajusta a lo que se VE desde la
+            // cámara, no a la esfera que envuelve el conjunto (ver vistaDeEncuadre).
+            for (const X of [c.min.x, c.max.x]) for (const Y of [c.min.y, c.max.y]) for (const Z of [c.min.z, c.max.z]) esquinas.push([X, Y, Z]);
+        }
         if (!caja) return viewer.fitToView(dbIds, model);
 
-        const THREE = window.THREE;
         const nav = viewer.navigation;
         const r = viewer.canvas.getBoundingClientRect();
         const centro = caja.getCenter(new THREE.Vector3());
@@ -52,12 +82,14 @@ export function irAElementos(viewer, model, dbIds) {
             fovVertical: nav.getVerticalFov(),
             lienzo: { ancho: r.width, alto: r.height },
             libre: zonaLibre(r, tapasDelVisor()),
+            ocupacion,
+            puntos: esquinas,
         });
         nav.setRequestTransitionWithUp(true,
             new THREE.Vector3(...vista.posicion), new THREE.Vector3(...vista.objetivo),
             nav.getVerticalFov(), new THREE.Vector3(...vista.arriba), nav.getWorldUpVector(), centro);
     } catch (e) {
-        console.warn('[irAElementos] encuadre propio no disponible, se usa fitToView:', e);
+        console.warn('[irAConjunto] encuadre propio no disponible, se usa fitToView:', e);
         viewer.fitToView(dbIds, model);
     }
 }

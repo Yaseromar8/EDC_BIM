@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import React, { useRef, useState, useMemo, useCallback, useEffect } from 'react';
 import HeatmapConfigPanel from './HeatmapConfigPanel';
 import { facetItems, searchFacetItems, filterFeedback, filterValueColor } from '../lib/filterPresentation';
 import {
@@ -55,11 +55,13 @@ const FilterCategory = React.memo(({
         && (() => { const s = new Set(selectedValues); return (bucket?.values || []).every(v => s.has(v.value)); })();
     const parcial = !sinRestriccion && !todoSeleccionado;   // guion en vez de palomita
     const [renderLimit, setRenderLimit] = useState(100);
-    // Los valores sin coincidencias se ocultan, como en baseline; buscar los
-    // vuelve a mostrar. El conmutador «Mostrar valores no disponibles» era
-    // chrome añadido y se retiró: la conducta que gobernaba sigue aquí.
+    // POSICIONES FIJAS (decisión del propietario, 24-oct-2026: «hago clic en una información y
+    // se mueve la ubicación de los parámetros»). Antes, los valores que se quedaban sin
+    // coincidencias al marcar otro filtro se OCULTABAN: las listas se acortaban y todo lo de
+    // debajo subía. Ahora un valor que existe en los datos (totalCount > 0) se queda en su
+    // sitio, en gris y desactivado; solo se omite lo que no existe en absoluto.
     const searchedItems = useMemo(() => searchFacetItems(validItems, searchQuery)
-        .filter(item => searchQuery.trim() || !item.disabled), [validItems, searchQuery]);
+        .filter(item => searchQuery.trim() || !item.disabled || item.totalCount > 0), [validItems, searchQuery]);
     const limit = expanded ? renderLimit : DEFAULT_VISIBLE_VALUES;
     const filteredVisibleItems = searchedItems.slice(0, limit);
     const hasMore = searchedItems.length > limit;
@@ -190,7 +192,8 @@ const FilterCategory = React.memo(({
                         }
                     }
                     return (
-                        <li key={item.value} className="tandem-item" data-test-id={`facet-value:${item.value}`}>
+                        <li key={item.value} className={`tandem-item${item.disabled ? ' sin-coincidencias' : ''}`} data-test-id={`facet-value:${item.value}`}
+                            title={item.disabled ? 'Sin elementos con los filtros actuales' : undefined}>
                             <label className="tandem-item-label">
                                 <span className="tandem-cb-container">
                                     {/* La casilla real se conserva --es la que da el estado, el
@@ -449,6 +452,28 @@ const TandemFilterPanel = ({
     // «Sources» va sembrado: el bloque de modelos de arriba se llama así y no es
     // una propiedad configurada, así que el recuento no lo vería. Sin esto,
     // añadir `Standard::Sources` por ⚙ deja dos grupos titulados «Sources».
+    // POSICIONES FIJAS (decisión del propietario, 24-oct-2026: «hago clic en una información y
+    // se mueve la ubicación de los parámetros»). El motor de Filters (CLOSED) no envía los
+    // valores que se quedan en 0 al marcar otro filtro, y cada lista se acortaba: todo lo de
+    // debajo subía. El panel RECUERDA los valores que ya vio de cada propiedad y los vuelve a
+    // poner, con 0, en su sitio (FilterCategory los pinta en gris). Es presentación: el motor y
+    // su resultado no cambian.
+    const valoresVistos = useRef(new Map());
+    const bucketsEstables = useMemo(() => {
+        const out = {};
+        for (const [propId, bucket] of Object.entries(dynamicFilterBuckets || {})) {
+            if (!valoresVistos.current.has(propId)) valoresVistos.current.set(propId, new Map());
+            const vistos = valoresVistos.current.get(propId);
+            const valores = bucket?.values || [];
+            for (const v of valores) vistos.set(v.value, Math.max(vistos.get(v.value) || 0, v.totalCount || v.count || 0));
+            const presentes = new Set(valores.map(v => v.value));
+            const ausentes = [...vistos].filter(([valor]) => !presentes.has(valor))
+                .map(([value, totalCount]) => ({ value, count: 0, totalCount }));
+            out[propId] = ausentes.length ? { ...bucket, values: [...valores, ...ausentes] } : bucket;
+        }
+        return out;
+    }, [dynamicFilterBuckets]);
+
     const nombresRepetidos = useMemo(() => {
         const cuenta = new Map();
         for (const p of allPropertyObjects) {
@@ -693,6 +718,7 @@ const TandemFilterPanel = ({
           .tandem-scroll::-webkit-scrollbar-thumb { background: #cccac0; border-radius: 3px; }
           .tandem-scroll::-webkit-scrollbar-thumb:hover { background: #b0aea5; }
           .tandem-group { border-bottom: 1px solid #e8e6dc; }
+          .tandem-item.sin-coincidencias { opacity: 0.45; }
           .tandem-group-header { display: flex; align-items: center; padding: 8px 16px 8px 12px; cursor: pointer; transition: background 0.1s; }
           .tandem-group-header:hover { background: #e8e6dc; }
           .tandem-cb-container { display: inline-flex; cursor: pointer; flex-shrink: 0; margin-right: 8px; }
@@ -930,7 +956,7 @@ const TandemFilterPanel = ({
                     <FilterCategory 
                         key={prop.id}
                         prop={prop}
-                        bucket={dynamicFilterBuckets[prop.id]}
+                        bucket={bucketsEstables[prop.id]}
                         selectedValues={filterSelections[prop.id] || []}
                         expanded={expandedFilters[prop.id]}
                         searchConfig={facetSearch[prop.id]}

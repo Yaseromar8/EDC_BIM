@@ -857,6 +857,18 @@ function App() {
   const [panelVisible, setPanelVisible] = useState(false);
   const [inventoryTabOpen, setInventoryTabOpen] = useState(false);
   const [inventoryPanelHeight, setInventoryPanelHeight] = useState(280);
+  // La Planilla se apoya ENCIMA de la barra inferior del visor (Capas, Agrupación…), no sobre ella.
+  const [altoBarraInferior, setAltoBarraInferior] = useState(0);
+  useEffect(() => {
+    if (!inventoryTabOpen) return undefined;
+    const barra = document.querySelector('.split-3d > .viewer-labels-bar');
+    if (!barra) { setAltoBarraInferior(0); return undefined; }
+    const medir = () => setAltoBarraInferior(Math.round(barra.getBoundingClientRect().height));
+    medir();
+    const ro = new ResizeObserver(medir);
+    ro.observe(barra);
+    return () => ro.disconnect();
+  }, [inventoryTabOpen]);
   const [budgetTabOpen, setBudgetTabOpen] = useState(false);
   const [budgetPoppedOut, setBudgetPoppedOut] = useState(false);
   const [budgetPanelHeight, setBudgetPanelHeight] = useState(320);
@@ -4926,7 +4938,7 @@ function App() {
               {inventoryTabOpen && (
                 <div className="inventory-overlay-panel" data-tapa-visor style={{
                   position: 'absolute',
-                  bottom: 0,
+                  bottom: `${altoBarraInferior}px`,
                   left: panelVisible && activePanel && activePanel !== 'views' && activePanel !== 'inventory'
                     ? `${64 + sidebarWidth}px`
                     : '64px',
@@ -4940,6 +4952,8 @@ function App() {
                   pointerEvents: 'auto',
                   transition: 'left 0.3s ease'
                 }}>
+                  {/* La barra de herramientas del visor sube por encima de la Planilla, como en Tandem. */}
+                  <style>{`.split-3d .adsk-viewing-viewer .adsk-toolbar { bottom: ${inventoryPanelHeight + 10}px !important; }`}</style>
                   {/* Resize Handle */}
                   <div
                     onMouseDown={(e) => {

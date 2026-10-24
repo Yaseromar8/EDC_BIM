@@ -9,6 +9,11 @@ import { leerInventoryConfig, fijarInventoryConfig, columnasParaElGrid, columnas
 import * as Tabla from '../lib/inventoryTabla';
 import { libroDeLaTabla } from '../lib/inventoryExport';
 import { catalogoDeCampos } from '../lib/inventoryCatalogo';
+import * as Buscador from '../lib/inventoryBuscar';
+import * as Partidas from '../lib/planillaPartidas';
+import { deducirRoles, diccionarioDeducido } from '../lib/planillaPerfil';
+import { EVENTOS } from '../lib/aislamientoTemporal';
+import TablaDePartidas from './TablaDePartidas';
 import SelectorDeCampo, { ListaDeCampos } from './SelectorDeCampo';
 import { Capacitor } from '@capacitor/core';
 
@@ -175,6 +180,98 @@ const FiltroAvanzado = ({ filtro, setFiltro, catalogo, muestra, onClose }) => {
     );
 };
 
+// Del external_id de una fila al dbId de esta sesión del visor (rosettaToDbId,
+// con el URN en sus tres escrituras: tal cual, base64 URL y base64 estándar).
+function dbIdEnVisor(extId, urn) {
+    const r = window.rosettaToDbId;
+    if (!r || !urn) return null;
+    const seguro = String(urn).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    const estandar = String(urn).replace(/-/g, '+').replace(/_/g, '/');
+    const dic = r[urn] || r[seguro] || r[estandar]
+        || Object.entries(r).find(([k]) => k.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '') === seguro)?.[1];
+    return dic && dic[extId] != null ? dic[extId] : null;
+}
+
+// Barra del modo búsqueda: dónde se busca (todo o lo seleccionado), qué se
+// encontró y dónde, los parecidos para confirmar y las medidas que se suman.
+const chipBusqueda = { border: '1px solid var(--v-linea-campo, #cccac0)', borderRadius: '3px', padding: '1px 7px', background: '#ffffff', font: 'inherit', fontSize: '11px', cursor: 'pointer', color: '#52524d', whiteSpace: 'nowrap' };
+const chipActivo = { ...chipBusqueda, borderColor: 'var(--v-accion, #507294)', background: 'var(--alephia-selected-bg, #ECF0F1)', color: 'var(--v-accion, #507294)' };
+
+// «Datos › 03_05_DSI_CodigoDePartida» → «03_05_DSI_CodigoDePartida»: el grupo va en el título.
+const nombreCorto = clave => String(Tabla.etiquetaDeColumna(clave)).split(' › ').pop();
+
+const BarraDeBusqueda = ({ resultado, campo, onCampo, seleccion, seleccionCongelada, onSeleccion, parecidos, confirmados, onConfirmados, verParecidos, onVerParecidos, medidas, activas, onMedidas, sumas }) => {
+    const n = resultado.filas.size;
+    const modos = new Set(resultado.lineas.map(l => l.modo));
+    const modo = modos.has('completo') && !modos.has('contiene') ? 'valor completo' : modos.has('contiene') && !modos.has('completo') ? 'contiene' : modos.has('completo') ? 'valor completo o contiene' : '';
+    const tamSel = seleccion ? seleccion.size : 0;
+    const alternarMedida = (clave) => onMedidas(activas.includes(clave) ? activas.filter(k => k !== clave) : [...activas, clave]);
+    const alternarConfirmado = (clave) => onConfirmados(confirmados.includes(clave) ? confirmados.filter(k => k !== clave) : [...confirmados, clave]);
+    return (
+        <div style={{ background: '#ffffff', borderBottom: '1px solid #e8e6dc', padding: '0 12px', display: 'flex', flexDirection: 'column', flexShrink: 0, fontSize: '11.5px', color: '#52524d' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', height: '30px', whiteSpace: 'nowrap' }}>
+            {/* Izquierda: dónde y qué se encontró; si no cabe, se desvanece en el borde (nada se sale). */}
+            <div style={{ flex: '1 1 auto', minWidth: 0, display: 'flex', alignItems: 'center', gap: '8px', overflow: 'hidden',
+                maskImage: 'linear-gradient(to right, #000 calc(100% - 28px), transparent)', WebkitMaskImage: 'linear-gradient(to right, #000 calc(100% - 28px), transparent)' }}>
+                <span>Buscar en</span>
+                <button style={seleccionCongelada ? chipBusqueda : chipActivo} onClick={() => onSeleccion(null)}>todo</button>
+                <button style={seleccionCongelada ? chipActivo : chipBusqueda} disabled={!seleccionCongelada && tamSel < 1}
+                    onClick={() => onSeleccion(seleccionCongelada || (tamSel ? new Set(seleccion) : null))}
+                    title="Solo entre los elementos que tenías seleccionados al empezar a buscar">
+                    lo seleccionado ({(seleccionCongelada || seleccion || new Set()).size})
+                </button>
+                <span style={{ width: '1px', height: '14px', background: '#e8e6dc' }} />
+                <strong style={{ color: n ? 'var(--v-accion, #507294)' : '#9a3b2e', fontWeight: 600 }}>
+                    {n ? `${n.toLocaleString('es-PE')} elemento${n === 1 ? '' : 's'}` : 'Sin coincidencias'}
+                </strong>
+                {modo && <span>· {modo}</span>}
+                {resultado.confirmados > 0 && <span>· {confirmados.length} parecido{confirmados.length === 1 ? '' : 's'} confirmado{confirmados.length === 1 ? '' : 's'}</span>}
+                {resultado.lineas.length > 1 && resultado.lineas.map((l, i) => (
+                    <span key={i} title={l.texto} style={{ color: l.n ? '#52524d' : '#9a3b2e' }}>· línea {i + 1}: {l.n}</span>
+                ))}
+                {campo
+                    ? <button style={chipActivo} onClick={() => onCampo(null)} title={`${Tabla.etiquetaDeColumna(campo)} · buscar en todos los parámetros`}>en {nombreCorto(campo)} ✕</button>
+                    : resultado.porCampo.slice(0, 4).map(([c, k]) => (
+                        <button key={c} style={chipBusqueda} onClick={() => onCampo(c)} title={`${Tabla.etiquetaDeColumna(c)} · buscar solo en este parámetro`}>{nombreCorto(c)} · {k}</button>
+                    ))}
+                {parecidos.length > 0 && (
+                    <button style={verParecidos ? chipActivo : chipBusqueda} onClick={() => onVerParecidos(!verParecidos)}>
+                        Parecidos ({parecidos.length})
+                    </button>
+                )}
+            </div>
+                {/* Derecha: las sumas, siempre a la vista. */}
+                {n > 0 && medidas.length > 0 && (
+                    <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span>Sumar</span>
+                        {medidas.map(m => {
+                            const activa = activas.includes(m.clave);
+                            return (
+                                <button key={m.clave} style={activa ? chipActivo : chipBusqueda} onClick={() => alternarMedida(m.clave)}
+                                    title={`${Tabla.etiquetaDeColumna(m.clave)} · dato en el ${Math.round(m.cobertura * 100)} % de lo encontrado`}>
+                                    {m.nombre} ({m.unidad}){activa && sumas[m.clave] ? <strong style={{ marginLeft: '6px', fontWeight: 600 }}>{sumas[m.clave]}</strong> : null}
+                                </button>
+                            );
+                        })}
+                    </div>
+                )}
+            </div>
+            {verParecidos && parecidos.length > 0 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', border: '1px solid #e8e6dc', borderRadius: '4px', padding: '6px 8px', margin: '0 0 6px', background: '#faf9f5', maxHeight: '120px', overflowY: 'auto' }}>
+                    <span className="v-menu__nota">Se parecen a lo buscado (los números coinciden). Marca los que valen:</span>
+                    {parecidos.map(p => (
+                        <label key={p.clave} style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', padding: '2px 0' }} title={p.valor}>
+                            <input type="checkbox" checked={confirmados.includes(p.clave)} onChange={() => alternarConfirmado(p.clave)} style={{ accentColor: 'var(--v-accion, #507294)' }} />
+                            <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: '#141413' }}>{p.valor}</span>
+                            <span style={{ whiteSpace: 'nowrap' }}>{Tabla.etiquetaDeColumna(p.campo)} · {p.n} elem. · {p.puntos} %</span>
+                        </label>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+};
+
 // Componente Row estable
 const InventoryRow = memo(({ row, columns, index, onRowClick, isHighlighted, top, onCellEdit, isChecked, onToggleCheck }) => {
     const [editingCol, setEditingCol] = useState(null);
@@ -203,10 +300,10 @@ const InventoryRow = memo(({ row, columns, index, onRowClick, isHighlighted, top
                 cursor: 'pointer', userSelect: 'none', transition: 'background 0.1s ease',
                 opacity: row._isSaving ? 0.6 : 1
             }}
-            onClick={() => { if(!editingCol) onRowClick(row.dbId, row.source_urn || row.model_urn, inventoryRowKey(row)); }}
+            onClick={e => { if(!editingCol) onRowClick(row.dbId, row.source_urn || row.model_urn, inventoryRowKey(row), { shift: e.shiftKey, ctrl: e.ctrlKey || e.metaKey }); }}
         >
             <div style={{ width: '40px', flexShrink: 0, padding: '0 4px', color: '#72706b', borderRight: '1px solid #e8e6dc', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '2px' }}>
-                <input type="checkbox" checked={!!isChecked} onChange={(e) => { e.stopPropagation(); onToggleCheck(inventoryRowKey(row)); }} onClick={e => e.stopPropagation()} style={{ accentColor: '#6a9bcc', cursor: 'pointer', width: '13px', height: '13px', margin: 0 }} />
+                <input type="checkbox" checked={!!isChecked} onChange={() => {}} onClick={e => { e.stopPropagation(); onToggleCheck(inventoryRowKey(row), { shift: e.shiftKey }); }} style={{ accentColor: '#6a9bcc', cursor: 'pointer', width: '13px', height: '13px', margin: 0 }} />
                 <span style={{ fontSize: '10px', minWidth: '18px', textAlign: 'right' }}>{index + 1}</span>
             </div>
             {columns.map(col => {
@@ -267,12 +364,33 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
     // Sin pestañas: «Tickets» (mantenimiento en Tandem) no tenía contenido aquí y
     // se retiró el 23-oct; las observaciones no están ligadas a elementos.
     const [followSelection, setFollowSelection] = useState(true);
+    const [editarAbierto, setEditarAbierto] = useState(false);
+    // Itemizado de la obra (ítem, descripción, unidad), cargado desde un Excel: vive solo en esta
+    // sesión del navegador, no se guarda (docs/visor/24, paso 3).
+    const [itemizado, setItemizado] = useState(null);
     const [showAssetsOnly, setShowAssetsOnly] = useState(() => leerInventoryConfig().assetsOnly);
     // «Solo con metrado» sustituye a «Assets only» en la barra: en un modelo de
     // Revit todo es ejemplar y aquel no quitaba nada. assetsOnly sigue leyéndose
     // de las vistas guardadas (inventoryConfig, CLOSED) y solo se enseña si viene
     // marcado, para poder desmarcarlo. Este, como el resto de la Fase T, es de sesión.
     const [soloConMetrado, setSoloConMetrado] = useState(false);
+    // Vista: 'elementos' (una fila por elemento) o 'partidas' (una fila por
+    // partida DSI, con su cantidad nativa; lib/planillaPartidas, docs/visor/23).
+    const [vista, setVista] = useState('elementos');
+    // Buscador de la Planilla (lib/inventoryBuscar): lo escrito, lo buscado (con
+    // un respiro de 250 ms al teclear) y, si se elige, un solo parámetro.
+    const [textoBusqueda, setTextoBusqueda] = useState('');
+    const [busqueda, setBusqueda] = useState('');
+    const [campoBusqueda, setCampoBusqueda] = useState(null);
+    useEffect(() => { const t = setTimeout(() => setBusqueda(textoBusqueda), 250); return () => clearTimeout(t); }, [textoBusqueda]);
+    // Parecidos que el usuario confirma, búsqueda dentro de lo seleccionado (la
+    // selección se congela al empezar a buscar: pulsar un resultado no la cambia)
+    // y las medidas que se suman en modo búsqueda (null = las de más cobertura).
+    const [confirmados, setConfirmados] = useState([]);
+    const [verParecidos, setVerParecidos] = useState(false);
+    const [seleccionCongelada, setSeleccionCongelada] = useState(null);
+    const [medidasElegidas, setMedidasElegidas] = useState(null);
+    useEffect(() => { setConfirmados([]); setVerParecidos(false); setMedidasElegidas(null); }, [busqueda]);
     const [isLoading, setIsLoading] = useState(true);
     const [inventoryError, setInventoryError] = useState(null);
     const [inventoryRevision, setInventoryRevision] = useState(0);
@@ -393,7 +511,8 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
         });
         observer.observe(containerRef.current);
         return () => observer.disconnect();
-    }, []);
+        // La rejilla se desmonta en la vista Partidas: al volver hay que medir la nueva.
+    }, [vista]);
 
     // (B) Visor 3D -> Tabla
     useEffect(() => {
@@ -690,7 +809,62 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
 
 
     // (A) Tabla -> Visor
-    const handleRowClick = useCallback((rowExtId, rowUrn, rowKey) => {
+    // Selección de varias filas: Mayús + clic = tramo, Ctrl + clic = añadir o
+    // quitar. Con refs para no rehacer el manejador de cada fila en cada cambio.
+    const anclaRef = useRef(null);
+    const checkedRef = useRef(checkedIds);
+    checkedRef.current = checkedIds;
+    const ordenVisibleRef = useRef([]);
+    const filaPorClaveRef = useRef(new Map());
+    // Lo último que la propia Planilla pidió seleccionar en el 3D (Mayús/Ctrl en la
+    // tabla, clic en una partida): cuando el 3D lo devuelve, es un eco, no una
+    // selección nueva del usuario.
+    const ultimaProgramadaRef = useRef(null);
+    const seleccionarEn3D = useCallback((claves, { encuadrar = false, enfocar = null, clave = null } = {}) => {
+        ultimaProgramadaRef.current = new Set(claves);
+        const porUrn = new Map();
+        for (const k of claves) {
+            const fila = filaPorClaveRef.current.get(k);
+            if (!fila) continue;
+            const urn = fila.source_urn || fila.model_urn;
+            const id = dbIdEnVisor(fila.dbId, urn);
+            if (id == null) continue;
+            if (!porUrn.has(urn)) porUrn.set(urn, []);
+            porUrn.get(urn).push(id);
+        }
+        window.dispatchEvent(new CustomEvent('viewer-select', { detail: { items: [...porUrn].map(([urn, dbIds]) => ({ urn, dbIds })), encuadrar, enfocar, clave } }));
+    }, []);
+    const alternarCasilla = useCallback((clave, mods = {}) => {
+        const ancla = anclaRef.current;
+        setCheckedIds(prev => {
+            if (mods.shift && ancla) return new Set([...prev, ...Tabla.tramo(ordenVisibleRef.current, ancla, clave)]);
+            const next = new Set(prev);
+            if (next.has(clave)) next.delete(clave); else next.add(clave);
+            return next;
+        });
+        if (!mods.shift) anclaRef.current = clave;
+    }, []);
+
+    const handleRowClick = useCallback((rowExtId, rowUrn, rowKey, mods = {}) => {
+        if ((mods.shift && anclaRef.current) || mods.ctrl) {
+            const actual = checkedRef.current;
+            let next;
+            if (mods.shift && anclaRef.current) {
+                const t = Tabla.tramo(ordenVisibleRef.current, anclaRef.current, rowKey);
+                next = mods.ctrl ? new Set([...actual, ...t]) : new Set(t);
+            } else {
+                next = new Set(actual.size ? actual : [anclaRef.current].filter(Boolean));
+                if (next.has(rowKey)) next.delete(rowKey); else next.add(rowKey);
+                anclaRef.current = rowKey;
+            }
+            setCheckedIds(next);
+            setHighlightedDbId(rowKey);
+            seleccionarEn3D(next);
+            return;
+        }
+        // Clic simple: una fila (como antes) y el punto de partida del próximo Mayús.
+        anclaRef.current = rowKey;
+        if (checkedRef.current.size) setCheckedIds(new Set());
         // En nuestro estado visual (React), la fila brilla usando el external_id
         setHighlightedDbId(rowKey);
 
@@ -721,7 +895,7 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
         } else {
             console.warn(`[Inventory] No se encontró malla 3D cargada para el Elemento: ${rowExtId} en la capa modelo ${rowUrn}`);
         }
-    }, []);
+    }, [seleccionarEn3D]);
 
     const handleCellEdit = useCallback(async (row, colKey, newValue) => {
         setInventoryError(null);
@@ -776,13 +950,90 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
     }, [detectedGroupKey]);
 
     // Filtros del embudo y orden, sobre lo que ya deja pasar Filters.
+    // Búsqueda primero (pegar un valor de Revit), luego los filtros del embudo.
+    const hayBusqueda = Buscador.lineasDeBusqueda(busqueda).length > 0;
+    const indiceBusqueda = useMemo(() => (hayBusqueda ? Buscador.crearIndice(flattenedData, allPropertyKeys || []) : null),
+        [hayBusqueda, flattenedData, allPropertyKeys]);
+    const permitidas = useMemo(() => {
+        if (!seleccionCongelada) return null;
+        const s = new Set();
+        flattenedData.forEach((f, i) => { if (seleccionCongelada.has(inventoryRowKey(f))) s.add(i); });
+        return s;
+    }, [seleccionCongelada, flattenedData]);
+    const resultadoBusqueda = useMemo(() => (indiceBusqueda ? Buscador.buscar(indiceBusqueda, busqueda, { soloCampo: campoBusqueda, permitidas, confirmados }) : null),
+        [indiceBusqueda, busqueda, campoBusqueda, permitidas, confirmados]);
+    const listaParecidos = useMemo(() => (indiceBusqueda ? Buscador.parecidos(indiceBusqueda, busqueda, { soloCampo: campoBusqueda, permitidas }) : []),
+        [indiceBusqueda, busqueda, campoBusqueda, permitidas]);
+    const filasBuscadas = useMemo(() => (resultadoBusqueda ? flattenedData.filter((_, i) => resultadoBusqueda.filas.has(i)) : flattenedData),
+        [resultadoBusqueda, flattenedData]);
     const filasFiltradas = useMemo(
-        () => Tabla.filtrar(flattenedData, filtroTabla),
-        [flattenedData, filtroTabla]);
-    const reglasActivas = Tabla.contarReglas(filtroTabla);
+        () => Tabla.filtrar(filasBuscadas, filtroTabla),
+        [filasBuscadas, filtroTabla]);
+    const filaPorClave = useMemo(() => new Map(flattenedData.map(f => [inventoryRowKey(f), f])), [flattenedData]);
+    // El criterio de la vista Partidas sale SOLO del itemizado que sube el usuario: sin itemizado no
+    // hay criterio (ni uno escrito en el código). Con él, se buscan en el modelo los parámetros donde
+    // están sus ítems, y su descripción y su unidad son las oficiales (docs/visor/24 §11-12).
+    const rolesPartidas = useMemo(() => (itemizado && flattenedData.length ? deducirRoles(flattenedData, undefined, { itemizado: itemizado.indice }) : null),
+        [itemizado, flattenedData]);
+    const dicPartidas = useMemo(() => (rolesPartidas && rolesPartidas.lineas.length
+        ? { ...diccionarioDeducido(rolesPartidas, allPropertyKeys || []), itemizado: itemizado.indice } : null),
+    [rolesPartidas, allPropertyKeys, itemizado]);
+    const [ambitoPartidas, setAmbitoPartidas] = useState(null); // Set de claves elegidas, o null = la tabla
+    // Manda la ÚLTIMA selección del usuario, sea en la tabla o en el 3D.
+    useEffect(() => { if (checkedIds.size) setAmbitoPartidas(new Set(checkedIds)); }, [checkedIds]);
+    useEffect(() => {
+        if (!localSelIds || !localSelIds.size) {
+            if (!checkedRef.current.size) setAmbitoPartidas(null);
+            return;
+        }
+        const claves = new Set(refineInventorySelection(flattenedData, localSelIds, rawData).map(inventoryRowKey));
+        const pedida = ultimaProgramadaRef.current;
+        if (pedida && claves.size === pedida.size && [...claves].every(k => pedida.has(k))) return; // eco
+        // Selección hecha por el usuario en el 3D: sustituye a las casillas de la tabla.
+        ultimaProgramadaRef.current = null;
+        if (checkedRef.current.size) setCheckedIds(new Set());
+        setAmbitoPartidas(claves);
+    }, [localSelIds]); // eslint-disable-line react-hooks/exhaustive-deps
+    filaPorClaveRef.current = filaPorClave;
+
     // Qué es cada campo y cuánto dato tiene (filtro, agrupar, columnas). Sobre
     // todas las filas cargadas, no sobre las filtradas: no cambia al filtrar.
     const catalogo = useMemo(() => catalogoDeCampos(rawData, allPropertyKeys || []), [rawData, allPropertyKeys]);
+
+    // Medidas que se pueden sumar en lo encontrado (numéricas con unidad que se
+    // suman), por cobertura; por defecto las que tienen dato en la mitad o más.
+    const medidasPosibles = useMemo(() => {
+        if (!resultadoBusqueda || !filasBuscadas.length) return [];
+        const out = [];
+        for (const f of catalogo.values()) {
+            if (f.tipo !== 'numero' || !f.unidad || f.clase === 'interno') continue;
+            if (Tabla.calculoPorDefecto(f.clave, 'numero', f.unidad) !== 'suma') continue;
+            let con = 0;
+            for (const fila of filasBuscadas) { const v = fila[f.clave]; if (v !== undefined && v !== null && String(v).trim() !== '') con++; }
+            if (con) out.push({ clave: f.clave, nombre: f.nombre, unidad: f.unidad, cobertura: con / filasBuscadas.length });
+        }
+        return out.sort((a, b) => b.cobertura - a.cobertura).slice(0, 8);
+    }, [resultadoBusqueda, filasBuscadas, catalogo]);
+    const medidasActivas = useMemo(() => medidasElegidas
+        ?? medidasPosibles.filter(m => m.cobertura >= 0.5).slice(0, 3).map(m => m.clave), [medidasElegidas, medidasPosibles]);
+    const columnasVista = useMemo(() => {
+        if (!resultadoBusqueda || !filasBuscadas.length) return columns;
+        const delante = [];
+        const poner = (clave, ancho) => {
+            if (!clave || delante.some(c => c.key === clave)) return;
+            // Delante y con anchura para leer lo encontrado (lo pegado suele ser una descripción larga).
+            const c = columns.find(x => x.key === clave);
+            delante.push(c ? { ...c, width: Math.max(c.width || 0, ancho) } : { key: clave, header: Tabla.etiquetaDeColumna(clave), width: ancho });
+        };
+        // Nombre, dónde se encontró, lo que se suma y después los demás campos donde también aparece:
+        // así la cantidad queda a la vista aunque el valor salga en varios parámetros.
+        poner('Name', 240);
+        poner(resultadoBusqueda.porCampo[0]?.[0], 320);
+        for (const m of medidasActivas) poner(m, 150);
+        for (const [campo] of resultadoBusqueda.porCampo) poner(campo, 320);
+        return [...delante, ...columns.filter(c => !delante.some(d => d.key === c.key))];
+    }, [resultadoBusqueda, filasBuscadas, columns, medidasActivas]);
+    const reglasActivas = Tabla.contarReglas(filtroTabla);
     const niveles = useMemo(() => [groupByKey, ...nivelesExtra].filter(Boolean), [groupByKey, nivelesExtra]);
 
     // Tipo de cada columna visible, por muestra (con 700 columnas y 20.000
@@ -791,15 +1042,15 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
         const paso = Math.max(1, Math.ceil(flattenedData.length / 1500));
         const muestra = paso === 1 ? flattenedData : flattenedData.filter((_, i) => i % paso === 0);
         const t = {};
-        for (const col of columns) if (col.key !== 'dbId') t[col.key] = Tabla.tipoDeColumna(muestra, col.key);
+        for (const col of columnasVista) if (col.key !== 'dbId') t[col.key] = Tabla.tipoDeColumna(muestra, col.key);
         return t;
-    }, [flattenedData, columns]);
+    }, [flattenedData, columnasVista]);
 
     // El cálculo de cada columna: el elegido, o «Σ» si estaba en los totales
     // de la vista guardada, o el de por defecto según el dato.
     const calculos = useMemo(() => {
         const c = {};
-        for (const col of columns) {
+        for (const col of columnasVista) {
             if (col.key === 'dbId') continue;
             const elegido = calculosElegidos[col.key];
             if (elegido === 'ninguno') continue;
@@ -808,7 +1059,7 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
             if (calc) c[col.key] = calc;
         }
         return c;
-    }, [columns, calculosElegidos, tiposColumna, totalColumns]);
+    }, [columnasVista, calculosElegidos, tiposColumna, totalColumns]);
 
     // «Solo con metrado»: fuera lo que no tiene cantidad en ninguna columna Σ.
     const camposSuma = useMemo(() => Object.keys(calculos).filter(k => calculos[k] === 'suma'), [calculos]);
@@ -816,16 +1067,27 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
         () => Tabla.ordenar(soloConMetrado ? Tabla.conMetrado(filasFiltradas, camposSuma) : filasFiltradas, orden),
         [filasFiltradas, soloConMetrado, camposSuma, orden]);
 
+    // Elementos de la vista Partidas: lo seleccionado por el usuario (tabla o 3D) o, si no hay, la tabla.
+    const filasDePartidas = useMemo(() => (ambitoPartidas ? refineInventorySelection(flattenedData, ambitoPartidas, rawData) : filasTabla),
+        [ambitoPartidas, flattenedData, rawData, filasTabla]);
+    // Clic en una partida: selecciona sus elementos y VUELA a ellos, a distancia prudente.
+    // Clic en una partida: aísla sus elementos y vuela a ellos. `clave` = la partida (con la misma,
+    // el visor no vuelve a aislar); `enfocar` = paso del recorrido «◀ 1/4 ▶».
+    const seleccionarPartida = useCallback((claves, { enfocar = null, clave = null } = {}) => seleccionarEn3D(claves, { encuadrar: true, enfocar, clave }), [seleccionarEn3D]);
+
     // Excel = lo que se ve: mismas filas (Filters + filtros de la tabla + «Solo
     // con metrado»), mismo orden y grupos, mismas columnas y los cálculos del pie.
     // Las hojas las prepara lib/inventoryExport.js (probado sin navegador).
     const handleExportExcel = useCallback(async () => {
-        if (!filasTabla.length || !columns.length) return;
+        if (!filasTabla.length || !columnasVista.length) return;
         // Solo al exportar: la librería de Excel (~95 KB) no viaja en cada apertura de View.
         const XLSX = await import('xlsx');
-        const hojas = libroDeLaTabla({
-            filas: filasTabla, columnas: columns, tipos: tiposColumna, calculos, niveles,
-            criterios: { filtroTabla, soloConMetrado, camposSuma, orden, totalTrasFilters: flattenedData.length },
+        const hojas = vista === 'partidas' && dicPartidas ? Partidas.hojasDePartidas(
+            Partidas.partidasDe(filasDePartidas, dicPartidas, inventoryRowKey),
+            { ambito: ambitoPartidas ? `${filasDePartidas.length} elementos seleccionados` : `${filasDePartidas.length} filas de la tabla` }
+        ) : libroDeLaTabla({
+            filas: filasTabla, columnas: columnasVista, tipos: tiposColumna, calculos, niveles,
+            criterios: { filtroTabla, soloConMetrado, camposSuma, orden, totalTrasFilters: flattenedData.length, busqueda: hayBusqueda ? busqueda : '', campoBusqueda },
         });
         const workbook = XLSX.utils.book_new();
         for (const hoja of hojas) {
@@ -859,7 +1121,18 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
         } else {
             XLSX.writeFile(workbook, fileName, { cellDates: true });
         }
-    }, [filasTabla, columns, tiposColumna, calculos, niveles, filtroTabla, soloConMetrado, camposSuma, orden, flattenedData.length]);
+    }, [vista, filasDePartidas, dicPartidas, ambitoPartidas, filasTabla, columnasVista, tiposColumna, calculos, niveles, filtroTabla, soloConMetrado, camposSuma, orden, flattenedData.length, hayBusqueda, busqueda, campoBusqueda]);
+
+    // Lo seleccionado que está en la tabla: casillas / Mayús / Ctrl, o si no, lo elegido en el 3D.
+    const [copiado, setCopiado] = useState(null);
+    const seleccionParaSumar = checkedIds.size ? checkedIds : (localSelIds && localSelIds.size && !followSelection ? localSelIds : null);
+    const filasSeleccionadas = useMemo(() => (seleccionParaSumar ? filasTabla.filter(f => seleccionParaSumar.has(inventoryRowKey(f))) : []),
+        [seleccionParaSumar, filasTabla]);
+    const totalesSeleccion = useMemo(() => {
+        const r = {};
+        if (filasSeleccionadas.length) for (const [campo, calc] of Object.entries(calculos)) r[campo] = Tabla.calcular(filasSeleccionadas, campo, calc);
+        return r;
+    }, [filasSeleccionadas, calculos]);
 
     const totalesPie = useMemo(() => {
         const r = {};
@@ -869,14 +1142,41 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
 
     // Lista de render: grupos (varios niveles, plegables), filas y, si se
     // piden, los totales de cada grupo.
+    // Lo elegido EN EL MODELO va arriba, en su propio grupo con subtotal (con
+    // «Seguir el 3D»). La selección hecha en la tabla con Mayús/Ctrl no mueve
+    // filas: el siguiente clic caería en otra.
+    const seleccionDelModelo = useMemo(() => {
+        if (!followSelection || checkedIds.size || !localSelIds || !localSelIds.size) return [];
+        return refineInventorySelection(filasTabla, localSelIds, rawData);
+    }, [followSelection, checkedIds, localSelIds, filasTabla, rawData]);
+    const clavesSeleccionModelo = useMemo(() => new Set(seleccionDelModelo.map(inventoryRowKey)), [seleccionDelModelo]);
+
     const displayList = useMemo(() => {
-        if (!niveles.length) return filasTabla.map(row => ({ type: 'data', row, nivel: 0 }));
-        const grupos = Tabla.agrupar(filasTabla, niveles, totalesPorGrupo ? calculos : {});
-        return Tabla.aplanar(grupos, collapsedGroups, totalesPorGrupo).map(it => (
+        const cabeza = [];
+        const resto = clavesSeleccionModelo.size ? filasTabla.filter(f => !clavesSeleccionModelo.has(inventoryRowKey(f))) : filasTabla;
+        if (seleccionDelModelo.length) {
+            const grupo = {
+                clave: '__seleccion_del_modelo__', campo: 'Selección', nivel: 0,
+                // Lo elegido que no tiene fila (no está en el inventario extraído) se dice, no se calla.
+                valor: localSelIds.size > seleccionDelModelo.length
+                    ? `Seleccionado en el modelo — ${localSelIds.size - seleccionDelModelo.length} sin fila en la planilla`
+                    : 'Seleccionado en el modelo', n: seleccionDelModelo.length, seleccion: true,
+                totales: Object.fromEntries(Object.entries(calculos).map(([c, k]) => [c, Tabla.calcular(seleccionDelModelo, c, k)])),
+            };
+            cabeza.push({ type: 'group', grupo });
+            if (!collapsedGroups.has(grupo.clave)) for (const row of seleccionDelModelo) cabeza.push({ type: 'data', row, nivel: 1 });
+            // Si lo seleccionado es todo lo que hay, el pie ya dice lo mismo.
+            if (resto.length) cabeza.push({ type: 'groupTotals', grupo });
+        }
+        if (!niveles.length) return [...cabeza, ...resto.map(row => ({ type: 'data', row, nivel: 0 }))];
+        const grupos = Tabla.agrupar(resto, niveles, totalesPorGrupo ? calculos : {});
+        return [...cabeza, ...Tabla.aplanar(grupos, collapsedGroups, totalesPorGrupo).map(it => (
             it.tipo === 'fila' ? { type: 'data', row: it.fila, nivel: it.nivel }
-                : { type: it.tipo === 'grupo' ? 'group' : 'groupTotals', grupo: it.grupo }));
-    }, [filasTabla, niveles, collapsedGroups, totalesPorGrupo, calculos]);
+                : { type: it.tipo === 'grupo' ? 'group' : 'groupTotals', grupo: it.grupo }))];
+    }, [filasTabla, niveles, collapsedGroups, totalesPorGrupo, calculos, seleccionDelModelo, clavesSeleccionModelo, localSelIds]);
     displayListRef.current = displayList;
+    const ordenVisible = useMemo(() => displayList.filter(i => i.type === 'data').map(i => inventoryRowKey(i.row)), [displayList]);
+    ordenVisibleRef.current = ordenVisible;
 
     const alternarOrden = useCallback((campo, añadir) => {
         setOrden(prev => {
@@ -904,24 +1204,34 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
     // Compute total content width for horizontal scroll sync
     const totalContentWidth = useMemo(() => {
         const checkboxColWidth = 40;
-        const colsWidth = columns.reduce((sum, col) => sum + col.width, 0);
+        const colsWidth = columnasVista.reduce((sum, col) => sum + col.width, 0);
         return checkboxColWidth + colsWidth;
-    }, [columns]);
+    }, [columnasVista]);
+
+    const textoDeFilas = `${filasTabla.length.toLocaleString('es-PE')} filas${reglasActivas || soloConMetrado || resultadoBusqueda ? ` de ${flattenedData.length.toLocaleString('es-PE')}` : ''}${reglasActivas ? ` (filtros de la tabla: ${reglasActivas})` : ''}${soloConMetrado ? ' · solo con metrado' : ''}${orden.length ? ` · ordenado por ${orden.map(o => o.campo + (o.dir === 'asc' ? ' ▲' : ' ▼')).join(', ')}` : ''}`;
+    // Edición masiva: sobre las casillas o, si no hay, sobre lo elegido en el 3D. Se abre a petición.
+    const objetivoEdicion = enlaceCompartido() ? null : (checkedIds.size ? checkedIds : (localSelIds && localSelIds.size ? localSelIds : null));
 
     // ESTILO GENERAL DE LA APP:
     return (
-        <div data-escape-propio onKeyDown={alPulsarEscape} style={{ height: '100%', display: 'flex', flexDirection: 'column', background: '#faf9f5', color: '#333330', fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif', opacity: 0.95 }}>
+        <div data-escape-propio onKeyDown={alPulsarEscape} style={{ height: '100%', flex: '1 1 0', minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column', background: '#faf9f5', color: '#333330', fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' }}>
             
             {/* Header / Tabs - Top Level (Como Tandem) */}
-            <div style={{ display: 'flex', background: '#ffffff', height: '35px', alignItems: 'flex-end', padding: '0 20px', borderBottom: '1px solid #e8e6dc', justifyContent: 'space-between' }}>
-                <div style={{ display: 'flex', alignItems: 'flex-end', gap: '20px' }}>
-                    <div style={{ fontSize: '11px', textTransform: 'uppercase', color: '#52524d', fontWeight: 600, paddingBottom: '10px', letterSpacing: '0.8px' }}>
-                        Planilla
-                    </div>
+            <div style={{ display: 'flex', background: '#ffffff', height: '30px', flexShrink: 0, alignItems: 'center', padding: '0 12px 0 16px', borderBottom: '1px solid #e8e6dc', gap: '16px' }}>
+                <div style={{ fontSize: '11px', textTransform: 'uppercase', color: '#52524d', fontWeight: 600, letterSpacing: '0.8px', flexShrink: 0 }}>
+                    Planilla
+                </div>
+                <div role="status" style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '11px', color: '#72706b' }}>
+                    {!filterResult || filterResult.scopeId !== activeModelUrn || filterResult.status === 'pending'
+                        ? 'Filtros: esperando datos o cálculo'
+                        : filterResult.status !== 'ready'
+                            ? 'Filtros: ' + (filterResult.diagnostics?.[0]?.message || filterResult.diagnostics?.[0]?.code || filterResult.status)
+                            : filterResult.matches.length + ' coincidencias globales · ' + flattenedData.length + ' filas locales'}
+                    {filterProgress?.phase === 'paused' ? ' · Aplicación visual pausada: ' + filterProgress.owner : ''}
                 </div>
 
                 {/* Window Controls (Undock / Close) */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '15px', paddingBottom: '8px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
                     <button style={{ background:'none', border:'none', color:'#72706b', cursor:'pointer' }} title="Abrir en otra ventana" onClick={() => {
                         openInventoryFilterPopout({ host:window,scopeId:activeModelUrn,columns,
                             assetsOnly:showAssetsOnly,selection:activeSelectionFilter||isolatedExtIds,onClose });
@@ -931,16 +1241,16 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
             </div>
 
             {inventoryError && <div role="alert" style={{ color: '#fecaca', background: '#4c1d24', padding: '8px 12px', fontSize: '12px' }}>{inventoryError}</div>}
-            <div role="status" style={{ padding: '4px 12px', fontSize: '12px' }}>
-                {!filterResult || filterResult.scopeId !== activeModelUrn || filterResult.status === 'pending'
-                    ? 'Filtros: esperando datos o cálculo'
-                    : filterResult.status !== 'ready'
-                        ? 'Filtros: ' + (filterResult.diagnostics?.[0]?.message || filterResult.diagnostics?.[0]?.code || filterResult.status)
-                        : filterResult.matches.length + ' coincidencias globales · ' + flattenedData.length + ' filas locales'}
-                {filterProgress?.phase === 'paused' ? ' · Aplicación visual pausada: ' + filterProgress.owner : ''}
-            </div>
             {/* Toolbar (Filters, Columns, Group rows...) */}
-            <div style={{ display: 'flex', background: '#ffffff', minHeight: '36px', alignItems: 'center', padding: '0 12px', borderBottom: checkedIds.size > 0 ? 'none' : '1px solid #e8e6dc', gap: '12px' }}>
+            <div style={{ display: 'flex', background: '#ffffff', minHeight: '36px', flexShrink: 0, minWidth: 0, alignItems: 'center', padding: '0 12px', borderBottom: '1px solid #e8e6dc', gap: '12px' }}>
+                <div role="radiogroup" aria-label="Vista de la planilla" style={{ display: 'flex', border: '1px solid var(--v-linea-campo, #cccac0)', borderRadius: 'var(--v-radio-control, 4px)', overflow: 'hidden', marginRight: '10px' }}>
+                    {[['elementos', 'Elementos'], ['partidas', 'Partidas']].map(([v, t]) => (
+                        <button key={v} role="radio" aria-checked={vista === v} onClick={() => setVista(v)}
+                            title={v === 'partidas' ? 'Una fila por partida, con la cantidad nativa de Revit en su unidad' : 'Una fila por elemento'}
+                            style={{ border: 'none', padding: '0 10px', height: '26px', font: 'inherit', fontSize: '12px', cursor: 'pointer',
+                                background: vista === v ? 'var(--alephia-selected-bg, #ECF0F1)' : '#ffffff', color: vista === v ? 'var(--v-accion, #507294)' : '#52524d', fontWeight: vista === v ? 600 : 400 }}>{t}</button>
+                    ))}
+                </div>
                 <div style={{ display: 'flex', alignItems: 'center' }}>
                     <div style={{ position: 'relative' }}>
                         <ToolBtn icon={<Icons.Filter />} onClick={() => setFiltroAbierto(o => !o)} active={reglasActivas > 0 || filtroAbierto}
@@ -1023,6 +1333,30 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
                 
                 <div style={{ width: '1px', height: '16px', background: '#cccac0' }} />
                 
+                {/* Buscador: pegar un valor parametrizado en Revit (o varios, uno por línea). */}
+                <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                    <textarea rows={1} wrap="off" className="v-campo" aria-label="Buscar en la planilla"
+                        placeholder="Buscar o pegar un valor…" value={textoBusqueda}
+                        onChange={e => {
+                            const v = e.target.value;
+                            if (!textoBusqueda.trim() && v.trim()) {
+                                const sel = checkedIds.size ? checkedIds : (localSelIds || new Set());
+                                setSeleccionCongelada(sel.size >= 2 ? new Set(sel) : null);
+                            }
+                            if (!v.trim()) setSeleccionCongelada(null);
+                            setTextoBusqueda(v);
+                        }}
+                        onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) e.preventDefault(); if (e.key === 'Escape' && textoBusqueda) { e.stopPropagation(); setTextoBusqueda(''); setCampoBusqueda(null); setSeleccionCongelada(null); } }}
+                        title={textoBusqueda || 'Sin tildes, mayúsculas, comas ni espacios de más. Varias líneas = cualquiera de ellas. De una fila de Excel se busca la descripción.'}
+                        style={{ width: textoBusqueda ? 'min(560px, 34vw)' : '280px', transition: 'width .15s ease', height: '28px', resize: 'none', overflow: 'hidden', padding: '5px 26px 5px 8px', fontSize: '12px', lineHeight: '16px' }} />
+                    {textoBusqueda && (
+                        <button aria-label="Quitar la búsqueda" className="v-cerrar" onClick={() => { setTextoBusqueda(''); setCampoBusqueda(null); setSeleccionCongelada(null); }}
+                            style={{ position: 'absolute', right: '2px', width: '24px', height: '24px' }}><Icons.Close /></button>
+                    )}
+                </div>
+
+                <div style={{ width: '1px', height: '16px', background: '#cccac0' }} />
+
                 {/* View Options */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '16px', fontSize: '12.5px', color: '#52524d' }}>
                     {showAssetsOnly && (
@@ -1045,7 +1379,10 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
                     </label>
                 </div>
 
-                <div style={{ flex: 1 }} />
+                {/* Cuántas filas y por qué: en la barra, no en una franja propia. */}
+                <span title={textoDeFilas} style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '11px', color: '#72706b' }}>
+                    {vista === 'elementos' ? textoDeFilas : ''}
+                </span>
 
                 {/* Right Actions — ALWAYS VISIBLE */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -1143,6 +1480,13 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
                             </div>
                         );
                     })()}
+                    {objetivoEdicion && vista === 'elementos' && (
+                        <button onClick={() => setEditarAbierto(o => !o)} aria-expanded={editarAbierto}
+                            title="Asignar un valor a un parámetro en los elementos seleccionados"
+                            style={{ background: editarAbierto ? 'var(--alephia-selected-bg, #ECF0F1)' : 'none', border: '1px solid #cccac0', color: editarAbierto ? '#507294' : '#52524d', padding: '4px 10px', fontSize: '11.5px', borderRadius: '4px', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                            Editar ({objetivoEdicion.size}{checkedIds.size ? '' : ' en 3D'})
+                        </button>
+                    )}
                     <button 
                         onClick={handleExportExcel}
                         style={{ background: 'none', border: '1px solid #cccac0', color: '#52524d', padding: '4px 10px', fontSize: '11.5px', borderRadius: '4px', cursor: 'pointer', transition: 'all 0.2s', display: 'flex', alignItems: 'center', gap: '6px' }}
@@ -1180,10 +1524,10 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
                 const bulkTargetIds = checkedIds.size > 0
                     ? checkedIds
                     : (localSelIds && localSelIds.size > 0 ? localSelIds : null);
-                if (!bulkTargetIds) return null;
+                if (!bulkTargetIds || !editarAbierto || vista !== 'elementos') return null;
                 return (
                 <div style={{
-                    display: 'flex', background: '#ffffff', minHeight: '34px', alignItems: 'center',
+                    display: 'flex', background: '#ffffff', minHeight: '34px', flexShrink: 0, alignItems: 'center',
                     padding: '0 12px', borderBottom: '1px solid #e8e6dc', gap: '8px',
                     animation: 'fadeIn 0.15s ease-out'
                 }}>
@@ -1290,9 +1634,9 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
                         {bulkAssigning ? '...' : '▶'} Aplicar
                     </button>
                     <button
-                        onClick={() => { setCheckedIds(new Set()); setLocalSelIds(null); }}
+                        onClick={() => setEditarAbierto(false)}
                         style={{ background: 'none', border: 'none', color: '#72706b', cursor: 'pointer', padding: '4px', display: 'flex', borderRadius: '4px' }}
-                        title="Quitar la selección"
+                        title="Cerrar la edición"
                     >
                         <Icons.Close />
                     </button>
@@ -1300,12 +1644,26 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
                 );
             })()}
 
-            {/* Sub-header Summary */}
-            <div style={{ padding: '6px 12px', background: '#ffffff', fontSize: '11px', color: '#72706b', borderBottom: '1px solid #e8e6dc', display: 'flex', justifyContent: 'space-between' }}>
-                 <span>{filasTabla.length.toLocaleString('es-PE')} filas{reglasActivas || soloConMetrado ? ` de ${flattenedData.length.toLocaleString('es-PE')}` : ''}{reglasActivas ? ` (filtros de la tabla: ${reglasActivas})` : ''}{soloConMetrado ? ' · solo con metrado' : ''}{orden.length ? ` · ordenado por ${orden.map(o => o.campo + (o.dir === 'asc' ? ' ▲' : ' ▼')).join(', ')}` : ''}</span>
-            </div>
+            {resultadoBusqueda && (
+                <BarraDeBusqueda
+                    resultado={resultadoBusqueda} campo={campoBusqueda} onCampo={setCampoBusqueda}
+                    seleccion={checkedIds.size ? checkedIds : localSelIds} seleccionCongelada={seleccionCongelada} onSeleccion={setSeleccionCongelada}
+                    parecidos={listaParecidos} confirmados={confirmados} onConfirmados={setConfirmados}
+                    verParecidos={verParecidos || (!resultadoBusqueda.filas.size && listaParecidos.length > 0)} onVerParecidos={setVerParecidos}
+                    medidas={medidasPosibles} activas={medidasActivas} onMedidas={setMedidasElegidas}
+                    sumas={Object.fromEntries(medidasActivas.map(k => [k, Tabla.textoDeResultado(Tabla.calcular(filasTabla, k, 'suma'))]))}
+                />
+            )}
             
-            {/* ═══ UNIFIED SCROLL CONTAINER (horizontal + vertical) ═══ */}
+            {vista === 'partidas' ? (
+                <TablaDePartidas filas={filasDePartidas} filasObra={flattenedData} dic={dicPartidas} roles={rolesPartidas} claveDeFila={inventoryRowKey}
+                    itemizado={itemizado} onItemizado={setItemizado}
+                    ambito={ambitoPartidas ? 'seleccionados' : 'de la tabla'}
+                    onUsarTodo={ambitoPartidas ? () => setAmbitoPartidas(null) : null}
+                    onSeleccionar={seleccionarPartida}
+                    onMostrarTodo={() => window.dispatchEvent(new CustomEvent(EVENTOS.MOSTRAR_TODO))} />
+            ) : (
+            /* ═══ UNIFIED SCROLL CONTAINER (horizontal + vertical) ═══ */
             <div 
                 ref={containerRef} 
                 onScroll={handleScroll}
@@ -1347,7 +1705,7 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
                                 title={checkedIds.size === flattenedData.length ? 'Deselect all' : `Select all ${flattenedData.length} items`}
                             />
                         </div>
-                        {columns.map(col => {
+                        {columnasVista.map(col => {
                             const o = orden.findIndex(x => x.campo === col.key);
                             const dir = o >= 0 ? orden[o].dir : null;
                             return (
@@ -1410,7 +1768,7 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
                                         position: 'absolute', top: `${top}px`, left: 0, height: `${ROW_HEIGHT}px`,
                                         width: `${totalContentWidth}px`, display: 'flex', alignItems: 'center', gap: '8px',
                                         padding: `0 12px 0 ${12 + item.grupo.nivel * 18}px`, boxSizing: 'border-box', cursor: 'pointer',
-                                        background: item.grupo.nivel ? '#fdfdfb' : '#ffffff', borderBottom: '1px solid #e8e6dc', borderTop: '1px solid #e8e6dc',
+                                        background: item.grupo.seleccion ? 'var(--alephia-selected-bg, #ECF0F1)' : item.grupo.nivel ? '#fdfdfb' : '#ffffff', borderBottom: '1px solid #e8e6dc', borderTop: '1px solid #e8e6dc',
                                         color: '#52524d', fontSize: '12px', fontWeight: 700, zIndex: 1
                                     }}
                                     title={`${item.grupo.campo}: ${item.grupo.valor}`}
@@ -1422,12 +1780,12 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
                             ) : item.type === 'groupTotals' ? (
                                 <div key={`tot-${item.grupo.clave}`} style={{
                                     position: 'absolute', top: `${top}px`, left: 0, height: `${ROW_HEIGHT}px`, width: `${totalContentWidth}px`,
-                                    display: 'flex', alignItems: 'center', boxSizing: 'border-box', background: '#f5f4ef',
-                                    borderBottom: '1px solid #e8e6dc', fontSize: '11.5px', fontWeight: 600, color: '#333330'
+                                    display: 'flex', alignItems: 'center', boxSizing: 'border-box', background: item.grupo.seleccion ? 'var(--alephia-selected-bg, #ECF0F1)' : '#f5f4ef',
+                                    borderBottom: item.grupo.seleccion ? '2px solid #cccac0' : '1px solid #e8e6dc', fontSize: '11.5px', fontWeight: 600, color: '#333330'
                                 }}>
-                                    <div style={{ width: '40px', flexShrink: 0, textAlign: 'center', color: '#72706b' }}>{item.grupo.n}</div>
-                                    {columns.map(col => (
-                                        <div key={col.key} style={{ width: col.width, flexShrink: 0, padding: '0 12px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                    <div style={{ width: '40px', flexShrink: 0, boxSizing: 'border-box', borderRight: '1px solid #e8e6dc', textAlign: 'center', color: '#72706b' }}>{item.grupo.n}</div>
+                                    {columnasVista.map(col => (
+                                        <div key={col.key} style={{ width: col.width, flexShrink: 0, boxSizing: 'border-box', padding: '0 12px', borderRight: '1px solid #e8e6dc', textAlign: 'right', fontVariantNumeric: 'tabular-nums', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                             {Tabla.textoDeResultado(item.grupo.totales[col.key])}
                                         </div>
                                     ))}
@@ -1436,14 +1794,14 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
                                 <InventoryRow
                                     key={inventoryRowKey(item.row)}
                                     row={item.row}
-                                    columns={columns}
+                                    columns={columnasVista}
                                     index={index}
                                     onRowClick={handleRowClick}
-                                    isHighlighted={highlightedDbId === inventoryRowKey(item.row)}
+                                    isHighlighted={highlightedDbId === inventoryRowKey(item.row) || clavesSeleccionModelo.has(inventoryRowKey(item.row))}
                                     top={top}
                                     onCellEdit={handleCellEdit}
                                     isChecked={checkedIds.has(inventoryRowKey(item.row))}
-                                    onToggleCheck={(dbId) => setCheckedIds(prev => { const next = new Set(prev); if (next.has(dbId)) next.delete(dbId); else next.add(dbId); return next; })}
+                                    onToggleCheck={alternarCasilla}
                                 />
                             ))}
                         </div>
@@ -1454,6 +1812,38 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
                     )}
 
                     {/* FOOTER TOTALS ROW (inside scroll container so it scrolls horizontally with data) */}
+                    {/* Σ SELECCIÓN: lo elegido (Mayús/Ctrl, casillas o 3D), mismo cálculo y unidad que el pie; clic = copiar */}
+                    {filasSeleccionadas.length > 0 && (
+                        <div style={{
+                            display: 'flex', background: 'var(--alephia-selected-bg, #ECF0F1)', borderTop: '1px solid #cccac0',
+                            alignItems: 'center', fontSize: '12px', fontWeight: 600, color: '#141413', flexShrink: 0, height: '28px',
+                            position: 'sticky', bottom: '30px', zIndex: 2
+                        }}>
+                            <div title={`${filasSeleccionadas.length} elementos seleccionados en la tabla`} style={{ width: '40px', flexShrink: 0, borderRight: '1px solid #e8e6dc', textAlign: 'center', fontSize: '11px', color: 'var(--v-accion, #507294)' }}>
+                                {filasSeleccionadas.length}
+                            </div>
+                            {columnasVista.map((col, i) => {
+                                const r = totalesSeleccion[col.key];
+                                const texto = Tabla.textoDeResultado(r);
+                                const unico = r && Object.keys(r.porUnidad).length === 1 ? Object.values(r.porUnidad)[0] : null;
+                                const copia = unico != null ? String(Number(unico.toPrecision(12))) : texto;
+                                return (
+                                    <button key={col.key} disabled={!texto && i > 0}
+                                        onClick={() => { if (texto) { navigator.clipboard?.writeText(copia); setCopiado(col.key); setTimeout(() => setCopiado(c => (c === col.key ? null : c)), 1200); } }}
+                                        title={texto ? `Selección · ${col.header}: ${texto} · clic para copiar ${copia}` : ''}
+                                        style={{
+                                            width: col.width, flexShrink: 0, padding: '0 12px', height: '100%', textAlign: texto ? 'right' : 'left', fontVariantNumeric: 'tabular-nums',
+                                            background: 'transparent', border: 'none', borderRight: '1px solid #e8e6dc', font: 'inherit', fontWeight: 600,
+                                            color: texto ? 'var(--v-accion, #507294)' : '#72706b', cursor: texto ? 'copy' : 'default',
+                                            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'
+                                        }}>
+                                        {copiado === col.key ? 'Copiado' : (texto || (i === 0 ? 'Σ selección' : ''))}
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    )}
+
                     {/* PIE: recuento y el cálculo de cada columna (clic para cambiarlo) */}
                     {flattenedData.length > 0 && (
                         <div style={{
@@ -1464,7 +1854,7 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
                             <div title="Filas en la tabla" style={{ width: '40px', flexShrink: 0, borderRight: '1px solid #e8e6dc', textAlign: 'center', fontSize: '11px' }}>
                                 {filasTabla.length.toLocaleString('es-PE')}
                             </div>
-                            {columns.map(col => {
+                            {columnasVista.map(col => {
                                 const r = totalesPie[col.key];
                                 const texto = Tabla.textoDeResultado(r);
                                 const aviso = r && r.sinDato && r.calculo !== 'recuento' && r.calculo !== 'distintos' ? `${r.sinDato} sin dato numérico` : '';
@@ -1485,7 +1875,8 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
                         </div>
                     )}
                 </div>{/* close inner minWidth wrapper */}
-            </div>{/* close outer scroll container */}
+            </div>
+            )}{/* close outer scroll container */}
 
             {/* Menú de la cabecera (clic derecho) */}
             {menuCabecera && (() => {

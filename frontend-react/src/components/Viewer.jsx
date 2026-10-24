@@ -3,7 +3,9 @@ import { installPivotUnderPointer } from '../utils/pivotUnderPointer';
 import { installForwardWheelZoom, forwardWheelDirectionForScope } from '../utils/forwardWheelZoom';
 import { mountFiltersRuntime } from '../lib/filterRuntimeBridge.js';
 import { viewerElementKey } from '../lib/filtersCore.js';
-import { irAElementos } from '../lib/irAElemento.js';
+import { irAElementos, irAConjunto, OCUPACION_CONJUNTO } from '../lib/irAElemento.js';
+import { centroDe, gruposPorTramos, MAX_PIEZAS_SUELTAS } from '../lib/recorridoDePartida.js';
+import { crearAislamientoTemporal, EVENTOS } from '../lib/aislamientoTemporal.js';
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import './viewer.css';
 import './IconMarkup.css'; // Add this line
@@ -1607,6 +1609,23 @@ const Viewer = ({
                 if (button === 0) {
                     // El raycast natively ignora elementos ocultos/ghosted según la config
                     const hit = viewer.impl.hitTest(event.canvasX, event.canvasY, false);
+                    // Ctrl / Mayús + clic: añadir o quitar ese elemento sin perder lo ya
+                    // elegido. Antes cada clic sustituía la selección y no había forma de
+                    // elegir varios en el modelo salvo Mayús + arrastrar (recuadro).
+                    if (event.ctrlKey || event.metaKey || event.shiftKey) {
+                        if (hit && hit.dbId) {
+                            const actual = viewer.getAggregateSelection();
+                            viewer.setAggregateSelection(viewer.impl.modelQueue().getModels().map(m => {
+                                const ids = (actual.find(x => x.model === m)?.selection || []).slice();
+                                if (m === hit.model) {
+                                    const i = ids.indexOf(hit.dbId);
+                                    if (i >= 0) ids.splice(i, 1); else ids.push(hit.dbId);
+                                }
+                                return { model: m, ids };
+                            }));
+                        }
+                        return true;
+                    }
                     if (hit && hit.dbId) {
                         viewer.select(hit.dbId, hit.model);
                     } else {
@@ -1782,9 +1801,78 @@ const Viewer = ({
         }
     }, [models.length, onModelProperties, onSheetsLoaded]);
 
+    // UNA PARTIDA SE AÍSLA, IGUAL QUE EN FILTERS (propietario, 24-oct-2026: «que sea lo mismo que
+    // Filter en todo»): LMV dibuja cada pieza SELECCIONADA otra vez en una pasada de resaltado, y con
+    // cientos de barras pesa; aislar dibuja menos. Un clic aísla; otro clic, Escape u otra selección
+    // muestran todo como estaba. Todo el estado y las reglas viven en lib/aislamientoTemporal.js.
+    const aislamientoRef = useRef(null);
+    const aislamiento = () => {
+        const viewer = viewerRef.current;
+        if (!viewer) return null;
+        if (aislamientoRef.current?.viewer !== viewer) {
+            aislamientoRef.current = {
+                viewer,
+                // Silenciado con la marca de Filters, que respetan su conductor visual y la
+                // sincronización de aislamiento de este visor (si no, volvería a filtrar la Planilla).
+                ctl: crearAislamientoTemporal(viewer),
+            };
+        }
+        return aislamientoRef.current.ctl;
+    };
     // External Custom Event Listener for Component Selection
     useEffect(() => {
         const handleViewerSelect = (e) => {
+            // Varios elementos de varios modelos: una sola selección agregada. Con Mayús/Ctrl
+            // en la tabla la cámara NO se mueve (saltaría en cada clic); con `encuadrar` (clic
+            // en una partida) vuela al conjunto, a distancia prudente.
+            // Una selección que no es otra partida sustituye a la aislada: todo vuelve a como estaba.
+            // (Otra partida re-aísla directamente, sin mostrar todo entre medias.)
+            if (!(Array.isArray(e.detail?.items) && e.detail.encuadrar)) aislamiento()?.restaurar();
+            if (Array.isArray(e.detail?.items)) {
+                const viewer = viewerRef.current;
+                if (!viewer) return;
+                const models = viewer.impl.modelQueue().getModels();
+                const porModelo = new Map();
+                for (const { urn: u, dbIds: ids } of e.detail.items) {
+                    const n = normalizeUrn(u);
+                    const m = models.find(x => {
+                        const mv = normalizeUrn(x.getData()?.urn);
+                        const mr = Object.keys(loadedModelsRef.current).find(k => normalizeUrn(k) === mv) || mv;
+                        return normalizeUrn(mr) === n || mv === n;
+                    });
+                    if (m) porModelo.set(m, [...(porModelo.get(m) || []), ...ids]);
+                }
+                // Clic en una partida: se aísla (como Filters). Mayús/Ctrl en la tabla: se selecciona.
+                const aislar = !!e.detail.encuadrar;
+                if (aislar) {
+                    viewer.clearSelection();
+                    // Con la misma clave (un paso «◀ ▶» de la misma partida) no se toca la visibilidad.
+                    aislamiento().aislar(porModelo, e.detail.clave ?? null);
+                } else {
+                    viewer.setAggregateSelection(models.map(m => ({ model: m, ids: porModelo.get(m) || [] })));
+                }
+                if (!e.detail.encuadrar) return;
+                // Una partida: vuelo al conjunto, o al paso `enfocar` del recorrido «◀ ▶».
+                const lista = [...porModelo].flatMap(([model, ids]) => ids.map(dbId => ({ model, dbId })));
+                const centros = lista.map(x => centroDe(x.model, x.dbId));
+                // Pocas piezas: cada una es un paso del recorrido. Muchas (el acero): tramos de 15 m.
+                const metro = 1 / (lista[0]?.model.getUnitScale?.() || 1);
+                const grupos = lista.length > MAX_PIEZAS_SUELTAS
+                    ? gruposPorTramos(centros.map(c => c && c.toArray()), 15 * metro)
+                    : lista.map((_, i) => [i]).filter(g => centros[g[0]]);
+                const irA = indices => {
+                    const porM = new Map();
+                    for (const i of indices) porM.set(lista[i].model, [...(porM.get(lista[i].model) || []), lista[i].dbId]);
+                    irAConjunto(viewer, [...porM].map(([model, dbIds]) => ({ model, dbIds })),
+                        indices.length > 1 ? { ocupacion: OCUPACION_CONJUNTO } : undefined);
+                };
+                // La Planilla necesita saber cuántos pasos tiene el recorrido y si son piezas o tramos.
+                window.dispatchEvent(new CustomEvent(EVENTOS.RECORRIDO, { detail: { pasos: grupos.length, porTramos: lista.length > MAX_PIEZAS_SUELTAS } }));
+                const k = e.detail.enfocar;
+                if (Number.isInteger(k) && grupos[k]) irA(grupos[k]);
+                else irAConjunto(viewer, [...porModelo].map(([model, dbIds]) => ({ model, dbIds })), { ocupacion: OCUPACION_CONJUNTO });
+                return;
+            }
             const { dbIds, urn } = e.detail;
             const viewer = viewerRef.current;
             if (!viewer || !dbIds || dbIds.length === 0 || !urn) return;
@@ -1834,11 +1922,15 @@ const Viewer = ({
             }
         };
 
+        // Segundo clic en la partida (Planilla): mostrar todo, como estaba antes de aislarla.
+        const handleMostrarTodo = () => { aislamiento()?.restaurar(); };
         window.addEventListener('viewer-select', handleViewerSelect);
+        window.addEventListener(EVENTOS.MOSTRAR_TODO, handleMostrarTodo);
         window.addEventListener('budget-tandem-highlight', handleTandemHighlight);
         
         return () => {
             window.removeEventListener('viewer-select', handleViewerSelect);
+            window.removeEventListener(EVENTOS.MOSTRAR_TODO, handleMostrarTodo);
             window.removeEventListener('budget-tandem-highlight', handleTandemHighlight);
         };
     }, [viewerReady]);
@@ -2701,6 +2793,9 @@ const Viewer = ({
                 if (viewer.getSelection().length > 0) {
                     viewer.clearSelection();
                 }
+                // Una partida aislada desde la Planilla: Escape la suelta y devuelve los modelos
+                // a como estaban (con sus filtros).
+                aislamiento()?.restaurar();
 
                 // 3. Optional: Cancel tools if needed, but DO NOT Unhide.
             }

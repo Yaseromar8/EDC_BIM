@@ -72,6 +72,9 @@ ok('solo con metrado y sus columnas', cr['Solo con metrado'] === 'sí · cantida
 ok('orden', cr['Orden'] === 'Cotas › Volumen ↓');
 ok('agrupado', cr['Agrupado por'] === 'Zona');
 ok('ámbito', cr['Ámbito'] === 'Frente Drenaje Urbano');
+const conBusqueda = X.libroDeLaTabla({ filas, columnas, tipos, calculos, criterios: { busqueda: 'DN 1000\nDN 1500', campoBusqueda: 'Datos::03_05_DSI_CodigoDePartida' } });
+const crb = Object.fromEntries(conBusqueda[conBusqueda.length - 1].filas.slice(1).map(r => [r[0], r[1]]));
+ok('la búsqueda consta en criterios', crb['Búsqueda'] === 'DN 1000 | DN 1500 (solo en Datos › 03_05_DSI_CodigoDePartida)');
 ok('los cálculos, una línea por tipo', cr['Cálculo · Suma'] === '2 columnas: Cotas › Área (m²); Cotas › Volumen (m³)');
 const ruido = X.libroDeLaTabla({ filas: Array.from({ length: 10 }, () => ({ v: '4.5245 m^3' })), columnas: [{ key: 'v', header: 'v' }], tipos: { v: { tipo: 'numero', unidad: 'm³' } }, calculos: { v: 'suma' } })[0].filas;
 ok('sin ruido de coma flotante en las sumas (10 × 4.5245 = 45.245)', ruido[ruido.length - 1][0] === 45.245);
