@@ -1,5 +1,6 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { analizarPartidas, gruposDePartidas } from '../lib/planillaPartidas';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { analizarPartidas } from '../lib/planillaPartidas';
+import { plantillaDelItemizado, filasVisibles } from '../lib/planillaPlantilla';
 import { leerItemizado, cruzarCampos, diferencias } from '../lib/planillaItemizado';
 import { formatearNumero } from '../lib/inventoryTabla';
 import { compacto } from '../lib/inventoryBuscar';
@@ -10,15 +11,15 @@ import { UNIDADES_MEDIBLES, MAX_MEDIR_CON, candidatosDeMedida, camposParaDonde, 
     claveDeCriterio, describirCriterio, etiquetaDeClave, sinMedidaNativa, usoDeCriterios } from '../lib/criteriosDeMedida';
 
 /**
- * Vista «Partidas» de la Planilla: una fila por partida (código + unidad) de los
- * elementos del ámbito, con la cantidad NATIVA de Revit en la unidad de la
- * partida (regla del propietario, docs/visor/23 §7). El criterio sale SOLO del
- * itemizado que sube el usuario: sin itemizado, no hay partidas. Ordenada como un
- * presupuesto: bajo su partida padre (la línea sin número que la contiene) o
- * bajo su capítulo (el código sin su último tramo). Donde no hay medida nativa,
+ * Vista «Partidas» de la Planilla: el ITEMIZADO como plantilla (docs/visor/33). Todas sus
+ * filas, en el orden del Excel y desplegadas: títulos con «x de y con dato» y, en cada
+ * partida, lo que el modelo tiene de ella (cantidad NATIVA de Revit en la unidad de la
+ * partida, docs/visor/23 §7); si no tiene nada, la fila queda vacía, a la vista. Las
+ * partidas del modelo fuera del itemizado van en un bloque al final. El criterio sale
+ * SOLO del itemizado que sube el administrador. Donde no hay medida nativa,
  * la da un criterio de medida de la obra («Medir con…», docs/visor/32), marcado
  * «·crit.». Lo manual va aparte. Clic en
- * una partida = sus elementos en el 3D; clic en un grupo = plegar o desplegar.
+ * una partida = sus elementos en el 3D; clic en un título = plegar o desplegar.
  */
 const celda = { padding: '0 10px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' };
 const num = { ...celda, textAlign: 'right', fontVariantNumeric: 'tabular-nums' };
@@ -32,6 +33,8 @@ const COLUMNAS = [
     { titulo: 'Manual (aparte)', ancho: '150px', derecha: true },
 ];
 const rejilla = COLUMNAS.map(c => c.ancho).join(' ');
+const ALTO = 28;   // alto de cada fila de la plantilla (se dibujan solo las que se ven)
+const sangria = nivel => `${10 + (Math.max(1, nivel) - 1) * 12}px`;
 const ROJO = '#9a3b2e';
 
 // Cómo se leyeron las partidas: lo que la Planilla deduce de los datos (docs/visor/24 §9).
@@ -350,7 +353,7 @@ function ListaDeCriterios({ juego, uso, estado, onGuardar, onCerrar }) {
     );
 }
 
-export default function TablaDePartidas({ filas, filasObra, dic, roles, claveDeFila, ambito, onUsarTodo, onSeleccionar, onMostrarTodo, onVerEnFilters, itemizado, estadoItemizado, onItemizado, criterios, estadoCriterios, onCriterios }) {
+export default function TablaDePartidas({ filas, filasObra, dic, roles, claveDeFila, ambito, onUsarTodo, onSeleccionar, onMostrarTodo, onVerEnFilters, itemizado, estadoItemizado, onItemizado, criterios, estadoCriterios, onCriterios, busqueda = '' }) {
     const estadoObra = estadoItemizado || { cargando: false, guardando: false, puedeEditar: true, error: '' };
     const estadoCrit = estadoCriterios || { cargando: false, guardando: false, puedeEditar: false, error: '', modo: 'obra', aviso: '' };
     const [medirCon, setMedirCon] = useState(null);         // clave de la partida cuyo «Medir con…» está abierto
@@ -364,13 +367,11 @@ export default function TablaDePartidas({ filas, filasObra, dic, roles, claveDeF
         window.addEventListener(EVENTOS.RECORRIDO, al);
         return () => window.removeEventListener(EVENTOS.RECORRIDO, al);
     }, []);
-    const [plegados, setPlegados] = useState(() => new Set());
     const [verComo, setVerComo] = useState(false);
     const [errorItemizado, setErrorItemizado] = useState('');
     const indice = itemizado?.indice || null;
     const { partidas, calidad } = useMemo(() => (dic ? analizarPartidas(filas, dic, claveDeFila) : { partidas: [], calidad: { repetidas: 0, intercambiadas: 0 } }),
         [filas, dic, claveDeFila]);
-    const grupos = useMemo(() => gruposDePartidas(partidas, indice), [partidas, indice]);
     // Cobertura frente al itemizado, sobre los mismos elementos que la tabla (docs/visor/25, P1).
     const cobertura = useMemo(() => (dic && indice ? coberturaDelItemizado(filas, dic, indice, claveDeFila) : null),
         [filas, dic, indice, claveDeFila]);
@@ -430,6 +431,43 @@ export default function TablaDePartidas({ filas, filasObra, dic, roles, claveDeF
         return d?.tipo === 'exacto' ? d.item : p.codigo;
     };
     const medible = p => !!(p.codigo && UNIDADES_MEDIBLES.includes(p.unidad) && onCriterios && estadoCrit.puedeEditar);
+
+    // ── La plantilla: el itemizado en su orden, todo desplegado (docs/visor/33) ──
+    const plantilla = useMemo(() => (dic && itemizado ? plantillaDelItemizado(itemizado.items, partidas, indice) : null), [dic, itemizado, partidas, indice]);
+    const [plegados, setPlegados] = useState(() => new Set());     // índices de títulos plegados A MANO
+    useEffect(() => { setPlegados(new Set()); }, [itemizado?.huella]);
+    const [soloConDato, setSoloConDato] = useState(false);
+    const texto = String(busqueda || '');
+    const visibles = useMemo(() => (plantilla ? filasVisibles(plantilla, { plegados, soloConDato, texto }) : []), [plantilla, plegados, soloConDato, texto]);
+    // Lo que se dibuja, fila a fila: títulos, partidas, sus sub-partidas y el bloque «fuera».
+    const lista = useMemo(() => {
+        if (!plantilla) return [];
+        const out = [];
+        for (const i of visibles) {
+            const f = plantilla.filas[i];
+            if (f.tipo === 'titulo') { out.push({ tipo: 'titulo', clave: `t${i}`, i, f }); continue; }
+            out.push({ tipo: 'partida', clave: `p${i}`, f });
+            for (const p of f.sub) out.push({ tipo: 'sub', clave: `s${i}|${p.clave}`, p, f });
+        }
+        if (plantilla.fuera.length) {
+            out.push({ tipo: 'cabeceraFuera', clave: 'fuera' });
+            for (const p of plantilla.fuera) out.push({ tipo: 'fuera', clave: `f|${p.clave}`, p });
+        }
+        return out;
+    }, [plantilla, visibles]);
+    const plegarTitulo = i => setPlegados(prev => { const n = new Set(prev); if (n.has(i)) n.delete(i); else n.add(i); return n; });
+    const cuerpoRef = useRef(null);
+    const [scroll, setScroll] = useState(0);
+    const [altoVista, setAltoVista] = useState(600);
+    useEffect(() => {
+        const el = cuerpoRef.current;
+        if (!el || typeof ResizeObserver === 'undefined') return undefined;
+        const ro = new ResizeObserver(() => setAltoVista(el.clientHeight));
+        ro.observe(el);
+        return () => ro.disconnect();
+    }, [!!plantilla]); // eslint-disable-line react-hooks/exhaustive-deps
+    const desde = Math.max(0, Math.floor(scroll / ALTO) - 10);
+    const hasta = Math.min(lista.length, Math.ceil((scroll + altoVista) / ALTO) + 10);
     const lineas = partidas.reduce((s, p) => s + p.elementos, 0);
 
     // Sin itemizado no hay criterio: se pide, no se supone.
@@ -448,11 +486,125 @@ export default function TablaDePartidas({ filas, filasObra, dic, roles, claveDeF
             </div>
         );
     }
-    const plegar = clave => setPlegados(prev => { const n = new Set(prev); if (n.has(clave)) n.delete(clave); else n.add(clave); return n; });
+    // Una partida CON elementos en el modelo (la misma fila de siempre). `codigo` y `nombre` son los del
+    // itemizado cuando la fila es de la plantilla; las sub-partidas y las de fuera llevan los del modelo.
+    const filaConDato = (p, { codigo = p.codigo, nombre = p.nombre, nivel = 1 } = {}) => {
+        const sel = activa === p.clave;
+        const calculada = p.origenes.includes('calculada');
+        const conCriterio = p.origenes.includes('criterio');
+        const donde = indice && p.codigo ? indice.ubicar(p.codigo) : null;
+        // Una sub-partida de verdad tiene SU descripción (el FUSTE del buzón). Si la
+        // del modelo es la de OTROS ítems del itemizado, el código está mal puesto
+        // (Canal: 04.02.03.05 bajo «ACARREO…» con «INSTALACION DE ACERO…»).
+        const otrosItems = donde?.tipo === 'subpartida' ? (indice.porDescripcion.get(compacto(p.nombreModelo || p.nombre)) || []) : [];
+        return (
+            <div role="row" aria-selected={sel} className={`inv-fila${sel ? ' resaltada' : ''}`}
+                onClick={() => alternar(p.clave, p.claves)}
+                title={`${codigo || '(sin código)'} · ${nombre || '(sin nombre)'} — ${sel ? 'clic: mostrar todo' : `clic: aislar sus ${p.elementos} elementos en el 3D`}`}
+                style={{ display: 'grid', gridTemplateColumns: rejilla, height: `${ALTO}px`, alignItems: 'center', borderBottom: '1px solid #e8e6dc', cursor: 'pointer', background: '#ffffff' }}>
+                <div style={{ ...celda, paddingLeft: sangria(nivel), color: codigo ? '#141413' : ROJO }}>
+                    {codigo || 'sin código'}
+                    {p.intercambiadas ? <span title="En Revit el código estaba en NombreDePartida" style={{ color: ROJO }}> ⇄</span> : null}
+                    {p.unidas > 1 && <span title={`El mismo ítem escrito de ${p.unidas} formas en el modelo (con y sin ceros a la izquierda): se suman`} style={{ color: '#72706b' }}> ×{p.unidas}</span>}
+                    {donde?.tipo === 'subpartida' && !otrosItems.length && <span title={`Sub-partida de ${donde.item}: el itemizado no baja a este nivel`} style={{ color: '#72706b' }}> ↳</span>}
+                    {otrosItems.length > 0 && <span title={`¿Código equivocado? Su descripción es la de ${otrosItems.slice(0, 3).join(', ')}${otrosItems.length > 3 ? '…' : ''} en el itemizado, no la de una sub-partida de ${donde.item}`} style={{ color: ROJO }}> ⚠</span>}
+                    {donde?.tipo === 'fuera' && <span title="No está en el itemizado" style={{ color: ROJO }}> ∉</span>}
+                </div>
+                <div style={{ ...celda, color: nombre ? '#141413' : ROJO }}
+                    title={p.oficial && p.nombreModelo && p.nombreModelo !== nombre ? `En el modelo: ${p.nombreModelo}` : undefined}>{nombre || 'sin nombre'}</div>
+                <div style={{ ...celda, color: p.unidad ? '#52524d' : ROJO }}>{p.unidad || 'sin unidad'}</div>
+                <div style={{ ...num, fontWeight: 600, color: p.conMedida ? '#141413' : '#b0aea5' }}
+                    title={[calculada ? 'calculada: longitud total de barra × kg/m del diámetro' : '',
+                        conCriterio ? `${p.medidoCon.map(m => `${miles(m.n)} medidos con ${etiquetaDeClave(m.clave)} (Σ ${fmt(m.suma, p.unidad)})`).join('; ')}: criterio de medida de la obra, porque no traen medida nativa${p.conMedida > p.porCriterio ? `; ${miles(p.conMedida - p.porCriterio)} con su medida nativa` : ''}` : ''].filter(Boolean).join(' · ')}>
+                    {p.conMedida ? `${formatearNumero(p.cantidad)} ${p.unidad}` : '—'}
+                    {calculada ? <span style={{ fontWeight: 400, color: '#72706b' }}> ·calc.</span> : null}
+                    {conCriterio ? <span style={{ fontWeight: 400, color: '#72706b' }}> ·crit.</span> : null}
+                </div>
+                <div style={{ ...num, display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '4px' }}>
+                    {sel && new Set(p.claves).size > 1 && recorrido?.pasos > 1 ? (() => {
+                        // Recorrer pieza a pieza o, con miles (el acero), tramo a tramo.
+                        const piezas = [...new Set(p.claves)];
+                        const n = recorrido.pasos;
+                        const que = recorrido.porTramos ? 'Tramo' : 'Pieza';
+                        const ir = (k, ev) => { ev.stopPropagation(); setPaso(k); onSeleccionar(piezas, { enfocar: k, clave: p.clave }); };
+                        const k = paso ?? -1;
+                        return (
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '2px' }} title={recorrido.porTramos ? `${piezas.length.toLocaleString('es-PE')} piezas en ${n} tramos de terreno` : undefined}>
+                                <button className="v-enlace" title={`${que} anterior`} onClick={ev => ir((k - 1 + n) % n, ev)}>◀</button>
+                                <span style={{ minWidth: '34px', textAlign: 'center' }}>{k >= 0 ? `${recorrido.porTramos ? 'T' : ''}${k + 1}/${n}` : `${n}${recorrido.porTramos ? ' T' : ''}`}</span>
+                                <button className="v-enlace" title={`${que} siguiente`} onClick={ev => ir((k + 1) % n, ev)}>▶</button>
+                            </span>
+                        );
+                    })() : p.elementos.toLocaleString('es-PE')}
+                </div>
+                <div style={{ ...num, color: p.sinMedida ? ROJO : '#b0aea5', display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '6px' }}>
+                    {p.conflictos > 0 && <span title={`${miles(p.conflictos)} con dos criterios de medida del mismo nivel: no se elige uno en silencio (ver «criterios de medida»)`}>⚠</span>}
+                    {p.sinMedida ? p.sinMedida.toLocaleString('es-PE') : '0'}
+                    {(p.sinMedida > 0 || conCriterio) && medible(p) && (
+                        <button className="v-enlace" style={{ fontSize: '11px' }}
+                            title="Elegir con qué parámetro se miden los elementos de esta partida que no traen medida nativa"
+                            onClick={ev => { ev.stopPropagation(); const k = String(p.clave).split('+')[0]; setMedirCon(medirCon === k ? null : k); }}>
+                            medir con…
+                        </button>
+                    )}
+                </div>
+                <div style={{ ...num, color: '#72706b' }} title={p.conManual ? `valor puesto a mano en el parámetro de la línea, en ${p.conManual} elementos; no se suma con lo nativo` : ''}>
+                    {p.conManual ? `${formatearNumero(p.manual)} ${p.unidad} (${p.conManual})` : ''}
+                </div>
+            </div>
+        );
+    };
+    // Una partida del itemizado SIN elementos en el modelo: queda, vacía y a la vista.
+    const filaVacia = f => (
+        <div role="row" title={`${f.item} · ${f.descripcion} — ${f.sub.length ? 'sin elementos con este código exacto; los tiene en sus sub-partidas, debajo' : 'sin elementos en el modelo: este metrado no sale del modelo'}`}
+            style={{ display: 'grid', gridTemplateColumns: rejilla, height: `${ALTO}px`, alignItems: 'center', borderBottom: '1px solid #e8e6dc', background: '#ffffff', color: '#9a9890' }}>
+            <div style={{ ...celda, paddingLeft: sangria(f.nivel) }}>{f.item}</div>
+            <div style={celda}>{f.descripcion}</div>
+            <div style={celda}>{f.unidad}</div>
+            <div style={num}>—</div>
+            <div style={{ ...num, fontSize: '11px' }}>{f.sub.length ? 'en sub-partidas ↓' : 'sin elementos'}</div>
+            <div /><div />
+        </div>
+    );
+    const filaTitulo = r => {
+        const { f, i } = r;
+        const plegado = plegados.has(i);
+        return (
+            <div role="row" onClick={() => plegarTitulo(i)} title={`${f.item} · ${f.descripcion} — ${f.conDato} de ${f.total} partidas con elementos en el modelo · clic: ${plegado ? 'desplegar' : 'plegar'}`}
+                style={{ display: 'grid', gridTemplateColumns: rejilla, height: `${ALTO}px`, alignItems: 'center', borderBottom: '1px solid #e8e6dc', cursor: 'pointer',
+                    background: f.nivel <= 1 ? '#ebe9e0' : '#f5f4ef', fontWeight: 600, color: '#141413' }}>
+                <div style={{ ...celda, paddingLeft: sangria(f.nivel) }}><span style={{ display: 'inline-block', width: '12px', color: '#72706b' }}>{plegado ? '▸' : '▾'}</span>{f.item}</div>
+                <div style={celda}>
+                    {f.descripcion}
+                    {f.total > 0 && <span style={{ fontWeight: 400, color: f.conDato ? '#52524d' : '#9a9890' }}> · {miles(f.conDato)} de {miles(f.total)} con dato</span>}
+                </div>
+                <div /><div /><div /><div /><div />
+            </div>
+        );
+    };
+    const dibujar = r => {
+        if (r.tipo === 'titulo') return filaTitulo(r);
+        if (r.tipo === 'partida') return r.f.datos ? filaConDato(r.f.datos, { codigo: r.f.item, nombre: r.f.descripcion, nivel: r.f.nivel }) : filaVacia(r.f);
+        if (r.tipo === 'sub') return filaConDato(r.p, { nivel: r.f.nivel + 1 });
+        if (r.tipo === 'fuera') return filaConDato(r.p, { nivel: 1 });
+        return (
+            <div role="row" style={{ display: 'flex', alignItems: 'center', height: `${ALTO}px`, padding: '0 10px', background: '#f5ece8', borderBottom: '1px solid #e8e6dc', fontWeight: 600, color: ROJO }}
+                title="Partidas que tienen elementos en el modelo pero cuyo código no está en el itemizado (ni es sub-partida de un ítem suyo)">
+                Del modelo, fuera del itemizado · {miles(plantilla.fuera.length)} partida{plantilla.fuera.length === 1 ? '' : 's'}
+            </div>
+        );
+    };
     return (
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, background: '#ffffff', fontSize: '12px', color: '#333330' }}>
             <div style={{ padding: '0 12px', height: '28px', flexShrink: 0, fontSize: '11px', color: '#72706b', borderBottom: '1px solid #e8e6dc', display: 'flex', gap: '8px', alignItems: 'center', whiteSpace: 'nowrap', overflow: 'hidden' }}>
-                <span><strong style={{ color: '#141413', fontWeight: 600 }}>{partidas.length}</strong> partidas en {grupos.length} grupos · {lineas.toLocaleString('es-PE')} líneas de {filas.length.toLocaleString('es-PE')} elementos {ambito}</span>
+                <span title="Partidas del itemizado (filas con unidad) que tienen elementos en el modelo, sobre todas las del itemizado">
+                    <strong style={{ color: '#141413', fontWeight: 600 }}>{miles(plantilla.resumen.conDato)}</strong> de {miles(plantilla.resumen.partidas)} partidas del itemizado con dato
+                    {plantilla.resumen.fuera > 0 ? ` · ${miles(plantilla.resumen.fuera)} del modelo fuera del itemizado` : ''} · {lineas.toLocaleString('es-PE')} líneas de {filas.length.toLocaleString('es-PE')} elementos {ambito}
+                </span>
+                <label style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }} title="Oculta las partidas sin elementos en el modelo y los títulos sin ninguna">
+                    <input type="checkbox" checked={soloConDato} onChange={e => setSoloConDato(e.target.checked)} />solo con dato
+                </label>
+                {plegados.size > 0 && <button className="v-enlace" style={{ fontSize: '11px' }} onClick={() => setPlegados(new Set())}>desplegar todo</button>}
                 {onUsarTodo && <button className="v-enlace" style={{ fontSize: '11px' }} onClick={onUsarTodo}>usar toda la tabla</button>}
                 {porCriterio > 0 && <span title="Líneas sin medida nativa medidas con un criterio de medida de la obra">· {porCriterio.toLocaleString('es-PE')} medidas con criterio</span>}
                 {sinMedida > 0 && <span style={{ color: ROJO }}>· {sinMedida.toLocaleString('es-PE')} sin medida</span>}
@@ -524,98 +676,17 @@ export default function TablaDePartidas({ filas, filasObra, dic, roles, claveDeF
                     juego={criterios} estado={estadoCrit} onGuardar={onCriterios} onCerrar={() => setMedirCon(null)} />
             )}
             {verComo && roles && <ComoSeLeyo roles={roles} itemizado={itemizado} cruce={cruce} onCerrar={() => setVerComo(false)} />}
-            <div role="table" aria-label="Partidas" style={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
-                <div role="row" style={{ display: 'grid', gridTemplateColumns: rejilla, position: 'sticky', top: 0, zIndex: 1, background: '#f5f4ef', borderBottom: '1px solid #cccac0', height: '28px', alignItems: 'center', fontWeight: 600, fontSize: '11.5px', color: '#52524d' }}>
+            <div ref={cuerpoRef} role="table" aria-label="Partidas" onScroll={e => setScroll(e.currentTarget.scrollTop)} style={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
+                <div role="row" style={{ display: 'grid', gridTemplateColumns: rejilla, position: 'sticky', top: 0, zIndex: 1, background: '#f5f4ef', borderBottom: '1px solid #cccac0', height: `${ALTO}px`, alignItems: 'center', fontWeight: 600, fontSize: '11.5px', color: '#52524d' }}>
                     {COLUMNAS.map(c => <div key={c.titulo} role="columnheader" style={c.derecha ? num : celda}>{c.titulo}</div>)}
                 </div>
-                {grupos.map(g => {
-                    const abierto = !plegados.has(g.clave);
-                    const elementos = new Set(g.partidas.flatMap(p => p.claves)).size;
-                    return (
-                        <React.Fragment key={g.clave}>
-                            <div role="row" onClick={() => plegar(g.clave)} title={g.tipo === 'padre' ? 'Partida padre (línea sin número del elemento)' : g.tipo === 'capitulo' ? 'Capítulo: el código sin su último tramo' : ''}
-                                style={{ display: 'grid', gridTemplateColumns: rejilla, height: '26px', alignItems: 'center', background: '#f1f0e8', borderBottom: '1px solid #e8e6dc', cursor: 'pointer', fontWeight: 600, color: '#141413' }}>
-                                <div style={celda}><span style={{ display: 'inline-block', width: '12px', color: '#72706b' }}>{abierto ? '▾' : '▸'}</span>{g.codigo || '—'}</div>
-                                <div style={{ ...celda, fontWeight: g.nombre ? 600 : 400, color: g.nombre ? '#141413' : '#72706b' }}>
-                                    {g.nombre || (g.tipo === 'capitulo' ? `capítulo ${g.codigo}` : '')}
-                                    <span style={{ fontWeight: 400, color: '#72706b' }}> · {g.partidas.length} partida{g.partidas.length === 1 ? '' : 's'}</span>
-                                </div>
-                                <div />
-                                {/* Sin total: las partidas de un grupo son actividades distintas sobre las
-                                    mismas piezas (suministro, instalación, prueba); sumarlas multiplica. */}
-                                <div />
-                                <div style={num}>{elementos.toLocaleString('es-PE')}</div>
-                                <div /><div />
-                            </div>
-                            {abierto && g.partidas.map(p => {
-                                const sel = activa === p.clave;
-                                const calculada = p.origenes.includes('calculada');
-                                const conCriterio = p.origenes.includes('criterio');
-                                const donde = indice && p.codigo ? indice.ubicar(p.codigo) : null;
-                                // Una sub-partida de verdad tiene SU descripción (el FUSTE del buzón). Si la
-                                // del modelo es la de OTROS ítems del itemizado, el código está mal puesto
-                                // (Canal: 04.02.03.05 bajo «ACARREO…» con «INSTALACION DE ACERO…»).
-                                const otrosItems = donde?.tipo === 'subpartida' ? (indice.porDescripcion.get(compacto(p.nombreModelo || p.nombre)) || []) : [];
-                                return (
-                                    <div key={p.clave} role="row" aria-selected={sel} className={`inv-fila${sel ? ' resaltada' : ''}`}
-                                        onClick={() => alternar(p.clave, p.claves)}
-                                        title={`${p.codigo || '(sin código)'} · ${p.nombre || '(sin nombre)'} — ${sel ? 'clic: mostrar todo' : `clic: aislar sus ${p.elementos} elementos en el 3D`}`}
-                                        style={{ display: 'grid', gridTemplateColumns: rejilla, height: '28px', alignItems: 'center', borderBottom: '1px solid #e8e6dc', cursor: 'pointer' }}>
-                                        <div style={{ ...celda, paddingLeft: '22px', color: p.codigo ? '#141413' : ROJO }}>
-                                            {p.codigo || 'sin código'}
-                                            {p.intercambiadas ? <span title="En Revit el código estaba en NombreDePartida" style={{ color: ROJO }}> ⇄</span> : null}
-                                            {donde?.tipo === 'subpartida' && !otrosItems.length && <span title={`Sub-partida de ${donde.item}: el itemizado no baja a este nivel`} style={{ color: '#72706b' }}> ↳</span>}
-                                            {otrosItems.length > 0 && <span title={`¿Código equivocado? Su descripción es la de ${otrosItems.slice(0, 3).join(', ')}${otrosItems.length > 3 ? '…' : ''} en el itemizado, no la de una sub-partida de ${donde.item}`} style={{ color: ROJO }}> ⚠</span>}
-                                            {donde?.tipo === 'fuera' && <span title="No está en el itemizado" style={{ color: ROJO }}> ∉</span>}
-                                        </div>
-                                        <div style={{ ...celda, color: p.nombre ? '#141413' : ROJO }}
-                                            title={p.oficial && p.nombreModelo && p.nombreModelo !== p.nombre ? `En el modelo: ${p.nombreModelo}` : undefined}>{p.nombre || 'sin nombre'}</div>
-                                        <div style={{ ...celda, color: p.unidad ? '#52524d' : ROJO }}>{p.unidad || 'sin unidad'}</div>
-                                        <div style={{ ...num, fontWeight: 600, color: p.conMedida ? '#141413' : '#b0aea5' }}
-                                            title={[calculada ? 'calculada: longitud total de barra × kg/m del diámetro' : '',
-                                                conCriterio ? `${p.medidoCon.map(m => `${miles(m.n)} medidos con ${etiquetaDeClave(m.clave)} (Σ ${fmt(m.suma, p.unidad)})`).join('; ')}: criterio de medida de la obra, porque no traen medida nativa${p.conMedida > p.porCriterio ? `; ${miles(p.conMedida - p.porCriterio)} con su medida nativa` : ''}` : ''].filter(Boolean).join(' · ')}>
-                                            {p.conMedida ? `${formatearNumero(p.cantidad)} ${p.unidad}` : '—'}
-                                            {calculada ? <span style={{ fontWeight: 400, color: '#72706b' }}> ·calc.</span> : null}
-                                            {conCriterio ? <span style={{ fontWeight: 400, color: '#72706b' }}> ·crit.</span> : null}
-                                        </div>
-                                        <div style={{ ...num, display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '4px' }}>
-                                            {sel && new Set(p.claves).size > 1 && recorrido?.pasos > 1 ? (() => {
-                                                // Recorrer pieza a pieza o, con miles (el acero), tramo a tramo.
-                                                const piezas = [...new Set(p.claves)];
-                                                const n = recorrido.pasos;
-                                                const que = recorrido.porTramos ? 'Tramo' : 'Pieza';
-                                                const ir = (k, ev) => { ev.stopPropagation(); setPaso(k); onSeleccionar(piezas, { enfocar: k, clave: p.clave }); };
-                                                const k = paso ?? -1;
-                                                return (
-                                                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '2px' }} title={recorrido.porTramos ? `${piezas.length.toLocaleString('es-PE')} piezas en ${n} tramos de terreno` : undefined}>
-                                                        <button className="v-enlace" title={`${que} anterior`} onClick={ev => ir((k - 1 + n) % n, ev)}>◀</button>
-                                                        <span style={{ minWidth: '34px', textAlign: 'center' }}>{k >= 0 ? `${recorrido.porTramos ? 'T' : ''}${k + 1}/${n}` : `${n}${recorrido.porTramos ? ' T' : ''}`}</span>
-                                                        <button className="v-enlace" title={`${que} siguiente`} onClick={ev => ir((k + 1) % n, ev)}>▶</button>
-                                                    </span>
-                                                );
-                                            })() : p.elementos.toLocaleString('es-PE')}
-                                        </div>
-                                        <div style={{ ...num, color: p.sinMedida ? ROJO : '#b0aea5', display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '6px' }}>
-                                            {p.conflictos > 0 && <span title={`${miles(p.conflictos)} con dos criterios de medida del mismo nivel: no se elige uno en silencio (ver «criterios de medida»)`}>⚠</span>}
-                                            {p.sinMedida ? p.sinMedida.toLocaleString('es-PE') : '0'}
-                                            {(p.sinMedida > 0 || conCriterio) && medible(p) && (
-                                                <button className="v-enlace" style={{ fontSize: '11px' }}
-                                                    title="Elegir con qué parámetro se miden los elementos de esta partida que no traen medida nativa"
-                                                    onClick={ev => { ev.stopPropagation(); setMedirCon(medirCon === p.clave ? null : p.clave); }}>
-                                                    medir con…
-                                                </button>
-                                            )}
-                                        </div>
-                                        <div style={{ ...num, color: '#72706b' }} title={p.conManual ? `valor puesto a mano en el parámetro de la línea, en ${p.conManual} elementos; no se suma con lo nativo` : ''}>
-                                            {p.conManual ? `${formatearNumero(p.manual)} ${p.unidad} (${p.conManual})` : ''}
-                                        </div>
-                                    </div>
-                                );
-                            })}
-                        </React.Fragment>
-                    );
-                })}
-                {!partidas.length && <div style={{ padding: '24px', color: '#72706b' }}>Ningún elemento del ámbito tiene partida asignada.</div>}
+                {/* Solo se dibujan las filas que se ven (una plantilla puede tener miles). */}
+                <div style={{ position: 'relative', height: `${lista.length * ALTO}px` }}>
+                    {lista.slice(desde, hasta).map((r, k) => (
+                        <div key={r.clave} style={{ position: 'absolute', top: `${(desde + k) * ALTO}px`, left: 0, right: 0 }}>{dibujar(r)}</div>
+                    ))}
+                </div>
+                {!lista.length && <div style={{ padding: '24px', color: '#72706b' }}>{texto || soloConDato ? 'Ninguna fila de la plantilla cumple lo pedido.' : 'El itemizado no tiene filas.'}</div>}
             </div>
         </div>
     );

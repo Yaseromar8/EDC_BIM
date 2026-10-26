@@ -1688,7 +1688,7 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
                 <TablaDePartidas filas={filasDePartidas} filasObra={flattenedData} dic={dicPartidas} roles={rolesPartidas} claveDeFila={inventoryRowKey}
                     itemizado={itemizado} estadoItemizado={obraItemizado}
                     onItemizado={leido => (leido ? itemizadoDeObra.guardar(leido) : itemizadoDeObra.quitar())}
-                    criterios={juegoCriterios} estadoCriterios={obraCriterios}
+                    criterios={juegoCriterios} estadoCriterios={obraCriterios} busqueda={hayBusqueda ? busqueda : ''}
                     onCriterios={lista => criteriosDeMedida.guardar({ criterios: lista })}
                     ambito={ambitoPartidas ? 'seleccionados' : 'de la tabla'}
                     onUsarTodo={ambitoPartidas ? () => setAmbitoPartidas(null) : null}
