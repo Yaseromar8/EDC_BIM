@@ -14,6 +14,8 @@ import * as Partidas from '../lib/planillaPartidas';
 import { deducirRoles, diccionarioDeducido } from '../lib/planillaPerfil';
 import { EVENTOS } from '../lib/aislamientoTemporal';
 import { itemizadoDeObra } from '../utils/itemizadoDeObraVisor';
+import { criteriosDeMedida } from '../utils/criteriosDeMedidaVisor';
+import { describirCriterio } from '../lib/criteriosDeMedida';
 import { contextoDerivado, suscribirDerivados } from '../utils/camposDerivadosVisor';
 import TablaDePartidas from './TablaDePartidas';
 import SelectorDeCampo, { ListaDeCampos } from './SelectorDeCampo';
@@ -371,6 +373,10 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
     // cargado al abrir la obra (docs/visor/27 §6). La Planilla lo lee y lo cambia por el almacén.
     const obraItemizado = useSyncExternalStore(itemizadoDeObra.suscribir, itemizadoDeObra.estado);
     const itemizado = obraItemizado.vigente;
+    // Criterios de medida de la OBRA («Medir con…», docs/visor/32): dan la cantidad donde el elemento
+    // no trae medida nativa. Mismo almacén y mismas reglas que el itemizado.
+    const obraCriterios = useSyncExternalStore(criteriosDeMedida.suscribir, criteriosDeMedida.estado);
+    const juegoCriterios = obraCriterios.vigente;
     const [showAssetsOnly, setShowAssetsOnly] = useState(() => leerInventoryConfig().assetsOnly);
     // «Solo con metrado» sustituye a «Assets only» en la barra: en un modelo de
     // Revit todo es ejemplar y aquel no quitaba nada. assetsOnly sigue leyéndose
@@ -993,11 +999,13 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
         if (derivadoVale) return derivado.roles;
         return itemizado && flattenedData.length ? deducirRoles(flattenedData, undefined, { itemizado: itemizado.indice }) : null;
     }, [derivadoVale, derivado, itemizado, flattenedData]);
-    const dicPartidas = useMemo(() => {
+    const dicDeducido = useMemo(() => {
         if (!rolesPartidas || !rolesPartidas.lineas.length) return null;
         if (derivadoVale) return derivado.dic;
         return { ...diccionarioDeducido(rolesPartidas, allPropertyKeys || []), itemizado: itemizado.indice };
     }, [rolesPartidas, derivadoVale, derivado, allPropertyKeys, itemizado]);
+    const dicPartidas = useMemo(() => (dicDeducido ? { ...dicDeducido, criterios: juegoCriterios?.indice || null } : null),
+        [dicDeducido, juegoCriterios]);
     const [ambitoPartidas, setAmbitoPartidas] = useState(null); // Set de claves elegidas, o null = la tabla
     // Manda la ÚLTIMA selección del usuario, sea en la tabla o en el 3D.
     useEffect(() => { if (checkedIds.size) setAmbitoPartidas(new Set(checkedIds)); }, [checkedIds]);
@@ -1104,7 +1112,8 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
         const XLSX = await import('xlsx');
         const hojas = vista === 'partidas' && dicPartidas ? Partidas.hojasDePartidas(
             Partidas.partidasDe(filasDePartidas, dicPartidas, inventoryRowKey),
-            { ambito: ambitoPartidas ? `${filasDePartidas.length} elementos seleccionados` : `${filasDePartidas.length} filas de la tabla` }
+            { ambito: ambitoPartidas ? `${filasDePartidas.length} elementos seleccionados` : `${filasDePartidas.length} filas de la tabla`,
+                criterios: (juegoCriterios?.criterios || []).map(describirCriterio) }
         ) : libroDeLaTabla({
             filas: filasTabla, columnas: columnasVista, tipos: tiposColumna, calculos, niveles,
             criterios: { filtroTabla, soloConMetrado, camposSuma, orden, totalTrasFilters: flattenedData.length, busqueda: hayBusqueda ? busqueda : '', campoBusqueda },
@@ -1141,7 +1150,7 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
         } else {
             XLSX.writeFile(workbook, fileName, { cellDates: true });
         }
-    }, [vista, filasDePartidas, dicPartidas, ambitoPartidas, filasTabla, columnasVista, tiposColumna, calculos, niveles, filtroTabla, soloConMetrado, camposSuma, orden, flattenedData.length, hayBusqueda, busqueda, campoBusqueda]);
+    }, [vista, filasDePartidas, dicPartidas, juegoCriterios, ambitoPartidas, filasTabla, columnasVista, tiposColumna, calculos, niveles, filtroTabla, soloConMetrado, camposSuma, orden, flattenedData.length, hayBusqueda, busqueda, campoBusqueda]);
 
     // Lo seleccionado que está en la tabla: casillas / Mayús / Ctrl, o si no, lo elegido en el 3D.
     const [copiado, setCopiado] = useState(null);
@@ -1679,6 +1688,8 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
                 <TablaDePartidas filas={filasDePartidas} filasObra={flattenedData} dic={dicPartidas} roles={rolesPartidas} claveDeFila={inventoryRowKey}
                     itemizado={itemizado} estadoItemizado={obraItemizado}
                     onItemizado={leido => (leido ? itemizadoDeObra.guardar(leido) : itemizadoDeObra.quitar())}
+                    criterios={juegoCriterios} estadoCriterios={obraCriterios}
+                    onCriterios={lista => criteriosDeMedida.guardar({ criterios: lista })}
                     ambito={ambitoPartidas ? 'seleccionados' : 'de la tabla'}
                     onUsarTodo={ambitoPartidas ? () => setAmbitoPartidas(null) : null}
                     onSeleccionar={seleccionarPartida}

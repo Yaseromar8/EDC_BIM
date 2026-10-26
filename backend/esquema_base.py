@@ -691,6 +691,26 @@ TABLAS = [
         );
         CREATE UNIQUE INDEX IF NOT EXISTS uq_planilla_itemizado_vigente
             ON planilla_itemizados (project_id) WHERE vigente
+    """),
+    # Criterios de medida de la obra («Medir con…»), migración 41, docs/visor/32.
+    ("planilla_criterios_medida", """
+        CREATE TABLE IF NOT EXISTS "planilla_criterios_medida" (
+        "id" BIGSERIAL,
+        "project_id" text NOT NULL,
+        "version" integer NOT NULL CHECK (version > 0),
+        "criterios" jsonb NOT NULL CHECK (jsonb_typeof(criterios) = 'array'),
+        "n_criterios" integer NOT NULL CHECK (n_criterios >= 0),
+        "huella" text NOT NULL CHECK (huella ~ '^[a-f0-9]{64}$'),
+        "vigente" boolean NOT NULL DEFAULT true,
+        "creado_por" integer REFERENCES users(id),
+        "creado_en" timestamp with time zone NOT NULL DEFAULT now(),
+        "retirado_por" integer REFERENCES users(id),
+        "retirado_en" timestamp with time zone,
+        PRIMARY KEY (id),
+        UNIQUE (project_id, version)
+        );
+        CREATE UNIQUE INDEX IF NOT EXISTS uq_planilla_criterios_medida_vigente
+            ON planilla_criterios_medida (project_id) WHERE vigente
     """),]
 
 

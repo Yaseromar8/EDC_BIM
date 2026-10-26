@@ -6,6 +6,8 @@ import { compacto } from '../lib/inventoryBuscar';
 import { EVENTOS } from '../lib/aislamientoTemporal';
 import { coberturaDelItemizado, ESTADOS } from '../lib/planillaCobertura';
 import { ID_ESTADO, ID_CAPITULO, COLORES_ESTADO } from '../lib/camposDerivados';
+import { UNIDADES_MEDIBLES, MAX_MEDIR_CON, candidatosDeMedida, camposParaDonde, simularCriterio, validarCriterios,
+    claveDeCriterio, describirCriterio, etiquetaDeClave, sinMedidaNativa, usoDeCriterios } from '../lib/criteriosDeMedida';
 
 /**
  * Vista «Partidas» de la Planilla: una fila por partida (código + unidad) de los
@@ -13,7 +15,9 @@ import { ID_ESTADO, ID_CAPITULO, COLORES_ESTADO } from '../lib/camposDerivados';
  * partida (regla del propietario, docs/visor/23 §7). El criterio sale SOLO del
  * itemizado que sube el usuario: sin itemizado, no hay partidas. Ordenada como un
  * presupuesto: bajo su partida padre (la línea sin número que la contiene) o
- * bajo su capítulo (el código sin su último tramo). Lo manual va aparte. Clic en
+ * bajo su capítulo (el código sin su último tramo). Donde no hay medida nativa,
+ * la da un criterio de medida de la obra («Medir con…», docs/visor/32), marcado
+ * «·crit.». Lo manual va aparte. Clic en
  * una partida = sus elementos en el 3D; clic en un grupo = plegar o desplegar.
  */
 const celda = { padding: '0 10px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' };
@@ -22,9 +26,9 @@ const COLUMNAS = [
     { titulo: 'Código', ancho: '170px' },
     { titulo: 'Partida', ancho: 'minmax(260px, 1fr)' },
     { titulo: 'Unidad', ancho: '64px' },
-    { titulo: 'Cantidad nativa', ancho: '140px', derecha: true },
+    { titulo: 'Cantidad', ancho: '150px', derecha: true },
     { titulo: 'Elementos', ancho: '84px', derecha: true },
-    { titulo: 'Sin medida', ancho: '90px', derecha: true },
+    { titulo: 'Sin medida', ancho: '150px', derecha: true },
     { titulo: 'Manual (aparte)', ancho: '150px', derecha: true },
 ];
 const rejilla = COLUMNAS.map(c => c.ancho).join(' ');
@@ -182,8 +186,175 @@ function BotonCargar({ onArchivo, texto = 'Cargar itemizado…', ocupado = false
     );
 }
 
-export default function TablaDePartidas({ filas, filasObra, dic, roles, claveDeFila, ambito, onUsarTodo, onSeleccionar, onMostrarTodo, onVerEnFilters, itemizado, estadoItemizado, onItemizado }) {
+// ── Criterios de medida de la obra («Medir con…», docs/visor/32) ──────────────────────────────
+const panel = { borderBottom: '1px solid #e8e6dc', background: '#faf9f5', padding: '8px 12px', maxHeight: '260px', overflowY: 'auto', fontSize: '11.5px', color: '#52524d', flexShrink: 0 };
+const fmt = (n, u) => `${formatearNumero(n)} ${u}`;
+const campoForm = { font: 'inherit', fontSize: '11.5px', height: '22px', border: '1px solid #cccac0', borderRadius: '3px', background: '#ffffff', color: '#333330', padding: '0 4px' };
+const etiquetaRadio = { display: 'inline-flex', gap: '4px', alignItems: 'center', cursor: 'pointer' };
+
+// Para una partida con elementos sin medida nativa: elegir con qué parámetro se miden (sin preselección),
+// a qué alcanza y, si hace falta, limitarlo con «solo donde». Se ve el resultado antes de guardar.
+function MedirCon({ partida, codigoOficial, sinNativa, obra, juego, estado, onGuardar, onCerrar }) {
+    const unidad = partida.unidad;
+    const claves = useMemo(() => [...new Set(sinNativa.flatMap(Object.keys))], [sinNativa]);
+    const candidatos = useMemo(() => candidatosDeMedida(sinNativa, unidad, claves), [sinNativa, unidad, claves]);
+    const campos = useMemo(() => camposParaDonde(sinNativa, claves, { obra }), [sinNativa, claves, obra]);
+    const [elegidos, setElegidos] = useState([]);
+    const [alcance, setAlcance] = useState('partida');
+    const [conDonde, setConDonde] = useState(false);
+    const [campo, setCampo] = useState('');
+    const [op, setOp] = useState('es');
+    const [valor, setValor] = useState('');
+    const [error, setError] = useState('');
+    const fichaCampo = campos.find(c => c.campo === campo) || null;
+    const donde = conDonde && campo && valor.trim() ? { campo, op, valor: valor.trim() } : null;
+    const criterio = useMemo(() => (elegidos.length
+        ? { unidad, ...(alcance === 'partida' ? { partida: codigoOficial } : {}), ...(donde ? { donde } : {}), medirCon: elegidos }
+        : null), [unidad, alcance, codigoOficial, donde?.campo, donde?.op, donde?.valor, elegidos]); // eslint-disable-line react-hooks/exhaustive-deps
+    const sim = useMemo(() => (criterio ? simularCriterio(sinNativa, criterio) : null), [sinNativa, criterio]);
+    const actuales = juego?.criterios || [];
+    const reemplaza = criterio ? actuales.find(c => claveDeCriterio(c) === claveDeCriterio(criterio)) : null;
+    const guardar = async () => {
+        setError('');
+        const lista = [...actuales.filter(c => c !== reemplaza), criterio];
+        const { errores } = validarCriterios(lista);
+        if (errores.length) { setError(errores[0].motivo); return; }
+        const r = await onGuardar(lista);
+        if (r && !r.ok) setError(r.error || 'No se pudo guardar.');
+        else onCerrar();
+    };
+    const etiqueta = clave => candidatos.find(c => c.clave === clave)?.etiqueta || etiquetaDeClave(clave);
+    return (
+        <div style={panel}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+                <strong style={{ color: '#141413', fontWeight: 600 }}>Medir con…</strong>
+                <span>· {codigoOficial} {partida.nombre} ({unidad}) · {miles(sinNativa.length)} elementos de la obra sin medida nativa. Solo se rellenan esos: la medida nativa manda siempre.</span>
+                <span style={{ flex: 1 }} />
+                <button className="v-enlace" style={{ fontSize: '11px' }} onClick={onCerrar}>cerrar</button>
+            </div>
+            {!candidatos.length && <div>Ningún parámetro de esos elementos trae valores en {unidad}. La medida no llega al visor: hay que volcarla en Revit a un parámetro del elemento.</div>}
+            {candidatos.length > 0 && (
+                <>
+                    <div style={{ color: '#141413', fontWeight: 600, margin: '2px 0' }}>Medir con (en orden: se usa el primero que tenga valor)</div>
+                    {elegidos.map((k, i) => (
+                        <div key={k} style={{ display: 'flex', alignItems: 'center', gap: '8px', height: '22px', paddingLeft: '6px' }}>
+                            <span style={{ color: '#141413' }}>{i + 1}. {etiqueta(k)}</span>
+                            <button className="v-enlace" style={{ fontSize: '11px' }} onClick={() => setElegidos(elegidos.filter(x => x !== k))}>quitar</button>
+                        </div>
+                    ))}
+                    {elegidos.length < MAX_MEDIR_CON && (
+                        <div style={{ paddingLeft: '6px' }}>
+                            <span>{elegidos.length ? 'si falta, con:' : 'elige un parámetro:'}</span>
+                            {candidatos.filter(c => !elegidos.includes(c.clave)).slice(0, 12).map(c => (
+                                <div key={c.clave} role="button" tabIndex={0} className="inv-fila" onClick={() => setElegidos([...elegidos, c.clave])}
+                                    onKeyDown={e => { if (e.key === 'Enter') setElegidos([...elegidos, c.clave]); }}
+                                    style={{ ...filaLista, gridTemplateColumns: 'minmax(180px, 1fr) 150px 130px', cursor: 'pointer' }}>
+                                    <span style={{ ...recorte, color: '#141413' }}>{c.etiqueta}</span>
+                                    <span>{miles(c.conDato)} de {miles(sinNativa.length)} con dato</span>
+                                    <span style={{ textAlign: 'right' }}>Σ {fmt(c.suma, unidad)}</span>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginTop: '6px', flexWrap: 'wrap' }}>
+                        <span>Vale para:</span>
+                        <label style={etiquetaRadio}><input type="radio" checked={alcance === 'partida'} onChange={() => setAlcance('partida')} />esta partida</label>
+                        <label style={etiquetaRadio}><input type="radio" checked={alcance === 'obra'} onChange={() => setAlcance('obra')} />todas las partidas en {unidad} de la obra</label>
+                        <label style={etiquetaRadio}>
+                            <input type="checkbox" checked={conDonde} onChange={e => setConDonde(e.target.checked)} disabled={!campos.length} />solo donde
+                        </label>
+                        {conDonde && (
+                            <>
+                                <select style={campoForm} value={campo} onChange={e => { setCampo(e.target.value); setValor(''); }}>
+                                    <option value="">campo…</option>
+                                    {campos.map(c => <option key={c.campo} value={c.campo}>{c.etiqueta}{c.enObra != null ? ` · ${miles(c.enObra)} en la obra` : ''}</option>)}
+                                </select>
+                                <select style={campoForm} value={op} onChange={e => setOp(e.target.value)}>
+                                    <option value="es">es</option>
+                                    <option value="contiene">contiene</option>
+                                </select>
+                                {op === 'es' && fichaCampo
+                                    ? (
+                                        <select style={{ ...campoForm, maxWidth: '320px' }} value={valor} onChange={e => setValor(e.target.value)}>
+                                            <option value="">valor…</option>
+                                            {fichaCampo.valores.map(v => <option key={v.valor} value={v.valor}>{v.valor} ({miles(v.n)})</option>)}
+                                        </select>
+                                    )
+                                    : <input style={{ ...campoForm, width: '200px' }} value={valor} onChange={e => setValor(e.target.value)} placeholder="texto" />}
+                            </>
+                        )}
+                    </div>
+                    {sim && (
+                        <div style={{ marginTop: '6px', color: '#141413' }}>
+                            En esta partida: <strong style={{ fontWeight: 600 }}>{miles(sim.medidos)}</strong> elementos medidos · Σ {fmt(sim.suma, unidad)}
+                            {sim.sinValor > 0 && <span style={{ color: ROJO }}> · {miles(sim.sinValor)} siguen sin medida (sin valor)</span>}
+                            {sim.unidadDistinta > 0 && <span style={{ color: ROJO }}> · {miles(sim.unidadDistinta)} con el valor en otra unidad (no se usan)</span>}
+                            {sim.fueraDeDonde > 0 && <span> · {miles(sim.fueraDeDonde)} fuera de «solo donde»</span>}
+                        </div>
+                    )}
+                    {reemplaza && <div style={{ color: '#9e5943' }}>Reemplaza al criterio actual: {describirCriterio(reemplaza)}</div>}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '6px' }}>
+                        <button style={{ ...estiloBoton, ...(criterio && !estado.guardando ? {} : { opacity: 0.5, pointerEvents: 'none' }) }} onClick={guardar}>
+                            {estado.guardando ? 'Guardando…' : 'Guardar criterio'}
+                        </button>
+                        <button style={estiloBoton} onClick={onCerrar}>Cancelar</button>
+                        <span style={{ color: '#72706b' }}>{estado.modo === 'navegador' ? estado.aviso : 'Se guarda para toda la obra (una versión nueva de sus criterios de medida).'}</span>
+                        {error && <span style={{ color: ROJO }}>{error}</span>}
+                    </div>
+                </>
+            )}
+        </div>
+    );
+}
+
+// Los criterios de medida vigentes de la obra, con lo que mide cada uno en lo cargado.
+function ListaDeCriterios({ juego, uso, estado, onGuardar, onCerrar }) {
+    const [error, setError] = useState('');
+    const quitar = async c => {
+        setError('');
+        const r = await onGuardar(juego.criterios.filter(x => x !== c));
+        if (r && !r.ok) setError(r.error || 'No se pudo quitar.');
+    };
+    return (
+        <div style={panel}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+                <strong style={{ color: '#141413', fontWeight: 600 }}>Criterios de medida de la obra</strong>
+                <span>
+                    · dan la cantidad solo donde el elemento no trae medida nativa
+                    {juego?.version ? ` · versión ${juego.version}${juego.creadoPor ? `, de ${juego.creadoPor}` : ''}${juego.creadoEn ? ` el ${fechaCorta(juego.creadoEn)}` : ''}` : ''}
+                    {juego?.local ? ' · solo en este navegador' : ''}
+                </span>
+                <span style={{ flex: 1 }} />
+                <button className="v-enlace" style={{ fontSize: '11px' }} onClick={onCerrar}>cerrar</button>
+            </div>
+            {!juego?.criterios.length && <div>No hay criterios. En una partida con elementos «sin medida», «medir con…» los crea.</div>}
+            {(juego?.criterios || []).map((c, i) => {
+                const u = uso?.get(c);
+                return (
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '8px', minHeight: '22px', paddingLeft: '6px' }}>
+                        <span style={{ color: '#141413' }}>{describirCriterio(c)}</span>
+                        {u && (u.medidos
+                            ? <span>· mide {miles(u.medidos)} · Σ {fmt(u.suma, c.unidad)}</span>
+                            : <span style={{ color: ROJO }}>· sin efecto en lo cargado</span>)}
+                        {u?.sinValor > 0 && <span style={{ color: ROJO }}>· {miles(u.sinValor)} sin valor</span>}
+                        {u?.unidadDistinta > 0 && <span style={{ color: ROJO }}>· {miles(u.unidadDistinta)} en otra unidad</span>}
+                        {u?.conflictos > 0 && <span style={{ color: ROJO }} title="Otro criterio del mismo nivel aplica a los mismos elementos: no se elige uno en silencio">· {miles(u.conflictos)} en conflicto</span>}
+                        {estado.puedeEditar && <button className="v-enlace" style={{ fontSize: '11px' }} disabled={estado.guardando} onClick={() => quitar(c)}>quitar</button>}
+                    </div>
+                );
+            })}
+            {!estado.puedeEditar && <div style={{ color: '#72706b', marginTop: '4px' }}>Solo un administrador de la obra pone o quita criterios de medida.</div>}
+            {estado.aviso && <div style={{ color: '#72706b', marginTop: '4px' }}>{estado.aviso}</div>}
+            {(error || estado.error) && <div style={{ color: ROJO }}>{error || estado.error}</div>}
+        </div>
+    );
+}
+
+export default function TablaDePartidas({ filas, filasObra, dic, roles, claveDeFila, ambito, onUsarTodo, onSeleccionar, onMostrarTodo, onVerEnFilters, itemizado, estadoItemizado, onItemizado, criterios, estadoCriterios, onCriterios }) {
     const estadoObra = estadoItemizado || { cargando: false, guardando: false, puedeEditar: true, error: '' };
+    const estadoCrit = estadoCriterios || { cargando: false, guardando: false, puedeEditar: false, error: '', modo: 'obra', aviso: '' };
+    const [medirCon, setMedirCon] = useState(null);         // clave de la partida cuyo «Medir con…» está abierto
+    const [verCriterios, setVerCriterios] = useState(false);
     const [activa, setActiva] = useState(null);
     const [paso, setPaso] = useState(null);     // paso del recorrido de la partida activa
     // Cuántos pasos tiene el recorrido: lo dice el visor (piezas sueltas, o tramos si son miles).
@@ -248,6 +419,17 @@ export default function TablaDePartidas({ filas, filasObra, dic, roles, claveDeF
     };
     const error = errorItemizado || estadoObra.error;
     const sinMedida = partidas.reduce((s, p) => s + p.sinMedida, 0);
+    const porCriterio = partidas.reduce((s, p) => s + p.porCriterio, 0);
+    // «Medir con…» mira toda la obra (no solo el ámbito): el criterio es de la obra.
+    const partidaAMedir = medirCon ? partidas.find(p => p.clave === medirCon) || null : null;
+    const sinNativa = useMemo(() => (partidaAMedir && dic ? sinMedidaNativa(filasObra, dic, partidaAMedir.codigo, partidaAMedir.unidad) : []),
+        [partidaAMedir, dic, filasObra]);
+    const uso = useMemo(() => (verCriterios && dic?.criterios ? usoDeCriterios(filasObra, dic) : null), [verCriterios, dic, filasObra]);
+    const codigoOficial = p => {
+        const d = indice && p.codigo ? indice.ubicar(p.codigo) : null;
+        return d?.tipo === 'exacto' ? d.item : p.codigo;
+    };
+    const medible = p => !!(p.codigo && UNIDADES_MEDIBLES.includes(p.unidad) && onCriterios && estadoCrit.puedeEditar);
     const lineas = partidas.reduce((s, p) => s + p.elementos, 0);
 
     // Sin itemizado no hay criterio: se pide, no se supone.
@@ -272,7 +454,14 @@ export default function TablaDePartidas({ filas, filasObra, dic, roles, claveDeF
             <div style={{ padding: '0 12px', height: '28px', flexShrink: 0, fontSize: '11px', color: '#72706b', borderBottom: '1px solid #e8e6dc', display: 'flex', gap: '8px', alignItems: 'center', whiteSpace: 'nowrap', overflow: 'hidden' }}>
                 <span><strong style={{ color: '#141413', fontWeight: 600 }}>{partidas.length}</strong> partidas en {grupos.length} grupos · {lineas.toLocaleString('es-PE')} líneas de {filas.length.toLocaleString('es-PE')} elementos {ambito}</span>
                 {onUsarTodo && <button className="v-enlace" style={{ fontSize: '11px' }} onClick={onUsarTodo}>usar toda la tabla</button>}
-                {sinMedida > 0 && <span style={{ color: ROJO }}>· {sinMedida.toLocaleString('es-PE')} sin medida nativa</span>}
+                {porCriterio > 0 && <span title="Líneas sin medida nativa medidas con un criterio de medida de la obra">· {porCriterio.toLocaleString('es-PE')} medidas con criterio</span>}
+                {sinMedida > 0 && <span style={{ color: ROJO }}>· {sinMedida.toLocaleString('es-PE')} sin medida</span>}
+                {(onCriterios || criterios?.criterios.length > 0) && (
+                    <button className="v-enlace" style={{ fontSize: '11px' }} onClick={() => setVerCriterios(v => !v)} aria-expanded={verCriterios}
+                        title="Con qué parámetro se mide lo que no trae medida nativa, para toda la obra">
+                        criterios de medida ({criterios?.criterios.length || 0})
+                    </button>
+                )}
                 {calidad.repetidas > 0 && <span title="La misma partida en varias líneas del mismo elemento (p. ej. línea sin número y línea 2): se cuenta una vez">· {calidad.repetidas.toLocaleString('es-PE')} repetidas contadas una vez</span>}
                 {calidad.intercambiadas > 0 && <span style={{ color: ROJO }} title="En Revit, la descripción está en CodigoDePartida y el código en NombreDePartida: se leen al derecho">· {calidad.intercambiadas} con código y nombre intercambiados</span>}
                 <button className="v-enlace" style={{ fontSize: '11px' }} onClick={() => setVerComo(v => !v)} aria-expanded={verComo}
@@ -291,7 +480,7 @@ export default function TablaDePartidas({ filas, filasObra, dic, roles, claveDeF
                 </span>
                 {error && <span style={{ color: ROJO }}>{error}</span>}
                 <span style={{ flex: 1 }} />
-                <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }} title="m → Longitud · m² → Área · m³ → Volumen de Revit; kg → longitud total de barra × kg/m del diámetro de barra; und → 1 por elemento">Cantidad = medida nativa de Revit según la unidad</span>
+                <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }} title="m → Longitud · m² → Área · m³ → Volumen de Revit; kg → longitud total de barra × kg/m del diámetro de barra; und → 1 por elemento. Si el elemento no la trae: el criterio de medida de la obra (·crit.)">Cantidad = medida nativa; si falta, criterio de la obra</span>
             </div>
             {cobertura && (
                 <div style={{ padding: '0 12px', height: '28px', flexShrink: 0, fontSize: '11px', color: '#52524d', borderBottom: '1px solid #e8e6dc', display: 'flex', gap: '10px', alignItems: 'center', whiteSpace: 'nowrap', overflow: 'hidden' }}>
@@ -329,6 +518,11 @@ export default function TablaDePartidas({ filas, filasObra, dic, roles, claveDeF
                 </div>
             )}
             {verFalta && cobertura && dif && <QueFalta cobertura={cobertura} dif={dif} ambito={ambito} activa={activa} onAlternar={alternar} onCerrar={() => setVerFalta(false)} />}
+            {verCriterios && <ListaDeCriterios juego={criterios} uso={uso} estado={estadoCrit} onGuardar={onCriterios} onCerrar={() => setVerCriterios(false)} />}
+            {partidaAMedir && (
+                <MedirCon key={partidaAMedir.clave} partida={partidaAMedir} codigoOficial={codigoOficial(partidaAMedir)} sinNativa={sinNativa} obra={filasObra}
+                    juego={criterios} estado={estadoCrit} onGuardar={onCriterios} onCerrar={() => setMedirCon(null)} />
+            )}
             {verComo && roles && <ComoSeLeyo roles={roles} itemizado={itemizado} cruce={cruce} onCerrar={() => setVerComo(false)} />}
             <div role="table" aria-label="Partidas" style={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
                 <div role="row" style={{ display: 'grid', gridTemplateColumns: rejilla, position: 'sticky', top: 0, zIndex: 1, background: '#f5f4ef', borderBottom: '1px solid #cccac0', height: '28px', alignItems: 'center', fontWeight: 600, fontSize: '11.5px', color: '#52524d' }}>
@@ -356,6 +550,7 @@ export default function TablaDePartidas({ filas, filasObra, dic, roles, claveDeF
                             {abierto && g.partidas.map(p => {
                                 const sel = activa === p.clave;
                                 const calculada = p.origenes.includes('calculada');
+                                const conCriterio = p.origenes.includes('criterio');
                                 const donde = indice && p.codigo ? indice.ubicar(p.codigo) : null;
                                 // Una sub-partida de verdad tiene SU descripción (el FUSTE del buzón). Si la
                                 // del modelo es la de OTROS ítems del itemizado, el código está mal puesto
@@ -376,8 +571,12 @@ export default function TablaDePartidas({ filas, filasObra, dic, roles, claveDeF
                                         <div style={{ ...celda, color: p.nombre ? '#141413' : ROJO }}
                                             title={p.oficial && p.nombreModelo && p.nombreModelo !== p.nombre ? `En el modelo: ${p.nombreModelo}` : undefined}>{p.nombre || 'sin nombre'}</div>
                                         <div style={{ ...celda, color: p.unidad ? '#52524d' : ROJO }}>{p.unidad || 'sin unidad'}</div>
-                                        <div style={{ ...num, fontWeight: 600, color: p.conMedida ? '#141413' : '#b0aea5' }} title={calculada ? 'calculada: longitud total de barra × kg/m del diámetro' : ''}>
-                                            {p.conMedida ? `${formatearNumero(p.cantidad)} ${p.unidad}` : '—'}{calculada ? <span style={{ fontWeight: 400, color: '#72706b' }}> ·calc.</span> : null}
+                                        <div style={{ ...num, fontWeight: 600, color: p.conMedida ? '#141413' : '#b0aea5' }}
+                                            title={[calculada ? 'calculada: longitud total de barra × kg/m del diámetro' : '',
+                                                conCriterio ? `${p.medidoCon.map(m => `${miles(m.n)} medidos con ${etiquetaDeClave(m.clave)} (Σ ${fmt(m.suma, p.unidad)})`).join('; ')}: criterio de medida de la obra, porque no traen medida nativa${p.conMedida > p.porCriterio ? `; ${miles(p.conMedida - p.porCriterio)} con su medida nativa` : ''}` : ''].filter(Boolean).join(' · ')}>
+                                            {p.conMedida ? `${formatearNumero(p.cantidad)} ${p.unidad}` : '—'}
+                                            {calculada ? <span style={{ fontWeight: 400, color: '#72706b' }}> ·calc.</span> : null}
+                                            {conCriterio ? <span style={{ fontWeight: 400, color: '#72706b' }}> ·crit.</span> : null}
                                         </div>
                                         <div style={{ ...num, display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '4px' }}>
                                             {sel && new Set(p.claves).size > 1 && recorrido?.pasos > 1 ? (() => {
@@ -396,7 +595,17 @@ export default function TablaDePartidas({ filas, filasObra, dic, roles, claveDeF
                                                 );
                                             })() : p.elementos.toLocaleString('es-PE')}
                                         </div>
-                                        <div style={{ ...num, color: p.sinMedida ? ROJO : '#b0aea5' }}>{p.sinMedida ? p.sinMedida.toLocaleString('es-PE') : '0'}</div>
+                                        <div style={{ ...num, color: p.sinMedida ? ROJO : '#b0aea5', display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '6px' }}>
+                                            {p.conflictos > 0 && <span title={`${miles(p.conflictos)} con dos criterios de medida del mismo nivel: no se elige uno en silencio (ver «criterios de medida»)`}>⚠</span>}
+                                            {p.sinMedida ? p.sinMedida.toLocaleString('es-PE') : '0'}
+                                            {(p.sinMedida > 0 || conCriterio) && medible(p) && (
+                                                <button className="v-enlace" style={{ fontSize: '11px' }}
+                                                    title="Elegir con qué parámetro se miden los elementos de esta partida que no traen medida nativa"
+                                                    onClick={ev => { ev.stopPropagation(); setMedirCon(medirCon === p.clave ? null : p.clave); }}>
+                                                    medir con…
+                                                </button>
+                                            )}
+                                        </div>
                                         <div style={{ ...num, color: '#72706b' }} title={p.conManual ? `valor puesto a mano en el parámetro de la línea, en ${p.conManual} elementos; no se suma con lo nativo` : ''}>
                                             {p.conManual ? `${formatearNumero(p.manual)} ${p.unidad} (${p.conManual})` : ''}
                                         </div>

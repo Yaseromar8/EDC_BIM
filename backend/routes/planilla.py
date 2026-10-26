@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
-"""Planilla del visor: el itemizado de la obra, guardado y con versiones.
+"""Planilla del visor: el itemizado y los criterios de medida de la obra, guardados y con versiones.
 
-Migración 40 (`planilla_itemizados`), docs/visor/27 §6.
+Migración 40 (`planilla_itemizados`, docs/visor/27 §6) y 41 (`planilla_criterios_medida`,
+docs/visor/32).
 
 Por qué existe: la vista Partidas, la cobertura del itemizado y los campos derivados
 que usará Filters dependen del itemizado de la obra. Mientras vivía solo en el
@@ -19,14 +20,17 @@ Rutas:
   GET    /api/planilla/itemizado?project=<frente u obra>   vigente + historial de versiones
   POST   /api/planilla/itemizado                           nueva versión (la anterior deja de estar vigente)
   DELETE /api/planilla/itemizado?project=<frente u obra>   quitar el vigente (no se borra: queda en el historial)
+  GET    /api/planilla/criterios-medida?project=<…>         criterios de medida vigentes + historial
+  POST   /api/planilla/criterios-medida                     nuevo juego de criterios (quitar uno = guardar sin él)
 
-No hay migraciones en caliente: la tabla la crea la migración 40 (y esquema_base.py en una
-base nueva). Sin la tabla, las rutas responden 503 con el motivo.
+No hay migraciones en caliente: las tablas las crean las migraciones 40 y 41 (y esquema_base.py
+en una base nueva). Sin la tabla, sus rutas responden 503 con el motivo.
 """
 import json
 
 from flask import Blueprint, g, jsonify, request
 
+import planilla_criterios_medida as pcm
 import planilla_itemizado as pi
 from db import get_db_connection, resolve_project_id
 from perimetro_de_obra import guardia_de_obra
@@ -72,12 +76,12 @@ def _obra_canonica(valor):
     return obra, None
 
 
-def _tabla_ausente(e):
-    return 'planilla_itemizados' in str(e) and ('does not exist' in str(e) or 'no existe' in str(e))
+def _tabla_ausente(e, tabla='planilla_itemizados'):
+    return tabla in str(e) and ('does not exist' in str(e) or 'no existe' in str(e))
 
 
-def _sin_tabla():
-    return _error('Falta la migración 40 (planilla_itemizados) en esta base.', 503, 'MIGRATION_MISSING')
+def _sin_tabla(migracion='40', tabla='planilla_itemizados'):
+    return _error(f'Falta la migración {migracion} ({tabla}) en esta base.', 503, 'MIGRATION_MISSING')
 
 
 def _fecha(v):
@@ -210,3 +214,97 @@ def quitar_itemizado():
             return _sin_tabla()
         raise
     return jsonify({'success': True, 'retirada': fila[0] if fila else None})
+
+
+# ── Criterios de medida (migración 41, docs/visor/32) ───────────────────────────────────────
+
+TABLA_CRITERIOS = 'planilla_criterios_medida'
+
+
+@planilla_bp.route('/api/planilla/criterios-medida', methods=['GET'])
+def leer_criterios_medida():
+    """Los criterios de medida vigentes de la obra (o null) y las últimas versiones."""
+    valor = request.args.get('project')
+    negativa = guardia_de_obra(valor, 'leer los criterios de medida de la obra')
+    if negativa:
+        return negativa
+    obra, negativa = _obra_canonica(valor)
+    if negativa:
+        return negativa
+    try:
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            cur.execute('''SELECT c.version, c.criterios, c.n_criterios, c.huella, c.creado_en, u.name
+                             FROM planilla_criterios_medida c LEFT JOIN users u ON u.id = c.creado_por
+                            WHERE c.project_id = %s AND c.vigente''', (obra,))
+            fila = cur.fetchone()
+            cur.execute('''SELECT c.version, c.n_criterios, c.creado_en, u.name, c.vigente
+                             FROM planilla_criterios_medida c LEFT JOIN users u ON u.id = c.creado_por
+                            WHERE c.project_id = %s ORDER BY c.version DESC LIMIT %s''', (obra, HISTORIAL))
+            versiones = cur.fetchall()
+            puede_editar = _es_admin(cur, obra)
+    except Exception as e:
+        if _tabla_ausente(e, TABLA_CRITERIOS):
+            return _sin_tabla('41', TABLA_CRITERIOS)
+        raise
+    vigente = None
+    if fila:
+        vigente = {'version': fila[0], 'criterios': _json(fila[1]) or [], 'n_criterios': fila[2], 'huella': fila[3],
+                   'creado_en': _fecha(fila[4]), 'creado_por': fila[5] or ''}
+    return jsonify({
+        'success': True, 'vigente': vigente, 'puede_editar': puede_editar,
+        'versiones': [{'version': v[0], 'n_criterios': v[1], 'creado_en': _fecha(v[2]), 'creado_por': v[3] or '',
+                       'vigente': bool(v[4])} for v in versiones],
+    })
+
+
+@planilla_bp.route('/api/planilla/criterios-medida', methods=['POST'])
+def guardar_criterios_medida():
+    """Guarda el juego completo como versión nueva y la deja vigente. El mismo juego no crea otra.
+
+    Quitar un criterio es guardar el juego sin él: la versión anterior queda en el historial.
+    """
+    if request.content_length is not None and request.content_length > LIMITE_CUERPO:
+        return _error('Los criterios son demasiado grandes para guardarlos.', 413, 'PAYLOAD_TOO_LARGE')
+    datos = request.get_json(silent=True)
+    if not isinstance(datos, dict):
+        return _error('Cuerpo JSON requerido.', 400, 'INVALID_BODY')
+    negativa = guardia_de_obra(datos.get('project'), 'cambiar los criterios de medida de la obra')
+    if negativa:
+        return negativa
+    obra, negativa = _obra_canonica(datos.get('project'))
+    if negativa:
+        return negativa
+    uid = _uid()   # None solo con la identidad demo local (ver guardar_itemizado): sin 401
+    try:
+        criterios = pcm.validar_criterios(datos.get('criterios'))
+    except pcm.CriteriosInvalidos as e:
+        return jsonify({'success': False, **e.como_dict()}), 400
+    huella = pcm.huella(criterios)
+    try:
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            if not _es_admin(cur, obra):
+                return _error('Solo un administrador de la obra cambia los criterios de medida.', 403, 'NOT_PROJECT_ADMIN')
+            cur.execute('SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))', ('planilla_criterios_medida:' + obra,))
+            cur.execute('SELECT version, huella FROM planilla_criterios_medida WHERE project_id = %s AND vigente', (obra,))
+            actual = cur.fetchone()
+            # El mismo juego no crea otra versión; una obra sin criterios que guarda «ninguno», tampoco.
+            if (actual and actual[1] == huella) or (not actual and not criterios):
+                conn.commit()
+                return jsonify({'success': True, 'version': actual[0] if actual else None, 'sin_cambios': True,
+                                'n_criterios': len(criterios)}), 200
+            cur.execute('''UPDATE planilla_criterios_medida SET vigente = false, retirado_por = %s, retirado_en = now()
+                            WHERE project_id = %s AND vigente''', (uid, obra))
+            cur.execute('SELECT COALESCE(MAX(version), 0) + 1 FROM planilla_criterios_medida WHERE project_id = %s', (obra,))
+            version = cur.fetchone()[0]
+            cur.execute('''INSERT INTO planilla_criterios_medida (project_id, version, criterios, n_criterios, huella, creado_por)
+                           VALUES (%s, %s, %s, %s, %s, %s)''',
+                        (obra, version, json.dumps(criterios, ensure_ascii=False), len(criterios), huella, uid))
+            conn.commit()
+    except Exception as e:
+        if _tabla_ausente(e, TABLA_CRITERIOS):
+            return _sin_tabla('41', TABLA_CRITERIOS)
+        raise
+    return jsonify({'success': True, 'version': version, 'sin_cambios': False, 'n_criterios': len(criterios),
+                    'huella': huella}), 201

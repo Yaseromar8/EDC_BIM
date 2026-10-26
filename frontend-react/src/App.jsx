@@ -40,6 +40,7 @@ import BudgetTree from './components/BudgetTree';
 import TandemSidebar from './components/TandemSidebar';
 import TandemFilterPanel, { restoreSourceTints } from './components/TandemFilterPanel';
 import { itemizadoDeObra } from './utils/itemizadoDeObraVisor';
+import { criteriosDeMedida } from './utils/criteriosDeMedidaVisor';
 import { aplicarAlInventario, suscribirDerivados, esquemaDerivadoVigente } from './utils/camposDerivadosVisor';
 import { EVENTOS as EVENTOS_PLANILLA } from './lib/aislamientoTemporal';
 import PdfReader from './components/PdfReader';
@@ -2623,7 +2624,10 @@ function App() {
 
   // El itemizado de la OBRA (criterio de la Planilla y de sus campos derivados) se carga al abrir
   // la obra, esté abierta la Planilla o no (docs/visor/27 §6).
-  useEffect(() => { itemizadoDeObra.cargar(selectedProject?.id || null); }, [selectedProject?.id]);
+  useEffect(() => {
+    itemizadoDeObra.cargar(selectedProject?.id || null);
+    criteriosDeMedida.cargar(selectedProject?.id || null);   // «Medir con…» de la Planilla (docs/visor/32)
+  }, [selectedProject?.id]);
   // Si los campos derivados aparecen o desaparecen (llegó el itemizado, se quitó), la lista de
   // propiedades de Filters se pone al día sin esperar a otra carga del inventario.
   useEffect(() => suscribirDerivados(() => {

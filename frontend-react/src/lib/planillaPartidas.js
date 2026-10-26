@@ -13,6 +13,9 @@
  *   m  → Cotas › Longitud          m² → Cotas › Área          m³ → Cotas › Volumen
  *   kg → Longitud total de barra (nativa) × kg/m del diámetro de barra (nativo, tabla normativa)
  *   und → 1 por elemento
+ * Si el elemento NO tiene medida nativa, la dan los criterios de medida de la obra (`dic.criterios`,
+ * lib/criteriosDeMedida.js, docs/visor/32): «la partida 01.02 se mide con Cotas › Long. Reja». Solo
+ * rellenan lo que falta; la nativa manda siempre.
  * Sin IA: el diccionario se lee de los nombres de los parámetros y las reglas
  * son fijas y visibles.
  */
@@ -124,12 +127,21 @@ function lineasCrudas(fila, dic) {
         const unidad = oficial?.unidad || unidadModelo;
         const nombreModelo = nombre;
         if (oficial?.descripcion) nombre = oficial.descripcion;
-        const nativa = cantidadNativa(fila, unidad, dic.nativas);
+        let medida = cantidadNativa(fila, unidad, dic.nativas);
+        // Sin medida nativa: el criterio de medida de la obra, si hay uno para esta línea.
+        let sinMedidaPor = null;
+        if (!medida && dic.criterios) {
+            const r = dic.criterios.cantidad(fila, codigo, unidad);
+            if (r?.valor != null) medida = r;
+            else if (r) sinMedidaPor = r;
+        }
         const claveManual = l[MANUAL_POR_UNIDAD[unidad]];
         const manual = claveManual ? numero(fila[claveManual]) : 0;
         out.push({
             linea: i || '0', codigo, nombre, unidad, intercambiado, unidadModelo, nombreModelo, oficial: !!oficial,
-            cantidad: nativa ? nativa.valor : null, origen: nativa ? nativa.origen : null, detalle: nativa ? nativa.detalle : '',
+            cantidad: medida ? medida.valor : null, origen: medida ? medida.origen : null, detalle: medida ? medida.detalle : '',
+            medidoCon: medida?.origen === 'criterio' ? medida.clave : null, sinMedidaPor,
+            criterio: medida?.criterio || sinMedidaPor?.criterio || null,
             manual: manual > 0 ? manual : null,
             inicioReal: l.inicioReal ? fila[l.inicioReal] ?? '' : '', finReal: l.finReal ? fila[l.finReal] ?? '' : '',
             inicioProgramado: l.inicioProgramado ? fila[l.inicioProgramado] ?? '' : '', finProgramado: l.finProgramado ? fila[l.finProgramado] ?? '' : '',
@@ -168,7 +180,8 @@ export function analizarElemento(fila, dic) {
         if (previa) {
             repetidas++;
             // Se completa lo que le falte a la primera (unidad y cantidad, nombre).
-            if (!previa.unidad && l.unidad) Object.assign(previa, { unidad: l.unidad, cantidad: l.cantidad, origen: l.origen, detalle: l.detalle, manual: l.manual });
+            if (!previa.unidad && l.unidad) Object.assign(previa, { unidad: l.unidad, cantidad: l.cantidad, origen: l.origen, detalle: l.detalle, manual: l.manual,
+                medidoCon: l.medidoCon, sinMedidaPor: l.sinMedidaPor, criterio: l.criterio });
             if (!previa.nombre && l.nombre) previa.nombre = l.nombre;
             continue;
         }
@@ -210,6 +223,7 @@ export function analizarPartidas(filas, dic, claveDeFila) {
                 clave, codigo: l.codigo, nombre: l.nombre, unidad: l.unidad, nombres: new Map(), padres: new Map(), intercambiadas: 0,
                 unidadesModelo: new Map(), nombresModelo: new Map(), oficial: false,
                 elementos: 0, conMedida: 0, sinMedida: 0, cantidad: 0, manual: 0, conManual: 0, origenes: new Set(), claves: [],
+                porCriterio: 0, medidoCon: new Map(), conflictos: 0, unidadDistinta: 0, criterioSinValor: 0,
             }).get(clave);
             if (l.nombre) p.nombres.set(l.nombre, (p.nombres.get(l.nombre) || 0) + 1);
             if (l.padre) { const kp = l.padre.codigo; const e = p.padres.get(kp) || { ...l.padre, n: 0 }; e.n++; p.padres.set(kp, e); }
@@ -220,13 +234,22 @@ export function analizarPartidas(filas, dic, claveDeFila) {
             p.elementos++;
             p.claves.push(claveDeFila(fila));
             if (l.cantidad != null) { p.conMedida++; p.cantidad += l.cantidad; p.origenes.add(l.origen); } else p.sinMedida++;
+            if (l.medidoCon) {
+                p.porCriterio++;
+                const e = p.medidoCon.get(l.medidoCon) || { n: 0, suma: 0 };
+                e.n++; e.suma += l.cantidad; p.medidoCon.set(l.medidoCon, e);
+            }
+            if (l.sinMedidaPor?.motivo === 'conflicto') p.conflictos++;
+            else if (l.sinMedidaPor?.motivo === 'unidad') p.unidadDistinta++;
+            else if (l.sinMedidaPor?.motivo === 'sin-valor') p.criterioSinValor++;
             if (l.manual != null) { p.conManual++; p.manual += l.manual; }
         }
     }
     const masUsado = m => [...m].sort((a, b) => b[1] - a[1])[0]?.[0] || '';
-    const partidas = [...mapa.values()].map(({ nombres, padres, unidadesModelo, nombresModelo, ...p }) => {
+    const partidas = [...mapa.values()].map(({ nombres, padres, unidadesModelo, nombresModelo, medidoCon, ...p }) => {
         const padre = [...padres.values()].sort((x, y) => y.n - x.n)[0] || null;
         return {
+            medidoCon: [...medidoCon].map(([clave, e]) => ({ clave, n: e.n, suma: limpio(e.suma) })).sort((a, b) => b.n - a.n),
             unidadModelo: masUsado(unidadesModelo), nombreModelo: masUsado(nombresModelo),
             ...p, cantidad: limpio(p.cantidad), manual: limpio(p.manual), origenes: [...p.origenes],
             nombre: [...nombres].sort((a, b) => b[1] - a[1])[0]?.[0] || p.nombre, variantesDeNombre: nombres.size,
@@ -277,10 +300,12 @@ export function gruposDePartidas(partidas, itemizado = null) {
  * Hojas de Excel de la vista Partidas: la tabla (cantidades como números) y los
  * criterios (ámbito y regla de cantidad). Mismo formato que lib/inventoryExport.
  */
-export function hojasDePartidas(partidas, { ambito = '', fecha = new Date() } = {}) {
-    const cab = ['Grupo', 'Nombre del grupo', 'Código', 'Partida', 'Unidad', 'Cantidad nativa', 'Origen', 'Elementos', 'Sin medida nativa', 'Manual (aparte)', 'Elementos con manual'];
+export function hojasDePartidas(partidas, { ambito = '', fecha = new Date(), criterios: deMedida = [] } = {}) {
+    const cab = ['Grupo', 'Nombre del grupo', 'Código', 'Partida', 'Unidad', 'Cantidad', 'Origen', 'Elementos', 'Sin medida', 'Manual (aparte)', 'Elementos con manual'];
+    const origen = p => p.origenes.map(o => (o === 'criterio'
+        ? `criterio: ${p.medidoCon.map(m => String(m.clave).split('::').pop()).join(', ')}` : o)).join(', ');
     const filas = gruposDePartidas(partidas).flatMap(g => g.partidas.map(p => [
-        g.codigo, g.nombre, p.codigo, p.nombre, p.unidad, p.conMedida ? p.cantidad : '', p.origenes.join(', '),
+        g.codigo, g.nombre, p.codigo, p.nombre, p.unidad, p.conMedida ? p.cantidad : '', origen(p),
         p.elementos, p.sinMedida, p.conManual ? p.manual : '', p.conManual,
     ]));
     const tabla = [cab, ...filas];
@@ -292,7 +317,9 @@ export function hojasDePartidas(partidas, { ambito = '', fecha = new Date() } = 
         ['Partidas', partidas.length],
         ['Cantidad', 'Medida nativa de Revit según la unidad de la partida: m → Longitud, m² → Área, m³ → Volumen; kg → longitud total de barra × kg/m del diámetro de barra; und → 1 por elemento.'],
         ['Manual', 'Valor puesto a mano en el parámetro DSI de la línea (Longitud/Area/Volumen/Peso{i}). Se informa aparte; no se suma con lo nativo.'],
-        ['Sin medida nativa', 'Líneas cuya unidad no tiene medida nativa en el modelo (p. ej. encofrados modelados como muros).'],
+        ['Criterio de medida', 'Solo donde el elemento NO trae medida nativa: el parámetro que la obra eligió para esa unidad o partida (Planilla › Medir con…). La nativa manda siempre.'],
+        ['Sin medida', 'Líneas sin medida nativa ni criterio de medida que las mida (p. ej. encofrados modelados como muros).'],
+        ...deMedida.map((c, i) => [`Criterio de medida ${i + 1}`, c]),
     ];
     return [
         { nombre: 'Partidas', filas: tabla, anchos, filtroHasta: tabla.length },

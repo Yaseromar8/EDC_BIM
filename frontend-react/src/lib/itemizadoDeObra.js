@@ -17,21 +17,12 @@
  *     como antes de existir el guardado: el itemizado vive en este navegador y se pierde al recargar,
  *     con un aviso que lo dice. Así subir el código antes que la migración no rompe nada.
  *
- * Sin React ni red: `pedir(metodo, ruta, cuerpo)` lo pone quien lo crea (utils/itemizadoDeObraVisor.js).
+ * El almacén (cargar, guardar, quitar, modo navegador) es lib/almacenDeObra.js, compartido con los
+ * criterios de medida. Sin React ni red: `pedir` lo pone utils/itemizadoDeObraVisor.js.
  * Pruebas: pruebas/itemizadoDeObra.prueba.mjs.
  */
 import { indiceDeItemizado, explicarOrigen } from './planillaItemizado.js';
-
-const VACIO = Object.freeze({ scope: null, cargando: false, guardando: false, vigente: null, versiones: [], puedeEditar: false, error: '', modo: 'obra', aviso: '' });
-
-/** ¿La respuesta dice que este servidor no puede guardar itemizados? Entonces, modo navegador. */
-function avisoSinGuardado(r) {
-    const code = r?.json?.code;
-    if (code === 'MIGRATION_MISSING') return 'No se guarda para la obra (falta la migración 40 en el servidor): se usa solo en este navegador y se pierde al recargar.';
-    if (code === 'NO_DISPONIBLE') return 'En una vista compartida el itemizado se usa solo en este navegador.';
-    if (r?.status === 404) return 'Este servidor aún no guarda itemizados: se usa solo en este navegador y se pierde al recargar.';
-    return null;
-}
+import { crearAlmacenDeObra } from './almacenDeObra.js';
 
 /** Huella de una lista en el navegador (FNV-1a de 32 bits): distingue una lista de otra, nada más. */
 function huellaLocal(items) {
@@ -60,102 +51,20 @@ export function itemizadoDesdeServidor(v) {
     };
 }
 
-const mensajeDe = (r, porDefecto) => r?.json?.error || porDefecto;
-
 export function crearAlmacenDeItemizado({ pedir }) {
-    let estado = VACIO;
-    let pedido = 0;            // para descartar respuestas viejas
-    const oyentes = new Set();
-    const publicar = cambio => {
-        estado = Object.freeze({ ...estado, ...cambio });
-        for (const f of oyentes) f(estado);
-    };
-
-    async function cargar(scope) {
-        const mio = ++pedido;
-        if (!scope || scope === 'global') { publicar({ ...VACIO, scope: scope || null }); return estado; }
-        const mismaObra = estado.scope === scope;
-        publicar({ scope, cargando: true, error: '', ...(mismaObra ? {} : { vigente: null, versiones: [], puedeEditar: false, modo: 'obra', aviso: '' }) });
-        let r;
-        try {
-            r = await pedir('GET', `/api/planilla/itemizado?project=${encodeURIComponent(scope)}`);
-        } catch (e) {
-            r = { ok: false, json: { error: `No se pudo pedir el itemizado de la obra: ${e.message}` } };
-        }
-        if (mio !== pedido) return estado;          // el usuario ya está en otra obra
-        if (!r.ok) {
-            const aviso = avisoSinGuardado(r);
-            if (aviso) {
-                // Modo navegador: se conserva lo que ya se hubiera cargado en esta obra.
-                publicar({ cargando: false, error: '', modo: 'navegador', aviso, puedeEditar: true, versiones: [],
-                    vigente: mismaObra && estado.modo === 'navegador' ? estado.vigente : null });
-                return estado;
-            }
-            publicar({ cargando: false, vigente: null, versiones: [], puedeEditar: false, error: mensajeDe(r, 'No se pudo leer el itemizado de la obra.') });
-            return estado;
-        }
-        publicar({
-            cargando: false, error: '', modo: 'obra', aviso: '', vigente: itemizadoDesdeServidor(r.json.vigente),
-            versiones: Array.isArray(r.json.versiones) ? r.json.versiones : [], puedeEditar: !!r.json.puede_editar,
-        });
-        return estado;
-    }
-
-    /** { ok, version, sinCambios } o { ok: false, error }. */
-    async function guardar({ items, hoja = '', columnas = {}, archivo }) {
-        const scope = estado.scope;
-        if (!scope) return { ok: false, error: 'No hay obra abierta.' };
-        if (estado.modo === 'navegador') {
-            publicar({ vigente: itemizadoLocal({ items, hoja, columnas, archivo }), error: '' });
-            return { ok: true, local: true };
-        }
-        publicar({ guardando: true, error: '' });
-        let r;
-        try {
-            r = await pedir('POST', '/api/planilla/itemizado', { project: scope, archivo, hoja, columnas, items });
-        } catch (e) {
-            r = { ok: false, json: { error: `No se pudo guardar el itemizado: ${e.message}` } };
-        }
-        publicar({ guardando: false });
-        if (!r.ok) {
-            const aviso = avisoSinGuardado(r);
-            if (aviso) {
-                publicar({ modo: 'navegador', aviso, puedeEditar: true, vigente: itemizadoLocal({ items, hoja, columnas, archivo }), error: '' });
-                return { ok: true, local: true };
-            }
-            const error = mensajeDe(r, 'No se pudo guardar el itemizado.');
-            publicar({ error });
-            return { ok: false, error, code: r.json?.code };
-        }
-        if (estado.scope === scope) await cargar(scope);
-        return { ok: true, version: r.json.version, sinCambios: !!r.json.sin_cambios };
-    }
-
-    /** { ok, retirada } o { ok: false, error }. */
-    async function quitar() {
-        const scope = estado.scope;
-        if (!scope) return { ok: false, error: 'No hay obra abierta.' };
-        if (estado.modo === 'navegador') { publicar({ vigente: null, error: '' }); return { ok: true, retirada: null, local: true }; }
-        publicar({ guardando: true, error: '' });
-        let r;
-        try {
-            r = await pedir('DELETE', `/api/planilla/itemizado?project=${encodeURIComponent(scope)}`);
-        } catch (e) {
-            r = { ok: false, json: { error: `No se pudo quitar el itemizado: ${e.message}` } };
-        }
-        publicar({ guardando: false });
-        if (!r.ok) {
-            const error = mensajeDe(r, 'No se pudo quitar el itemizado.');
-            publicar({ error });
-            return { ok: false, error };
-        }
-        if (estado.scope === scope) await cargar(scope);
-        return { ok: true, retirada: r.json.retirada ?? null };
-    }
-
-    return {
-        estado: () => estado,
-        suscribir(f) { oyentes.add(f); return () => oyentes.delete(f); },
-        cargar, guardar, quitar,
-    };
+    return crearAlmacenDeObra({
+        pedir, ruta: '/api/planilla/itemizado',
+        desdeServidor: itemizadoDesdeServidor,
+        local: itemizadoLocal,
+        cuerpo: ({ items, hoja = '', columnas = {}, archivo }) => ({ archivo, hoja, columnas, items }),
+        textos: {
+            sinMigracion: 'No se guarda para la obra (falta la migración 40 en el servidor): se usa solo en este navegador y se pierde al recargar.',
+            compartida: 'En una vista compartida el itemizado se usa solo en este navegador.',
+            antiguo: 'Este servidor aún no guarda itemizados: se usa solo en este navegador y se pierde al recargar.',
+            pedir: 'No se pudo pedir el itemizado de la obra',
+            leer: 'No se pudo leer el itemizado de la obra.',
+            guardar: 'No se pudo guardar el itemizado',
+            quitar: 'No se pudo quitar el itemizado',
+        },
+    });
 }
