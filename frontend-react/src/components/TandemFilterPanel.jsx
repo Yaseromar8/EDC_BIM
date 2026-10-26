@@ -37,6 +37,11 @@ const FilterCategory = React.memo(({
     // accesible-- pero sin dibujarse. No es `display:none`: eso la sacaría del
     // foco por teclado. `.tandem-cb-*` no tiene CSS en ninguna hoja, así que el
     // estilo va aquí y no en App.css.
+    // La casilla invisible va posicionada DENTRO de su caja (`.tandem-cb-container` es `position:
+    // relative`). Antes su referencia era el marco del panel (`filters-shell`, sin barra): las casillas
+    // de una lista larga se salían de la lista y, al marcar un valor de abajo, el navegador desplazaba
+    // ese marco para enseñarla: el panel subía 1.544 px y no había forma de bajarlo (25-oct-2026,
+    // reproducido en producción con «Mostrar más» de un código de partida).
     const CASILLA_INVISIBLE = { position: 'absolute', opacity: 0, width: 16, height: 16, margin: 0, cursor: 'pointer' };
     const searchQuery = searchConfig?.query || '';
     // SIN RESTRICCIÓN SE VE TODO MARCADO — baseline, y también Tandem.
@@ -721,7 +726,7 @@ const TandemFilterPanel = ({
           .tandem-item.sin-coincidencias { opacity: 0.45; }
           .tandem-group-header { display: flex; align-items: center; padding: 8px 16px 8px 12px; cursor: pointer; transition: background 0.1s; }
           .tandem-group-header:hover { background: #e8e6dc; }
-          .tandem-cb-container { display: inline-flex; cursor: pointer; flex-shrink: 0; margin-right: 8px; }
+          .tandem-cb-container { display: inline-flex; cursor: pointer; flex-shrink: 0; margin-right: 8px; position: relative; }
           .tandem-cb-wrap { position: relative; display: flex; align-items: center; justify-content: center; }
           .tandem-cb-box { width: 18px; height: 18px; border-radius: 0; display: flex; align-items: center; justify-content: center; transition: background 0.15s, border-color 0.15s; border: 1.5px solid #b0aea5; background: #ffffff; border-radius: 3px; }
           .tandem-cb-container:hover .tandem-cb-box { border-color: #72706b; background: #f1f0e8; }
