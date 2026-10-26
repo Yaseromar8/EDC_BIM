@@ -15,7 +15,7 @@ import { UNIDADES_MEDIBLES, MAX_MEDIR_CON, candidatosDeMedida, camposParaDonde, 
  * filas, en el orden del Excel y desplegadas: títulos con «x de y con dato» y, en cada
  * partida, lo que el modelo tiene de ella (cantidad NATIVA de Revit en la unidad de la
  * partida, docs/visor/23 §7); si no tiene nada, la fila queda vacía, a la vista. Las
- * partidas del modelo fuera del itemizado van en un bloque al final. El criterio sale
+ * partidas del modelo fuera del itemizado no van aquí: están en «qué falta». El criterio sale
  * SOLO del itemizado que sube el administrador. Donde no hay medida nativa,
  * la da un criterio de medida de la obra («Medir con…», docs/visor/32), marcado
  * «·crit.». Lo manual va aparte. Clic en
@@ -439,7 +439,9 @@ export default function TablaDePartidas({ filas, filasObra, dic, roles, claveDeF
     const [soloConDato, setSoloConDato] = useState(false);
     const texto = String(busqueda || '');
     const visibles = useMemo(() => (plantilla ? filasVisibles(plantilla, { plegados, soloConDato, texto }) : []), [plantilla, plegados, soloConDato, texto]);
-    // Lo que se dibuja, fila a fila: títulos, partidas, sus sub-partidas y el bloque «fuera».
+    // Lo que se dibuja, fila a fila: títulos, partidas y sus sub-partidas. Solo lo del itemizado: las
+    // partidas del modelo que no están en él NO van en la plantilla (confundía, dijo el dueño el 26-oct);
+    // siguen en «qué falta» y en la cobertura.
     const lista = useMemo(() => {
         if (!plantilla) return [];
         const out = [];
@@ -448,10 +450,6 @@ export default function TablaDePartidas({ filas, filasObra, dic, roles, claveDeF
             if (f.tipo === 'titulo') { out.push({ tipo: 'titulo', clave: `t${i}`, i, f }); continue; }
             out.push({ tipo: 'partida', clave: `p${i}`, f });
             for (const p of f.sub) out.push({ tipo: 'sub', clave: `s${i}|${p.clave}`, p, f });
-        }
-        if (plantilla.fuera.length) {
-            out.push({ tipo: 'cabeceraFuera', clave: 'fuera' });
-            for (const p of plantilla.fuera) out.push({ tipo: 'fuera', clave: `f|${p.clave}`, p });
         }
         return out;
     }, [plantilla, visibles]);
@@ -487,7 +485,7 @@ export default function TablaDePartidas({ filas, filasObra, dic, roles, claveDeF
         );
     }
     // Una partida CON elementos en el modelo (la misma fila de siempre). `codigo` y `nombre` son los del
-    // itemizado cuando la fila es de la plantilla; las sub-partidas y las de fuera llevan los del modelo.
+    // itemizado cuando la fila es de la plantilla; las sub-partidas llevan los del modelo.
     const filaConDato = (p, { codigo = p.codigo, nombre = p.nombre, nivel = 1 } = {}) => {
         const sel = activa === p.clave;
         const calculada = p.origenes.includes('calculada');
@@ -585,21 +583,14 @@ export default function TablaDePartidas({ filas, filasObra, dic, roles, claveDeF
     const dibujar = r => {
         if (r.tipo === 'titulo') return filaTitulo(r);
         if (r.tipo === 'partida') return r.f.datos ? filaConDato(r.f.datos, { codigo: r.f.item, nombre: r.f.descripcion, nivel: r.f.nivel }) : filaVacia(r.f);
-        if (r.tipo === 'sub') return filaConDato(r.p, { nivel: r.f.nivel + 1 });
-        if (r.tipo === 'fuera') return filaConDato(r.p, { nivel: 1 });
-        return (
-            <div role="row" style={{ display: 'flex', alignItems: 'center', height: `${ALTO}px`, padding: '0 10px', background: '#f5ece8', borderBottom: '1px solid #e8e6dc', fontWeight: 600, color: ROJO }}
-                title="Partidas que tienen elementos en el modelo pero cuyo código no está en el itemizado (ni es sub-partida de un ítem suyo)">
-                Del modelo, fuera del itemizado · {miles(plantilla.fuera.length)} partida{plantilla.fuera.length === 1 ? '' : 's'}
-            </div>
-        );
+        return filaConDato(r.p, { nivel: r.f.nivel + 1 });   // 'sub'
     };
     return (
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, background: '#ffffff', fontSize: '12px', color: '#333330' }}>
             <div style={{ padding: '0 12px', height: '28px', flexShrink: 0, fontSize: '11px', color: '#72706b', borderBottom: '1px solid #e8e6dc', display: 'flex', gap: '8px', alignItems: 'center', whiteSpace: 'nowrap', overflow: 'hidden' }}>
                 <span title="Partidas del itemizado (filas con unidad) que tienen elementos en el modelo, sobre todas las del itemizado">
                     <strong style={{ color: '#141413', fontWeight: 600 }}>{miles(plantilla.resumen.conDato)}</strong> de {miles(plantilla.resumen.partidas)} partidas del itemizado con dato
-                    {plantilla.resumen.fuera > 0 ? ` · ${miles(plantilla.resumen.fuera)} del modelo fuera del itemizado` : ''} · {lineas.toLocaleString('es-PE')} líneas de {filas.length.toLocaleString('es-PE')} elementos {ambito}
+                    {' · '}{lineas.toLocaleString('es-PE')} líneas de {filas.length.toLocaleString('es-PE')} elementos {ambito}
                 </span>
                 <label style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }} title="Oculta las partidas sin elementos en el modelo y los títulos sin ninguna">
                     <input type="checkbox" checked={soloConDato} onChange={e => setSoloConDato(e.target.checked)} />solo con dato

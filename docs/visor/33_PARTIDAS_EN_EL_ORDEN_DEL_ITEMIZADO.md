@@ -104,7 +104,7 @@ plantilla, **por decidir**; la auditoría de metrados, **después**.
 
 - `lib/planillaPlantilla.js` (20/20): plantilla en el orden del Excel, nivel por tramos, títulos con
   «x de y con dato» por el orden, el mismo ítem con o sin ceros sumado una vez, sub-partidas debajo y
-  bloque «fuera»; qué se ve (todo / plegado a mano / «solo con dato» / buscador, que también encuentra
+  bloque «fuera» (la tabla no lo enseña: confundía; está en «qué falta»); qué se ve (todo / plegado a mano / «solo con dato» / buscador, que también encuentra
   las partidas vacías). 50.000 filas en 186 ms.
 - `TablaDePartidas.jsx`: dibuja la plantilla y solo las filas en pantalla. Una partida sin elementos se
   ve en gris, «sin elementos» (o «en sub-partidas ↓»). Cabecera «x de y partidas del itemizado con
