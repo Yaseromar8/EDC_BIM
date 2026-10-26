@@ -124,7 +124,7 @@ titulo('SI AISLAR FALLA A MEDIAS, VUELVE A COMO ESTABA');
 }
 
 titulo('EVENTOS CON NOMBRE PROPIO');
-ok('nombres fijos y congelados', EVENTOS.MOSTRAR_TODO === 'planilla-mostrar-todo' && EVENTOS.RECORRIDO === 'partida-recorrido' && Object.isFrozen(EVENTOS));
+ok('nombres fijos y congelados', EVENTOS.MOSTRAR_TODO === 'planilla-mostrar-todo' && EVENTOS.RECORRIDO === 'partida-recorrido' && EVENTOS.VER_EN_FILTERS === 'planilla-ver-en-filters' && Object.isFrozen(EVENTOS));
 
 console.log('');
 console.log(fallos ? `${fallos} de ${total} FALLAN` : `${total}/${total} en verde`);

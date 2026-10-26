@@ -39,6 +39,9 @@ import InventoryDataGrid from './components/InventoryDataGrid';
 import BudgetTree from './components/BudgetTree';
 import TandemSidebar from './components/TandemSidebar';
 import TandemFilterPanel, { restoreSourceTints } from './components/TandemFilterPanel';
+import { itemizadoDeObra } from './utils/itemizadoDeObraVisor';
+import { aplicarAlInventario, suscribirDerivados, esquemaDerivadoVigente } from './utils/camposDerivadosVisor';
+import { EVENTOS as EVENTOS_PLANILLA } from './lib/aislamientoTemporal';
 import PdfReader from './components/PdfReader';
 import CompareView from './components/CompareView';
 import LOB4DPanel from './components/LOB4DPanel';
@@ -894,6 +897,9 @@ function App() {
   // como si fueran suyas. El consumidor compara la marca y, si no coincide,
   // descarga lo que le toca.
   const tagInventory = useCallback((rows, urn) => {
+    // Campos derivados de la Planilla (Planilla › Estado frente al itemizado, Capítulo) ANTES de
+    // anunciar el inventario: una vista guardada que filtra por ellos los encuentra (docs/visor/27 §6).
+    aplicarAlInventario(rows, rows ? (urn || null) : null);
     window.postgresInventory = rows;
     markInventoryRevision();   // el dataset cambio: la cache de facetas caduca
     window.postgresInventoryUrn = rows ? (urn || null) : null;
@@ -2615,6 +2621,15 @@ function App() {
 
   }, [selectedProject]);
 
+  // El itemizado de la OBRA (criterio de la Planilla y de sus campos derivados) se carga al abrir
+  // la obra, esté abierta la Planilla o no (docs/visor/27 §6).
+  useEffect(() => { itemizadoDeObra.cargar(selectedProject?.id || null); }, [selectedProject?.id]);
+  // Si los campos derivados aparecen o desaparecen (llegó el itemizado, se quitó), la lista de
+  // propiedades de Filters se pone al día sin esperar a otra carga del inventario.
+  useEffect(() => suscribirDerivados(() => {
+    setAvailableProperties(prev => (prev.length ? [...prev.filter(p => !p.derivado), ...esquemaDerivadoVigente()] : prev));
+  }), []);
+
   // Recarga reactiva: cuando una extracción termina, re-descargar inventario fresco
   useEffect(() => {
     if (!selectedProject) return;
@@ -4180,12 +4195,61 @@ function App() {
   useEffect(() => {
     const handleSchemaExtracted = (e) => {
       console.log(`[REACT] ⏱️ ${performance.now().toFixed(2)}ms - Recibido: viewer-schema-extracted - Sincronizando propiedades disponibles.`);
-      setAvailableProperties(e.detail.schema);
+      // Con los campos derivados de la Planilla, si hay itemizado (docs/visor/27 §6).
+      setAvailableProperties([...(e.detail.schema || []), ...esquemaDerivadoVigente()]);
       // No dispatch aquí: el useEffect de filterProperties/filterSelections/availableProperties ya lo hará
     };
     window.addEventListener('viewer-schema-extracted', handleSchemaExtracted);
     return () => window.removeEventListener('viewer-schema-extracted', handleSchemaExtracted);
   }, [filterProperties, filterSelections]);
+
+  // «COLOREAR EN FILTERS» DESDE LA PLANILLA (docs/visor/27 §6). Filters es el dueño del color que se
+  // queda (y se guarda en las vistas): la Planilla solo pide que su campo derivado salga ARRIBA,
+  // desplegado y coloreado, con los colores con sentido del estado si el usuario no puso los suyos.
+  // El color se pide DESPUÉS de que la lista de Filters ya incluya el campo (efecto de abajo): antes,
+  // Filters aún no tiene las cifras de esa propiedad y no pintaría nada.
+  const colorPendienteRef = useRef(null);
+  const propiedadesFiltersRef = useRef(filterProperties);
+  propiedadesFiltersRef.current = filterProperties;
+  const seleccionFiltersRef = useRef(filterSelections);
+  seleccionFiltersRef.current = filterSelections;
+  const pedirColorEnFilters = useCallback((propId) => {
+    setFilterColors(prev => ({ ...prev, [propId]: true }));
+    const seleccion = seleccionFiltersRef.current?.[propId] || [];
+    window.dispatchEvent(new CustomEvent('theme-property-bucket', {
+      detail: { propId, values: seleccion.length ? seleccion : null, active: true, paletteName: 'Classic Tandem', customColors: window._customValueColors || {} },
+    }));
+  }, []);
+  useEffect(() => {
+    const alVer = (e) => {
+      const { propId, colores } = e.detail || {};
+      if (!propId) return;
+      if (colores) {
+        const propios = window._customValueColors || {};
+        const mezcla = { ...propios };
+        for (const [valor, hex] of Object.entries(colores)) {
+          const k = `${propId}::${valor}`;
+          if (!(k in mezcla)) mezcla[k] = hex;
+        }
+        window._customValueColors = mezcla;
+        window.dispatchEvent(new CustomEvent('custom-colors-restored', { detail: mezcla }));
+      }
+      setExpandedFilters(prev => ({ ...prev, [propId]: true }));
+      setActivePanel('filters');
+      setPanelVisible(true);
+      if (propiedadesFiltersRef.current.includes(propId)) pedirColorEnFilters(propId);
+      else { colorPendienteRef.current = propId; setFilterProperties(prev => (prev.includes(propId) ? prev : [propId, ...prev])); }
+    };
+    window.addEventListener(EVENTOS_PLANILLA.VER_EN_FILTERS, alVer);
+    return () => window.removeEventListener(EVENTOS_PLANILLA.VER_EN_FILTERS, alVer);
+  }, [pedirColorEnFilters]);
+  useEffect(() => {
+    const pendiente = colorPendienteRef.current;
+    if (pendiente && filterProperties.includes(pendiente)) {
+      colorPendienteRef.current = null;
+      pedirColorEnFilters(pendiente);
+    }
+  }, [filterProperties, pedirColorEnFilters]);
 
 
   // --- RENDER: LOGIN -> LANDING -> APP ---

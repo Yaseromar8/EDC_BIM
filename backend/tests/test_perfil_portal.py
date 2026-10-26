@@ -41,7 +41,7 @@ PORTAL_SRC = os.path.join(RAIZ, 'frontend-docs', 'src')
 # perimetro de verdad. Una lista de prohibiciones mal recortada es peor que no
 # tenerla: da por vigilado lo que no lo esta.
 DEL_VISOR = ('/api/lob', '/api/compare', '/api/inventory', '/api/geo',
-             '/api/link', '/api/dashboards', '/api/civil',
+             '/api/link', '/api/dashboards', '/api/planilla', '/api/civil',
              '/api/rfis', '/api/redlines', '/api/presupuesto', '/api/schedule',
              '/api/build', '/api/hubs', '/api/images/proxy')
 

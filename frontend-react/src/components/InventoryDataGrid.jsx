@@ -1,5 +1,5 @@
 import { INVENTORY_IDENTITY_FORMAT, INVENTORY_INTERNAL_KEYS, withInventoryIdentity, inventoryRowKey, inventoryRowForViewer, inventoryEditPayload, inventoryBulkPayload, resolveInventoryTargets, updateInventoryRows, requireInventoryResponse, markInventoryRevision } from '../lib/inventoryIdentity';
-import React, { useState, useEffect, useRef, useCallback, memo, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useCallback, memo, useMemo, useSyncExternalStore } from 'react';
 import { urlInventario, enlaceCompartido } from '../utils/enlaceCompartido';
 import { filterInventoryRows, refineInventorySelection } from '../lib/filtersCore.js';
 import { openInventoryFilterPopout } from '../lib/inventoryFilterPopout.js';
@@ -13,6 +13,8 @@ import * as Buscador from '../lib/inventoryBuscar';
 import * as Partidas from '../lib/planillaPartidas';
 import { deducirRoles, diccionarioDeducido } from '../lib/planillaPerfil';
 import { EVENTOS } from '../lib/aislamientoTemporal';
+import { itemizadoDeObra } from '../utils/itemizadoDeObraVisor';
+import { contextoDerivado, suscribirDerivados } from '../utils/camposDerivadosVisor';
 import TablaDePartidas from './TablaDePartidas';
 import SelectorDeCampo, { ListaDeCampos } from './SelectorDeCampo';
 import { Capacitor } from '@capacitor/core';
@@ -365,9 +367,10 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
     // se retiró el 23-oct; las observaciones no están ligadas a elementos.
     const [followSelection, setFollowSelection] = useState(true);
     const [editarAbierto, setEditarAbierto] = useState(false);
-    // Itemizado de la obra (ítem, descripción, unidad), cargado desde un Excel: vive solo en esta
-    // sesión del navegador, no se guarda (docs/visor/24, paso 3).
-    const [itemizado, setItemizado] = useState(null);
+    // Itemizado de la OBRA (ítem, descripción, unidad): guardado en el servidor con versiones y
+    // cargado al abrir la obra (docs/visor/27 §6). La Planilla lo lee y lo cambia por el almacén.
+    const obraItemizado = useSyncExternalStore(itemizadoDeObra.suscribir, itemizadoDeObra.estado);
+    const itemizado = obraItemizado.vigente;
     const [showAssetsOnly, setShowAssetsOnly] = useState(() => leerInventoryConfig().assetsOnly);
     // «Solo con metrado» sustituye a «Assets only» en la barra: en un modelo de
     // Revit todo es ejemplar y aquel no quitaba nada. assetsOnly sigue leyéndose
@@ -820,8 +823,8 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
     // tabla, clic en una partida): cuando el 3D lo devuelve, es un eco, no una
     // selección nueva del usuario.
     const ultimaProgramadaRef = useRef(null);
-    const seleccionarEn3D = useCallback((claves, { encuadrar = false, enfocar = null, clave = null } = {}) => {
-        ultimaProgramadaRef.current = new Set(claves);
+    // Claves de fila → [{ urn, dbIds }] del visor (las que no están cargadas en el visor se saltan).
+    const itemsDelVisor = useCallback((claves) => {
         const porUrn = new Map();
         for (const k of claves) {
             const fila = filaPorClaveRef.current.get(k);
@@ -832,7 +835,15 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
             if (!porUrn.has(urn)) porUrn.set(urn, []);
             porUrn.get(urn).push(id);
         }
-        window.dispatchEvent(new CustomEvent('viewer-select', { detail: { items: [...porUrn].map(([urn, dbIds]) => ({ urn, dbIds })), encuadrar, enfocar, clave } }));
+        return [...porUrn].map(([urn, dbIds]) => ({ urn, dbIds }));
+    }, []);
+    const seleccionarEn3D = useCallback((claves, { encuadrar = false, enfocar = null, clave = null } = {}) => {
+        ultimaProgramadaRef.current = new Set(claves);
+        window.dispatchEvent(new CustomEvent('viewer-select', { detail: { items: itemsDelVisor(claves), encuadrar, enfocar, clave } }));
+    }, [itemsDelVisor]);
+    // El color que se queda es de Filters: la Planilla le pide abrir uno de sus campos derivados.
+    const verEnFilters = useCallback((propId, colores = null) => {
+        window.dispatchEvent(new CustomEvent(EVENTOS.VER_EN_FILTERS, { detail: { propId, colores } }));
     }, []);
     const alternarCasilla = useCallback((clave, mods = {}) => {
         const ancla = anclaRef.current;
@@ -973,11 +984,20 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
     // El criterio de la vista Partidas sale SOLO del itemizado que sube el usuario: sin itemizado no
     // hay criterio (ni uno escrito en el código). Con él, se buscan en el modelo los parámetros donde
     // están sus ítems, y su descripción y su unidad son las oficiales (docs/visor/24 §11-12).
-    const rolesPartidas = useMemo(() => (itemizado && flattenedData.length ? deducirRoles(flattenedData, undefined, { itemizado: itemizado.indice }) : null),
-        [itemizado, flattenedData]);
-    const dicPartidas = useMemo(() => (rolesPartidas && rolesPartidas.lineas.length
-        ? { ...diccionarioDeducido(rolesPartidas, allPropertyKeys || []), itemizado: itemizado.indice } : null),
-    [rolesPartidas, allPropertyKeys, itemizado]);
+    // La deducción ya la hizo la capa de campos derivados al cargar la obra, sobre TODO el inventario
+    // (utils/camposDerivadosVisor.js): se reutiliza, así no se deduce dos veces ni cambia según lo que
+    // filtre Filters. Solo si no la hay (p. ej. otro itemizado aún llegando) se deduce aquí.
+    const derivado = useSyncExternalStore(suscribirDerivados, contextoDerivado);
+    const derivadoVale = !!(derivado && itemizado && derivado.huella === itemizado.huella && derivado.scope === activeModelUrn);
+    const rolesPartidas = useMemo(() => {
+        if (derivadoVale) return derivado.roles;
+        return itemizado && flattenedData.length ? deducirRoles(flattenedData, undefined, { itemizado: itemizado.indice }) : null;
+    }, [derivadoVale, derivado, itemizado, flattenedData]);
+    const dicPartidas = useMemo(() => {
+        if (!rolesPartidas || !rolesPartidas.lineas.length) return null;
+        if (derivadoVale) return derivado.dic;
+        return { ...diccionarioDeducido(rolesPartidas, allPropertyKeys || []), itemizado: itemizado.indice };
+    }, [rolesPartidas, derivadoVale, derivado, allPropertyKeys, itemizado]);
     const [ambitoPartidas, setAmbitoPartidas] = useState(null); // Set de claves elegidas, o null = la tabla
     // Manda la ÚLTIMA selección del usuario, sea en la tabla o en el 3D.
     useEffect(() => { if (checkedIds.size) setAmbitoPartidas(new Set(checkedIds)); }, [checkedIds]);
@@ -1657,10 +1677,12 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
             
             {vista === 'partidas' ? (
                 <TablaDePartidas filas={filasDePartidas} filasObra={flattenedData} dic={dicPartidas} roles={rolesPartidas} claveDeFila={inventoryRowKey}
-                    itemizado={itemizado} onItemizado={setItemizado}
+                    itemizado={itemizado} estadoItemizado={obraItemizado}
+                    onItemizado={leido => (leido ? itemizadoDeObra.guardar(leido) : itemizadoDeObra.quitar())}
                     ambito={ambitoPartidas ? 'seleccionados' : 'de la tabla'}
                     onUsarTodo={ambitoPartidas ? () => setAmbitoPartidas(null) : null}
                     onSeleccionar={seleccionarPartida}
+                    onVerEnFilters={derivadoVale ? verEnFilters : null}
                     onMostrarTodo={() => window.dispatchEvent(new CustomEvent(EVENTOS.MOSTRAR_TODO))} />
             ) : (
             /* ═══ UNIFIED SCROLL CONTAINER (horizontal + vertical) ═══ */

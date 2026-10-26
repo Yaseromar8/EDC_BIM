@@ -201,6 +201,9 @@ POLITICAS_POR_BLUEPRINT = {
     'partidas_bp': _SESION, 'presupuesto_bp': _SESION,
     'pins': _SESION, 'tracking': _SESION, 'views': _SESION, 'maps': _SESION,
     'ai': _SESION, 'dashboards': _SESION, 'sets': _SESION, 'attributes': _SESION,
+    # Itemizado de la obra (Planilla del visor): sesión aquí; guardia de obra en las tres
+    # rutas y administrador de la obra para cambiarlo, por dentro.
+    'planilla': _SESION,
     'reviews': _SESION, 'transmittals': _SESION, 'rfis_bp': _SESION,
     # El directorio de obra y «Mi Trabajo»: exigen sesion, y cada ruta
     # comprueba obra o pertenencia por dentro.

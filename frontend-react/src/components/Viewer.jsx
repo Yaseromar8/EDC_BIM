@@ -1821,6 +1821,15 @@ const Viewer = ({
     };
     // External Custom Event Listener for Component Selection
     useEffect(() => {
+        // El modelo cargado de una URN (con o sin relleno base64, o por la URN con la que se cargó).
+        const modeloDeUrn = (models, u) => {
+            const n = normalizeUrn(u);
+            return models.find(x => {
+                const mv = normalizeUrn(x.getData()?.urn);
+                const mr = Object.keys(loadedModelsRef.current).find(k => normalizeUrn(k) === mv) || mv;
+                return normalizeUrn(mr) === n || mv === n;
+            });
+        };
         const handleViewerSelect = (e) => {
             // Varios elementos de varios modelos: una sola selección agregada. Con Mayús/Ctrl
             // en la tabla la cámara NO se mueve (saltaría en cada clic); con `encuadrar` (clic
@@ -1834,12 +1843,7 @@ const Viewer = ({
                 const models = viewer.impl.modelQueue().getModels();
                 const porModelo = new Map();
                 for (const { urn: u, dbIds: ids } of e.detail.items) {
-                    const n = normalizeUrn(u);
-                    const m = models.find(x => {
-                        const mv = normalizeUrn(x.getData()?.urn);
-                        const mr = Object.keys(loadedModelsRef.current).find(k => normalizeUrn(k) === mv) || mv;
-                        return normalizeUrn(mr) === n || mv === n;
-                    });
+                    const m = modeloDeUrn(models, u);
                     if (m) porModelo.set(m, [...(porModelo.get(m) || []), ...ids]);
                 }
                 // Clic en una partida: se aísla (como Filters). Mayús/Ctrl en la tabla: se selecciona.

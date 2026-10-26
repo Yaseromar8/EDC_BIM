@@ -1,9 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { analizarPartidas, gruposDePartidas } from '../lib/planillaPartidas';
-import { leerItemizado, indiceDeItemizado, cruzarCampos, diferencias } from '../lib/planillaItemizado';
+import { leerItemizado, cruzarCampos, diferencias } from '../lib/planillaItemizado';
 import { formatearNumero } from '../lib/inventoryTabla';
 import { compacto } from '../lib/inventoryBuscar';
 import { EVENTOS } from '../lib/aislamientoTemporal';
+import { coberturaDelItemizado, ESTADOS } from '../lib/planillaCobertura';
+import { ID_ESTADO, ID_CAPITULO, COLORES_ESTADO } from '../lib/camposDerivados';
 
 /**
  * Vista «Partidas» de la Planilla: una fila por partida (código + unidad) de los
@@ -73,19 +75,115 @@ function ComoSeLeyo({ roles, itemizado, cruce, onCerrar }) {
     );
 }
 
+const miles = x => x.toLocaleString('es-PE');
+const Cuadro = ({ color }) => <span aria-hidden style={{ display: 'inline-block', width: '9px', height: '9px', borderRadius: '2px', background: color, flexShrink: 0 }} />;
+const filaLista = { display: 'grid', gridTemplateColumns: '150px minmax(160px, 1fr) 110px 80px', gap: '8px', alignItems: 'center', height: '22px', padding: '0 6px', borderRadius: '3px' };
+const recorte = { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' };
+
+// «Qué falta» (docs/visor/25, P1): lo que el total de Partidas NO incluye, recorrible y aislable.
+function QueFalta({ cobertura, dif, ambito, activa, onAlternar, onCerrar }) {
+    const titulo = { color: '#141413', fontWeight: 600, margin: '6px 0 2px', display: 'flex', alignItems: 'center', gap: '6px' };
+    const clic = (clave, claves) => ({
+        role: 'button', tabIndex: 0, onClick: () => onAlternar(clave, claves),
+        onKeyDown: e => { if (e.key === 'Enter') onAlternar(clave, claves); },
+        className: `inv-fila${activa === clave ? ' resaltada' : ''}`,
+        title: activa === clave ? 'clic: mostrar todo' : `clic: aislar sus ${miles(new Set(claves).size)} elementos en el 3D`,
+        style: { ...filaLista, cursor: 'pointer' },
+    });
+    const MAX = 100;
+    return (
+        <div style={{ borderBottom: '1px solid #e8e6dc', background: '#faf9f5', padding: '8px 12px', maxHeight: '220px', overflowY: 'auto', fontSize: '11.5px', color: '#52524d', flexShrink: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <strong style={{ color: '#141413', fontWeight: 600 }}>Qué falta</strong>
+                <span>· en los {miles(cobertura.total)} elementos {ambito}: lo que el total de Partidas no incluye o no cuadra con el itemizado. Clic en una línea: aislar en el 3D.</span>
+                <span style={{ flex: 1 }} />
+                <button className="v-enlace" style={{ fontSize: '11px' }} onClick={onCerrar}>cerrar</button>
+            </div>
+
+            <div style={titulo}><Cuadro color={ESTADOS[3].color} />{miles(cobertura.porEstado.sin.length)} elementos sin partida, por categoría</div>
+            {cobertura.sinPorCategoria.slice(0, 20).map(c => (
+                <div key={c.categoria} {...clic(`sin:${c.categoria}`, c.claves)}>
+                    <span style={recorte}>{c.categoria}</span><span /><span /><span style={{ textAlign: 'right' }}>{miles(c.claves.length)}</span>
+                </div>
+            ))}
+            {cobertura.sinPorCategoria.length > 20 && <div style={{ paddingLeft: '6px' }}>y {cobertura.sinPorCategoria.length - 20} categorías más</div>}
+
+            <div style={titulo}><Cuadro color={ESTADOS[2].color} />{miles(dif.fuera.length)} partidas del modelo fuera del itemizado (ni ítem ni sub-partida de un ítem)</div>
+            {dif.fuera.slice(0, MAX).map(p => (
+                <div key={p.clave} {...clic(`fuera:${p.clave}`, p.claves)}>
+                    <span style={{ ...recorte, color: ROJO }}>{p.codigo}</span><span style={recorte}>{p.nombreModelo || p.nombre || '—'}</span>
+                    <span>{p.unidad || '—'}</span><span style={{ textAlign: 'right' }}>{miles(p.elementos)}</span>
+                </div>
+            ))}
+            {dif.fuera.length > MAX && <div style={{ paddingLeft: '6px' }}>y {miles(dif.fuera.length - MAX)} más</div>}
+            {cobertura.porEstado.fuera.length > 0 && (
+                <div {...clic('estado:fuera', cobertura.porEstado.fuera)}>
+                    <span>todos</span><span style={recorte}>elementos con partida fuera del itemizado o sin código</span><span /><span style={{ textAlign: 'right' }}>{miles(cobertura.porEstado.fuera.length)}</span>
+                </div>
+            )}
+
+            <div style={titulo}>{miles(dif.unidadDistinta.length)} partidas con unidad distinta en el modelo (manda la del itemizado)</div>
+            {dif.unidadDistinta.slice(0, MAX).map(({ p, oficial }) => (
+                <div key={p.clave} {...clic(`unidad:${p.clave}`, p.claves)}>
+                    <span style={recorte}>{p.codigo}</span><span style={recorte}>{oficial.descripcion}</span>
+                    <span style={{ color: ROJO }}>{p.unidadModelo} → {oficial.unidad}</span><span style={{ textAlign: 'right' }}>{miles(p.elementos)}</span>
+                </div>
+            ))}
+
+            <div style={titulo}>{miles(dif.sinElementos.length)} partidas del itemizado (con unidad) sin ningún elemento {ambito}: lo que no se modela, o falta parametrizar</div>
+            {dif.sinElementos.slice(0, MAX).map(x => (
+                <div key={x.item} style={filaLista}>
+                    <span style={recorte}>{x.item}</span><span style={recorte}>{x.descripcion}</span><span>{x.unidad}</span><span />
+                </div>
+            ))}
+            {dif.sinElementos.length > MAX && <div style={{ paddingLeft: '6px' }}>y {miles(dif.sinElementos.length - MAX)} más</div>}
+        </div>
+    );
+}
+
+const fechaCorta = iso => { try { return new Date(iso).toLocaleDateString('es-PE', { day: 'numeric', month: 'short', year: 'numeric' }); } catch { return ''; } };
+
+// Cargar otra versión o quitar el itemizado de la OBRA. Solo quien la administra; quitar pide confirmación
+// porque cambia lo que ve todo el equipo (la versión no se borra: queda en el historial del servidor).
+function AccionesDelItemizado({ estado, hay, onArchivo, onQuitar }) {
+    const deLaObra = estado.modo !== 'navegador';
+    const [confirmar, setConfirmar] = useState(false);
+    if (estado.cargando) return <span>Cargando el itemizado de la obra…</span>;
+    if (!estado.puedeEditar) return <span style={{ color: '#72706b' }}>Solo un administrador de la obra carga o cambia el itemizado.</span>;
+    if (estado.guardando) return <span>Guardando…</span>;
+    if (confirmar) {
+        return (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                {deLaObra ? '¿Quitar el itemizado de toda la obra?' : '¿Quitar el itemizado?'}
+                <button style={{ ...estiloBoton, color: ROJO, borderColor: ROJO }} onClick={() => { setConfirmar(false); onQuitar(); }}>Sí, quitar</button>
+                <button style={estiloBoton} onClick={() => setConfirmar(false)}>No</button>
+            </span>
+        );
+    }
+    return (
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+            <BotonCargar onArchivo={onArchivo} texto={hay ? 'Cargar otra versión…' : 'Cargar itemizado…'} />
+            {hay && <button onClick={() => setConfirmar(true)} title={deLaObra ? 'Deja la obra sin itemizado (la versión queda en el historial)' : 'Deja de usar el itemizado en este navegador'} style={estiloBoton}>✕ Quitar itemizado</button>}
+        </span>
+    );
+}
+
+
 const estiloBoton = { display: 'inline-flex', alignItems: 'center', border: '1px solid #cccac0', borderRadius: '3px', background: '#ffffff', color: '#52524d', font: 'inherit', fontSize: '11px', padding: '0 6px', height: '20px', cursor: 'pointer' };
 
-function BotonCargar({ onArchivo, texto = 'Cargar itemizado…' }) {
+function BotonCargar({ onArchivo, texto = 'Cargar itemizado…', ocupado = false }) {
     return (
-        <label title="Excel o CSV con ítem, descripción y unidad. Se lee en tu navegador; no se guarda." style={estiloBoton}>
+        <label title="Excel o CSV con ítem, descripción y unidad. Se guarda como itemizado de la OBRA (una versión nueva) y lo usan todos sus frentes."
+            style={{ ...estiloBoton, ...(ocupado ? { opacity: 0.5, pointerEvents: 'none' } : {}) }}>
             {texto}
-            <input type="file" accept=".xlsx,.xls,.csv" style={{ display: 'none' }}
+            <input type="file" accept=".xlsx,.xls,.csv" style={{ display: 'none' }} disabled={ocupado}
                 onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) onArchivo(f); }} />
         </label>
     );
 }
 
-export default function TablaDePartidas({ filas, filasObra, dic, roles, claveDeFila, ambito, onUsarTodo, onSeleccionar, onMostrarTodo, itemizado, onItemizado }) {
+export default function TablaDePartidas({ filas, filasObra, dic, roles, claveDeFila, ambito, onUsarTodo, onSeleccionar, onMostrarTodo, onVerEnFilters, itemizado, estadoItemizado, onItemizado }) {
+    const estadoObra = estadoItemizado || { cargando: false, guardando: false, puedeEditar: true, error: '' };
     const [activa, setActiva] = useState(null);
     const [paso, setPaso] = useState(null);     // paso del recorrido de la partida activa
     // Cuántos pasos tiene el recorrido: lo dice el visor (piezas sueltas, o tramos si son miles).
@@ -102,6 +200,18 @@ export default function TablaDePartidas({ filas, filasObra, dic, roles, claveDeF
     const { partidas, calidad } = useMemo(() => (dic ? analizarPartidas(filas, dic, claveDeFila) : { partidas: [], calidad: { repetidas: 0, intercambiadas: 0 } }),
         [filas, dic, claveDeFila]);
     const grupos = useMemo(() => gruposDePartidas(partidas, indice), [partidas, indice]);
+    // Cobertura frente al itemizado, sobre los mismos elementos que la tabla (docs/visor/25, P1).
+    const cobertura = useMemo(() => (dic && indice ? coberturaDelItemizado(filas, dic, indice, claveDeFila) : null),
+        [filas, dic, indice, claveDeFila]);
+    const [verFalta, setVerFalta] = useState(false);
+    const dif = useMemo(() => (verFalta && indice ? diferencias(partidas, indice, itemizado.items) : null), [verFalta, partidas, indice, itemizado]);
+    // Un clic aísla (una partida, un estado, una categoría…); otro clic en lo MISMO muestra todo como estaba.
+    const alternar = (clave, claves) => {
+        setPaso(null); setRecorrido(null);
+        if (activa === clave) { setActiva(null); onMostrarTodo?.(); return; }
+        setActiva(clave);
+        onSeleccionar([...new Set(claves)], { clave });
+    };
     // El cruce se calcula sobre toda la obra y solo con el panel abierto.
     const cruce = useMemo(() => {
         if (!verComo || !dic || !roles) return null;
@@ -124,11 +234,19 @@ export default function TablaDePartidas({ filas, filasObra, dic, roles, claveDeF
             }));
             const leido = leerItemizado(hojas);
             if (!leido) { setErrorItemizado('No se encontró una columna de ítems (códigos como 06.02.01) con su descripción.'); return; }
-            onItemizado({ ...leido, indice: indiceDeItemizado(leido.items), archivo: archivo.name });
+            // Se guarda como itemizado de la obra; lo que se usa después es lo que devuelve el servidor.
+            const r = await onItemizado({ items: leido.items, hoja: leido.hoja, columnas: leido.columnas, archivo: archivo.name });
+            if (r && !r.ok) setErrorItemizado(r.error);
         } catch (e) {
             setErrorItemizado(`No se pudo leer el archivo: ${e.message}`);
         }
     };
+    const quitarItemizado = async () => {
+        setErrorItemizado('');
+        const r = await onItemizado(null);
+        if (r && !r.ok) setErrorItemizado(r.error);
+    };
+    const error = errorItemizado || estadoObra.error;
     const sinMedida = partidas.reduce((s, p) => s + p.sinMedida, 0);
     const lineas = partidas.reduce((s, p) => s + p.elementos, 0);
 
@@ -137,15 +255,14 @@ export default function TablaDePartidas({ filas, filasObra, dic, roles, claveDeF
         return (
             <div style={{ padding: '24px', color: '#52524d', fontSize: '13px', display: 'flex', flexDirection: 'column', gap: '10px', alignItems: 'flex-start' }}>
                 {itemizado
-                    ? <span>Ningún parámetro del modelo contiene los ítems de «{itemizado.archivo}».</span>
+                    ? <span>Ningún parámetro del modelo contiene los ítems de «{itemizado.archivo}»{itemizado.version ? ` (versión ${itemizado.version})` : ''}.</span>
                     : <span>Carga el itemizado de la obra (ítem, descripción y unidad) para armar las partidas con tu criterio.
-                        La Planilla buscará en el modelo los parámetros donde están tus ítems.</span>}
+                        Se guarda para toda la obra, y la Planilla buscará en el modelo los parámetros donde están tus ítems.</span>}
                 <span style={{ display: 'inline-flex', gap: '8px', alignItems: 'center' }}>
-                    {itemizado
-                        ? <button style={estiloBoton} onClick={() => onItemizado(null)}>✕ Quitar itemizado</button>
-                        : <BotonCargar onArchivo={cargarItemizado} />}
-                    {errorItemizado && <span style={{ color: ROJO }}>{errorItemizado}</span>}
+                    <AccionesDelItemizado estado={estadoObra} hay={!!itemizado} onArchivo={cargarItemizado} onQuitar={quitarItemizado} />
+                    {error && <span style={{ color: ROJO }}>{error}</span>}
                 </span>
+                {estadoObra.aviso && <span style={{ color: '#72706b', fontSize: '12px' }}>{estadoObra.aviso}</span>}
             </div>
         );
     }
@@ -163,16 +280,55 @@ export default function TablaDePartidas({ filas, filasObra, dic, roles, claveDeF
                     cómo se leyó
                 </button>
                 <span style={{ width: '1px', height: '12px', background: '#e8e6dc' }} />
-                <span title={itemizado.porque} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-                    itemizado «{itemizado.archivo}» · {itemizado.items.length.toLocaleString('es-PE')} ítems
-                    <button onClick={() => onItemizado(null)} title="Dejar de usar el itemizado (no se guarda en ningún sitio)" style={estiloBoton}>
-                        ✕ Quitar itemizado
-                    </button>
+                <span title={itemizado.local
+                    ? `${itemizado.porque}. ${estadoObra.aviso || 'Solo en este navegador.'}`
+                    : `${itemizado.porque}. Versión ${itemizado.version}${itemizado.creadoPor ? `, cargada por ${itemizado.creadoPor}` : ''}${itemizado.creadoEn ? ` el ${fechaCorta(itemizado.creadoEn)}` : ''}. Es el itemizado de la obra: lo usan todos sus frentes.`}
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                    {itemizado.local
+                        ? <>itemizado «{itemizado.archivo}» · {itemizado.items.length.toLocaleString('es-PE')} ítems · <span style={{ color: '#9e5943' }}>solo en este navegador</span></>
+                        : <>itemizado de la obra «{itemizado.archivo}» · v{itemizado.version} · {itemizado.items.length.toLocaleString('es-PE')} ítems</>}
+                    <AccionesDelItemizado estado={estadoObra} hay onArchivo={cargarItemizado} onQuitar={quitarItemizado} />
                 </span>
-                {errorItemizado && <span style={{ color: ROJO }}>{errorItemizado}</span>}
+                {error && <span style={{ color: ROJO }}>{error}</span>}
                 <span style={{ flex: 1 }} />
                 <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }} title="m → Longitud · m² → Área · m³ → Volumen de Revit; kg → longitud total de barra × kg/m del diámetro de barra; und → 1 por elemento">Cantidad = medida nativa de Revit según la unidad</span>
             </div>
+            {cobertura && (
+                <div style={{ padding: '0 12px', height: '28px', flexShrink: 0, fontSize: '11px', color: '#52524d', borderBottom: '1px solid #e8e6dc', display: 'flex', gap: '10px', alignItems: 'center', whiteSpace: 'nowrap', overflow: 'hidden' }}>
+                    <span title="Elementos con alguna línea cuyo código es un ítem del itemizado o sub-partida de uno, sobre los elementos de la tabla">
+                        Cobertura del itemizado <strong style={{ color: '#141413', fontWeight: 600 }}>{cobertura.porcentaje.toLocaleString('es-PE')} %</strong>
+                    </span>
+                    {ESTADOS.map(e => {
+                        const claves = cobertura.porEstado[e.id];
+                        const clave = `estado:${e.id}`;
+                        return (
+                            <button key={e.id} disabled={!claves.length} onClick={() => alternar(clave, claves)}
+                                title={activa === clave ? 'clic: mostrar todo' : `clic: aislar los ${miles(claves.length)} elementos ${e.etiqueta}`}
+                                style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', border: 'none', borderRadius: '3px', padding: '0 5px', height: '20px', font: 'inherit', fontSize: '11px',
+                                    background: activa === clave ? 'var(--alephia-selected-bg, #ECF0F1)' : 'transparent', color: claves.length ? '#52524d' : '#b0aea5', cursor: claves.length ? 'pointer' : 'default' }}>
+                                <Cuadro color={e.color} />{miles(claves.length)} {e.etiqueta}
+                            </button>
+                        );
+                    })}
+                    <button className="v-enlace" style={{ fontSize: '11px' }} onClick={() => setVerFalta(v => !v)} aria-expanded={verFalta}
+                        title="Lo que el total no incluye: elementos sin partida, partidas fuera del itemizado, unidades distintas y partidas sin elementos">
+                        qué falta
+                    </button>
+                    <span style={{ flex: 1 }} />
+                    {/* El color que se queda (y se guarda en las vistas) es de Filters: estos botones abren
+                        Filters con el campo derivado arriba y coloreado (docs/visor/27 §6). */}
+                    {onVerEnFilters && (
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                            Colorear en Filters
+                            <button style={estiloBoton} onClick={() => onVerEnFilters(ID_ESTADO, COLORES_ESTADO)}
+                                title="Abre Filters con «Planilla › Estado frente al itemizado» y lo colorea con estos mismos colores">por estado</button>
+                            <button style={estiloBoton} onClick={() => onVerEnFilters(ID_CAPITULO)}
+                                title="Abre Filters con «Planilla › Capítulo» y lo colorea, un color por capítulo">por capítulo</button>
+                        </span>
+                    )}
+                </div>
+            )}
+            {verFalta && cobertura && dif && <QueFalta cobertura={cobertura} dif={dif} ambito={ambito} activa={activa} onAlternar={alternar} onCerrar={() => setVerFalta(false)} />}
             {verComo && roles && <ComoSeLeyo roles={roles} itemizado={itemizado} cruce={cruce} onCerrar={() => setVerComo(false)} />}
             <div role="table" aria-label="Partidas" style={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
                 <div role="row" style={{ display: 'grid', gridTemplateColumns: rejilla, position: 'sticky', top: 0, zIndex: 1, background: '#f5f4ef', borderBottom: '1px solid #cccac0', height: '28px', alignItems: 'center', fontWeight: 600, fontSize: '11.5px', color: '#52524d' }}>
@@ -207,13 +363,7 @@ export default function TablaDePartidas({ filas, filasObra, dic, roles, claveDeF
                                 const otrosItems = donde?.tipo === 'subpartida' ? (indice.porDescripcion.get(compacto(p.nombreModelo || p.nombre)) || []) : [];
                                 return (
                                     <div key={p.clave} role="row" aria-selected={sel} className={`inv-fila${sel ? ' resaltada' : ''}`}
-                                        onClick={() => {
-                                            // Un clic aísla la partida; otro clic en la MISMA, muestra todo (como estaba).
-                                            setPaso(null); setRecorrido(null);
-                                            if (sel) { setActiva(null); onMostrarTodo?.(); return; }
-                                            setActiva(p.clave);
-                                            onSeleccionar([...new Set(p.claves)], { clave: p.clave });
-                                        }}
+                                        onClick={() => alternar(p.clave, p.claves)}
                                         title={`${p.codigo || '(sin código)'} · ${p.nombre || '(sin nombre)'} — ${sel ? 'clic: mostrar todo' : `clic: aislar sus ${p.elementos} elementos en el 3D`}`}
                                         style={{ display: 'grid', gridTemplateColumns: rejilla, height: '28px', alignItems: 'center', borderBottom: '1px solid #e8e6dc', cursor: 'pointer' }}>
                                         <div style={{ ...celda, paddingLeft: '22px', color: p.codigo ? '#141413' : ROJO }}>

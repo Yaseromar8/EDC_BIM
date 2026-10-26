@@ -27,6 +27,8 @@ export const EVENTOS = Object.freeze({
     MOSTRAR_TODO: 'planilla-mostrar-todo',
     /** El visor dice a la Planilla cuántos pasos tiene el recorrido «◀ ▶» de la partida. */
     RECORRIDO: 'partida-recorrido',
+    /** La Planilla pide abrir Filters con uno de sus campos derivados arriba y coloreado ({ propId, colores }). */
+    VER_EN_FILTERS: 'planilla-ver-en-filters',
 });
 
 /**

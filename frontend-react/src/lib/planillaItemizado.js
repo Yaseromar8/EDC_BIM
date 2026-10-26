@@ -58,11 +58,13 @@ export function leerItemizado(hojas) {
         if (!mejor || nota > mejor.nota) mejor = { nota, items, hoja: nombre, columnas: { item: cItem, descripcion: cDesc, unidad: cUnidad } };
     }
     if (!mejor || !mejor.items.length) return null;
-    const letra = i => (i < 0 ? '—' : String.fromCharCode(65 + i));
-    return {
-        items: mejor.items, hoja: mejor.hoja, columnas: mejor.columnas,
-        porque: `Hoja «${mejor.hoja}»: ítem en la columna ${letra(mejor.columnas.item)}, descripción en la ${letra(mejor.columnas.descripcion)}, unidad en la ${letra(mejor.columnas.unidad)} (${miles(mejor.items.length)} ítems, ${miles(mejor.items.filter(x => x.unidad).length)} con unidad)`,
-    };
+    return { items: mejor.items, hoja: mejor.hoja, columnas: mejor.columnas, porque: explicarOrigen(mejor) };
+}
+
+/** «Hoja «CAOV»: ítem en la columna B, descripción en la E, unidad en la F (6 ítems, 4 con unidad)». */
+export function explicarOrigen({ hoja, columnas = {}, items = [] }) {
+    const letra = i => (i == null || i < 0 ? '—' : String.fromCharCode(65 + i));
+    return `Hoja «${hoja || '—'}»: ítem en la columna ${letra(columnas.item)}, descripción en la ${letra(columnas.descripcion)}, unidad en la ${letra(columnas.unidad)} (${miles(items.length)} ítems, ${miles(items.filter(x => x.unidad).length)} con unidad)`;
 }
 
 /** El código sin su último tramo: 06.05.02.04.03.08 → 06.05.02.04.03. */

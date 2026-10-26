@@ -667,6 +667,30 @@ TABLAS = [
         "creado" timestamp with time zone DEFAULT now(),
         PRIMARY KEY (workitem_id)
         )
+    """),
+    # El itemizado de la obra para la Planilla del visor, con versiones; una sola vigente por obra
+    # (sql/40, docs/visor/27 §6). Tabla e índice van juntos: sin el índice, «una vigente» no se garantiza.
+    ("planilla_itemizados", """
+        CREATE TABLE IF NOT EXISTS "planilla_itemizados" (
+        "id" BIGSERIAL,
+        "project_id" text NOT NULL,
+        "version" integer NOT NULL CHECK (version > 0),
+        "archivo" text NOT NULL,
+        "hoja" text NOT NULL DEFAULT '',
+        "columnas" jsonb NOT NULL DEFAULT '{}'::jsonb CHECK (jsonb_typeof(columnas) = 'object'),
+        "items" jsonb NOT NULL CHECK (jsonb_typeof(items) = 'array'),
+        "n_items" integer NOT NULL CHECK (n_items > 0),
+        "huella" text NOT NULL CHECK (huella ~ '^[a-f0-9]{64}$'),
+        "vigente" boolean NOT NULL DEFAULT true,
+        "creado_por" integer REFERENCES users(id),
+        "creado_en" timestamp with time zone NOT NULL DEFAULT now(),
+        "retirado_por" integer REFERENCES users(id),
+        "retirado_en" timestamp with time zone,
+        PRIMARY KEY (id),
+        UNIQUE (project_id, version)
+        );
+        CREATE UNIQUE INDEX IF NOT EXISTS uq_planilla_itemizado_vigente
+            ON planilla_itemizados (project_id) WHERE vigente
     """),]
 
 

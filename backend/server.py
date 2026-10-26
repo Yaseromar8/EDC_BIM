@@ -973,12 +973,14 @@ if PERFIL_DESPLIEGUE != 'portal':
     from routes.compare import compare_bp
     from routes.link import link_bp
     from routes.dashboards import dashboards_bp
+    from routes.planilla import planilla_bp
     from routes.civil_ghost import civil_ghost_bp
     from routes.civil_solids import civil_solids_bp
 
     app.register_blueprint(digital_twin_bp)
     app.register_blueprint(link_bp)
     app.register_blueprint(dashboards_bp)
+    app.register_blueprint(planilla_bp)   # itemizado de la obra para la Planilla (sql/40)
     app.register_blueprint(civil_ghost_bp)
     app.register_blueprint(civil_solids_bp)
     app.register_blueprint(civil_da_bp)
