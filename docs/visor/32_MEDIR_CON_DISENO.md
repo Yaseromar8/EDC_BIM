@@ -164,3 +164,27 @@ Se usa el mismo patrón ya probado con el itemizado (migración 40):
 - Usar los parámetros manuales DSI (`02_0x_DSI_…{i}`) como criterio: son por línea y hoy se enseñan
   aparte. Hace falta decidir cómo se emparejan con su línea.
 - Criterios con fórmula (p. ej. largo × alto). Solo parámetros tal cual: lo que se ve es lo que se suma.
+
+## 8 · Escritos a mano (26-oct-2026)
+
+Caso del dueño: un **modelo genérico** sin medida nativa donde quien modeló escribió la medida a mano
+(`02_02_DSI_Longitud = 33.725`, o Área, o Espesor). Llega como número **sin unidad**, y el principio 5
+lo dejaba fuera.
+
+- Un criterio puede llevar **`aMano: true`**: acepta números sin unidad, leídos en la unidad de la
+  partida. Un valor con **otra** unidad sigue sin usarse. Lo confirma el administrador al elegir un
+  parámetro del apartado «Escritos a mano».
+- La cantidad sale con **«·man.»** (origen «a mano» en el Excel), no «·crit.»: lo declaró quien modeló,
+  no es geometría. Sirve al revisor.
+- **No se enseñan los 50 parámetros numéricos**: solo los **probables**, con su razón, por señales que
+  se pueden comprobar (ni nombres ni IA):
+  1. con número en la mitad o más de los elementos sin medida de la partida;
+  2. **coincide** (±2 %) con la medida de Revit en los elementos que sí la tienen; o
+  3. está lleno **solo donde falta** la medida (≤ 10 % de los que la tienen). Fechas, códigos y costos,
+     llenos en todas partes, quedan fuera.
+  Además: lo que empieza por cero y otra cifra («08.01») es un código, no una medida; un parámetro con
+  **solo enteros** (conteos, números de tramo) no se propone. El resto queda en «ver todos (n)».
+- Medido en Canal local: CURADO 05.03.03.07 (m², 239 vigas sin área nativa) propone 2 (VAL_Encofrado
+  Σ 4.139 m² y 02_04_DSI_Area1 Σ 3.779 m²) y deja 5 en «ver todos». Con Area1: **3.783,4 m² ·man.**
+  (10 nativas + 234 a mano), 5 sin medida.
+- Las fórmulas (Área × Espesor para m³) siguen fuera (§7).

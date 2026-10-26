@@ -140,7 +140,7 @@ function lineasCrudas(fila, dic) {
         out.push({
             linea: i || '0', codigo, nombre, unidad, intercambiado, unidadModelo, nombreModelo, oficial: !!oficial,
             cantidad: medida ? medida.valor : null, origen: medida ? medida.origen : null, detalle: medida ? medida.detalle : '',
-            medidoCon: medida?.origen === 'criterio' ? medida.clave : null, sinMedidaPor,
+            medidoCon: medida?.origen === 'criterio' || medida?.origen === 'a mano' ? medida.clave : null, sinMedidaPor,
             criterio: medida?.criterio || sinMedidaPor?.criterio || null,
             manual: manual > 0 ? manual : null,
             inicioReal: l.inicioReal ? fila[l.inicioReal] ?? '' : '', finReal: l.finReal ? fila[l.finReal] ?? '' : '',
@@ -302,8 +302,8 @@ export function gruposDePartidas(partidas, itemizado = null) {
  */
 export function hojasDePartidas(partidas, { ambito = '', fecha = new Date(), criterios: deMedida = [] } = {}) {
     const cab = ['Grupo', 'Nombre del grupo', 'Código', 'Partida', 'Unidad', 'Cantidad', 'Origen', 'Elementos', 'Sin medida', 'Manual (aparte)', 'Elementos con manual'];
-    const origen = p => p.origenes.map(o => (o === 'criterio'
-        ? `criterio: ${p.medidoCon.map(m => String(m.clave).split('::').pop()).join(', ')}` : o)).join(', ');
+    const origen = p => p.origenes.map(o => (o === 'criterio' || o === 'a mano'
+        ? `${o}: ${p.medidoCon.map(m => String(m.clave).split('::').pop()).join(', ')}` : o)).join(', ');
     const filas = gruposDePartidas(partidas).flatMap(g => g.partidas.map(p => [
         g.codigo, g.nombre, p.codigo, p.nombre, p.unidad, p.conMedida ? p.cantidad : '', origen(p),
         p.elementos, p.sinMedida, p.conManual ? p.manual : '', p.conManual,
@@ -318,6 +318,7 @@ export function hojasDePartidas(partidas, { ambito = '', fecha = new Date(), cri
         ['Cantidad', 'Medida nativa de Revit según la unidad de la partida: m → Longitud, m² → Área, m³ → Volumen; kg → longitud total de barra × kg/m del diámetro de barra; und → 1 por elemento.'],
         ['Manual', 'Valor puesto a mano en el parámetro DSI de la línea (Longitud/Area/Volumen/Peso{i}). Se informa aparte; no se suma con lo nativo.'],
         ['Criterio de medida', 'Solo donde el elemento NO trae medida nativa: el parámetro que la obra eligió para esa unidad o partida (Planilla › Medir con…). La nativa manda siempre.'],
+        ['A mano', 'Criterio de medida con un número escrito a mano en Revit, sin unidad, leído en la unidad de la partida: lo declaró quien modeló, no sale de la geometría.'],
         ['Sin medida', 'Líneas sin medida nativa ni criterio de medida que las mida (p. ej. encofrados modelados como muros).'],
         ...deMedida.map((c, i) => [`Criterio de medida ${i + 1}`, c]),
     ];

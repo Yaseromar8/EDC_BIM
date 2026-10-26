@@ -7,18 +7,22 @@
  * otro idioma. La medida está en ALGÚN parámetro del elemento y solo la obra sabe cuál. Un criterio
  * lo dice:
  *
- *   { unidad: 'm', partida?: '01.02', donde?: { campo, op: 'es'|'contiene', valor }, medirCon: [clave…] }
+ *   { unidad: 'm', partida?: '01.02', donde?: { campo, op: 'es'|'contiene', valor }, medirCon: [clave…], aMano?: true }
  *
  *   unidad     obligatoria (m · m² · m³ · kg);
  *   partida    opcional: sin ella vale para todas las partidas de esa unidad;
  *   donde      opcional: limita a los elementos con ese valor en un campo cualquiera del modelo;
- *   medirCon   claves de parámetros en orden: se usa el primero con valor > 0 EN ESA UNIDAD.
+ *   medirCon   claves de parámetros en orden: se usa el primero con valor > 0 EN ESA UNIDAD;
+ *   aMano      además acepta NÚMEROS SIN UNIDAD («33.725»), leídos en la unidad de la partida: es lo que
+ *              escribe a mano quien modela un genérico (02_02_DSI_Longitud). Lo confirma el administrador
+ *              al elegirlo, y la cantidad sale marcada «a mano», no como geometría.
  *
  * Reglas fijas:
  *   - solo rellena: quien llama lo usa únicamente si el elemento no tiene medida nativa;
  *   - gana el más específico (partida+donde → partida → donde → toda la obra); dos del mismo nivel
  *     que aplican al mismo elemento = CONFLICTO: no se elige uno en silencio;
- *   - el valor debe traer la unidad de la partida («11.983 m»); otra unidad o ninguna no se usa.
+ *   - el valor debe traer la unidad de la partida («11.983 m»); otra unidad no se usa nunca, y un número
+ *     sin unidad solo con `aMano`.
  * Nada de nombres de familias, parámetros ni idiomas aquí: todo sale de los criterios de la obra.
  */
 import { leerValor } from './inventoryTabla.js';
@@ -34,8 +38,6 @@ const OPERADORES = ['es', 'contiene'];
 const texto = v => String(v ?? '').trim();
 const nombreDe = clave => String(clave).split('::').pop();
 const grupoDe = clave => (String(clave).includes('::') ? String(clave).split('::')[0] : '');
-// Los parámetros manuales de las líneas DSI ya se enseñan aparte («Manual (aparte)»): no son candidatos.
-const ES_MANUAL_DSI = /^\d\d_\d\d_DSI_(Longitud|Area|Volumen|Peso)\d?$/;
 
 /** «Cotas › Long. Reja» */
 export const etiquetaDeClave = clave => (grupoDe(clave) ? `${grupoDe(clave)} › ${nombreDe(clave)}` : nombreDe(clave));
@@ -70,7 +72,7 @@ export function validarCriterios(lista) {
             if (!OPERADORES.includes(op)) return mal(`Operador «${op}» desconocido (es / contiene).`);
             donde = { campo, op, valor };
         }
-        const limpio = { unidad, ...(partida ? { partida } : {}), ...(donde ? { donde } : {}), medirCon };
+        const limpio = { unidad, ...(partida ? { partida } : {}), ...(donde ? { donde } : {}), medirCon, ...(c.aMano === true ? { aMano: true } : {}) };
         const k = claveDeCriterio(limpio);
         if (vistos.has(k)) return mal('Ya hay un criterio para esa misma unidad, partida y condición.');
         vistos.add(k);
@@ -89,20 +91,34 @@ export function cumpleDonde(fila, donde) {
     return donde.op === 'es' ? s === q : s.includes(q);
 }
 
-/** Valor de un parámetro EN una unidad: { valor } si es > 0 y trae esa unidad; { unidad } si trae otra. */
-export function valorEnUnidad(v, unidad) {
+/**
+ * Valor de un parámetro EN una unidad: { valor } si es > 0 y trae esa unidad; { unidad } si trae otra.
+ * Con `aMano`, un número SIN unidad vale como de esa unidad: { valor, aMano: true }.
+ */
+export function valorEnUnidad(v, unidad, { aMano = false } = {}) {
     const r = leerValor(v);
     if (r.tipo !== 'numero') return null;
+    if (!r.unidad && aMano) return r.num > 0 ? { valor: r.num, aMano: true } : null;
     if (normalizarUnidad(r.unidad) !== unidad) return r.num ? { unidad: r.unidad || 'sin unidad' } : null;
     return r.num > 0 ? { valor: r.num } : null;
 }
 
-/** Mide con un criterio: { valor, clave } · { motivo: 'unidad', clave, unidadEncontrada } · { motivo: 'sin-valor' }. */
+/**
+ * Un número escrito a mano, sin unidad y > 0 («33.725»). Lo que empieza por cero y otra cifra («08.01»,
+ * «05») es un CÓDIGO (de partida, de capítulo), no una medida: nadie escribe un metrado así.
+ */
+const numeroSinUnidad = v => {
+    if (/^\s*0\d/.test(String(v ?? ''))) return 0;
+    const r = leerValor(v);
+    return r.tipo === 'numero' && !r.unidad && r.num > 0 ? r.num : 0;
+};
+
+/** Mide con un criterio: { valor, clave, aMano? } · { motivo: 'unidad', clave, unidadEncontrada } · { motivo: 'sin-valor' }. */
 export function medirConCriterio(fila, criterio) {
     let distinta = null;
     for (const clave of criterio.medirCon) {
-        const r = valorEnUnidad(fila[clave], criterio.unidad);
-        if (r?.valor) return { valor: r.valor, clave };
+        const r = valorEnUnidad(fila[clave], criterio.unidad, { aMano: !!criterio.aMano });
+        if (r?.valor) return { valor: r.valor, clave, ...(r.aMano ? { aMano: true } : {}) };
         if (r?.unidad && !distinta) distinta = { motivo: 'unidad', clave, unidadEncontrada: r.unidad };
     }
     return distinta || { motivo: 'sin-valor' };
@@ -112,14 +128,14 @@ export function medirConCriterio(fila, criterio) {
 export function describirCriterio(c) {
     const partes = [c.unidad, c.partida ? `partida ${c.partida}` : 'toda la obra'];
     if (c.donde) partes.push(`donde ${nombreDe(c.donde.campo)} ${c.donde.op} «${c.donde.valor}»`);
-    partes.push(c.medirCon.map(nombreDe).join(', si no '));
+    partes.push(c.medirCon.map(nombreDe).join(', si no ') + (c.aMano ? ' (a mano)' : ''));
     return partes.join(' · ');
 }
 
 /**
  * Índice de los criterios vigentes. `cantidad(fila, codigo, unidad)` para una línea SIN medida nativa:
  *   null                                   ningún criterio le aplica;
- *   { valor, origen: 'criterio', detalle, clave, criterio }
+ *   { valor, origen: 'criterio' | 'a mano', detalle, clave, criterio }
  *   { motivo: 'conflicto', criterios }     dos del mismo nivel;
  *   { motivo: 'unidad' | 'sin-valor', criterio, … }
  */
@@ -155,7 +171,7 @@ export function indiceDeCriterios(criterios) {
         if (!a) return null;
         if (a.conflicto) return { motivo: 'conflicto', criterios: a.conflicto };
         const m = medirConCriterio(fila, a.criterio);
-        if (m.valor) return { valor: m.valor, origen: 'criterio', detalle: nombreDe(m.clave), clave: m.clave, criterio: a.criterio };
+        if (m.valor) return { valor: m.valor, origen: m.aMano ? 'a mano' : 'criterio', detalle: nombreDe(m.clave), clave: m.clave, criterio: a.criterio };
         return { ...m, criterio: a.criterio };
     }
     return { cantidad, aplicable, total: (criterios || []).length, criterios: criterios || [] };
@@ -170,7 +186,6 @@ export function candidatosDeMedida(filas, unidad, claves) {
     for (const clave of claves || []) {
         if (!String(clave).includes('::')) continue;                  // la clave plana repite la del grupo
         if (grupoDe(clave).startsWith('__') || nombreDe(clave).startsWith('__')) continue;
-        if (ES_MANUAL_DSI.test(nombreDe(clave))) continue;
         let conDato = 0, suma = 0;
         for (const f of filas) {
             const r = valorEnUnidad(f[clave], unidad);
@@ -179,6 +194,60 @@ export function candidatosDeMedida(filas, unidad, claves) {
         if (conDato) out.push({ clave, etiqueta: etiquetaDeClave(clave), conDato, suma: Number(suma.toPrecision(12)) });
     }
     return out.sort((a, b) => b.conDato - a.conDato || a.etiqueta.localeCompare(b.etiqueta, 'es'));
+}
+
+/**
+ * Parámetros escritos A MANO (números sin unidad) con que se podrían medir `filas` en `unidad`.
+ * No se enseñan todos: se proponen los PROBABLES, con su razón, por tres señales que se pueden comprobar
+ * (ni nombres ni IA):
+ *   cobertura      tiene número en la mitad o más de `filas` (los elementos sin medida nativa);
+ *   coincide       en los elementos de la obra que SÍ tienen la medida nativa (`claveNativa`) y este
+ *                  parámetro, vale lo mismo (±2 %) en el 80 % o más: mide lo mismo;
+ *   solo donde falta  está lleno en el 10 % o menos de esos otros elementos (fechas, códigos y costos,
+ *                  llenos en todas partes, quedan fuera).
+ * Y no se propone un parámetro con SOLO enteros (conteos, números de tramo): queda en «ver todos».
+ * { probables: [...], otros: [...] }, cada uno { clave, etiqueta, conDato, suma, porque }.
+ */
+export function candidatosAMano(filas, unidad, claves, { obra = [], claveNativa = null } = {}) {
+    const propias = new Set(filas);
+    // Con quién comparar: los demás elementos de la obra con la medida nativa (o, sin ella, todos los demás).
+    const otros = [];
+    for (const f of obra) {
+        if (propias.has(f)) continue;
+        const nat = claveNativa ? valorEnUnidad(f[claveNativa], unidad)?.valor : null;
+        if (claveNativa && !nat) continue;
+        otros.push({ f, nat });
+    }
+    const probables = [], resto = [];
+    for (const clave of claves || []) {
+        if (!String(clave).includes('::')) continue;
+        if (grupoDe(clave).startsWith('__') || nombreDe(clave).startsWith('__') || grupoDe(clave) === 'Planilla') continue;
+        let conDato = 0, suma = 0, conDecimales = 0;
+        for (const f of filas) { const n = numeroSinUnidad(f[clave]); if (n) { conDato++; suma += n; if (!Number.isInteger(n)) conDecimales++; } }
+        if (!conDato) continue;
+        let llenos = 0, coinciden = 0;
+        for (const { f, nat } of otros) {
+            const n = numeroSinUnidad(f[clave]);
+            if (!n) continue;
+            llenos++;
+            if (nat && Math.abs(n - nat) <= nat * 0.02) coinciden++;
+        }
+        const c = { clave, etiqueta: etiquetaDeClave(clave), conDato, suma: Number(suma.toPrecision(12)), llenos, coinciden, comparados: otros.length };
+        // Solo enteros en todos (1, 2, 3…): un conteo o un número de tramo, no un metrado. No se propone.
+        const cubre = conDato >= filas.length * 0.5 && (conDecimales > 0 || conDato < 3);
+        if (cubre && coinciden >= 3 && coinciden >= llenos * 0.8) {
+            c.porque = `en ${coinciden.toLocaleString('es-PE')} elementos que sí tienen la medida de Revit, este valor es el mismo`;
+            c.nivel = 0;
+        } else if (cubre && llenos <= otros.length * 0.1) {
+            c.porque = otros.length
+                ? `está lleno donde falta la medida (solo en ${llenos.toLocaleString('es-PE')} de ${otros.length.toLocaleString('es-PE')} elementos que sí la tienen)`
+                : 'está lleno en estos elementos';
+            c.nivel = 1;
+        }
+        (c.porque ? probables : resto).push(c);
+    }
+    const orden = (a, b) => (a.nivel ?? 2) - (b.nivel ?? 2) || b.conDato - a.conDato || a.llenos - b.llenos || a.etiqueta.localeCompare(b.etiqueta, 'es');
+    return { probables: probables.sort(orden), otros: resto.sort(orden) };
 }
 
 /**

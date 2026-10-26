@@ -7,7 +7,7 @@ import { compacto } from '../lib/inventoryBuscar';
 import { EVENTOS } from '../lib/aislamientoTemporal';
 import { coberturaDelItemizado, ESTADOS } from '../lib/planillaCobertura';
 import { ID_ESTADO, ID_CAPITULO, COLORES_ESTADO } from '../lib/camposDerivados';
-import { UNIDADES_MEDIBLES, MAX_MEDIR_CON, candidatosDeMedida, camposParaDonde, simularCriterio, validarCriterios,
+import { UNIDADES_MEDIBLES, MAX_MEDIR_CON, candidatosDeMedida, candidatosAMano, camposParaDonde, simularCriterio, validarCriterios,
     claveDeCriterio, describirCriterio, etiquetaDeClave, sinMedidaNativa, usoDeCriterios } from '../lib/criteriosDeMedida';
 
 /**
@@ -197,11 +197,15 @@ const etiquetaRadio = { display: 'inline-flex', gap: '4px', alignItems: 'center'
 
 // Para una partida con elementos sin medida nativa: elegir con qué parámetro se miden (sin preselección),
 // a qué alcanza y, si hace falta, limitarlo con «solo donde». Se ve el resultado antes de guardar.
-function MedirCon({ partida, codigoOficial, sinNativa, obra, juego, estado, onGuardar, onCerrar }) {
+function MedirCon({ partida, codigoOficial, sinNativa, obra, claveNativa, juego, estado, onGuardar, onCerrar }) {
     const unidad = partida.unidad;
     const claves = useMemo(() => [...new Set(sinNativa.flatMap(Object.keys))], [sinNativa]);
     const candidatos = useMemo(() => candidatosDeMedida(sinNativa, unidad, claves), [sinNativa, unidad, claves]);
     const campos = useMemo(() => camposParaDonde(sinNativa, claves, { obra }), [sinNativa, claves, obra]);
+    // Escritos a mano (números sin unidad): solo los PROBABLES, con su razón; el resto, a pedido.
+    const aMano = useMemo(() => candidatosAMano(sinNativa, unidad, claves, { obra, claveNativa }), [sinNativa, unidad, claves, obra, claveNativa]);
+    const [verTodosAMano, setVerTodosAMano] = useState(false);
+    const clavesAMano = useMemo(() => new Set([...aMano.probables, ...aMano.otros].map(c => c.clave)), [aMano]);
     const [elegidos, setElegidos] = useState([]);
     const [alcance, setAlcance] = useState('partida');
     const [conDonde, setConDonde] = useState(false);
@@ -211,9 +215,10 @@ function MedirCon({ partida, codigoOficial, sinNativa, obra, juego, estado, onGu
     const [error, setError] = useState('');
     const fichaCampo = campos.find(c => c.campo === campo) || null;
     const donde = conDonde && campo && valor.trim() ? { campo, op, valor: valor.trim() } : null;
+    const conAMano = elegidos.some(k => clavesAMano.has(k));
     const criterio = useMemo(() => (elegidos.length
-        ? { unidad, ...(alcance === 'partida' ? { partida: codigoOficial } : {}), ...(donde ? { donde } : {}), medirCon: elegidos }
-        : null), [unidad, alcance, codigoOficial, donde?.campo, donde?.op, donde?.valor, elegidos]); // eslint-disable-line react-hooks/exhaustive-deps
+        ? { unidad, ...(alcance === 'partida' ? { partida: codigoOficial } : {}), ...(donde ? { donde } : {}), medirCon: elegidos, ...(conAMano ? { aMano: true } : {}) }
+        : null), [unidad, alcance, codigoOficial, donde?.campo, donde?.op, donde?.valor, elegidos, conAMano]); // eslint-disable-line react-hooks/exhaustive-deps
     const sim = useMemo(() => (criterio ? simularCriterio(sinNativa, criterio) : null), [sinNativa, criterio]);
     const actuales = juego?.criterios || [];
     const reemplaza = criterio ? actuales.find(c => claveDeCriterio(c) === claveDeCriterio(criterio)) : null;
@@ -227,6 +232,16 @@ function MedirCon({ partida, codigoOficial, sinNativa, obra, juego, estado, onGu
         else onCerrar();
     };
     const etiqueta = clave => candidatos.find(c => c.clave === clave)?.etiqueta || etiquetaDeClave(clave);
+    const filaCandidato = (c, extra = null) => (
+        <div key={c.clave} role="button" tabIndex={0} className="inv-fila" onClick={() => setElegidos([...elegidos, c.clave])}
+            onKeyDown={e => { if (e.key === 'Enter') setElegidos([...elegidos, c.clave]); }} title={c.porque || undefined}
+            style={{ ...filaLista, gridTemplateColumns: 'minmax(180px, 1fr) 150px 130px', cursor: 'pointer' }}>
+            <span style={{ ...recorte, color: '#141413' }}>{c.etiqueta}{extra}</span>
+            <span>{miles(c.conDato)} de {miles(sinNativa.length)} con dato</span>
+            <span style={{ textAlign: 'right' }}>Σ {fmt(c.suma, unidad)}</span>
+        </div>
+    );
+    const hayAlgo = candidatos.length > 0 || aMano.probables.length > 0 || aMano.otros.length > 0;
     return (
         <div style={panel}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
@@ -235,8 +250,8 @@ function MedirCon({ partida, codigoOficial, sinNativa, obra, juego, estado, onGu
                 <span style={{ flex: 1 }} />
                 <button className="v-enlace" style={{ fontSize: '11px' }} onClick={onCerrar}>cerrar</button>
             </div>
-            {!candidatos.length && <div>Ningún parámetro de esos elementos trae valores en {unidad}. La medida no llega al visor: hay que volcarla en Revit a un parámetro del elemento.</div>}
-            {candidatos.length > 0 && (
+            {!hayAlgo && <div>Ningún parámetro de esos elementos trae valores en {unidad}, ni números escritos a mano. La medida no llega al visor: hay que volcarla en Revit a un parámetro del elemento.</div>}
+            {hayAlgo && (
                 <>
                     <div style={{ color: '#141413', fontWeight: 600, margin: '2px 0' }}>Medir con (en orden: se usa el primero que tenga valor)</div>
                     {elegidos.map((k, i) => (
@@ -248,17 +263,25 @@ function MedirCon({ partida, codigoOficial, sinNativa, obra, juego, estado, onGu
                     {elegidos.length < MAX_MEDIR_CON && (
                         <div style={{ paddingLeft: '6px' }}>
                             <span>{elegidos.length ? 'si falta, con:' : 'elige un parámetro:'}</span>
-                            {candidatos.filter(c => !elegidos.includes(c.clave)).slice(0, 12).map(c => (
-                                <div key={c.clave} role="button" tabIndex={0} className="inv-fila" onClick={() => setElegidos([...elegidos, c.clave])}
-                                    onKeyDown={e => { if (e.key === 'Enter') setElegidos([...elegidos, c.clave]); }}
-                                    style={{ ...filaLista, gridTemplateColumns: 'minmax(180px, 1fr) 150px 130px', cursor: 'pointer' }}>
-                                    <span style={{ ...recorte, color: '#141413' }}>{c.etiqueta}</span>
-                                    <span>{miles(c.conDato)} de {miles(sinNativa.length)} con dato</span>
-                                    <span style={{ textAlign: 'right' }}>Σ {fmt(c.suma, unidad)}</span>
-                                </div>
-                            ))}
+                            {candidatos.filter(c => !elegidos.includes(c.clave)).slice(0, 12).map(c => filaCandidato(c))}
+                            {(aMano.probables.length > 0 || aMano.otros.length > 0) && (
+                                <>
+                                    <div style={{ color: '#141413', fontWeight: 600, margin: '6px 0 2px' }}>
+                                        Escritos a mano (números sin unidad, se leen en {unidad})
+                                    </div>
+                                    {!aMano.probables.length && <div style={{ paddingLeft: '6px', color: '#72706b' }}>Ninguno parece corresponder (ni coincide con la medida de Revit ni está lleno solo donde falta).</div>}
+                                    {aMano.probables.filter(c => !elegidos.includes(c.clave)).map(c => filaCandidato(c, <span style={{ color: '#72706b', fontWeight: 400 }}> · {c.porque}</span>))}
+                                    {aMano.otros.length > 0 && (
+                                        <button className="v-enlace" style={{ fontSize: '11px', marginLeft: '6px' }} onClick={() => setVerTodosAMano(v => !v)}>
+                                            {verTodosAMano ? 'ocultar los demás' : `ver todos (${aMano.otros.length} más)`}
+                                        </button>
+                                    )}
+                                    {verTodosAMano && aMano.otros.filter(c => !elegidos.includes(c.clave)).map(c => filaCandidato(c))}
+                                </>
+                            )}
                         </div>
                     )}
+                    {conAMano && <div style={{ color: '#9e5943', marginTop: '4px' }}>Con un parámetro escrito a mano: su número se toma en {unidad} y la cantidad sale marcada «a mano» (lo declaró quien modeló; no es geometría).</div>}
                     <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginTop: '6px', flexWrap: 'wrap' }}>
                         <span>Vale para:</span>
                         <label style={etiquetaRadio}><input type="radio" checked={alcance === 'partida'} onChange={() => setAlcance('partida')} />esta partida</label>
@@ -490,6 +513,7 @@ export default function TablaDePartidas({ filas, filasObra, dic, roles, claveDeF
         const sel = activa === p.clave;
         const calculada = p.origenes.includes('calculada');
         const conCriterio = p.origenes.includes('criterio');
+        const aManoP = p.origenes.includes('a mano');
         const donde = indice && p.codigo ? indice.ubicar(p.codigo) : null;
         // Una sub-partida de verdad tiene SU descripción (el FUSTE del buzón). Si la
         // del modelo es la de OTROS ítems del itemizado, el código está mal puesto
@@ -513,10 +537,11 @@ export default function TablaDePartidas({ filas, filasObra, dic, roles, claveDeF
                 <div style={{ ...celda, color: p.unidad ? '#52524d' : ROJO }}>{p.unidad || 'sin unidad'}</div>
                 <div style={{ ...num, fontWeight: 600, color: p.conMedida ? '#141413' : '#b0aea5' }}
                     title={[calculada ? 'calculada: longitud total de barra × kg/m del diámetro' : '',
-                        conCriterio ? `${p.medidoCon.map(m => `${miles(m.n)} medidos con ${etiquetaDeClave(m.clave)} (Σ ${fmt(m.suma, p.unidad)})`).join('; ')}: criterio de medida de la obra, porque no traen medida nativa${p.conMedida > p.porCriterio ? `; ${miles(p.conMedida - p.porCriterio)} con su medida nativa` : ''}` : ''].filter(Boolean).join(' · ')}>
+                        conCriterio || aManoP ? `${p.medidoCon.map(m => `${miles(m.n)} medidos con ${etiquetaDeClave(m.clave)} (Σ ${fmt(m.suma, p.unidad)})`).join('; ')}: criterio de medida de la obra, porque no traen medida nativa${aManoP ? '; «a mano» = número escrito a mano en Revit, no sale de la geometría' : ''}${p.conMedida > p.porCriterio ? `; ${miles(p.conMedida - p.porCriterio)} con su medida nativa` : ''}` : ''].filter(Boolean).join(' · ')}>
                     {p.conMedida ? `${formatearNumero(p.cantidad)} ${p.unidad}` : '—'}
                     {calculada ? <span style={{ fontWeight: 400, color: '#72706b' }}> ·calc.</span> : null}
                     {conCriterio ? <span style={{ fontWeight: 400, color: '#72706b' }}> ·crit.</span> : null}
+                    {aManoP ? <span style={{ fontWeight: 400, color: '#9e5943' }}> ·man.</span> : null}
                 </div>
                 <div style={{ ...num, display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '4px' }}>
                     {sel && new Set(p.claves).size > 1 && recorrido?.pasos > 1 ? (() => {
@@ -538,7 +563,7 @@ export default function TablaDePartidas({ filas, filasObra, dic, roles, claveDeF
                 <div style={{ ...num, color: p.sinMedida ? ROJO : '#b0aea5', display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '6px' }}>
                     {p.conflictos > 0 && <span title={`${miles(p.conflictos)} con dos criterios de medida del mismo nivel: no se elige uno en silencio (ver «criterios de medida»)`}>⚠</span>}
                     {p.sinMedida ? p.sinMedida.toLocaleString('es-PE') : '0'}
-                    {(p.sinMedida > 0 || conCriterio) && medible(p) && (
+                    {(p.sinMedida > 0 || conCriterio || aManoP) && medible(p) && (
                         <button className="v-enlace" style={{ fontSize: '11px' }}
                             title="Elegir con qué parámetro se miden los elementos de esta partida que no traen medida nativa"
                             onClick={ev => { ev.stopPropagation(); const k = String(p.clave).split('+')[0]; setMedirCon(medirCon === k ? null : k); }}>
@@ -664,6 +689,7 @@ export default function TablaDePartidas({ filas, filasObra, dic, roles, claveDeF
             {verCriterios && <ListaDeCriterios juego={criterios} uso={uso} estado={estadoCrit} onGuardar={onCriterios} onCerrar={() => setVerCriterios(false)} />}
             {partidaAMedir && (
                 <MedirCon key={partidaAMedir.clave} partida={partidaAMedir} codigoOficial={codigoOficial(partidaAMedir)} sinNativa={sinNativa} obra={filasObra}
+                    claveNativa={dic.nativas?.[{ m: 'longitud', 'm²': 'area', 'm³': 'volumen' }[partidaAMedir.unidad]] || null}
                     juego={criterios} estado={estadoCrit} onGuardar={onCriterios} onCerrar={() => setMedirCon(null)} />
             )}
             {verComo && roles && <ComoSeLeyo roles={roles} itemizado={itemizado} cruce={cruce} onCerrar={() => setVerComo(false)} />}

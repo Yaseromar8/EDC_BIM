@@ -10,7 +10,8 @@ del elemento y solo la obra sabe cuál. Un criterio lo dice:
 
     {"unidad": "m", "partida": "01.02",                       # partida: opcional
      "donde": {"campo": "...", "op": "es|contiene", "valor": "..."},   # opcional
-     "medirCon": ["Cotas::Long. Reja", "Cotas::Largo Total"]}  # en orden
+     "medirCon": ["Cotas::Long. Reja", "Cotas::Largo Total"],  # en orden
+     "aMano": true}   # opcional: también números sin unidad, en la unidad de la partida
 
 El visor los aplica SOLO donde no hay medida nativa (lib/criteriosDeMedida.js). Aquí se
 VALIDAN y se normalizan antes de guardarlos, con las mismas reglas que el visor: el
@@ -139,6 +140,12 @@ def validar_criterios(criterios):
             limpio['donde'] = {'campo': _texto(d.get('campo'), 'campo', MAX_CLAVE, i, obligatorio=True), 'op': op,
                                'valor': _texto(d.get('valor'), 'valor', MAX_VALOR, i, obligatorio=True)}
         limpio['medirCon'] = claves
+        a_mano = c.get('aMano', False)
+        if not isinstance(a_mano, bool):
+            raise CriteriosInvalidos('CRITERIO_INVALIDO', f'«aMano» debe ser verdadero o falso en el criterio {i + 1}.')
+        if a_mano:
+            # Acepta números SIN unidad, leídos en la unidad de la partida (los escribe a mano quien modela).
+            limpio['aMano'] = True
         k = clave_de_criterio(limpio)
         if k in vistos:
             raise CriteriosInvalidos('CRITERIO_REPETIDO',

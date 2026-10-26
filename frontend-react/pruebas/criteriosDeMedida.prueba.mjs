@@ -147,7 +147,7 @@ titulo('CANDIDATOS, «SOLO DONDE» Y SIMULAR');
     const c = C.candidatosDeMedida(filas, 'm', claves);
     const etiquetas = c.map(x => x.etiqueta);
     ok('solo parámetros en m: Long. Reja, Largo Total, H1', etiquetas.includes('Cotas › Long. Reja') && etiquetas.includes('Cotas › Largo Total') && etiquetas.includes('Cotas › H1') && !etiquetas.includes('Cotas › Volumen'));
-    ok('sin la clave plana repetida ni el manual DSI', !c.some(x => x.clave === 'Long. Reja') && !c.some(x => /DSI_Longitud/.test(x.clave)));
+    ok('sin la clave plana repetida; un parámetro con unidad es candidato aunque sea «manual» por su nombre (nada se decide por nombres)', !c.some(x => x.clave === 'Long. Reja') && c.some(x => x.clave === 'Datos::02_02_DSI_Longitud1'));
     ok('con cuántos tienen dato y la suma', cerca(c.find(x => x.clave === 'Cotas::Long. Reja').suma, 23.8098 + 11.983 + 5) && c[0].conDato === 3);
     const d = C.camposParaDonde(filas, claves);
     const tipo = d.find(x => x.campo === 'Datos de identidad::Nombre de tipo');
@@ -163,6 +163,42 @@ titulo('CANDIDATOS, «SOLO DONDE» Y SIMULAR');
     ok('la clave plana sin grupo («Revit Category») sí se propone; la repetida («Nombre de tipo») no', pos('Revit Category') >= 0 && pos('Nombre de tipo') < 0);
     const s = C.simularCriterio(filas, { unidad: 'm', donde: { campo: 'Datos de identidad::Nombre de tipo', op: 'contiene', valor: 'Extendido' }, medirCon: ['Cotas::Long. Reja'] });
     ok('simular: 2 medidos, 1 fuera de la condición, con la suma', s.medidos === 2 && s.fueraDeDonde === 1 && cerca(s.suma, 35.7928));
+}
+
+titulo('A MANO: NÚMEROS SIN UNIDAD (genérico con 02_02_DSI_Longitud = 33.725, captura del 26-oct)');
+{
+    const generico = (id, lon) => ({ Name: `Modelo genérico [${id}]`, 'Datos::02_02_DSI_Longitud': String(lon), 'Datos::04_20_DSI_FinReal1': '20260924',
+        'Datos::Costo': '0', 'Datos::03_05_DSI_CodigoDePartida1': '08.01', 'Datos::02_01_DSI_Unidad1': 'm' });
+    const muro = (id, lon, declarado) => ({ Name: `Muro [${id}]`, 'Cotas::Longitud': `${lon} m`, 'Datos::04_20_DSI_FinReal1': '20260924',
+        ...(declarado ? { 'Datos::Largo declarado': String(declarado) } : {}) });
+    const sin = [generico(1, 33.725), generico(2, 12.5), generico(3, 7)];
+    const obra = [...sin, ...Array.from({ length: 30 }, (_, i) => muro(10 + i, 5 + i, i < 6 ? 5 + i : null))];
+    sin[0]['Datos::Largo declarado'] = '33.725'; sin[1]['Datos::Largo declarado'] = '12.5';
+    const claves = [...new Set(obra.flatMap(Object.keys))];
+    const { probables, otros } = C.candidatosAMano(sin, 'm', claves, { obra, claveNativa: 'Cotas::Longitud' });
+    const p = probables.map(x => x.clave);
+    ok('propone el que coincide con la medida de Revit donde la hay, primero', p[0] === 'Datos::Largo declarado' && /el mismo/.test(probables[0].porque));
+    ok('…y el que solo está lleno donde falta (02_02_DSI_Longitud), con su razón', p.includes('Datos::02_02_DSI_Longitud') && /lleno donde falta/.test(probables.find(x => x.clave === 'Datos::02_02_DSI_Longitud').porque));
+    const todos = [...p, ...otros.map(x => x.clave)];
+    ok('ni la fecha (20260924 se lee como fecha), ni el 0, ni el código «08.01» son candidatos', !todos.includes('Datos::04_20_DSI_FinReal1') && !todos.includes('Datos::Costo') && !todos.includes('Datos::03_05_DSI_CodigoDePartida1'));
+    ok('pocos probables, no los 50', probables.length === 2);
+    const conTramo = sin.map((f, i) => ({ ...f, 'Construcción::DAT_Tramo': String(i + 1), 'Datos::02_02_DSI_Longitud': ['33.725', '12.5', '7.25'][i] }));
+    const t = C.candidatosAMano(conTramo, 'm', [...claves, 'Construcción::DAT_Tramo'], { obra: [...conTramo, ...obra.slice(3)], claveNativa: 'Cotas::Longitud' });
+    ok('solo enteros (número de tramo): no es probable, queda en «ver todos»', !t.probables.some(x => x.clave === 'Construcción::DAT_Tramo') && t.otros.some(x => x.clave === 'Construcción::DAT_Tramo'));
+    const crit = C.validarCriterios([{ unidad: 'm', partida: '08.01', medirCon: ['Datos::02_02_DSI_Longitud'], aMano: true }]).criterios[0];
+    ok('el criterio guarda «a mano»', crit.aMano === true && /\(a mano\)/.test(C.describirCriterio(crit)));
+    const sinFlag = C.indiceDeCriterios(C.validarCriterios([{ unidad: 'm', partida: '08.01', medirCon: ['Datos::02_02_DSI_Longitud'] }]).criterios);
+    ok('sin «a mano», un número sin unidad NO se usa (se dice por qué)', sinFlag.cantidad(sin[0], '08.01', 'm').motivo === 'unidad');
+    const I = C.indiceDeCriterios([crit]);
+    const r = I.cantidad(sin[0], '08.01', 'm');
+    ok('con «a mano»: 33,725 m, origen «a mano»', r.valor === 33.725 && r.origen === 'a mano');
+    ok('…pero un valor con OTRA unidad sigue sin usarse', I.cantidad({ 'Datos::02_02_DSI_Longitud': '2.5 m^2' }, '08.01', 'm').motivo === 'unidad');
+    const base = PP.diccionarioDSI([...new Set(sin.flatMap(Object.keys))]);
+    const ps = PP.partidasDe(sin, { ...base, criterios: I }, f => f.Name);
+    const pa = ps.find(x => x.codigo === '08.01');
+    ok('en las partidas: 53,225 m «a mano», 0 sin medida', cerca(pa.cantidad, 53.225) && pa.sinMedida === 0 && pa.origenes.includes('a mano'));
+    const fila = PP.hojasDePartidas(ps)[0].filas.find(f => f[2] === '08.01');
+    ok('Excel: el origen dice «a mano: 02_02_DSI_Longitud»', /a mano: 02_02_DSI_Longitud/.test(fila[6]));
 }
 
 titulo('QUÉ FALTA MEDIR Y QUÉ HACE CADA CRITERIO');

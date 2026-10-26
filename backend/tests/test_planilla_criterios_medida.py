@@ -76,6 +76,14 @@ def test_las_reglas_son_las_del_visor():
     assert [pcm.normalizar_unidad(u) for u in ('ml', 'M2', 'm^3', 'Kg', 'und', '')] == ['m', 'm²', 'm³', 'kg', '', '']
 
 
+def test_a_mano_se_guarda_solo_si_es_un_booleano_verdadero():
+    n = pcm.validar_criterios([{'unidad': 'm', 'partida': '08.01', 'medirCon': ['Datos::02_02_DSI_Longitud'], 'aMano': True},
+                               {'unidad': 'm', 'partida': '08.02', 'medirCon': ['a::b'], 'aMano': False}])
+    assert n[0]['aMano'] is True and 'aMano' not in n[1]
+    with pytest.raises(pcm.CriteriosInvalidos):
+        pcm.validar_criterios([{'unidad': 'm', 'medirCon': ['a::b'], 'aMano': 'si'}])
+
+
 def test_demasiados_criterios():
     with pytest.raises(pcm.CriteriosInvalidos) as e:
         pcm.validar_criterios([{'unidad': 'm', 'partida': str(i), 'medirCon': ['a::b']} for i in range(pcm.MAX_CRITERIOS + 1)])
