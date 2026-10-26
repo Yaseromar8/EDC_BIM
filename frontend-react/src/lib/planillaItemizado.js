@@ -70,12 +70,29 @@ export function explicarOrigen({ hoja, columnas = {}, items = [] }) {
 /** El código sin su último tramo: 06.05.02.04.03.08 → 06.05.02.04.03. */
 const padreDe = c => { const i = Math.max(c.lastIndexOf('.'), c.lastIndexOf('-'), c.lastIndexOf('_')); return i > 0 ? c.slice(0, i) : ''; };
 
-/** Índice del itemizado: por código y por descripción compacta. */
+/**
+ * El mismo código escrito con o sin ceros a la izquierda en cada tramo es el mismo ítem:
+ * «02.01.01.04» = «2.1.1.4» (26-oct-2026: el itemizado de Interferencias viene sin ceros y el modelo
+ * con ellos; comparando el texto tal cual, 3 de 80 códigos casaban, y así casan 50). Solo se tocan
+ * los tramos que son números; las letras («OE.2») y los separadores se conservan.
+ */
+export function normalizarCodigo(c) {
+    return String(c ?? '').trim().replace(/\d+/g, n => String(Number(n)));
+}
+
+/** Un Map de códigos que compara con `normalizarCodigo`: get/has/set aceptan el código como venga. */
+class CodigosDelItemizado extends Map {
+    get(k) { return super.get(normalizarCodigo(k)); }
+    has(k) { return super.has(normalizarCodigo(k)); }
+    set(k, v) { return super.set(normalizarCodigo(k), v); }
+}
+
+/** Índice del itemizado: por código (sin ceros a la izquierda) y por descripción compacta. */
 export function indiceDeItemizado(items) {
-    const porCodigo = new Map();
+    const porCodigo = new CodigosDelItemizado();
     const porDescripcion = new Map();
     for (const x of items) {
-        porCodigo.set(x.item, { descripcion: x.descripcion, unidad: normalizarUnidad(x.unidad), unidadEscrita: x.unidad });
+        porCodigo.set(x.item, { item: x.item, descripcion: x.descripcion, unidad: normalizarUnidad(x.unidad), unidadEscrita: x.unidad });
         const k = compacto(x.descripcion);
         if (k) { if (!porDescripcion.has(k)) porDescripcion.set(k, []); porDescripcion.get(k).push(x.item); }
     }
@@ -85,10 +102,14 @@ export function indiceDeItemizado(items) {
      * dentro del buzón). Antes valía cualquier antecesor, y `04.15.03.05` pasaba por sub-partida
      * solo porque el capítulo `04` existe (24-oct-2026, acero del Canal).
      */
+    // `item` es el código COMO LO ESCRIBE EL ITEMIZADO («2.1.1.4» aunque el modelo diga «02.01.01.04»):
+    // así se compara con la lista del itemizado (partidas sin elementos) y se enseña el oficial.
     const ubicar = codigo => {
-        if (porCodigo.has(codigo)) return { tipo: 'exacto', item: codigo };
-        const p = padreDe(codigo);
-        if (p && porCodigo.has(p)) return { tipo: 'subpartida', item: p };
+        const exacto = porCodigo.get(codigo);
+        if (exacto) return { tipo: 'exacto', item: exacto.item };
+        const p = padreDe(String(codigo ?? '').trim());
+        const padre = p ? porCodigo.get(p) : null;
+        if (padre) return { tipo: 'subpartida', item: padre.item };
         return { tipo: 'fuera', item: null };
     };
     return { porCodigo, porDescripcion, ubicar, total: items.length };

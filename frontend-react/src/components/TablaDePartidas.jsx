@@ -39,7 +39,7 @@ function ComoSeLeyo({ roles, itemizado, cruce, onCerrar }) {
         <div style={{ borderBottom: '1px solid #e8e6dc', background: '#faf9f5', padding: '8px 12px', maxHeight: '180px', overflowY: 'auto', fontSize: '11.5px', color: '#52524d', flexShrink: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
                 <strong style={{ color: '#141413', fontWeight: 600 }}>Cómo se leyó</strong>
-                <span>· a partir de tu itemizado «{itemizado.archivo}» y de los valores del modelo (no de los nombres de los parámetros)</span>
+                <span>· a partir de tu itemizado «{itemizado.archivo}» y de los valores del modelo (no de los nombres de los parámetros); los códigos se comparan sin ceros a la izquierda («02.01.01.04» = «2.1.1.4»)</span>
                 <span style={{ flex: 1 }} />
                 <button className="v-enlace" style={{ fontSize: '11px' }} onClick={onCerrar}>cerrar</button>
             </div>

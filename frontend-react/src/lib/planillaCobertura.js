@@ -38,7 +38,9 @@ export function estadoDeElemento(fila, dic, indice) {
         if (u.tipo === 'fuera') continue;
         const e = u.tipo === 'exacto' ? 'exacta' : 'subpartida';
         if (RANGO[e] < RANGO[estado]) estado = e;
-        capitulos.add(capituloDe(l.codigo));
+        // El capítulo como lo escribe el itemizado («2», aunque el modelo diga «02»): uno solo.
+        const cap = capituloDe(l.codigo);
+        capitulos.add(indice.porCodigo.get(cap)?.item ?? cap);
     }
     return { estado, capitulos: [...capitulos] };
 }

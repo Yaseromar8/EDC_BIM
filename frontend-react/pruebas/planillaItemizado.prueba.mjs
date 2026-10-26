@@ -93,6 +93,45 @@ ok('el cartel no está en el itemizado', dif.fuera.length === 1 && dif.fuera[0].
 ok('la instalación: descripción del modelo distinta de la oficial', dif.descripcionDistinta.some(x => x.p.codigo === '06.02.01.03.05'));
 ok('ítems con unidad sin elementos en el modelo: transporte (el buzón tiene su fuste)', dif.sinElementos.map(x => x.item).join(',') === '06.09.01.01.01');
 
+titulo('CÓDIGOS CON Y SIN CEROS (Interferencias, 26-oct-2026)');
+{
+    // El Excel de Interferencias escribe «2.1.1.4»; el modelo, «02.01.01.04».
+    const itemsI = [
+        { item: '2', descripcion: 'INTERFERENCIAS CON REDES EXISTENTES', unidad: '' },
+        { item: '2.1.1', descripcion: 'OBRAS PRELIMINARES', unidad: '' },
+        { item: '2.1.1.4', descripcion: 'ELIMINACION DE MATERIAL PROVENIENTE DE DEMOLICION', unidad: 'm3' },
+        { item: '2.1.2.1.1', descripcion: 'EXCAVACION DE ZANJA', unidad: 'm' },
+        { item: '2.3.1.2', descripcion: 'TUBERIA PVC', unidad: 'm' },
+        { item: 'OE.2.1', descripcion: 'OTRO ESQUEMA', unidad: 'glb' },
+    ];
+    const indI = IT.indiceDeItemizado(itemsI);
+    ok('normalizar quita ceros a la izquierda de cada tramo y nada más', IT.normalizarCodigo(' 02.01.01.04 ') === '2.1.1.4' && IT.normalizarCodigo('OE.02.1') === 'OE.2.1' && IT.normalizarCodigo('10.00.3') === '10.0.3');
+    ok('02.01.01.04 del modelo = 2.1.1.4 del itemizado (y devuelve el código del itemizado)', indI.ubicar('02.01.01.04').tipo === 'exacto' && indI.ubicar('02.01.01.04').item === '2.1.1.4');
+    ok('sub-partida también sin ceros', indI.ubicar('02.03.01.02.05').tipo === 'subpartida' && indI.ubicar('02.03.01.02.05').item === '2.3.1.2');
+    ok('nombre oficial con el código del modelo', indI.porCodigo.get('02.01.01.04')?.descripcion.startsWith('ELIMINACION') && indI.porCodigo.get('02')?.item === '2');
+    ok('lo que no está, fuera', indI.ubicar('02.09.09').tipo === 'fuera' && indI.ubicar('06.02.01.03.05').tipo === 'fuera');
+    // Familia: Partida1 casa (≥ 50 %); Partida2 casa poco (el modelo mezcla presupuestos) pero es el mismo papel.
+    const filasI = [];
+    const deI = ['02.01.01.04', '02.01.02.01.01', '02.03.01.02'];
+    const ajenos = ['06.02.01.03.05', '06.05.01.04.01', '06.09.01.03.01', '06.03.01.03.05'];
+    for (let i = 0; i < 60; i++) {
+        const f = { id: `i${i}` };
+        f['Datos::03_05_DSI_CodigoDePartida1'] = deI[i % 3];
+        f['Datos::03_04_DSI_NombreDePartida1'] = ['ELIMINACION DE MATERIAL PROVENIENTE DE DEMOLICION', 'EXCAVACION DE ZANJA', 'TUBERIA PVC'][i % 3];
+        f['Datos::02_01_DSI_Unidad1'] = ['m3', 'm', 'm'][i % 3];
+        if (i % 2) { f['Datos::03_05_DSI_CodigoDePartida2'] = i % 6 === 1 ? '02.03.01.02' : ajenos[i % 4]; f['Datos::03_04_DSI_NombreDePartida2'] = i % 6 === 1 ? 'TUBERIA PVC' : `PARTIDA AJENA ${i % 4} DE OTRO PRESUPUESTO`; }
+        f['Otros::03_03_01_DSI_CodigoDePartida'] = ajenos[i % 4];
+        filasI.push(f);
+    }
+    const rolesI = PF.deducirRoles(filasI, PF.perfilarCampos(filasI), { itemizado: indI });
+    const cods = rolesI.lineas.map(l => l.codigo);
+    ok('Partida1 se reconoce sin los ceros', cods.includes('Datos::03_05_DSI_CodigoDePartida1'));
+    ok('Partida2, de la misma familia, también (aunque casi todos sus códigos sean de otro presupuesto)', cods.includes('Datos::03_05_DSI_CodigoDePartida2')
+        && rolesI.lineas.find(l => l.codigo === 'Datos::03_05_DSI_CodigoDePartida2').porque.some(t => /misma familia/.test(t)));
+    ok('otra familia sin códigos del itemizado no entra', !cods.includes('Otros::03_03_01_DSI_CodigoDePartida'));
+}
+
+
 console.log('');
 console.log(fallos ? `${fallos} de ${total} FALLAN` : `${total}/${total} en verde`);
 process.exit(fallos ? 1 : 0);

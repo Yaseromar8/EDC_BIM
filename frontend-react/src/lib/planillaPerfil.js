@@ -228,8 +228,23 @@ export function deducirRoles(filas, perfiles = perfilarCampos(filas), { itemizad
     // él (≥ 50 %, exactos o sub-partidas de un ítem suyo). Otro parámetro con forma de código (en
     // el Canal, `03_03_01_DSI_CodigoDePartida` con 04.15.03.05) contaba las mismas barras en
     // otras partidas. Sin itemizado, la regla de forma (≥ 5 códigos que se repiten).
-    const codigos = perfiles.filter(p => p.forma === 'codigo' && p.llenos >= minimo && p.distintos * 2 <= p.llenos
+    let codigos = perfiles.filter(p => p.forma === 'codigo' && p.llenos >= minimo && p.distintos * 2 <= p.llenos
         && (itemizado ? (enItemizado.get(p.clave) || 0) >= 0.5 : p.distintos >= MIN_CODIGOS));
+    // LA FAMILIA ES EL MISMO PAPEL (26-oct-2026, Interferencias): si `CodigoDePartida1` es de
+    // partidas por el itemizado, `CodigoDePartida2`, `3` y el sin número también lo son, aunque
+    // menos de la mitad de sus códigos estén en ESTE itemizado (el modelo mezcla partidas de varios
+    // presupuestos: 10 de 24 en Partida2). Basta con que alguno esté. Otra familia
+    // (`03_03_01_…CodigoDePartida` en el Canal) sigue con la regla de la mitad.
+    const hermanas = new Map();
+    if (itemizado && codigos.length) {
+        const familias = new Map(codigos.map(p => [familia(p.clave).base, p]));
+        for (const p of perfiles) {
+            if (codigos.includes(p) || p.forma !== 'codigo' || p.llenos < minimo || !(enItemizado.get(p.clave) > 0)) continue;
+            const reconocida = familias.get(familia(p.clave).base);
+            if (reconocida) hermanas.set(p.clave, reconocida);
+        }
+        codigos = [...codigos, ...perfiles.filter(p => hermanas.has(p.clave))];
+    }
     // Una descripción está hecha de palabras: un Id o un GUID largo no lo es.
     const textos = perfiles.filter(p => (p.forma === 'texto' || p.forma === 'mixto') && p.largoMedio >= 12 && p.palabrasMedia >= 3);
     const unidades = perfiles.filter(p => p.formas.unidad >= minimo && p.formas.unidad >= p.llenos * 0.3);
@@ -270,6 +285,7 @@ export function deducirRoles(filas, perfiles = perfilarCampos(filas), { itemizad
         if (c.formas.texto) avisos.push(`«${c.nombre}»: ${miles(c.formas.texto)} valores son texto, no código (¿código y descripción cambiados de sitio?)`);
         const porque = [`«${c.nombre}»: ${pct(c.fraccion)} de sus ${miles(c.llenos)} valores tienen forma de código y se repiten (${miles(c.distintos)} códigos distintos)`];
         if (enItemizado.has(c.clave)) porque.push(`el ${pct(enItemizado.get(c.clave))} de sus códigos están en el itemizado (o son sub-partidas de un ítem suyo)`);
+        if (hermanas.has(c.clave)) porque.push(`es de la misma familia que «${hermanas.get(c.clave).nombre}», reconocida por el itemizado: el mismo papel`);
         return {
             c, sufijo, codigo: c.clave, descripcion: null, unidad: null, avisos, dudosa: false, porque,
             _d: descripciones, _u: unidadesC,
