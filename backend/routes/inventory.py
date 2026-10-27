@@ -6,6 +6,7 @@ import time
 import requests
 import psycopg2
 from datetime import datetime
+from ejes_mep import es_eje_mep
 from flask import Blueprint, request, jsonify
 
 inventory_bp = Blueprint('inventory', __name__)
@@ -810,6 +811,7 @@ def extract_metadata_task(urn, target_urn, job_id, purge_source_urns=None, scope
 
         inventory_data = []
         skipped_nodes = 0
+        ejes_descartados = 0   # ejes de tuberías/conexiones (ejes_mep.py): se dicen al terminar
         seen_external_ids = set()  # Deduplicación integral por externalId
         for node in collection:
             name = node.get('name', 'Unnamed')
@@ -963,19 +965,17 @@ def extract_metadata_task(urn, target_urn, job_id, purge_source_urns=None, scope
                 continue
             
             # --- FILTRO INTEGRAL: CENTERLINES MEP (REVIT) ---
-            # En Revit, cada tubería/conducto genera DOS nodos SVF:
+            # En Revit, cada tubería/conexión/conducto genera DOS nodos SVF:
             #   1. La geometría 3D (tubería física) → tiene "Nombre de tipo"
             #   2. Su línea de eje (centerline) → NO tiene "Nombre de tipo"
             # Ambos heredan los mismos parámetros DSI, causando conteo doble.
-            # Solución: descartar nodos MEP que carezcan de Type Name.
-            MEP_CATEGORIES = {'Pipes', 'Pipe Fittings', 'Ducts', 'Duct Fittings',
-                              'Cable Trays', 'Conduits', 'Flex Pipes', 'Flex Ducts'}
-            if revit_cat in MEP_CATEGORIES:
-                identity = merged_props.get('Datos de identidad', merged_props.get('Identity Data', {}))
-                type_name = identity.get('Nombre de tipo', identity.get('Type Name', ''))
-                if not type_name:
-                    skipped_nodes += 1
-                    continue
+            # Solución: descartar nodos MEP que carezcan de Type Name. Las categorías, en inglés Y en
+            # español (26-oct-2026: «Uniones de tubería» no estaba y Interferencias guardó 439 ejes de
+            # codos como conexiones). Ver ejes_mep.py.
+            if es_eje_mep(revit_cat, merged_props):
+                skipped_nodes += 1
+                ejes_descartados += 1
+                continue
             
             inventory_data.append({
                 "name": name,
@@ -983,7 +983,7 @@ def extract_metadata_task(urn, target_urn, job_id, purge_source_urns=None, scope
                 "properties": json.dumps(merged_props)
             })
 
-        print(f"[Extractor] Fase 3 - {len(inventory_data)} instancias geométricas para insertar ({skipped_nodes} nodos type/category descartados)")
+        print(f"[Extractor] Fase 3 - {len(inventory_data)} instancias geométricas para insertar ({skipped_nodes} nodos type/category descartados, {ejes_descartados} de ellos ejes de tuberías/conexiones)")
 
         # Una extraccion completa puede tener cero instancias: publica el vacio
         # y cambia generation. No hereda filas de la version anterior.
@@ -1003,7 +1003,9 @@ def extract_metadata_task(urn, target_urn, job_id, purge_source_urns=None, scope
         if target_urn != '__cmp__':
             _apuntar_vista_extraida(target_urn, urn, vista_usada)
 
-        set_job(job_id, {'status': 'success', 'progress': 100, 'message': f'Extracción completa. {len(inventory_data)} activos insertados.'})
+        set_job(job_id, {'status': 'success', 'progress': 100,
+                         'message': f'Extracción completa. {len(inventory_data)} activos insertados'
+                                    + (f' ({ejes_descartados} ejes de tuberías/conexiones descartados: no son elementos aparte).' if ejes_descartados else '.')})
         print(f"[Extractor] COMPLETADO: {len(inventory_data)} activos insertados en PostgreSQL")
         print(f"[Extractor] ===== FIN JOB: {job_id} =====\n")
 
