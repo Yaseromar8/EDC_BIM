@@ -540,6 +540,7 @@ export default function TablaDePartidas({ filas, filasObra, dic, roles, claveDeF
                         conCriterio || aManoP ? `${p.medidoCon.map(m => `${miles(m.n)} medidos con ${etiquetaDeClave(m.clave)} (Σ ${fmt(m.suma, p.unidad)})`).join('; ')}: criterio de medida de la obra, porque no traen medida nativa${aManoP ? '; «a mano» = número escrito a mano en Revit, no sale de la geometría' : ''}${p.conMedida > p.porCriterio ? `; ${miles(p.conMedida - p.porCriterio)} con su medida nativa` : ''}` : ''].filter(Boolean).join(' · ')}>
                     {p.conMedida ? `${formatearNumero(p.cantidad)} ${p.unidad}` : '—'}
                     {calculada ? <span style={{ fontWeight: 400, color: '#72706b' }}> ·calc.</span> : null}
+                    {p.unidad === 'glb' && p.conMedida ? <span style={{ fontWeight: 400, color: '#72706b' }} title={`Partida global: vale 1 en total, aunque la lleven ${miles(p.elementos)} elementos`}> ·global</span> : null}
                     {conCriterio ? <span style={{ fontWeight: 400, color: '#72706b' }}> ·crit.</span> : null}
                     {aManoP ? <span style={{ fontWeight: 400, color: '#9e5943' }}> ·man.</span> : null}
                 </div>

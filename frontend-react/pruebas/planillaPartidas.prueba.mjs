@@ -135,6 +135,16 @@ const ms = performance.now() - t0;
 console.log(`  ${pm.length} partidas en ${ms.toFixed(0)} ms`);
 ok('< 500 ms', ms < 500);
 
+titulo('GLB ES GLOBAL, NO «UND» (26-oct-2026)');
+{
+    ok('glb, GBL y global → glb; pza → und', PP.normalizarUnidad('glb') === 'glb' && PP.normalizarUnidad('GBL') === 'glb' && PP.normalizarUnidad('Global') === 'glb' && PP.normalizarUnidad('pza') === 'und');
+    const g = i => ({ Name: `Cartel [${i}]`, 'Datos::03_05_DSI_CodigoDePartida1': '01.02', 'Datos::03_04_DSI_NombreDePartida1': 'MOVILIZACION', 'Datos::02_01_DSI_Unidad1': 'glb' });
+    const filasG = [g(1), g(2), g(3)];
+    const dicG = PP.diccionarioDSI([...new Set(filasG.flatMap(Object.keys))]);
+    const pg = PP.partidasDe(filasG, dicG, f => f.Name).find(p => p.codigo === '01.02');
+    ok('una partida global con 3 elementos vale 1 glb (antes: 3 und), sin «sin medida»', pg.unidad === 'glb' && pg.cantidad === 1 && pg.elementos === 3 && pg.sinMedida === 0 && pg.origenes.includes('global'));
+}
+
 console.log('');
 console.log(`${total - fallos}/${total} ${fallos ? 'CON FALLOS' : 'en verde'}`);
 process.exit(fallos ? 1 : 0);

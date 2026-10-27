@@ -12,7 +12,7 @@
  * nativo.
  *   m  → Cotas › Longitud          m² → Cotas › Área          m³ → Cotas › Volumen
  *   kg → Longitud total de barra (nativa) × kg/m del diámetro de barra (nativo, tabla normativa)
- *   und → 1 por elemento
+ *   und → 1 por elemento         glb → 1 en total (global), por muchos elementos que lleve
  * Si el elemento NO tiene medida nativa, la dan los criterios de medida de la obra (`dic.criterios`,
  * lib/criteriosDeMedida.js, docs/visor/32): «la partida 01.02 se mide con Cotas › Long. Reja». Solo
  * rellenan lo que falta; la nativa manda siempre.
@@ -51,7 +51,9 @@ export function normalizarUnidad(u) {
     if (s === 'm2' || s === 'm²') return 'm²';
     if (s === 'm3' || s === 'm³') return 'm³';
     if (s === 'kg' || s === 'kgs') return 'kg';
-    if (s === 'und' || s === 'u' || s === 'unid' || s === 'pza' || s === 'glb') return 'und';
+    // «glb» (global) NO es «und»: vale 1 en total, no 1 por elemento (26-oct-2026: salía como und).
+    if (s === 'glb' || s === 'gbl' || s === 'global') return 'glb';
+    if (s === 'und' || s === 'u' || s === 'unid' || s === 'pza') return 'und';
     return s; // se enseña tal cual («01», «0»): unidad no reconocida
 }
 
@@ -91,6 +93,8 @@ export function diccionarioDSI(claves) {
 /** Cantidad nativa de una línea según su unidad. { valor, origen, detalle } o null si no hay. */
 export function cantidadNativa(fila, unidad, nativas) {
     if (unidad === 'und') return { valor: 1, origen: 'conteo', detalle: '1 por elemento' };
+    // Global: cada elemento «tiene» la partida; la partida vale 1 en total (se ajusta al sumar).
+    if (unidad === 'glb') return { valor: 1, origen: 'global', detalle: 'global' };
     const de = rol => (nativas[rol] ? numero(fila[nativas[rol]]) : 0);
     if (unidad === 'm') { const v = de('longitud'); return v > 0 ? { valor: v, origen: 'nativa', detalle: 'Longitud' } : null; }
     if (unidad === 'm²') { const v = de('area'); return v > 0 ? { valor: v, origen: 'nativa', detalle: 'Área' } : null; }
@@ -251,7 +255,7 @@ export function analizarPartidas(filas, dic, claveDeFila) {
         return {
             medidoCon: [...medidoCon].map(([clave, e]) => ({ clave, n: e.n, suma: limpio(e.suma) })).sort((a, b) => b.n - a.n),
             unidadModelo: masUsado(unidadesModelo), nombreModelo: masUsado(nombresModelo),
-            ...p, cantidad: limpio(p.cantidad), manual: limpio(p.manual), origenes: [...p.origenes],
+            ...p, cantidad: p.unidad === 'glb' ? (p.conMedida ? 1 : 0) : limpio(p.cantidad), manual: limpio(p.manual), origenes: [...p.origenes],
             nombre: [...nombres].sort((a, b) => b[1] - a[1])[0]?.[0] || p.nombre, variantesDeNombre: nombres.size,
             padre: padre ? { codigo: padre.codigo, nombre: padre.nombre } : null,
         };
@@ -315,7 +319,7 @@ export function hojasDePartidas(partidas, { ambito = '', fecha = new Date(), cri
         ['Exportado', fecha],
         ['Ámbito', ambito || 'filas de la tabla'],
         ['Partidas', partidas.length],
-        ['Cantidad', 'Medida nativa de Revit según la unidad de la partida: m → Longitud, m² → Área, m³ → Volumen; kg → longitud total de barra × kg/m del diámetro de barra; und → 1 por elemento.'],
+        ['Cantidad', 'Medida nativa de Revit según la unidad de la partida: m → Longitud, m² → Área, m³ → Volumen; kg → longitud total de barra × kg/m del diámetro de barra; und → 1 por elemento; glb → 1 en total (global).'],
         ['Manual', 'Valor puesto a mano en el parámetro DSI de la línea (Longitud/Area/Volumen/Peso{i}). Se informa aparte; no se suma con lo nativo.'],
         ['Criterio de medida', 'Solo donde el elemento NO trae medida nativa: el parámetro que la obra eligió para esa unidad o partida (Planilla › Medir con…). La nativa manda siempre.'],
         ['A mano', 'Criterio de medida con un número escrito a mano en Revit, sin unidad, leído en la unidad de la partida: lo declaró quien modeló, no sale de la geometría.'],

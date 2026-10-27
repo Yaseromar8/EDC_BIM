@@ -33,6 +33,26 @@ ok('6 ítems (los títulos con código cuentan; el encabezado no)', leido.items.
 ok('unidad leída; títulos sin unidad', leido.items.find(x => x.item === '06.05.02.04.03').unidad === 'und' && leido.items.find(x => x.item === '06').unidad === '');
 ok('dice de dónde lo leyó', /CAOV/.test(leido.porque) && /columna B/.test(leido.porque));
 
+titulo('TÍTULOS DE NIVEL 2 SIN CEROS («2.5 LÍNEA DE IMPULSIÓN», Interferencias, 26-oct-2026)');
+{
+    const hoja = [
+        ['', 'ITEM', 'DESCRIPCION', 'UND', 'METRADO'],
+        ['', '2.4.2.4', 'SUMINISTRO E INSTALACION DE CODO PVC C-10', 'und', '31.00'],
+        ['', '2.4.2.5', 'SUMINISTRO E INSTALACION DE ABRAZADERA Ø4"', 'und', ''],
+        ['', '2.5', 'LINEA DE IMPULSION', '', ''],
+        ['', '2.5.1', 'OBRAS PRELIMINARES', '', ''],
+        ['', '2.5.1.1', 'TRAZO Y REPLANTEO INICIAL DEL PROYECTO, PARA LINEAS DE REDES', 'm', '35.32'],
+        ['', '2.5.2', 'MOVIMIENTO DE TIERRAS', '', ''],
+        ['', '2.5.2.1', 'EXCAVAC. ZANJA (MAQ.) P/TUB. T-NORMAL DN 600', 'm', '12.00'],
+        ['', '2.10', 'OTRO CAPITULO DE NIVEL 2', '', ''],
+    ];
+    const leido = IT.leerItemizado({ Hoja1: hoja });
+    const items = leido.items.map(x => x.item);
+    ok('«2.5» y «2.10» entran como títulos (antes se perdían), en su orden', items.join(',') === '2.4.2.4,2.4.2.5,2.5,2.5.1,2.5.1.1,2.5.2,2.5.2.1,2.10');
+    ok('…sin unidad (son títulos) y con su descripción', leido.items.find(x => x.item === '2.5').descripcion === 'LINEA DE IMPULSION' && leido.items.find(x => x.item === '2.5').unidad === '');
+    ok('el metrado (35.32) no se confunde con un ítem', !items.includes('35.32') && !items.includes('12.00'));
+}
+
 titulo('UBICAR UN CÓDIGO DEL MODELO');
 const ind = IT.indiceDeItemizado(leido.items);
 ok('exacto', ind.ubicar('06.02.01.03.05').tipo === 'exacto');

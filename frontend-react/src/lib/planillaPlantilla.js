@@ -39,7 +39,7 @@ export function unirPartidas(lista) {
         ...lista[0],
         clave: lista.map(p => p.clave).join('+'),
         elementos: suma('elementos'), conMedida: suma('conMedida'), sinMedida: suma('sinMedida'),
-        cantidad: limpio(suma('cantidad')), manual: limpio(suma('manual')), conManual: suma('conManual'),
+        cantidad: lista[0].unidad === 'glb' ? 1 : limpio(suma('cantidad')), manual: limpio(suma('manual')), conManual: suma('conManual'),
         porCriterio: suma('porCriterio'), conflictos: suma('conflictos'), unidadDistinta: suma('unidadDistinta'),
         intercambiadas: suma('intercambiadas'),
         origenes: [...new Set(lista.flatMap(p => p.origenes))],

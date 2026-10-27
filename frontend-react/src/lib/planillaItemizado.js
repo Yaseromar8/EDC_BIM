@@ -46,8 +46,11 @@ export function leerItemizado(hojas) {
         const items = [];
         for (const fila of filas) {
             const item = texto(fila[cItem]);
-            // En la columna de ítems, un número corto es un capítulo de primer nivel («06»).
-            if (!esCodigo(item) && !/^\d{1,3}$/.test(item)) continue;
+            // En la columna de ítems, un número corto es un capítulo de primer nivel («06») y uno con un
+            // solo punto, un ítem de nivel 2 («2.5 LÍNEA DE IMPULSIÓN»): fuera de esta columna «2.5» sería
+            // un decimal, pero aquí es un código. Antes se perdían todos los títulos de nivel 2 de un
+            // itemizado escrito sin ceros (Interferencias, 26-oct-2026).
+            if (!esCodigo(item) && !/^\d{1,3}(\.\d{1,3})?$/.test(item)) continue;
             items.push({
                 item, descripcion: texto(fila[cDesc]).replace(/\s+/g, ' '),
                 unidad: cUnidad >= 0 && esUnidad(fila[cUnidad]) ? texto(fila[cUnidad]) : '',
