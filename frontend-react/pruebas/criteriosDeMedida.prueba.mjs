@@ -223,6 +223,21 @@ titulo('FACTOR: «ENTIBADO AMBAS CARAS = SYP_PARAMETRO GLOBAL ÷ 2» (Interferen
     ok('Excel: «criterio: SYP_PARAMETRO GLOBAL × 0,5»', /criterio: SYP_PARAMETRO GLOBAL × 0,5/.test(fila[6]));
 }
 
+titulo('ELEGIR OTRO PARÁMETRO: TODOS LOS NUMÉRICOS, CON SU MOTIVO (27-oct-2026)');
+{
+    const el = (id, extra) => ({ Name: `Genérico [${id}]`, 'Datos::02_05_DSI_Volumen1': '153.904', 'Datos::02_07_DSI_MetradoPartida': '5.630',
+        'Cotas::Área': '7.08 m^2', 'Datos::04_20_DSI_FinReal1': '20260924', 'Datos::03_05_DSI_CodigoDePartida1': '08.01', 'Datos::Costo': '0', ...extra });
+    const filas = [el(1), el(2, { 'Datos::02_05_DSI_Volumen1': '' }), el(3, { 'Datos::N tramo': '4' })];
+    const t = C.todosLosNumericos(filas, 'm³', [...new Set(filas.flatMap(Object.keys))]);
+    const de = k => t.find(x => x.clave === k);
+    ok('Volumen1 y MetradoPartida (números a mano) se pueden elegir, en m³ «a mano»', de('Datos::02_05_DSI_Volumen1')?.usable && de('Datos::02_05_DSI_Volumen1').aMano
+        && de('Datos::02_07_DSI_MetradoPartida')?.usable && /a mano/.test(de('Datos::02_07_DSI_MetradoPartida').motivo));
+    ok('…con su cobertura: Volumen1 en 2 de 3', de('Datos::02_05_DSI_Volumen1').conDato === 2 && /2 de 3/.test(de('Datos::02_05_DSI_Volumen1').motivo));
+    ok('el área en m² sale, pero NO se puede usar para m³, y dice por qué', de('Cotas::Área') && !de('Cotas::Área').usable && /otra unidad \(m²\)/.test(de('Cotas::Área').motivo));
+    ok('ni fechas, ni códigos («08.01»), ni ceros', !de('Datos::04_20_DSI_FinReal1') && !de('Datos::03_05_DSI_CodigoDePartida1') && !de('Datos::Costo'));
+    ok('primero los usables', t.findIndex(x => !x.usable) > t.findIndex(x => x.usable));
+}
+
 titulo('QUÉ FALTA MEDIR Y QUÉ HACE CADA CRITERIO');
 {
     const filas = [malla(1, 23.8098, 24.0098), malla(2, 0, 12.183), muro, tuboPt];

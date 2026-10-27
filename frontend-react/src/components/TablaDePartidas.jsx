@@ -7,7 +7,7 @@ import { compacto } from '../lib/inventoryBuscar';
 import { EVENTOS } from '../lib/aislamientoTemporal';
 import { coberturaDelItemizado, ESTADOS } from '../lib/planillaCobertura';
 import { ID_ESTADO, ID_CAPITULO, COLORES_ESTADO } from '../lib/camposDerivados';
-import { UNIDADES_MEDIBLES, MAX_MEDIR_CON, candidatosDeMedida, candidatosAMano, camposParaDonde, simularCriterio, validarCriterios,
+import { UNIDADES_MEDIBLES, MAX_MEDIR_CON, candidatosDeMedida, candidatosAMano, todosLosNumericos, camposParaDonde, simularCriterio, validarCriterios,
     claveDeCriterio, describirCriterio, etiquetaDeClave, sinMedidaNativa, usoDeCriterios } from '../lib/criteriosDeMedida';
 
 /**
@@ -218,8 +218,16 @@ function MedirCon({ partida, codigoOficial, sinNativa, obra, claveNativa, juego,
     const campos = useMemo(() => camposParaDonde(sinNativa, claves, { obra }), [sinNativa, claves, obra]);
     // Escritos a mano (números sin unidad): solo los PROBABLES, con su razón; el resto, a pedido.
     const aMano = useMemo(() => candidatosAMano(sinNativa, unidad, claves, { obra, claveNativa }), [sinNativa, unidad, claves, obra, claveNativa]);
-    const [verTodosAMano, setVerTodosAMano] = useState(false);
-    const clavesAMano = useMemo(() => new Set([...aMano.probables, ...aMano.otros].map(c => c.clave)), [aMano]);
+    // «Elegir otro parámetro…»: TODOS los numéricos de esos elementos, con su motivo si no se recomiendan.
+    const todos = useMemo(() => todosLosNumericos(sinNativa, unidad, claves), [sinNativa, unidad, claves]);
+    const [verOtro, setVerOtro] = useState(false);
+    const [buscaOtro, setBuscaOtro] = useState('');
+    const clavesAMano = useMemo(() => new Set([...aMano.probables.map(c => c.clave), ...todos.filter(t => t.aMano).map(t => t.clave)]), [aMano, todos]);
+    const recomendados = useMemo(() => new Set([...candidatos, ...aMano.probables].map(c => c.clave)), [candidatos, aMano]);
+    const otrosVisibles = useMemo(() => {
+        const q = compacto(buscaOtro);
+        return todos.filter(t => !recomendados.has(t.clave) && (!q || compacto(t.etiqueta).includes(q))).slice(0, 40);
+    }, [todos, recomendados, buscaOtro]);
     const [elegidos, setElegidos] = useState([]);
     const [alcance, setAlcance] = useState('partida');
     const [conDonde, setConDonde] = useState(false);
@@ -258,6 +266,19 @@ function MedirCon({ partida, codigoOficial, sinNativa, obra, claveNativa, juego,
         else onCerrar();
     };
     const etiqueta = clave => candidatos.find(c => c.clave === clave)?.etiqueta || etiquetaDeClave(clave);
+    const filaOtro = t => (
+        <div key={t.clave} role="button" tabIndex={t.usable ? 0 : -1} className={t.usable ? 'inv-fila' : undefined}
+            onClick={() => { if (t.usable) setElegidos([...elegidos, t.clave]); }}
+            onKeyDown={e => { if (e.key === 'Enter' && t.usable) setElegidos([...elegidos, t.clave]); }}
+            title={t.usable ? 'clic: medir con este parámetro' : 'No se puede usar: ' + t.motivo}
+            style={{ ...filaLista, gridTemplateColumns: 'minmax(180px, 1fr) 150px 130px', cursor: t.usable ? 'pointer' : 'default', color: t.usable ? '#52524d' : '#b0aea5' }}>
+            <span style={{ ...recorte, color: t.usable ? '#141413' : '#b0aea5' }}>
+                {t.etiqueta}{t.motivo && <span style={{ color: t.usable ? '#72706b' : '#b0aea5', fontWeight: 400 }}> · {t.motivo}</span>}
+            </span>
+            <span>{t.usable ? `${miles(t.conDato)} de ${miles(sinNativa.length)} con dato` : ''}</span>
+            <span style={{ textAlign: 'right' }}>{t.usable ? `Σ ${fmt(t.suma, unidad)}` : ''}</span>
+        </div>
+    );
     const filaCandidato = (c, extra = null) => (
         <div key={c.clave} role="button" tabIndex={0} className="inv-fila" onClick={() => setElegidos([...elegidos, c.clave])}
             onKeyDown={e => { if (e.key === 'Enter') setElegidos([...elegidos, c.clave]); }} title={c.porque || undefined}
@@ -267,7 +288,7 @@ function MedirCon({ partida, codigoOficial, sinNativa, obra, claveNativa, juego,
             <span style={{ textAlign: 'right' }}>Σ {fmt(c.suma, unidad)}</span>
         </div>
     );
-    const hayAlgo = candidatos.length > 0 || aMano.probables.length > 0 || aMano.otros.length > 0;
+    const hayAlgo = candidatos.length > 0 || aMano.probables.length > 0 || todos.some(t => t.usable);
     return (
         <div style={panel}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
@@ -299,20 +320,30 @@ function MedirCon({ partida, codigoOficial, sinNativa, obra, claveNativa, juego,
                         <div style={{ paddingLeft: '6px' }}>
                             <span>{elegidos.length ? 'si falta, con:' : 'elige un parámetro:'}</span>
                             {candidatos.filter(c => !elegidos.includes(c.clave)).slice(0, 12).map(c => filaCandidato(c))}
-                            {(aMano.probables.length > 0 || aMano.otros.length > 0) && (
+                            {aMano.probables.length > 0 && (
                                 <>
                                     <div style={{ color: '#141413', fontWeight: 600, margin: '6px 0 2px' }}>
                                         Escritos a mano (números sin unidad, se leen en {unidad})
                                     </div>
-                                    {!aMano.probables.length && <div style={{ paddingLeft: '6px', color: '#72706b' }}>Ninguno parece corresponder (ni coincide con la medida de Revit ni está lleno solo donde falta).</div>}
                                     {aMano.probables.filter(c => !elegidos.includes(c.clave)).map(c => filaCandidato(c, <span style={{ color: '#72706b', fontWeight: 400 }}> · {c.porque}</span>))}
-                                    {aMano.otros.length > 0 && (
-                                        <button className="v-enlace" style={{ fontSize: '11px', marginLeft: '6px' }} onClick={() => setVerTodosAMano(v => !v)}>
-                                            {verTodosAMano ? 'ocultar los demás' : `ver todos (${aMano.otros.length} más)`}
-                                        </button>
-                                    )}
-                                    {verTodosAMano && aMano.otros.filter(c => !elegidos.includes(c.clave)).map(c => filaCandidato(c))}
                                 </>
+                            )}
+                            {/* Si el que interesa no está entre los recomendados: cualquiera de los numéricos de esos
+                                elementos, con buscador; lo que no se puede usar sale en gris con su motivo. */}
+                            {todos.some(t => !recomendados.has(t.clave)) && (
+                                <div style={{ marginTop: '6px' }}>
+                                    <button className="v-enlace" style={{ fontSize: '11px' }} onClick={() => setVerOtro(v => !v)} aria-expanded={verOtro}>
+                                        {verOtro ? 'ocultar los demás parámetros' : `elegir otro parámetro… (${todos.filter(t => !recomendados.has(t.clave)).length})`}
+                                    </button>
+                                    {verOtro && (
+                                        <div style={{ marginTop: '4px' }}>
+                                            <input style={{ ...campoForm, width: '280px', marginBottom: '4px' }} value={buscaOtro} autoFocus
+                                                onChange={e => setBuscaOtro(e.target.value)} placeholder="buscar parámetro (p. ej. volumen, metrado)" />
+                                            {otrosVisibles.filter(t => !elegidos.includes(t.clave)).map(filaOtro)}
+                                            {!otrosVisibles.length && <div style={{ color: '#72706b' }}>Ningún parámetro numérico con ese nombre en estos elementos.</div>}
+                                        </div>
+                                    )}
+                                </div>
                             )}
                         </div>
                     )}

@@ -266,6 +266,48 @@ export function candidatosAMano(filas, unidad, claves, { obra = [], claveNativa 
 }
 
 /**
+ * TODOS los parámetros numéricos de `filas`, para elegir uno que no se recomendó (pedido del dueño,
+ * 27-oct-2026: «si no nos muestra el de nuestro interés, poder elegir otro»; p. ej. 02_05_DSI_Volumen1 o
+ * 02_07_DSI_MetradoPartida, que la recomendación dejaba fuera). Nada se esconde: lo que no se puede usar
+ * sale con su motivo.
+ * [{ clave, etiqueta, conDato, suma, enUnidad, sinUnidad, otraUnidad, usable, aMano, motivo }]
+ *   enUnidad    elementos con el valor en la unidad de la partida;
+ *   sinUnidad   con un número sin unidad (se usaría «a mano», en la unidad de la partida);
+ *   otraUnidad  con el valor en otra unidad (no se puede usar: no se mezclan unidades).
+ */
+export function todosLosNumericos(filas, unidad, claves) {
+    const out = [];
+    const conGrupo = new Set((claves || []).filter(k => String(k).includes('::')).map(nombreDe));
+    for (const clave of claves || []) {
+        if (!String(clave).includes('::') && conGrupo.has(clave)) continue;    // la plana repite la del grupo
+        if (grupoDe(clave).startsWith('__') || nombreDe(clave).startsWith('__') || grupoDe(clave) === 'Planilla') continue;
+        let enUnidad = 0, sinUnidad = 0, otraUnidad = 0, suma = 0, enteros = 0, otra = '';
+        for (const f of filas) {
+            const v = f[clave];
+            const r = valorEnUnidad(v, unidad);
+            if (r?.valor) { enUnidad++; suma += r.valor; if (Number.isInteger(r.valor)) enteros++; continue; }
+            const n = numeroSinUnidad(v);
+            if (n) { sinUnidad++; suma += n; if (Number.isInteger(n)) enteros++; continue; }
+            if (r?.unidad && r.unidad !== 'sin unidad') { otraUnidad++; otra = otra || r.unidad; }
+        }
+        const conDato = enUnidad + sinUnidad;
+        if (!conDato && !otraUnidad) continue;
+        const usable = conDato > 0;
+        const motivos = [];
+        if (!usable) motivos.push(`otra unidad (${otra}): no se mezcla con ${unidad}`);
+        else {
+            if (conDato < filas.length) motivos.push(`con dato en ${conDato} de ${filas.length}`);
+            if (sinUnidad && !enUnidad) motivos.push(`número sin unidad: se lee en ${unidad} («a mano»)`);
+            if (enteros === conDato && conDato >= 3) motivos.push('solo enteros: ¿un conteo o un número de tramo?');
+            if (otraUnidad) motivos.push(`${otraUnidad} con otra unidad (${otra}), que no se usan`);
+        }
+        out.push({ clave, etiqueta: etiquetaDeClave(clave), conDato, suma: Number(suma.toPrecision(12)), enUnidad, sinUnidad, otraUnidad,
+            usable, aMano: usable && sinUnidad > 0, motivo: motivos.join(' · ') });
+    }
+    return out.sort((a, b) => (b.usable - a.usable) || b.conDato - a.conDato || a.etiqueta.localeCompare(b.etiqueta, 'es'));
+}
+
+/**
  * Campos con que limitar un criterio («solo donde») sobre `filas`: texto, con dato en la mitad o más
  * y pocos valores distintos (los que separan grupos: categoría, nombre de tipo…).
  * [{ campo, etiqueta, valores: [{ valor, n }], enObra }] — los valores de más a menos elementos.
