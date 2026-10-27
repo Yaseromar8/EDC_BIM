@@ -13,6 +13,9 @@
  *   partida    opcional: sin ella vale para todas las partidas de esa unidad;
  *   donde      opcional: limita a los elementos con ese valor en un campo cualquiera del modelo;
  *   medirCon   claves de parámetros en orden: se usa el primero con valor > 0 EN ESA UNIDAD;
+ *   factor     opcional (por defecto 1): el valor se multiplica por él. «Entibado ambas caras: SYP_PARAMETRO
+ *              GLOBAL ÷ 2» = factor 0,5 (Interferencias, 27-oct-2026). Un número fijo, no una fórmula: lo
+ *              que se ve es lo que se multiplica, y queda escrito en el criterio.
  *   aMano      además acepta NÚMEROS SIN UNIDAD («33.725»), leídos en la unidad de la partida: es lo que
  *              escribe a mano quien modela un genérico (02_02_DSI_Longitud). Lo confirma el administrador
  *              al elegirlo, y la cantidad sale marcada «a mano», no como geometría.
@@ -34,6 +37,7 @@ import { crearAlmacenDeObra } from './almacenDeObra.js';
 export const UNIDADES_MEDIBLES = ['m', 'm²', 'm³', 'kg'];
 export const MAX_CRITERIOS = 500;
 export const MAX_MEDIR_CON = 5;
+export const MAX_FACTOR = 1000;
 const OPERADORES = ['es', 'contiene'];
 const texto = v => String(v ?? '').trim();
 const nombreDe = clave => String(clave).split('::').pop();
@@ -72,7 +76,13 @@ export function validarCriterios(lista) {
             if (!OPERADORES.includes(op)) return mal(`Operador «${op}» desconocido (es / contiene).`);
             donde = { campo, op, valor };
         }
-        const limpio = { unidad, ...(partida ? { partida } : {}), ...(donde ? { donde } : {}), medirCon, ...(c.aMano === true ? { aMano: true } : {}) };
+        let factor = 1;
+        if (c.factor !== undefined && c.factor !== null && c.factor !== 1) {
+            factor = Number(c.factor);
+            if (!Number.isFinite(factor) || factor <= 0 || factor > MAX_FACTOR) return mal(`El factor debe ser un número mayor que 0 y hasta ${MAX_FACTOR}.`);
+        }
+        const limpio = { unidad, ...(partida ? { partida } : {}), ...(donde ? { donde } : {}), medirCon,
+            ...(factor !== 1 ? { factor } : {}), ...(c.aMano === true ? { aMano: true } : {}) };
         const k = claveDeCriterio(limpio);
         if (vistos.has(k)) return mal('Ya hay un criterio para esa misma unidad, partida y condición.');
         vistos.add(k);
@@ -118,17 +128,20 @@ export function medirConCriterio(fila, criterio) {
     let distinta = null;
     for (const clave of criterio.medirCon) {
         const r = valorEnUnidad(fila[clave], criterio.unidad, { aMano: !!criterio.aMano });
-        if (r?.valor) return { valor: r.valor, clave, ...(r.aMano ? { aMano: true } : {}) };
+        if (r?.valor) return { valor: r.valor * (criterio.factor || 1), clave, ...(r.aMano ? { aMano: true } : {}) };
         if (r?.unidad && !distinta) distinta = { motivo: 'unidad', clave, unidadEncontrada: r.unidad };
     }
     return distinta || { motivo: 'sin-valor' };
 }
 
+/** « × 0,5» para un factor distinto de 1; '' si no hay. */
+export const textoDeFactor = f => (f && f !== 1 ? ` × ${String(f).replace('.', ',')}` : '');
+
 /** «m · 01.02 · donde Nombre de tipo contiene «MALLA» · Long. Reja, si no Largo Total» */
 export function describirCriterio(c) {
     const partes = [c.unidad, c.partida ? `partida ${c.partida}` : 'toda la obra'];
     if (c.donde) partes.push(`donde ${nombreDe(c.donde.campo)} ${c.donde.op} «${c.donde.valor}»`);
-    partes.push(c.medirCon.map(nombreDe).join(', si no ') + (c.aMano ? ' (a mano)' : ''));
+    partes.push(c.medirCon.map(nombreDe).join(', si no ') + textoDeFactor(c.factor) + (c.aMano ? ' (a mano)' : ''));
     return partes.join(' · ');
 }
 
@@ -171,7 +184,9 @@ export function indiceDeCriterios(criterios) {
         if (!a) return null;
         if (a.conflicto) return { motivo: 'conflicto', criterios: a.conflicto };
         const m = medirConCriterio(fila, a.criterio);
-        if (m.valor) return { valor: m.valor, origen: m.aMano ? 'a mano' : 'criterio', detalle: nombreDe(m.clave), clave: m.clave, criterio: a.criterio };
+        // `medido` = cómo se dice lo que se usó: el parámetro y, si lo hay, su factor («SYP_PARAMETRO GLOBAL × 0,5»).
+        if (m.valor) return { valor: m.valor, origen: m.aMano ? 'a mano' : 'criterio', detalle: nombreDe(m.clave), clave: m.clave,
+            medido: m.clave + textoDeFactor(a.criterio.factor), criterio: a.criterio };
         return { ...m, criterio: a.criterio };
     }
     return { cantidad, aplicable, total: (criterios || []).length, criterios: criterios || [] };

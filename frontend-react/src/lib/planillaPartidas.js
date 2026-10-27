@@ -144,7 +144,7 @@ function lineasCrudas(fila, dic) {
         out.push({
             linea: i || '0', codigo, nombre, unidad, intercambiado, unidadModelo, nombreModelo, oficial: !!oficial,
             cantidad: medida ? medida.valor : null, origen: medida ? medida.origen : null, detalle: medida ? medida.detalle : '',
-            medidoCon: medida?.origen === 'criterio' || medida?.origen === 'a mano' ? medida.clave : null, sinMedidaPor,
+            medidoCon: medida?.origen === 'criterio' || medida?.origen === 'a mano' ? (medida.medido || medida.clave) : null, sinMedidaPor,
             criterio: medida?.criterio || sinMedidaPor?.criterio || null,
             manual: manual > 0 ? manual : null,
             inicioReal: l.inicioReal ? fila[l.inicioReal] ?? '' : '', finReal: l.finReal ? fila[l.finReal] ?? '' : '',

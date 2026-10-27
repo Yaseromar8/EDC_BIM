@@ -226,13 +226,17 @@ function MedirCon({ partida, codigoOficial, sinNativa, obra, claveNativa, juego,
     const [campo, setCampo] = useState('');
     const [op, setOp] = useState('es');
     const [valor, setValor] = useState('');
+    const [factorTexto, setFactorTexto] = useState('1');
     const [error, setError] = useState('');
+    // «× 0,5» para «ambas caras ÷ 2», «× 2», conversiones: un número fijo, no una fórmula.
+    const factor = (() => { const n = Number(String(factorTexto).replace(',', '.')); return Number.isFinite(n) && n > 0 ? n : null; })();
     const fichaCampo = campos.find(c => c.campo === campo) || null;
     const donde = conDonde && campo && valor.trim() ? { campo, op, valor: valor.trim() } : null;
     const conAMano = elegidos.some(k => clavesAMano.has(k));
     const criterio = useMemo(() => (elegidos.length
-        ? { unidad, ...(alcance === 'partida' ? { partida: codigoOficial } : {}), ...(donde ? { donde } : {}), medirCon: elegidos, ...(conAMano ? { aMano: true } : {}) }
-        : null), [unidad, alcance, codigoOficial, donde?.campo, donde?.op, donde?.valor, elegidos, conAMano]); // eslint-disable-line react-hooks/exhaustive-deps
+        ? { unidad, ...(alcance === 'partida' ? { partida: codigoOficial } : {}), ...(donde ? { donde } : {}), medirCon: elegidos,
+            ...(factor && factor !== 1 ? { factor } : {}), ...(conAMano ? { aMano: true } : {}) }
+        : null), [unidad, alcance, codigoOficial, donde?.campo, donde?.op, donde?.valor, elegidos, conAMano, factor]); // eslint-disable-line react-hooks/exhaustive-deps
     const sim = useMemo(() => (criterio ? simularCriterio(sinNativa, criterio) : null), [sinNativa, criterio]);
     const actuales = juego?.criterios || [];
     const reemplaza = criterio ? actuales.find(c => claveDeCriterio(c) === claveDeCriterio(criterio)) : null;
@@ -314,6 +318,11 @@ function MedirCon({ partida, codigoOficial, sinNativa, obra, claveNativa, juego,
                     )}
                     {conAMano && <div style={{ color: '#9e5943', marginTop: '4px' }}>Con un parámetro escrito a mano: su número se toma en {unidad} y la cantidad sale marcada «a mano» (lo declaró quien modeló; no es geometría).</div>}
                     <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginTop: '6px', flexWrap: 'wrap' }}>
+                        <label style={etiquetaRadio} title="El valor del parámetro se multiplica por este número. Ej.: 0,5 para «ambas caras» (÷ 2), 2 para el doble. Queda escrito en el criterio.">
+                            multiplicar por
+                            <input style={{ ...campoForm, width: '56px', textAlign: 'right', borderColor: factor ? '#cccac0' : ROJO }} value={factorTexto}
+                                onChange={e => setFactorTexto(e.target.value)} inputMode="decimal" />
+                        </label>
                         <span>Vale para:</span>
                         <label style={etiquetaRadio}><input type="radio" checked={alcance === 'partida'} onChange={() => setAlcance('partida')} />esta partida</label>
                         <label style={etiquetaRadio}><input type="radio" checked={alcance === 'obra'} onChange={() => setAlcance('obra')} />todas las partidas en {unidad} de la obra</label>
@@ -351,7 +360,7 @@ function MedirCon({ partida, codigoOficial, sinNativa, obra, claveNativa, juego,
                     )}
                     {reemplaza && <div style={{ color: '#9e5943' }}>Reemplaza al criterio actual: {describirCriterio(reemplaza)}</div>}
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '6px' }}>
-                        <button style={{ ...estiloBoton, ...(criterio && !estado.guardando ? {} : { opacity: 0.5, pointerEvents: 'none' }) }} onClick={guardar}>
+                        <button style={{ ...estiloBoton, ...(criterio && factor && !estado.guardando ? {} : { opacity: 0.5, pointerEvents: 'none' }) }} onClick={guardar}>
                             {estado.guardando ? 'Guardando…' : 'Guardar criterio'}
                         </button>
                         <button style={estiloBoton} onClick={onCerrar}>Cancelar</button>

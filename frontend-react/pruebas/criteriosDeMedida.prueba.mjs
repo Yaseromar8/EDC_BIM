@@ -201,6 +201,28 @@ titulo('A MANO: NÚMEROS SIN UNIDAD (genérico con 02_02_DSI_Longitud = 33.725, 
     ok('Excel: el origen dice «a mano: 02_02_DSI_Longitud»', /a mano: 02_02_DSI_Longitud/.test(fila[6]));
 }
 
+titulo('FACTOR: «ENTIBADO AMBAS CARAS = SYP_PARAMETRO GLOBAL ÷ 2» (Interferencias, 27-oct-2026)');
+{
+    const ent = (id, g) => ({ Name: `Emplazamiento [${id}]`, 'Cotas::SYP_PARAMETRO GLOBAL': `${g} m`,
+        'Datos::03_05_DSI_CodigoDePartida1': '02.01.02.02.01', 'Datos::02_01_DSI_Unidad1': 'm' });
+    const filas = [ent(1, 3.5), ent(2, 3.5), ent(3, 2.426)];
+    const { criterios, errores } = C.validarCriterios([
+        { unidad: 'm', partida: '2.1.2.2.1', medirCon: ['Cotas::SYP_PARAMETRO GLOBAL'], factor: 0.5 },
+        { unidad: 'm', partida: '9.9', medirCon: ['a::b'], factor: 1 },
+        { unidad: 'm', partida: '9.8', medirCon: ['a::b'], factor: 0 },
+        { unidad: 'm', partida: '9.7', medirCon: ['a::b'], factor: 'medio' },
+    ]);
+    ok('el factor se guarda si no es 1; 0 o texto se rechazan', criterios[0].factor === 0.5 && !('factor' in criterios[1]) && errores.length === 2);
+    ok('describir: «SYP_PARAMETRO GLOBAL × 0,5»', /SYP_PARAMETRO GLOBAL × 0,5/.test(C.describirCriterio(criterios[0])));
+    const dic = { ...PP.diccionarioDSI([...new Set(filas.flatMap(Object.keys))]), criterios: C.indiceDeCriterios(criterios) };
+    const p = PP.partidasDe(filas, dic, f => f.Name).find(x => x.codigo === '02.01.02.02.01');
+    ok('la partida suma la mitad: (3,5 + 3,5 + 2,426) ÷ 2 = 4,713 m', cerca(p.cantidad, 4.713) && p.sinMedida === 0);
+    ok('…y dice con qué y por cuánto', p.medidoCon[0].clave === 'Cotas::SYP_PARAMETRO GLOBAL × 0,5');
+    ok('simular también aplica el factor', cerca(C.simularCriterio(filas, criterios[0]).suma, 4.713));
+    const fila = PP.hojasDePartidas([p])[0].filas.find(f => f[2] === '02.01.02.02.01');
+    ok('Excel: «criterio: SYP_PARAMETRO GLOBAL × 0,5»', /criterio: SYP_PARAMETRO GLOBAL × 0,5/.test(fila[6]));
+}
+
 titulo('QUÉ FALTA MEDIR Y QUÉ HACE CADA CRITERIO');
 {
     const filas = [malla(1, 23.8098, 24.0098), malla(2, 0, 12.183), muro, tuboPt];

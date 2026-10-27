@@ -84,6 +84,15 @@ def test_a_mano_se_guarda_solo_si_es_un_booleano_verdadero():
         pcm.validar_criterios([{'unidad': 'm', 'medirCon': ['a::b'], 'aMano': 'si'}])
 
 
+def test_el_factor_se_guarda_si_no_es_1_y_se_valida():
+    n = pcm.validar_criterios([{'unidad': 'm', 'partida': '2.1.2.2.1', 'medirCon': ['Cotas::SYP_PARAMETRO GLOBAL'], 'factor': 0.5},
+                               {'unidad': 'm', 'partida': '2.1.2.2.2', 'medirCon': ['a::b'], 'factor': 1}])
+    assert n[0]['factor'] == 0.5 and 'factor' not in n[1]
+    for malo in (0, -1, 1001, 'medio', True):
+        with pytest.raises(pcm.CriteriosInvalidos):
+            pcm.validar_criterios([{'unidad': 'm', 'medirCon': ['a::b'], 'factor': malo}])
+
+
 def test_demasiados_criterios():
     with pytest.raises(pcm.CriteriosInvalidos) as e:
         pcm.validar_criterios([{'unidad': 'm', 'partida': str(i), 'medirCon': ['a::b']} for i in range(pcm.MAX_CRITERIOS + 1)])

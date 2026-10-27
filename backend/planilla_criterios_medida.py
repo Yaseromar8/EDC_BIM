@@ -30,6 +30,7 @@ import unicodedata
 
 MAX_CRITERIOS = 500
 MAX_MEDIR_CON = 5
+MAX_FACTOR = 1000
 MAX_CLAVE = 300        # clave de un parámetro del modelo («Grupo::Nombre»)
 MAX_VALOR = 300
 MAX_PARTIDA = 80
@@ -140,6 +141,14 @@ def validar_criterios(criterios):
             limpio['donde'] = {'campo': _texto(d.get('campo'), 'campo', MAX_CLAVE, i, obligatorio=True), 'op': op,
                                'valor': _texto(d.get('valor'), 'valor', MAX_VALOR, i, obligatorio=True)}
         limpio['medirCon'] = claves
+        factor = c.get('factor', 1)
+        if factor is None:
+            factor = 1
+        if isinstance(factor, bool) or not isinstance(factor, (int, float)) or not (0 < float(factor) <= MAX_FACTOR):
+            raise CriteriosInvalidos('CRITERIO_INVALIDO', f'El factor del criterio {i + 1} debe ser un número mayor que 0 y hasta {MAX_FACTOR}.')
+        if float(factor) != 1:
+            # «Entibado ambas caras: SYP_PARAMETRO GLOBAL ÷ 2» = factor 0,5. Un número fijo, no una fórmula.
+            limpio['factor'] = float(factor)
         a_mano = c.get('aMano', False)
         if not isinstance(a_mano, bool):
             raise CriteriosInvalidos('CRITERIO_INVALIDO', f'«aMano» debe ser verdadero o falso en el criterio {i + 1}.')
