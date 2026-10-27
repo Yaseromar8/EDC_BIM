@@ -5,6 +5,7 @@ import { leerItemizado, cruzarCampos, diferencias, normalizarCodigo } from '../l
 import { formatearNumero } from '../lib/inventoryTabla';
 import { compacto } from '../lib/inventoryBuscar';
 import { EVENTOS } from '../lib/aislamientoTemporal';
+import { useVentanaDelPanel } from './PanelAparte';
 import { coberturaDelItemizado, ESTADOS } from '../lib/planillaCobertura';
 import { ID_ESTADO, ID_CAPITULO, COLORES_ESTADO } from '../lib/camposDerivados';
 import { UNIDADES_MEDIBLES, MAX_MEDIR_CON, candidatosDeMedida, candidatosAMano, todosLosNumericos, camposParaDonde, simularCriterio, validarCriterios,
@@ -551,13 +552,16 @@ export default function TablaDePartidas({ filas, filasObra, dic, roles, claveDeF
     const cuerpoRef = useRef(null);
     const [scroll, setScroll] = useState(0);
     const [altoVista, setAltoVista] = useState(600);
+    // Si la Planilla se muda a otra ventana, se mide con el observador de ESA ventana.
+    const ventana = useVentanaDelPanel();
     useEffect(() => {
         const el = cuerpoRef.current;
-        if (!el || typeof ResizeObserver === 'undefined') return undefined;
-        const ro = new ResizeObserver(() => setAltoVista(el.clientHeight));
+        const RO = el?.ownerDocument.defaultView?.ResizeObserver;
+        if (!RO) return undefined;
+        const ro = new RO(() => setAltoVista(el.clientHeight));
         ro.observe(el);
         return () => ro.disconnect();
-    }, [!!plantilla]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [!!plantilla, ventana]); // eslint-disable-line react-hooks/exhaustive-deps
     const desde = Math.max(0, Math.floor(scroll / ALTO) - 10);
     const hasta = Math.min(lista.length, Math.ceil((scroll + altoVista) / ALTO) + 10);
     const lineas = partidas.reduce((s, p) => s + p.elementos, 0);

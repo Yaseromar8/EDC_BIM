@@ -18,6 +18,7 @@ import { criteriosDeMedida } from '../utils/criteriosDeMedidaVisor';
 import { describirCriterio } from '../lib/criteriosDeMedida';
 import { contextoDerivado, suscribirDerivados } from '../utils/camposDerivadosVisor';
 import TablaDePartidas from './TablaDePartidas';
+import { useVentanaDelPanel } from './PanelAparte';
 import SelectorDeCampo, { ListaDeCampos } from './SelectorDeCampo';
 import { Capacitor } from '@capacitor/core';
 
@@ -352,7 +353,25 @@ const InventoryRow = memo(({ row, columns, index, onRowClick, isHighlighted, top
 });
 InventoryRow.displayName = 'InventoryRow';
 
-const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProgress, isolatedExtIds: initialIsolatedExtIds = null, onClose }) => {
+// El libro se baja desde la ventana donde está la Planilla. Desde la ventana aparte, un enlace
+// de la principal no lleva el clic del usuario y el navegador no lo descarga (docs/visor/37 §7).
+function descargarLibro(XLSX, libro, nombre, ventana) {
+    const datos = XLSX.write(libro, { bookType: 'xlsx', type: 'array', cellDates: true });
+    const url = ventana.URL.createObjectURL(new ventana.Blob([datos], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
+    const a = ventana.document.createElement('a');
+    a.href = url;
+    a.download = nombre;
+    ventana.document.body.appendChild(a);
+    a.click();
+    a.remove();
+    ventana.setTimeout(() => ventana.URL.revokeObjectURL(url), 60000);
+}
+
+const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProgress, isolatedExtIds: initialIsolatedExtIds = null, onClose,
+    // Planilla en otra ventana (docs/visor/37): quién la saca y la devuelve, y si ahora está fuera.
+    onSacarAVentana = null, onVolverAlVisor = null, enVentanaAparte = false }) => {
+    // Donde se dibuja la Planilla: la ventana principal o la de aparte.
+    const ventana = useVentanaDelPanel();
     const [flattenedData, setFlattenedData] = useState([]);
     const [rawData, setRawData] = useState([]); // Unfiltered data from DB
     const [columns, setColumns] = useState([]);
@@ -391,7 +410,9 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
     const [textoBusqueda, setTextoBusqueda] = useState('');
     const [busqueda, setBusqueda] = useState('');
     const [campoBusqueda, setCampoBusqueda] = useState(null);
-    useEffect(() => { const t = setTimeout(() => setBusqueda(textoBusqueda), 250); return () => clearTimeout(t); }, [textoBusqueda]);
+    // Con el reloj de la ventana donde se escribe: si la principal queda minimizada o tapada mientras
+    // la Planilla está en otra pantalla, Chrome frena sus temporizadores y la búsqueda tardaría.
+    useEffect(() => { const t = ventana.setTimeout(() => setBusqueda(textoBusqueda), 250); return () => ventana.clearTimeout(t); }, [textoBusqueda, ventana]);
     // Parecidos que el usuario confirma, búsqueda dentro de lo seleccionado (la
     // selección se congela al empezar a buscar: pulsar un resultado no la cambia)
     // y las medidas que se suman en modo búsqueda (null = las de más cobertura).
@@ -514,14 +535,16 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
     // Auto-resize observer
     useEffect(() => {
         if (!containerRef.current) return;
-        const observer = new ResizeObserver(entries => {
+        // El de la ventana donde está la rejilla: al mudarse, se vuelve a medir allí.
+        const RO = containerRef.current.ownerDocument.defaultView?.ResizeObserver || ResizeObserver;
+        const observer = new RO(entries => {
             const entry = entries[0];
             if (entry) setContainerHeight(entry.contentRect.height);
         });
         observer.observe(containerRef.current);
         return () => observer.disconnect();
         // La rejilla se desmonta en la vista Partidas: al volver hay que medir la nueva.
-    }, [vista]);
+    }, [vista, ventana]);
 
     // (B) Visor 3D -> Tabla
     useEffect(() => {
@@ -1145,12 +1168,12 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
             } catch (err) {
                 console.error('[Export] Error guardando en dispositivo:', err);
                 // Fallback: intentar descarga web
-                XLSX.writeFile(workbook, fileName, { cellDates: true });
+                descargarLibro(XLSX, workbook, fileName, ventana);
             }
         } else {
-            XLSX.writeFile(workbook, fileName, { cellDates: true });
+            descargarLibro(XLSX, workbook, fileName, ventana);
         }
-    }, [vista, filasDePartidas, dicPartidas, juegoCriterios, ambitoPartidas, filasTabla, columnasVista, tiposColumna, calculos, niveles, filtroTabla, soloConMetrado, camposSuma, orden, flattenedData.length, hayBusqueda, busqueda, campoBusqueda]);
+    }, [ventana, vista, filasDePartidas, dicPartidas, juegoCriterios, ambitoPartidas, filasTabla, columnasVista, tiposColumna, calculos, niveles, filtroTabla, soloConMetrado, camposSuma, orden, flattenedData.length, hayBusqueda, busqueda, campoBusqueda]);
 
     // Lo seleccionado que está en la tabla: casillas / Mayús / Ctrl, o si no, lo elegido en el 3D.
     const [copiado, setCopiado] = useState(null);
@@ -1261,10 +1284,18 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
 
                 {/* Window Controls (Undock / Close) */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
-                    <button style={{ background:'none', border:'none', color:'#72706b', cursor:'pointer' }} title="Abrir en otra ventana" onClick={() => {
-                        openInventoryFilterPopout({ host:window,scopeId:activeModelUrn,columns,
-                            assetsOnly:showAssetsOnly,selection:activeSelectionFilter||isolatedExtIds,onClose });
-                    }}><Icons.Undock/></button>
+                    {enVentanaAparte ? (
+                        <button className="v-enlace" style={{ fontSize: '12px' }} onClick={() => onVolverAlVisor?.()}
+                            title="Devolver la Planilla a la parte inferior del visor">Volver al visor</button>
+                    ) : (
+                        <button style={{ background:'none', border:'none', color:'#72706b', cursor:'pointer' }} title="Abrir en otra ventana" onClick={() => {
+                            // La Planilla entera, viva, en otra ventana. Sin quien la saque
+                            // (un banco suelto), la lista de solo lectura de siempre.
+                            if (onSacarAVentana) { onSacarAVentana(); return; }
+                            openInventoryFilterPopout({ host:window,scopeId:activeModelUrn,columns,
+                                assetsOnly:showAssetsOnly,selection:activeSelectionFilter||isolatedExtIds,onClose });
+                        }}><Icons.Undock/></button>
+                    )}
                     <button style={{ background:'none', border:'none', color:'#72706b', cursor:'pointer' }} onClick={() => onClose ? onClose() : window.dispatchEvent(new CustomEvent('close-inventory'))} title="Cerrar"><Icons.Close/></button>
                 </div>
             </div>
@@ -1300,7 +1331,7 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
                             onClick={e => {
                                 // Abre hacia donde haya sitio: con el panel bajo, hacia arriba.
                                 const r = e.currentTarget.getBoundingClientRect();
-                                const abajo = window.innerHeight - r.bottom - 12, arriba = r.top - 12;
+                                const abajo = ventana.innerHeight - r.bottom - 12, arriba = r.top - 12;
                                 setGroupMenuOpen(o => o ? false : (abajo >= 380 || abajo >= arriba ? { arriba: false, alto: Math.min(380, abajo) } : { arriba: true, alto: Math.min(380, arriba) }));
                             }}
                             active={!!groupByKey}
@@ -1596,7 +1627,7 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
                         value={bulkValue}
                         onChange={e => setBulkValue(e.target.value)}
                         placeholder="Valor..."
-                        onKeyDown={e => { if (e.key === 'Enter' && bulkValue.trim()) document.getElementById('bulk-apply-btn')?.click(); }}
+                        onKeyDown={e => { if (e.key === 'Enter' && bulkValue.trim()) e.currentTarget.ownerDocument.getElementById('bulk-apply-btn')?.click(); }}
                         style={{
                             background: '#ffffff', border: '1px solid #cccac0', color: '#141413',
                             padding: '3px 8px', fontSize: '11px', borderRadius: '3px', outline: 'none',
@@ -1612,7 +1643,7 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
                             const fieldValue = bulkValue.trim();
                             if (bulkAssigning || !fieldValue || !fieldName) return;
                             if (isNew && (fieldName.toLowerCase() === 'dbId'.toLowerCase() || fieldName === 'EXT ID' || fieldName === 'Id. elemento')) {
-                                alert('Ese nombre está reservado. Elige otro.');
+                                ventana.alert('Ese nombre está reservado. Elige otro.');
                                 return;
                             }
                             setBulkAssigning(true);
@@ -1862,7 +1893,7 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
                                 const copia = unico != null ? String(Number(unico.toPrecision(12))) : texto;
                                 return (
                                     <button key={col.key} disabled={!texto && i > 0}
-                                        onClick={() => { if (texto) { navigator.clipboard?.writeText(copia); setCopiado(col.key); setTimeout(() => setCopiado(c => (c === col.key ? null : c)), 1200); } }}
+                                        onClick={() => { if (texto) { ventana.navigator.clipboard?.writeText(copia); setCopiado(col.key); setTimeout(() => setCopiado(c => (c === col.key ? null : c)), 1200); } }}
                                         title={texto ? `Selección · ${col.header}: ${texto} · clic para copiar ${copia}` : ''}
                                         style={{
                                             width: col.width, flexShrink: 0, padding: '0 12px', height: '100%', textAlign: texto ? 'right' : 'left', fontVariantNumeric: 'tabular-nums',
@@ -1921,7 +1952,7 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
                 return (
                     <>
                         <div style={{ position: 'fixed', inset: 0, zIndex: 300 }} onClick={() => setMenuCabecera(null)} onContextMenu={e => { e.preventDefault(); setMenuCabecera(null); }} />
-                        <div role="menu" aria-label={`Columna ${Tabla.etiquetaDeColumna(c)}`} className="v-menu" style={{ position: 'fixed', left: Math.min(menuCabecera.x, window.innerWidth - 240), top: Math.min(menuCabecera.y, window.innerHeight - 300), zIndex: 301, width: '230px' }}>
+                        <div role="menu" aria-label={`Columna ${Tabla.etiquetaDeColumna(c)}`} className="v-menu" style={{ position: 'fixed', left: Math.min(menuCabecera.x, ventana.innerWidth - 240), top: Math.min(menuCabecera.y, ventana.innerHeight - 300), zIndex: 301, width: '230px' }}>
                             {item('Ordenar ascendente', () => setOrden([{ campo: c, dir: 'asc' }]))}
                             {item('Ordenar descendente', () => setOrden([{ campo: c, dir: 'desc' }]))}
                             {item('Quitar el orden', () => setOrden(o => o.filter(x => x.campo !== c)), !orden.some(x => x.campo === c))}
@@ -1944,7 +1975,7 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
             {menuPie && (
                 <>
                     <div style={{ position: 'fixed', inset: 0, zIndex: 300 }} onClick={() => setMenuPie(null)} />
-                    <div role="menu" aria-label="Cálculo de la columna" className="v-menu" style={{ position: 'fixed', left: Math.min(menuPie.x, window.innerWidth - 210), top: Math.max(8, menuPie.y - 270), zIndex: 301, width: '200px' }}>
+                    <div role="menu" aria-label="Cálculo de la columna" className="v-menu" style={{ position: 'fixed', left: Math.min(menuPie.x, ventana.innerWidth - 210), top: Math.max(8, menuPie.y - 270), zIndex: 301, width: '200px' }}>
                         <div className="v-menu__nota" style={{ textTransform: 'uppercase', letterSpacing: '.5px', padding: '4px 10px' }}>Cálculo</div>
                         {[...Tabla.CALCULOS, 'ninguno'].map(calc => {
                             const actual = (calculos[menuPie.campo] || 'ninguno') === calc;

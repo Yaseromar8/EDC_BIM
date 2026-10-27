@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import ReactDOM from 'react-dom';
+import { useVentanaDelPanel } from './PanelAparte';
 import { partesDeClave, notaDeCampo, compararFichas, GRUPO_PROPIO } from '../lib/inventoryCatalogo';
 
 // Sin tildes ni mayúsculas, como el resto de buscadores de la Planilla.
@@ -7,6 +8,8 @@ const plano = s => String(s ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, 
 
 const ColumnConfiguratorModal = ({ open, onClose, availableColumns = [], selectedColumns = [], onUpdate, catalogo = null }) => {
     const [currentSelection, setCurrentSelection] = useState([]);
+    // El diálogo se abre en la ventana donde está la Planilla.
+    const ventana = useVentanaDelPanel();
     const [searchTermAvailable, setSearchTermAvailable] = useState('');
     const [searchTermSelected, setSearchTermSelected] = useState('');
 
@@ -327,7 +330,7 @@ const ColumnConfiguratorModal = ({ open, onClose, availableColumns = [], selecte
 
             </div>
         </div>,
-        document.body
+        ventana.document.body
     );
 };
 

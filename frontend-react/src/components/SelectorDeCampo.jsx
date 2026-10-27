@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { buscarCampos, seccionesDeCampos, notaDeCampo } from '../lib/inventoryCatalogo';
+import { useVentanaDelPanel } from './PanelAparte';
 
 /**
  * Elegir un campo de la Planilla: buscador, nombre limpio, grupo y cuánto dato
@@ -87,12 +88,13 @@ export function ListaDeCampos({ catalogo, valor, onElegir, excluir = SIN_EXCLUIR
 export default function SelectorDeCampo({ catalogo, valor, onElegir, excluir, placeholder = 'Campo', etiqueta = 'Campo', ancho = 360, disabled = false }) {
     const [abierto, setAbierto] = useState(false);
     const [arriba, setArriba] = useState(false);
+    const ventana = useVentanaDelPanel();
     const boton = useRef(null);
     const f = valor ? catalogo.get(valor) : null;
     const abrir = () => {
         if (disabled) return;
         const r = boton.current.getBoundingClientRect();
-        setArriba(window.innerHeight - r.bottom < 380 && r.top > window.innerHeight - r.bottom);
+        setArriba(ventana.innerHeight - r.bottom < 380 && r.top > ventana.innerHeight - r.bottom);
         setAbierto(true);
     };
     return (

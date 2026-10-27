@@ -36,6 +36,7 @@ import ProgressDetailPanel from './components/ProgressDetailPanel';
 import DocumentManager from './components/DocumentManager';
 import DocPinPanel from './components/DocPinPanel';
 import InventoryDataGrid from './components/InventoryDataGrid';
+import { usePanelAparte, RanuraDelPanel, EnElPanel } from './components/PanelAparte';
 import BudgetTree from './components/BudgetTree';
 import TandemSidebar from './components/TandemSidebar';
 import TandemFilterPanel, { restoreSourceTints } from './components/TandemFilterPanel';
@@ -860,6 +861,8 @@ function App() {
   const [compareMode, setCompareMode] = useState(false); // Comparador (contractual vs avance)
   const [panelVisible, setPanelVisible] = useState(false);
   const [inventoryTabOpen, setInventoryTabOpen] = useState(false);
+  // La Planilla entera, viva, se puede llevar a otra ventana (docs/visor/37).
+  const planillaAparte = usePanelAparte({ nombre: 'PlanillaAlephia', titulo: 'Planilla — ALEPHIA View' });
   const [inventoryPanelHeight, setInventoryPanelHeight] = useState(280);
   // La Planilla se apoya ENCIMA de la barra inferior del visor (Capas, Agrupación…), no sobre ella.
   const [altoBarraInferior, setAltoBarraInferior] = useState(0);
@@ -5003,7 +5006,7 @@ function App() {
               )}
 
               {/* INVENTORY DATA GRID - Overlay Panel (Tandem Style) */}
-              {inventoryTabOpen && (
+              {inventoryTabOpen && !planillaAparte.fuera && (
                 <div className="inventory-overlay-panel" data-tapa-visor style={{
                   position: 'absolute',
                   bottom: `${altoBarraInferior}px`,
@@ -5051,6 +5054,13 @@ function App() {
                   >
                     <div style={{ position: 'absolute', left: '50%', top: '1px', transform: 'translateX(-50%)', width: '40px', height: '3px', borderRadius: '2px', background: '#cccac0' }} />
                   </div>
+                  <RanuraDelPanel caja={planillaAparte.caja} />
+                </div>
+              )}
+              {/* La Planilla se dibuja siempre en su caja: abajo, en la ranura, o en
+                  otra ventana. Al mudarse no se vuelve a montar: conserva lo que tenía. */}
+              {inventoryTabOpen && (
+                <EnElPanel caja={planillaAparte.caja} ventana={planillaAparte.ventana} onDesmontar={planillaAparte.volver}>
                   <InventoryDataGrid
                     activeModelUrn={selectedProject?.id || 'global'}
                     filterResult={filterResult}
@@ -5060,8 +5070,13 @@ function App() {
                     hiddenModelUrns={hiddenModelUrns}
                     isolatedExtIds={isolatedExtIds}
                     onClose={() => setInventoryTabOpen(false)}
+                    enVentanaAparte={planillaAparte.fuera}
+                    onSacarAVentana={() => {
+                      if (!planillaAparte.sacar()) window.alert('El navegador bloqueó la ventana. Permite las ventanas emergentes de este sitio para abrir la Planilla aparte.');
+                    }}
+                    onVolverAlVisor={planillaAparte.volver}
                   />
-                </div>
+                </EnElPanel>
               )}
 
             </div>
