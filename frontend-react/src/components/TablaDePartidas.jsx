@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { analizarPartidas } from '../lib/planillaPartidas';
+import { analizarPartidas, normalizarUnidad } from '../lib/planillaPartidas';
 import { plantillaDelItemizado, filasVisibles } from '../lib/planillaPlantilla';
 import { leerItemizado, cruzarCampos, diferencias, normalizarCodigo } from '../lib/planillaItemizado';
 import { formatearNumero } from '../lib/inventoryTabla';
@@ -21,7 +21,7 @@ import { UNIDADES_MEDIBLES, MAX_MEDIR_CON, candidatosDeMedida, candidatosAMano, 
  * «·crit.». Lo manual va aparte. Clic en
  * una partida = sus elementos en el 3D; clic en un título = plegar o desplegar.
  */
-const celda = { padding: '0 10px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' };
+const celda = { padding: '0 8px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' };
 const num = { ...celda, textAlign: 'right', fontVariantNumeric: 'tabular-nums' };
 const COLUMNAS = [
     { titulo: 'Código', ancho: '170px' },
@@ -33,8 +33,12 @@ const COLUMNAS = [
     { titulo: 'Manual (aparte)', ancho: '150px', derecha: true },
 ];
 const rejilla = COLUMNAS.map(c => c.ancho).join(' ');
-const ALTO = 28;   // alto de cada fila de la plantilla (se dibujan solo las que se ven)
-const sangria = nivel => `${10 + (Math.max(1, nivel) - 1) * 12}px`;
+const ALTO = 24;   // alto de cada fila de la plantilla (se dibujan solo las que se ven); 24 = más pegadas, como un Excel
+// Formato de la plantilla, con la paleta oficial (D-24): el código en gris con cifras alineadas, como en
+// un presupuesto; los títulos de nivel 1 en Light 50, los demás solo en negrita; lo vacío en Mid Gray.
+const codigoCelda = { fontVariantNumeric: 'tabular-nums', fontSize: '11.5px' };
+const GRIS_600 = '#72706b', GRIS_700 = '#52524d', MID_GRAY = '#b0aea5', LIGHT_50 = '#f1f0e8', AVISO = '#734500';
+const sangria = nivel => `${8 + (Math.max(1, nivel) - 1) * 12}px`;
 const ROJO = '#9a3b2e';
 
 // Cómo se leyeron las partidas: lo que la Planilla deduce de los datos (docs/visor/24 §9).
@@ -541,7 +545,7 @@ export default function TablaDePartidas({ filas, filasObra, dic, roles, claveDeF
                 onClick={() => alternar(p.clave, p.claves)}
                 title={`${codigo || '(sin código)'} · ${nombre || '(sin nombre)'} — ${sel ? 'clic: mostrar todo' : `clic: aislar sus ${p.elementos} elementos en el 3D`}`}
                 style={{ display: 'grid', gridTemplateColumns: rejilla, height: `${ALTO}px`, alignItems: 'center', borderBottom: '1px solid #e8e6dc', cursor: 'pointer', background: '#ffffff' }}>
-                <div style={{ ...celda, paddingLeft: sangria(nivel), color: codigo ? '#141413' : ROJO }}>
+                <div style={{ ...celda, ...codigoCelda, paddingLeft: sangria(nivel), color: codigo ? GRIS_700 : ROJO }}>
                     {codigo || 'sin código'}
                     {p.intercambiadas ? <span title="En Revit el código estaba en NombreDePartida" style={{ color: ROJO }}> ⇄</span> : null}
                     {p.unidas > 1 && <span title={`El mismo ítem escrito de ${p.unidas} formas en el modelo (con y sin ceros a la izquierda): se suman`} style={{ color: '#72706b' }}> ×{p.unidas}</span>}
@@ -552,14 +556,14 @@ export default function TablaDePartidas({ filas, filasObra, dic, roles, claveDeF
                 <div style={{ ...celda, color: nombre ? '#141413' : ROJO }}
                     title={p.oficial && p.nombreModelo && p.nombreModelo !== nombre ? `En el modelo: ${p.nombreModelo}` : undefined}>{nombre || 'sin nombre'}</div>
                 <div style={{ ...celda, color: p.unidad ? '#52524d' : ROJO }}>{p.unidad || 'sin unidad'}</div>
-                <div style={{ ...num, fontWeight: 600, color: p.conMedida ? '#141413' : '#b0aea5' }}
+                <div style={{ ...num, fontWeight: 500, color: p.conMedida ? '#141413' : MID_GRAY }}
                     title={[calculada ? 'calculada: longitud total de barra × kg/m del diámetro' : '',
                         conCriterio || aManoP ? `${p.medidoCon.map(m => `${miles(m.n)} medidos con ${etiquetaDeClave(m.clave)} (Σ ${fmt(m.suma, p.unidad)})`).join('; ')}: criterio de medida de la obra, porque no traen medida nativa${aManoP ? '; «a mano» = número escrito a mano en Revit, no sale de la geometría' : ''}${p.conMedida > p.porCriterio ? `; ${miles(p.conMedida - p.porCriterio)} con su medida nativa` : ''}` : ''].filter(Boolean).join(' · ')}>
-                    {p.conMedida ? `${formatearNumero(p.cantidad)} ${p.unidad}` : '—'}
+                    {p.conMedida ? <>{formatearNumero(p.cantidad)} <span style={{ fontWeight: 400, color: GRIS_600 }}>{p.unidad}</span></> : '—'}
                     {calculada ? <span style={{ fontWeight: 400, color: '#72706b' }}> ·calc.</span> : null}
                     {p.unidad === 'glb' && p.conMedida ? <span style={{ fontWeight: 400, color: '#72706b' }} title={`Partida global: vale 1 en total, aunque la lleven ${miles(p.elementos)} elementos`}> ·global</span> : null}
                     {conCriterio ? <span style={{ fontWeight: 400, color: '#72706b' }}> ·crit.</span> : null}
-                    {aManoP ? <span style={{ fontWeight: 400, color: '#9e5943' }}> ·man.</span> : null}
+                    {aManoP ? <span style={{ fontWeight: 400, color: AVISO }}> ·man.</span> : null}
                 </div>
                 <div style={{ ...num, display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '4px' }}>
                     {sel && new Set(p.claves).size > 1 && recorrido?.pasos > 1 ? (() => {
@@ -580,7 +584,7 @@ export default function TablaDePartidas({ filas, filasObra, dic, roles, claveDeF
                 </div>
                 <div style={{ ...num, color: p.sinMedida ? ROJO : '#b0aea5', display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '6px' }}>
                     {p.conflictos > 0 && <span title={`${miles(p.conflictos)} con dos criterios de medida del mismo nivel: no se elige uno en silencio (ver «criterios de medida»)`}>⚠</span>}
-                    {p.sinMedida ? p.sinMedida.toLocaleString('es-PE') : '0'}
+                    {p.sinMedida ? p.sinMedida.toLocaleString('es-PE') : ''}
                     {(p.sinMedida > 0 || conCriterio || aManoP) && medible(p) && (
                         <button className="v-enlace" style={{ fontSize: '11px' }}
                             title="Elegir con qué parámetro se miden los elementos de esta partida que no traen medida nativa"
@@ -598,12 +602,12 @@ export default function TablaDePartidas({ filas, filasObra, dic, roles, claveDeF
     // Una partida del itemizado SIN elementos en el modelo: queda, vacía y a la vista.
     const filaVacia = f => (
         <div role="row" title={`${f.item} · ${f.descripcion} — ${f.sub.length ? 'sin elementos con este código exacto; los tiene en sus sub-partidas, debajo' : 'sin elementos en el modelo: este metrado no sale del modelo'}`}
-            style={{ display: 'grid', gridTemplateColumns: rejilla, height: `${ALTO}px`, alignItems: 'center', borderBottom: '1px solid #e8e6dc', background: '#ffffff', color: '#9a9890' }}>
-            <div style={{ ...celda, paddingLeft: sangria(f.nivel) }}>{f.item}</div>
+            style={{ display: 'grid', gridTemplateColumns: rejilla, height: `${ALTO}px`, alignItems: 'center', borderBottom: '1px solid #e8e6dc', background: '#ffffff', color: MID_GRAY }}>
+            <div style={{ ...celda, ...codigoCelda, paddingLeft: sangria(f.nivel) }}>{f.item}</div>
             <div style={celda}>{f.descripcion}</div>
-            <div style={celda}>{f.unidad}</div>
+            <div style={celda}>{normalizarUnidad(f.unidad) || f.unidad}</div>
             <div style={num}>—</div>
-            <div style={{ ...num, fontSize: '11px' }}>{f.sub.length ? 'en sub-partidas ↓' : 'sin elementos'}</div>
+            <div style={num}>{f.sub.length ? '↓' : '0'}</div>
             <div /><div />
         </div>
     );
@@ -612,14 +616,21 @@ export default function TablaDePartidas({ filas, filasObra, dic, roles, claveDeF
         const plegado = plegados.has(i);
         return (
             <div role="row" onClick={() => plegarTitulo(i)} title={`${f.item} · ${f.descripcion} — ${f.conDato} de ${f.total} partidas con elementos en el modelo · clic: ${plegado ? 'desplegar' : 'plegar'}`}
-                style={{ display: 'grid', gridTemplateColumns: rejilla, height: `${ALTO}px`, alignItems: 'center', borderBottom: '1px solid #e8e6dc', cursor: 'pointer',
-                    background: f.nivel <= 1 ? '#ebe9e0' : '#f5f4ef', fontWeight: 600, color: '#141413' }}>
-                <div style={{ ...celda, paddingLeft: sangria(f.nivel) }}><span style={{ display: 'inline-block', width: '12px', color: '#72706b' }}>{plegado ? '▸' : '▾'}</span>{f.item}</div>
-                <div style={celda}>
-                    {f.descripcion}
-                    {f.total > 0 && <span style={{ fontWeight: 400, color: f.conDato ? '#52524d' : '#9a9890' }}> · {miles(f.conDato)} de {miles(f.total)} con dato</span>}
+                style={{ display: 'grid', gridTemplateColumns: rejilla, height: `${ALTO}px`, alignItems: 'center', cursor: 'pointer',
+                    borderBottom: `1px solid ${f.nivel <= 1 ? '#cccac0' : '#e8e6dc'}`, borderTop: f.nivel <= 1 ? '1px solid #cccac0' : undefined,
+                    background: f.nivel <= 1 ? LIGHT_50 : '#ffffff', fontWeight: 600, color: '#141413' }}>
+                <div style={{ ...celda, ...codigoCelda, fontWeight: 600, paddingLeft: sangria(f.nivel), color: '#141413' }}>
+                    <span style={{ display: 'inline-block', width: '12px', color: MID_GRAY }}>{plegado ? '▸' : '▾'}</span>{f.item}
                 </div>
-                <div /><div /><div /><div /><div />
+                <div style={celda}>{f.descripcion}</div>
+                <div />
+                <div />
+                {/* «x de y con dato» en la columna de elementos: se lee de un vistazo, alineado. */}
+                <div style={{ ...num, fontWeight: 400, fontSize: '11px', color: f.conDato ? GRIS_600 : MID_GRAY }}
+                    title={`${f.conDato} de ${f.total} partidas de este título tienen elementos en el modelo`}>
+                    {f.total > 0 ? `${miles(f.conDato)}/${miles(f.total)}` : ''}
+                </div>
+                <div /><div />
             </div>
         );
     };
