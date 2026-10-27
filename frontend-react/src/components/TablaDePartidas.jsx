@@ -37,7 +37,17 @@ const ALTO = 24;   // alto de cada fila de la plantilla (se dibujan solo las que
 // Formato de la plantilla, con la paleta oficial (D-24): el código en gris con cifras alineadas, como en
 // un presupuesto; los títulos de nivel 1 en Light 50, los demás solo en negrita; lo vacío en Mid Gray.
 const codigoCelda = { fontVariantNumeric: 'tabular-nums', fontSize: '11.5px' };
-const GRIS_600 = '#72706b', GRIS_700 = '#52524d', MID_GRAY = '#b0aea5', LIGHT_50 = '#f1f0e8', AVISO = '#734500';
+const GRIS_600 = '#72706b', GRIS_700 = '#52524d', MID_GRAY = '#b0aea5', AVISO = '#734500';
+// Bandas de la EDT por nivel, como Primavera (pedido del dueño, 27-oct-2026: «bandas más suaves»): cada
+// nivel de título con su color, de más marcado (capítulo) a más claro; todos de la lista cerrada de la
+// paleta (D-24): Gris 300, Light Gray, Light 50 y Light. Las partidas, en blanco debajo de su banda.
+const BANDAS = [
+    { fondo: '#cccac0', texto: '#141413', apoyo: '#52524d', flecha: '#72706b' },   // nivel 1
+    { fondo: '#e8e6dc', texto: '#141413', apoyo: '#52524d', flecha: '#72706b' },   // nivel 2
+    { fondo: '#f1f0e8', texto: '#141413', apoyo: '#72706b', flecha: '#b0aea5' },   // nivel 3
+    { fondo: '#faf9f5', texto: '#141413', apoyo: '#72706b', flecha: '#b0aea5' },   // nivel 4 y más
+];
+const bandaDe = nivel => BANDAS[Math.min(Math.max(1, nivel), BANDAS.length) - 1];
 const sangria = nivel => `${8 + (Math.max(1, nivel) - 1) * 12}px`;
 const ROJO = '#9a3b2e';
 
@@ -614,19 +624,19 @@ export default function TablaDePartidas({ filas, filasObra, dic, roles, claveDeF
     const filaTitulo = r => {
         const { f, i } = r;
         const plegado = plegados.has(i);
+        const banda = bandaDe(f.nivel);
         return (
             <div role="row" onClick={() => plegarTitulo(i)} title={`${f.item} · ${f.descripcion} — ${f.conDato} de ${f.total} partidas con elementos en el modelo · clic: ${plegado ? 'desplegar' : 'plegar'}`}
                 style={{ display: 'grid', gridTemplateColumns: rejilla, height: `${ALTO}px`, alignItems: 'center', cursor: 'pointer',
-                    borderBottom: `1px solid ${f.nivel <= 1 ? '#cccac0' : '#e8e6dc'}`, borderTop: f.nivel <= 1 ? '1px solid #cccac0' : undefined,
-                    background: f.nivel <= 1 ? LIGHT_50 : '#ffffff', fontWeight: 600, color: '#141413' }}>
-                <div style={{ ...celda, ...codigoCelda, fontWeight: 600, paddingLeft: sangria(f.nivel), color: '#141413' }}>
-                    <span style={{ display: 'inline-block', width: '12px', color: MID_GRAY }}>{plegado ? '▸' : '▾'}</span>{f.item}
+                    borderBottom: '1px solid #e8e6dc', background: banda.fondo, fontWeight: 600, color: banda.texto }}>
+                <div style={{ ...celda, ...codigoCelda, fontWeight: 600, paddingLeft: sangria(f.nivel), color: banda.texto }}>
+                    <span style={{ display: 'inline-block', width: '12px', color: banda.flecha }}>{plegado ? '▸' : '▾'}</span>{f.item}
                 </div>
                 <div style={celda}>{f.descripcion}</div>
                 <div />
                 <div />
                 {/* «x de y con dato» en la columna de elementos: se lee de un vistazo, alineado. */}
-                <div style={{ ...num, fontWeight: 400, fontSize: '11px', color: f.conDato ? GRIS_600 : MID_GRAY }}
+                <div style={{ ...num, fontWeight: 400, fontSize: '11px', color: banda.apoyo }}
                     title={`${f.conDato} de ${f.total} partidas de este título tienen elementos en el modelo`}>
                     {f.total > 0 ? `${miles(f.conDato)}/${miles(f.total)}` : ''}
                 </div>
