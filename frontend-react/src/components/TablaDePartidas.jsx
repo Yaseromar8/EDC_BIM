@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { analizarPartidas } from '../lib/planillaPartidas';
 import { plantillaDelItemizado, filasVisibles } from '../lib/planillaPlantilla';
-import { leerItemizado, cruzarCampos, diferencias } from '../lib/planillaItemizado';
+import { leerItemizado, cruzarCampos, diferencias, normalizarCodigo } from '../lib/planillaItemizado';
 import { formatearNumero } from '../lib/inventoryTabla';
 import { compacto } from '../lib/inventoryBuscar';
 import { EVENTOS } from '../lib/aislamientoTemporal';
@@ -222,6 +222,14 @@ function MedirCon({ partida, codigoOficial, sinNativa, obra, claveNativa, juego,
     const sim = useMemo(() => (criterio ? simularCriterio(sinNativa, criterio) : null), [sinNativa, criterio]);
     const actuales = juego?.criterios || [];
     const reemplaza = criterio ? actuales.find(c => claveDeCriterio(c) === claveDeCriterio(criterio)) : null;
+    // Los criterios que ya tiene ESTA partida: se ven arriba y se pueden quitar para volver a lo detectado.
+    const deEstaPartida = actuales.filter(c => c.unidad === unidad && c.partida && normalizarCodigo(c.partida) === normalizarCodigo(codigoOficial));
+    const quitar = async c => {
+        setError('');
+        const r = await onGuardar(actuales.filter(x => x !== c));
+        if (r && !r.ok) setError(r.error || 'No se pudo quitar.');
+        else onCerrar();
+    };
     const guardar = async () => {
         setError('');
         const lista = [...actuales.filter(c => c !== reemplaza), criterio];
@@ -250,6 +258,15 @@ function MedirCon({ partida, codigoOficial, sinNativa, obra, claveNativa, juego,
                 <span style={{ flex: 1 }} />
                 <button className="v-enlace" style={{ fontSize: '11px' }} onClick={onCerrar}>cerrar</button>
             </div>
+            {deEstaPartida.map((c, i) => (
+                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '8px', minHeight: '22px', marginBottom: '4px', color: '#141413' }}>
+                    <span>Criterio actual: <strong style={{ fontWeight: 600 }}>{describirCriterio(c)}</strong></span>
+                    <button style={estiloBoton} disabled={estado.guardando} onClick={() => quitar(c)}
+                        title="Quita este criterio: la partida vuelve a la medida detectada (la nativa de Revit) y lo que no la tenga queda «sin medida»">
+                        quitar: volver a la medida detectada
+                    </button>
+                </div>
+            ))}
             {!hayAlgo && <div>Ningún parámetro de esos elementos trae valores en {unidad}, ni números escritos a mano. La medida no llega al visor: hay que volcarla en Revit a un parámetro del elemento.</div>}
             {hayAlgo && (
                 <>
