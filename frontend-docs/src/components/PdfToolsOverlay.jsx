@@ -15,7 +15,9 @@ const SELLO_ANCHO = 150, SELLO_ALTO = 62;
 // El marcador de foto mide lo mismo EN PANTALLA (px), como el conteo: se ve igual a cualquier zoom.
 const FOTO_R = 13, FOTO_ABANICO = 36, FOTO_APERTURA = 50;
 
-const COLORS = ['#e53935', '#1e88e5', '#43a047', '#fb8c00', '#8e24aa', '#000000'];
+// Colores de marca de la paleta oficial (D-24, lista cerrada; docs/ux/ESTUCHE_COMPACTO.md): error, naranja 30D,
+// aviso, azul 30D, verde 20D y Dark. Las marcas ya guardadas conservan el color con que se dibujaron.
+const COLORS = ['#b93535', '#9e5943', '#734500', '#507294', '#64744e', '#141413'];
 
 function dist2d(a, b) { return Math.hypot(b[0] - a[0], b[1] - a[1]); }
 function polyLength(pts) { let s = 0; for (let i = 1; i < pts.length; i++) s += dist2d(pts[i - 1], pts[i]); return s; }
@@ -167,6 +169,24 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
     }
   };
 
+  // SUPR BORRA LA MARCA ELEGIDA (29-oct-2026, estuche compacto): «Borrar marca» ya no es una herramienta del
+  // estuche. Como en el panel, solo su autor la borra; con una observación viva el servidor la rechaza (409).
+  useEffect(() => {
+    if (elegida == null) return undefined;
+    const alTeclear = (e) => {
+      if (e.key !== 'Delete' && e.key !== 'Backspace') return;
+      const t = e.target;
+      if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
+      const m = markups.find(x => x.id === elegida);
+      if (!m || String(m.id).startsWith('tmp_') || !userName || m.created_by !== userName) return;
+      e.preventDefault();
+      setElegida(null);
+      deleteMarkup(m);
+    };
+    window.addEventListener('keydown', alTeclear);
+    return () => window.removeEventListener('keydown', alTeclear);
+  }, [elegida, markups, userName]);
+
   // Publicar o retirar: un acto de su autor (GAP 02). Desde el panel de la marca.
   const publicarMarkup = async (m) => {
     const quiere = !m.publicado;
@@ -226,10 +246,23 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
       });
       return;
     }
-    // Figuras por arrastre
+    // Figuras: nube, rectángulo y flecha DE DOS CLICS, como en ACC (29-oct-2026): el primero fija una esquina
+    // (o el origen) y el segundo crea la figura. Arrastrar de una vez también vale. El lápiz, solo arrastrando.
+    const d = draftRef.current;
+    if (d && d.esperando && d.kind === tool) {
+      setDraft(null);
+      guardarFigura(d.kind, d.start, p);
+      return;
+    }
     if (['cloud', 'rect', 'arrow', 'pen'].includes(tool)) {
       setDraft({ kind: tool, start: p, end: p, points: [p], dragging: true });
     }
+  };
+
+  const guardarFigura = (kind, start, end) => {
+    if (dist2d(start, end) < 2) return; // los dos clics en el mismo sitio
+    if (kind === 'arrow') saveMarkup('arrow', { p1: start, p2: end });
+    else saveMarkup(kind, { x: Math.min(start[0], end[0]), y: Math.min(start[1], end[1]), w: Math.abs(end[0] - start[0]), h: Math.abs(end[1] - start[1]) });
   };
 
   const onPointerMove = (e) => {
@@ -245,13 +278,13 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
 
   const onPointerUp = () => {
     const d = draftRef.current;
-    if (!d || !d.dragging) return;
-    setDraft(null);
+    if (!d || !d.dragging || d.esperando) return;
     const { kind, start, end, points } = d;
-    if (kind === 'pen') { if (points.length > 2) saveMarkup('pen', { points }); return; }
-    if (dist2d(start, end) < 2) return; // clic accidental
-    if (kind === 'arrow') saveMarkup('arrow', { p1: start, p2: end });
-    else saveMarkup(kind, { x: Math.min(start[0], end[0]), y: Math.min(start[1], end[1]), w: Math.abs(end[0] - start[0]), h: Math.abs(end[1] - start[1]) });
+    if (kind === 'pen') { setDraft(null); if (points.length > 2) saveMarkup('pen', { points }); return; }
+    // Un clic sin arrastrar: la figura espera el segundo clic y sigue al cursor hasta entonces.
+    if (dist2d(start, end) < 2) { setDraft({ ...d, esperando: true }); return; }
+    setDraft(null);
+    guardarFigura(kind, start, end);
   };
 
   const onDoubleClick = (e) => {
@@ -264,12 +297,17 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
     if (d.kind === 'area' && pts.length >= 3) saveMarkup('area', { points: pts });
   };
 
-  // Esc cancela el dibujo en curso
+  // Esc cancela el dibujo en curso y DESACTIVA la herramienta, como en ACC (29-oct-2026): hasta entonces la
+  // herramienta sigue puesta para dibujar otra.
   useEffect(() => {
-    const onKey = (e) => { if (e.key === 'Escape') { setDraft(null); setTextDraft(null); setCalibAsk(null); setSelloEn(null); } };
+    const onKey = (e) => {
+      if (e.key !== 'Escape') return;
+      setDraft(null); setTextDraft(null); setCalibAsk(null); setSelloEn(null);
+      setTool('pan');
+    };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, []);
+  }, [setTool]);
 
   // ── Etiquetas con escala ──
   const lenLabel = (pts) => {

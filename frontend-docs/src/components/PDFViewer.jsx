@@ -180,11 +180,12 @@ const GRUPOS_DE_HERRAMIENTAS = [
       hint: 'Cada clic suma una unidad al conteo' } ] },
   { nombre: 'anotar', items: [
     { id: 'cloud', etiqueta: 'Nube', title: 'Nube de revisión',
-      icon: <path d="M6 7.5a2 2 0 0 1 3.3-1.4 2 2 0 0 1 3.4 0 2 2 0 0 1 3.4 0A2 2 0 0 1 18.5 8a2 2 0 0 1 .1 3.5 2 2 0 0 1-.1 3.6 2 2 0 0 1-2.4 2 2 2 0 0 1-3.4 0 2 2 0 0 1-3.4 0 2 2 0 0 1-3.3-1.5 2 2 0 0 1-1-3.4A2 2 0 0 1 6 7.5z"/>,
-      hint: 'Arrastra para encerrar lo que hay que revisar' },
+      // La nube de revisión de siempre: un rectángulo de festones iguales (3 × 2), grandes para que se lean a 18 px.
+      icon: <path d="M4.5 7a2.5 2.5 0 0 1 5 0a2.5 2.5 0 0 1 5 0a2.5 2.5 0 0 1 5 0a2.5 2.5 0 0 1 0 5a2.5 2.5 0 0 1 0 5a2.5 2.5 0 0 1-5 0a2.5 2.5 0 0 1-5 0a2.5 2.5 0 0 1-5 0a2.5 2.5 0 0 1 0-5a2.5 2.5 0 0 1 0-5z"/>,
+      hint: 'Clic en una esquina y clic en la opuesta' },
     { id: 'arrow', etiqueta: 'Flecha', title: 'Flecha',
       icon: <><path d="M5 19 18 6"/><path d="M18 6h-6.5M18 6v6.5"/></>,
-      hint: 'Arrastra desde el origen hasta la punta' },
+      hint: 'Clic en el origen y clic en la punta' },
     { id: 'text', etiqueta: 'Texto', title: 'Texto',
       icon: <><path d="M4 4h16v16H4z" strokeDasharray="2 2"/><path d="M8.5 8.5h7M12 8.5v7.5"/></>,
       hint: 'Clic donde quieras escribir' } ] },
@@ -210,6 +211,26 @@ const HINTS = {
   ...Object.fromEntries(GRUPOS_DE_HERRAMIENTAS.flatMap(g => g.items.map(t => [t.id, t.hint]))),
   calibrate: 'Marca dos puntos de una distancia conocida y escríbela',
 };
+
+// EL ESTUCHE COMPACTO (29-oct-2026, docs/ux/ESTUCHE_COMPACTO.md). El dueño, con la barra de ACC al lado: «el
+// nuestro parece herramientas para niños». Columna estrecha de iconos sobre Dark 12, como el mando inferior;
+// las variantes de una misma familia van en un desplegable (el triángulo de la esquina) que recuerda la
+// última usada, y el nombre con su tecla sale al pasar el ratón. Lo activo en naranja: en la paleta oficial
+// (D-24) es el «indicador activo». «Borrar marca» sale del estuche: se elige la marca y se pulsa Supr (o la
+// papelera de su panel). Las herramientas son las mismas de arriba; solo cambia cómo se ofrecen.
+const HERRAMIENTA = Object.fromEntries(GRUPOS_DE_HERRAMIENTAS.flatMap(g => g.items).map(t => [t.id, t]));
+const ICONO_SELECCIONAR = <path d="M6 4l12 7-5.5 1.2L10 18z" />;
+const NOMBRE_COMPACTO = { pan: 'Seleccionar y mover', measure: 'Distancia' };
+const nombreDe = (id) => NOMBRE_COMPACTO[id] || HERRAMIENTA[id]?.etiqueta || id;
+const TECLA = { pan: 'V', measure: 'M', area: 'A', count: 'K', cloud: 'C', arrow: 'F', text: 'T', stamp: 'S', photo: 'P' };
+const HERRAMIENTA_POR_TECLA = Object.fromEntries(Object.entries(TECLA).map(([id, k]) => [k.toLowerCase(), id]));
+const ESTUCHE_COMPACTO = [
+  [{ grupo: 'ver', variantes: ['pan'] }],
+  [{ grupo: 'medir', nombre: 'Medir', variantes: ['measure', 'area', 'count'] },
+    { grupo: 'marcar', nombre: 'Marcar', variantes: ['cloud', 'arrow'] },
+    { grupo: 'texto', variantes: ['text'] }],
+  [{ grupo: 'sello', variantes: ['stamp'] }, { grupo: 'foto', variantes: ['photo'] }],
+];
 
 // ----------------------------------------------------------------------
 // Visor Principal
@@ -732,15 +753,6 @@ export default function PDFViewer({ url, preparando = false,
   const [indice, setIndice] = useState([]);
   const [pestanaLateral, setPestanaLateral] = useState('paginas');
   const [apaisada, setApaisada] = useState(null);
-  // EL ESTUCHE SE PLIEGA (LDA E6): con nombres tapa el borde de la hoja; plegado deja solo los iconos.
-  // Se recuerda en este navegador (si el almacenamiento no está, empieza abierto).
-  const [estucheRecogido, setEstucheRecogido] = useState(() => {
-    try { return localStorage.getItem('lda.estucheRecogido') === '1'; } catch { return false; }
-  });
-  const plegarEstuche = () => setEstucheRecogido(v => {
-    try { localStorage.setItem('lda.estucheRecogido', v ? '0' : '1'); } catch { /* sin almacenamiento */ }
-    return !v;
-  });
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [pageRendering, setPageRendering] = useState(false);
 
@@ -907,6 +919,40 @@ export default function PDFViewer({ url, preparando = false,
   // Herramientas de ingeniería (overlay)
   const [tool, setTool] = useState('pan');
   const [markupColor, setMarkupColor] = useState(COLORS[0]);
+  // Estuche compacto: la última variante de cada familia y el desplegable abierto (uno a la vez).
+  const [variante, setVariante] = useState({ medir: 'measure', marcar: 'cloud' });
+  const [desplegable, setDesplegable] = useState(null);
+  const estucheRef = useRef(null);
+  useEffect(() => {
+    const familia = ESTUCHE_COMPACTO.flat().find(g => g.variantes.length > 1 && g.variantes.includes(tool));
+    if (familia) setVariante(v => (v[familia.grupo] === tool ? v : { ...v, [familia.grupo]: tool }));
+  }, [tool]);
+  // Un clic fuera del estuche cierra su desplegable y la paleta.
+  useEffect(() => {
+    if (!desplegable && !colorOpen) return undefined;
+    const fuera = (e) => {
+      if (estucheRef.current && !estucheRef.current.contains(e.target)) { setDesplegable(null); setColorOpen(false); }
+    };
+    document.addEventListener('mousedown', fuera);
+    return () => document.removeEventListener('mousedown', fuera);
+  }, [desplegable, colorOpen]);
+  // Las teclas del estuche (las del aviso de cada botón). Nunca mientras se escribe.
+  useEffect(() => {
+    if (!nodeId || !cajetin) return undefined;
+    const alTeclear = (e) => {
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      const t = e.target;
+      if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
+      if (e.key === 'Escape') { setDesplegable(null); setColorOpen(false); return; }
+      const id = HERRAMIENTA_POR_TECLA[(e.key || '').toLowerCase()];
+      if (!id) return;
+      e.preventDefault();
+      setTool(id);
+      setDesplegable(null);
+    };
+    window.addEventListener('keydown', alTeclear);
+    return () => window.removeEventListener('keydown', alTeclear);
+  }, [nodeId, cajetin]);
   const [vpInfo, setVpInfo] = useState(null); // { vp, w, h } del render actual
   const userName = (() => {
     try { return JSON.parse(localStorage.getItem('visor_user') || sessionStorage.getItem('visor_user') || '{}').name || ''; }
@@ -2489,16 +2535,78 @@ export default function PDFViewer({ url, preparando = false,
             </div>
           </div>
 
-        {nodeId && (
-            <div className={`pdf-rail${cajetin ? ' pdf-rail--estuche' : ''}${cajetin && estucheRecogido ? ' pdf-rail--recogido' : ''}`} role="toolbar" aria-label="Herramientas de medición y anotación">
-              {cajetin && (
-                <button type="button" className="pdf-rail__plegar" onClick={plegarEstuche}
-                  aria-expanded={!estucheRecogido}
-                  title={estucheRecogido ? 'Mostrar los nombres de las herramientas' : 'Plegar el estuche'}>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
-                    strokeLinecap="round" strokeLinejoin="round">{estucheRecogido ? <path d="M9 6l6 6-6 6" /> : <path d="M15 6l-6 6 6 6" />}</svg>
-                </button>
-              )}
+        {nodeId && cajetin && (
+            <div ref={estucheRef} className="pdf-rail pdf-rail--compacto" role="toolbar" aria-label="Herramientas de medición y anotación">
+              {ESTUCHE_COMPACTO.map((bloque, i) => (
+                <div key={i} className="pdf-rail__group">
+                  {bloque.map(g => {
+                    const conMas = g.variantes.length > 1;
+                    const id = conMas ? (variante[g.grupo] || g.variantes[0]) : g.variantes[0];
+                    const activo = g.variantes.includes(tool);
+                    return (
+                      <span key={g.grupo} className="pdf-estuche__celda">
+                        <button type="button" className="pdf-rail-btn" aria-pressed={activo}
+                          aria-label={nombreDe(id)} data-tip={`${nombreDe(id)} · ${TECLA[id]}`}
+                          aria-haspopup={conMas ? 'menu' : undefined}
+                          aria-expanded={conMas ? desplegable === g.grupo : undefined}
+                          onClick={() => {
+                            setColorOpen(false);
+                            if (conMas) { setTool(id); setDesplegable(d => (d === g.grupo ? null : g.grupo)); return; }
+                            setDesplegable(null);
+                            setTool(prev => (prev === id && id !== 'pan' ? 'pan' : id));
+                          }}>
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">{id === 'pan' ? ICONO_SELECCIONAR : HERRAMIENTA[id].icon}</svg>
+                          {conMas && <span className="pdf-estuche__mas" aria-hidden="true" />}
+                        </button>
+                        {conMas && desplegable === g.grupo && (
+                          <div className="pdf-estuche__menu" role="menu" aria-label={g.nombre}>
+                            {g.variantes.map(v => (
+                              <button key={v} type="button" role="menuitemradio" aria-checked={tool === v}
+                                title={HERRAMIENTA[v].title}
+                                onClick={() => { setTool(v); setDesplegable(null); }}>
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                  strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">{HERRAMIENTA[v].icon}</svg>
+                                <span>{nombreDe(v)}</span><kbd>{TECLA[v]}</kbd>
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </span>
+                    );
+                  })}
+                  {i === 0 && (extrasDelEstuche || []).map(x => (
+                    <button key={x.id} type="button" className="pdf-rail-btn" aria-label={x.titulo || x.etiqueta}
+                      data-tip={x.etiqueta} aria-pressed={!!x.activo} onClick={x.onClick}>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                        strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">{x.icono}</svg>
+                    </button>
+                  ))}
+                </div>
+              ))}
+              <div className="pdf-rail__group">
+                <span className="pdf-estuche__celda">
+                  <button type="button" className="pdf-swatch" aria-label="Color de la marca" data-tip="Color de la marca"
+                    aria-haspopup="true" aria-expanded={colorOpen}
+                    onClick={() => { setDesplegable(null); setColorOpen(o => !o); }}>
+                    <i style={{ background: markupColor }} />
+                  </button>
+                  {colorOpen && (
+                    <div className="pdf-colors pdf-estuche__colores" role="menu">
+                      {COLORS.map(c => (
+                        <button key={c} style={{ background: c }} aria-pressed={markupColor === c}
+                          aria-label={'Color ' + c} title={c}
+                          onClick={() => { setMarkupColor(c); setColorOpen(false); }} />
+                      ))}
+                    </div>
+                  )}
+                </span>
+              </div>
+            </div>
+          )}
+
+        {nodeId && !cajetin && (
+            <div className="pdf-rail" role="toolbar" aria-label="Herramientas de medición y anotación">
               {GRUPOS_DE_HERRAMIENTAS.map(grupo => (
                 <div key={grupo.nombre} className="pdf-rail__group">
                   {cajetin && <span className="pdf-rail__titulo">{TITULO_DE_GRUPO[grupo.nombre] || grupo.nombre}</span>}
@@ -2646,7 +2754,7 @@ export default function PDFViewer({ url, preparando = false,
           )}
 
           {nodeId && tool !== 'pan' && (
-            <div className="pdf-tool-hint">{HINTS[tool]} · Esc cancela</div>
+            <div className="pdf-tool-hint">{HINTS[tool]} · Esc para salir</div>
           )}
         </div>
       </div>

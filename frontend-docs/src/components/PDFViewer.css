@@ -160,7 +160,7 @@
 
 /* ── CUERPO ───────────────────────────────────────────────────────────── */
 
-.pdf-body { display: flex; flex: 1; min-height: 0; overflow: hidden; }
+.pdf-body { position: relative; display: flex; flex: 1; min-height: 0; overflow: hidden; }
 
 .pdf-sidebar {
   display: flex; flex-direction: column; flex-shrink: 0;
@@ -948,3 +948,127 @@
 .pdf-juego { display: inline-flex; flex-direction: column; justify-content: center; padding: 0 8px; line-height: 1.15; }
 .pdf-juego i { font-style: normal; font-size: 9px; font-weight: 600; letter-spacing: 0.09em; text-transform: uppercase; color: #6d6b67; white-space: nowrap; max-width: 180px; overflow: hidden; text-overflow: ellipsis; }
 .pdf-juego b { font-size: 12.5px; font-weight: 600; color: #141413; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* ── EL ESTUCHE COMPACTO (29-oct-2026, docs/ux/ESTUCHE_COMPACTO.md) ─────────
+   Columna estrecha de iconos sobre Dark 12, como el mando inferior. Todo de la
+   paleta oficial (D-24): Dark 12 de fondo, Light Gray en los iconos, Gris 700 en
+   los separadores, el NARANJA de «indicador activo» en lo elegido y el azul de
+   foco en el anillo del teclado. A la derecha, como el estuche de siempre; los desplegables y los
+   nombres salen hacia la izquierda, sobre el plano. */
+.pdf-rail--compacto {
+  width: 44px;
+  padding: 4px;
+  max-height: none;
+  overflow: visible;              /* el desplegable y el nombre salen a la izquierda */
+  border: none;
+  border-radius: 8px;
+  background: #302f2e;
+  box-shadow: 0 8px 26px rgba(20, 20, 19, 0.30);
+}
+
+.pdf-rail--compacto .pdf-rail__group + .pdf-rail__group {
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px solid #52524d;
+}
+
+.pdf-estuche__celda { position: relative; display: block; }
+
+.pdf-rail--compacto .pdf-rail-btn,
+.pdf-rail--compacto .pdf-swatch {
+  position: relative;
+  width: 36px;
+  height: 36px;
+  border-radius: 6px;
+  color: #e8e6dc;
+}
+
+.pdf-rail--compacto .pdf-rail-btn:hover,
+.pdf-rail--compacto .pdf-swatch:hover { background: rgba(250, 249, 245, 0.10); color: #faf9f5; }
+
+/* Lo elegido: naranja relleno (#c6613f, el de rellenos con texto) e icono blanco. */
+.pdf-rail--compacto .pdf-rail-btn[aria-pressed="true"] { background: #c6613f; color: #ffffff; }
+
+.pdf-rail--compacto .pdf-rail-btn:focus-visible,
+.pdf-rail--compacto .pdf-swatch:focus-visible,
+.pdf-estuche__menu button:focus-visible { outline: 2px solid #6a9bcc; outline-offset: 1px; }
+
+/* El triángulo de la esquina: este botón tiene más herramientas. */
+.pdf-estuche__mas {
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  width: 0;
+  height: 0;
+  border-left: 4px solid transparent;
+  border-bottom: 4px solid currentColor;
+  opacity: 0.75;
+}
+
+/* El nombre y su tecla, al pasar el ratón o con el foco del teclado. */
+.pdf-rail--compacto [data-tip]:hover::after,
+.pdf-rail--compacto [data-tip]:focus-visible::after {
+  content: attr(data-tip);
+  position: absolute;
+  right: calc(100% + 10px);
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 40;
+  padding: 5px 8px;
+  border-radius: 5px;
+  background: #141413;
+  color: #faf9f5;
+  font: 500 11.5px/1.2 'IBM Plex Sans', system-ui, sans-serif;
+  white-space: nowrap;
+  pointer-events: none;
+}
+/* Con su desplegable abierto, el nombre sobra. */
+.pdf-rail--compacto [aria-expanded="true"]::after { display: none; }
+
+.pdf-estuche__menu {
+  position: absolute;
+  right: calc(100% + 10px);
+  top: 0;
+  z-index: 41;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 172px;
+  padding: 4px;
+  border: 1px solid #52524d;
+  border-radius: 8px;
+  background: #302f2e;
+  box-shadow: 0 8px 26px rgba(20, 20, 19, 0.30);
+}
+
+.pdf-estuche__menu button {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 7px 9px;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: #e8e6dc;
+  font: 400 12.5px 'IBM Plex Sans', system-ui, sans-serif;
+  text-align: left;
+  cursor: pointer;
+}
+.pdf-estuche__menu button:hover { background: rgba(250, 249, 245, 0.10); color: #faf9f5; }
+.pdf-estuche__menu button[aria-checked="true"] { color: #faf9f5; box-shadow: inset 2px 0 0 #d97757; }
+.pdf-estuche__menu kbd {
+  margin-left: auto;
+  font: 500 11px 'IBM Plex Mono', ui-monospace, monospace;
+  color: #b0aea5;
+}
+
+.pdf-rail--compacto .pdf-swatch i { border-color: #302f2e; box-shadow: 0 0 0 1px #b0aea5; }
+
+.pdf-estuche__colores {
+  right: calc(100% + 10px);
+  left: auto;
+  border-color: #52524d;
+  background: #302f2e;
+}
+.pdf-estuche__colores button[aria-pressed="true"] { border-color: #faf9f5; }

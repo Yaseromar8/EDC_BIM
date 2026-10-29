@@ -127,6 +127,8 @@ function Banco() {
       // Con nodo, el lector monta su capa de marcas: asi se ve si siguen a la
       // hoja durante el zoom. Las marcas las sirve el fetch simulado de abajo.
       nodeId={'banco-' + PLANOS[i].id}
+      // `?cajetin` monta el lector como en Docs (con cajetín), para ver el estuche compacto (29-oct-2026).
+      cajetin={new URLSearchParams(window.location.search).has('cajetin') ? () => null : null}
       projectPrefix="banco"
       onClose={() => {}}
       versionLabel="V1"
