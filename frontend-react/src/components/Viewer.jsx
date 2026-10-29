@@ -12,10 +12,7 @@ import './IconMarkup.css'; // Add this line
 import { BaseExtension } from '../aps/extensions/BaseExtension';
 import { findLeafNodes, getBulkProperties, calculateDynamicFilterBucketsNative, extractPartidasNative, extractSchemaNative } from '../aps/utils/model';
 import IconMarkupExtension from '../aps/extensions/IconMarkupExtension';
-import ProgressiveExtension from '../aps/extensions/ProgressiveExtension';
 import LOB4DExtension from '../aps/extensions/LOB4DExtension';
-import WorkfrontsPanel from './WorkfrontsPanel';
-import StationTracker from './StationTracker';
 import { DataVizEngine } from '../aps/utils/DataVizEngine';
 
 const BACKEND_URL = (typeof window !== 'undefined' && window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()) ? 'https://visor-ecd-backend-va.onrender.com' : (import.meta.env.VITE_BACKEND_URL || (typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3000' : (typeof window !== 'undefined' && window.location.hostname.match(/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/) ? `http://${window.location.hostname}:3000` : 'https://visor-ecd-backend-va.onrender.com')));
@@ -223,17 +220,6 @@ const Viewer = ({
     const [avisoToken, setAvisoToken] = useState(null);
     const [mobileToolsVisible, setMobileToolsVisible] = useState(false);
     const [contextMenu, setContextMenu] = useState(null);
-    const [showProgressives, setShowProgressives] = useState(false);
-    const [isStationTrackerOpen, setStationTrackerOpen] = useState(false);
-    const [stationTrackerMarkers, setStationTrackerMarkers] = useState([]);
-    
-    // Workfronts State
-    const [isWorkfrontsPanelOpen, setWorkfrontsPanelOpen] = useState(false);
-    const [workfronts, setWorkfronts] = useState([
-        { id: '1', start: 0, end: 500, color: '#ffaaaa', name: 'Frente 1: Excavación', track: 'PG' },
-        { id: '2', start: 500, end: 1100, color: '#9c27b0', name: 'Frente 2: Base', track: 'PG' },
-        { id: '3', start: 1100, end: 2000, color: '#4caf50', name: 'Frente 3: Asfalto', track: 'PG' }
-    ]);
 
     // Sync hiddenModelUrnsRef
     useEffect(() => {
@@ -619,7 +605,6 @@ const Viewer = ({
 
                 Autodesk.Viewing.theExtensionManager.registerExtension('BaseExtension', BaseExtension);
                 Autodesk.Viewing.theExtensionManager.registerExtension('IconMarkupExtension', IconMarkupExtension);
-                Autodesk.Viewing.theExtensionManager.registerExtension('ProgressiveExtension', ProgressiveExtension);
                 Autodesk.Viewing.theExtensionManager.registerExtension('LOB4DExtension', LOB4DExtension);
                 // Custom extensions removed to simplify UI
 
@@ -638,7 +623,6 @@ const Viewer = ({
                         'Autodesk.PDF',
                         'Autodesk.AEC.LevelsExtension',
                         'Autodesk.AEC.Minimap3DExtension',
-                        'ProgressiveExtension',
                         'LOB4DExtension',
                         'Autodesk.DataVisualization'
                     ],
@@ -1202,21 +1186,6 @@ const Viewer = ({
         const alAvisar = (e) => setAvisoToken(e.detail || null);
         window.addEventListener('aps-token-aviso', alAvisar);
         return () => window.removeEventListener('aps-token-aviso', alAvisar);
-    }, []);
-
-    // ============== EVENTOS GLOBALES DE TOPBAR ==============
-    useEffect(() => {
-        const toggleProg = () => setShowProgressives(prev => !prev);
-        const toggleWF = () => setWorkfrontsPanelOpen(prev => !prev);
-        const toggleST = () => setStationTrackerOpen(prev => !prev);
-        window.addEventListener('toggle-progressives', toggleProg);
-        window.addEventListener('toggle-workfronts-panel', toggleWF);
-        window.addEventListener('toggle-station-tracker', toggleST);
-        return () => {
-            window.removeEventListener('toggle-progressives', toggleProg);
-            window.removeEventListener('toggle-workfronts-panel', toggleWF);
-            window.removeEventListener('toggle-station-tracker', toggleST);
-        };
     }, []);
 
     const handleModelLoaded = useCallback(async (event, retryCount = 0) => {
@@ -2282,116 +2251,6 @@ const Viewer = ({
         };
 
     }, [viewerReady, trackingTab, trackingData, trackingPinsVisible, onTrackingPinClick]);
-
-    // --- Progressive Markers Logic ---
-    useEffect(() => {
-        const viewer = viewerRef.current;
-        if (!viewer || !viewerReady) return;
-
-        let ext = viewer.getExtension('ProgressiveExtension');
-        if (!ext) return; // not loaded yet
-
-        if (showProgressives) {
-            // Fetch and Parse CSV
-            fetch('/data/progresivas.csv')
-                .then(r => r.text())
-                .then(text => {
-                    const lines = text.split('\n').filter(l => l.trim().length > 0);
-                    
-                    const rawGroups = {};
-                    lines.forEach((line) => {
-                        const parts = line.split(',');
-                        if (parts.length < 5) return;
-                        const tag = parts[4].trim();
-                        if (!rawGroups[tag]) rawGroups[tag] = [];
-                        rawGroups[tag].push({
-                            x: parseFloat(parts[1]),
-                            y: parseFloat(parts[2]),
-                            z: parseFloat(parts[3])
-                        });
-                    });
-
-                    const markers = [];
-
-                    // Process each alignment track independently
-                    Object.keys(rawGroups).forEach(tag => {
-                        const groupPoints = rawGroups[tag];
-                        if (groupPoints.length < 2) return;
-
-                        // Both tracks keep their CSV order (KM 0 starts at the same end)
-
-                        // 2. Build polyline with cumulative distances
-                        const polyline = [{ dist: 0, ...groupPoints[0] }];
-                        for (let i = 1; i < groupPoints.length; i++) {
-                            const dx = groupPoints[i].x - groupPoints[i - 1].x;
-                            const dy = groupPoints[i].y - groupPoints[i - 1].y;
-                            const segLen = Math.sqrt(dx * dx + dy * dy);
-                            polyline.push({
-                                dist: polyline[i - 1].dist + segLen,
-                                ...groupPoints[i]
-                            });
-                        }
-
-                        const totalLength = polyline[polyline.length - 1].dist;
-
-                        // 3. Interpolate at exact 10m intervals
-                        const INTERVAL = 10; // meters
-                        let segIdx = 0; // current segment index
-
-                        for (let station = 0; station <= totalLength; station += INTERVAL) {
-                            while (segIdx < polyline.length - 2 && polyline[segIdx + 1].dist < station) {
-                                segIdx++;
-                            }
-
-                            const a = polyline[segIdx];
-                            const b = polyline[segIdx + 1];
-                            const segLen = b.dist - a.dist;
-                            const t = segLen > 0 ? (station - a.dist) / segLen : 0;
-
-                            const x = a.x + (b.x - a.x) * t;
-                            const y = a.y + (b.y - a.y) * t;
-                            const z = a.z + (b.z - a.z) * t;
-
-                            const len = Math.sqrt(Math.pow(b.x - a.x, 2) + Math.pow(b.y - a.y, 2) + Math.pow(b.z - a.z, 2));
-                            const dx = len > 0 ? (b.x - a.x)/len : 0;
-                            const dy = len > 0 ? (b.y - a.y)/len : 0;
-                            const dz = len > 0 ? (b.z - a.z)/len : 0;
-
-                            const km = Math.floor(station / 1000);
-                            const m = Math.round(station % 1000);
-                            // Prefix label with Track tag to distinguish overlapping numbers
-                            const prefix = Object.keys(rawGroups).length > 1 ? `${tag}-` : '';
-                            const label = `${prefix}KM ${km}+${m.toString().padStart(3, '0')}`;
-
-                            markers.push({ x, y, z, label, station, dx, dy, dz, tag });
-                        }
-                    });
-                    
-                    // Inject actual Workfronts state
-                    ext.setWorkfronts(workfronts);
-                    ext.setMarkers(markers);
-                    ext.toggleVisibility(true);
-                    // Store markers for StationTracker
-                    setStationTrackerMarkers(markers);
-                })
-                .catch(err => console.error("Error loading progressivas CSV:", err));
-        } else {
-            ext.toggleVisibility(false);
-        }
-    }, [showProgressives, viewerReady]);
-
-    // Live update Workfronts without reloading the CSV
-    useEffect(() => {
-        if (!viewerReady || !showProgressives) return;
-        const viewer = viewerRef.current;
-        if (!viewer) return;
-        const ext = viewer.getExtension('ProgressiveExtension');
-        if (ext && ext._markers && ext._markers.length > 0) {
-            ext.setWorkfronts(workfronts);
-            ext.setMarkers(ext._markers); // Triggers clear and reconstruct
-            ext.toggleVisibility(true);
-        }
-    }, [workfronts, viewerReady, showProgressives]);
 
     // --- Native Overlay Implementation (Robust & Scaled) ---
     useEffect(() => {
@@ -4575,24 +4434,6 @@ const Viewer = ({
                 </div>
             )}
             
-            {/* Workfronts Config Panel */}
-            <WorkfrontsPanel 
-                isVisible={isWorkfrontsPanelOpen} 
-                onClose={() => setWorkfrontsPanelOpen(false)} 
-                workfronts={workfronts} 
-                setWorkfronts={setWorkfronts} 
-            />
-
-            {/* Station Tracker Panel (Civil Tools) */}
-            <StationTracker
-                isVisible={isStationTrackerOpen && showProgressives}
-                onClose={() => setStationTrackerOpen(false)}
-                markers={stationTrackerMarkers}
-                viewerRef={viewerRef}
-            />
-
-            {/* Civil Station Tracker Panel (ACC Style) */}
-
             {/* Botón de Captura de Pantalla Global */}
             {viewerReady && (
                 <button
