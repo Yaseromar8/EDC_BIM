@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef } from 'react';
 import TandemFilterPanel from './TandemFilterPanel';
 import SourceFilesPanel from './SourceFilesPanel';
 import DocumentPanel from './DocumentPanel';
-import DiscoverySearchPanel from './DiscoverySearchPanel';
 import BuildPanel from './BuildPanel';
 import CivilToolsPanel from './CivilToolsPanel';
 
@@ -67,10 +66,7 @@ const TandemSidebar = ({
     toggleSpritesVisibility,
     requestSpritePlacement,
 
-    onOpenDocument,
-    onCloseUniversalSearch,
     onClosePanel,
-    onUniversalSearch,
 
     // BuildPanel Props
     trackingData,
@@ -227,19 +223,6 @@ const TandemSidebar = ({
                     onRemove={removeDocument}
                     onToggleSprites={toggleSpritesVisibility}
                     onRequestSprite={requestSpritePlacement}
-                />
-            )}
-
-            {activePanel === 'search' && (
-                <DiscoverySearchPanel
-                    query={universalSearch?.query}
-                    answer={universalSearch?.answer}
-                    results={universalSearch?.results}
-                    loading={universalSearch?.loading}
-                    messages={universalSearch?.messages}
-                    onOpenDocument={onOpenDocument}
-                    onClose={onCloseUniversalSearch}
-                    onUniversalSearch={onUniversalSearch}
                 />
             )}
 

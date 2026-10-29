@@ -17,17 +17,10 @@
 }
 
 .top-bar-left,
-.top-bar-right,
-.top-bar-center {
+.top-bar-right {
     display: flex;
     align-items: center;
     gap: 8px;
-}
-
-.top-bar-center {
-    flex: 1;
-    justify-content: center;
-    max-width: 500px;
 }
 
 /* Logo */
@@ -46,42 +39,6 @@
     align-items: center;
     justify-content: center;
     transition: all 0.3s ease;
-}
-
-.logo-wrapper.ai-active-glow {
-    background: rgba(0, 0, 0, 0.2);
-}
-
-.logo-wrapper.ai-active-glow::before {
-    content: '';
-    position: absolute;
-    top: -2px;
-    left: -2px;
-    right: -2px;
-    bottom: -2px;
-    border-radius: 50%;
-    background: conic-gradient(from 0deg, transparent, #6a9bcc, transparent 50%, #6a9bcc, transparent);
-    animation: rotateGlow 2s linear infinite;
-    z-index: 1;
-}
-
-.logo-wrapper.ai-active-glow::after {
-    content: '';
-    position: absolute;
-    inset: 2px;
-    background: #302f2e;
-    border-radius: 50%;
-    z-index: 1;
-}
-
-@keyframes rotateGlow {
-    from {
-        transform: rotate(0deg);
-    }
-
-    to {
-        transform: rotate(360deg);
-    }
 }
 
 /* Tools */
@@ -133,42 +90,6 @@
     font-weight: 500;
     letter-spacing: 0.02em;
     white-space: nowrap;
-}
-
-/* Search */
-.top-search {
-    display: flex;
-    align-items: center;
-    background-color: rgba(0,0,0,0.3);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 4px;
-    padding: 0 10px;
-    width: 250px;
-    height: 30px;
-}
-
-.top-search:focus-within {
-    border-color: #6A9BCC;
-}
-
-.search-icon-wrapper {
-    color: #918f88;
-    display: flex;
-    align-items: center;
-}
-
-.top-search input {
-    background: transparent;
-    border: none;
-    color: white;
-    margin-left: 8px;
-    outline: none;
-    width: 100%;
-    font-size: 13px;
-}
-
-.top-search input::placeholder {
-    color: #72706b;
 }
 
 /* Text Buttons */
@@ -265,9 +186,6 @@
    RESPONSIVE DESIGN FOR TABLETS & MOBILE
    ========================================== */
 @media (max-width: 1024px) {
-    .top-search {
-        width: 180px;
-    }
     .breadcrumb-project, .breadcrumb-sep {
         display: none;
     }
@@ -278,9 +196,6 @@
 }
 
 @media (max-width: 768px) {
-    .top-search {
-        width: 140px;
-    }
     .breadcrumb-view {
         display: none;
     }

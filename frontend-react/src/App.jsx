@@ -1272,120 +1272,6 @@ function App() {
   const [modelViews, setModelViews] = useState({}); // { urn: [ { guid, name } ] }
   const [activeViewableGuids, setActiveViewableGuids] = useState({}); // { urn: guid }
 
-  // Universal Search State
-  const [universalSearch, setUniversalSearch] = useState({
-    query: '',
-    answer: '',
-    results: [],
-    loading: false
-  });
-  const [aiModelCommand, setAiModelCommand] = useState(null);
-
-  const handleUniversalSearch = async (query) => {
-    if (!query || !query.trim()) return;
-
-    // 1. Añadir el mensaje del usuario inmediatamente para el chat
-    const userMsg = { role: 'user', content: query };
-    setUniversalSearch(prev => ({
-      ...prev,
-      query,
-      answer: '',
-      results: [],
-      loading: true,
-      messages: [...(prev.messages || []), userMsg]
-    }));
-    setActivePanel('search');
-    setPanelVisible(true);
-
-    try {
-      // Usamos el historial acumulado hasta ahora más el nuevo mensaje
-      const fullHistory = [...(universalSearch.messages || []), userMsg];
-
-      const resp = await apiFetch(`${BACKEND_URL}/api/ai/universal-search`, {
-        method: 'POST',
-        body: JSON.stringify({
-          query,
-          model_urn: selectedProject?.urn || null,
-          history: fullHistory
-        })
-      });
-      const data = await resp.json();
-
-      if (data.success) {
-        if (data.intent === 'model_command') {
-          setAiModelCommand({ ...data.command, timestamp: Date.now() });
-          setUniversalSearch(prev => ({
-            ...prev,
-            answer: `Comando: Aislar ${data.command.parameter}`,
-            loading: false
-          }));
-        } else {
-          const assistantMsg = {
-            role: 'assistant',
-            content: data.answer,
-            results: data.results,
-            agentSteps: data.agent_steps // Capture from backend
-          };
-          setUniversalSearch(prev => ({
-            ...prev,
-            answer: data.answer,
-            results: data.results,
-            loading: false,
-            // Agregamos el mensaje del asistente al historial ya existente
-            messages: [...(prev.messages || []), assistantMsg]
-          }));
-        }
-      } else {
-        setUniversalSearch(prev => ({
-          ...prev,
-          loading: false,
-          messages: [...(prev.messages || []), { role: 'assistant', content: `Error: ${data.error || 'No se pudo procesar.'}` }]
-        }));
-      }
-    } catch (err) {
-      console.error('Search error:', err);
-      setUniversalSearch(prev => ({
-        ...prev,
-        loading: false,
-        messages: [...(prev.messages || []), { role: 'assistant', content: 'Error de conexión con la IA.' }]
-      }));
-    }
-  };
-
-  const handleOpenDocByNodeId = async (result) => {
-    if (!result.nodeId) {
-      alert("No se encontró ID de nodo para este documento en la base de datos.");
-      return;
-    }
-
-    try {
-      // Necesitamos obtener la URL real del archivo desde el backend
-      const resp = await apiFetch(`${BACKEND_URL}/api/documents/${result.nodeId}`);
-      const data = await resp.json();
-
-      if (data.success && data.document) {
-        // Abrir en el visor de planos/docs
-        setActiveSheet({
-          id: data.document.id,
-          name: data.document.name,
-          url: data.document.url,
-          type: data.document.mime_type?.includes('pdf') ? 'pdf' : 'image',
-          isPin: false // Se abre como un visor de documento directo
-        });
-        setOpenedDoc({
-          id: data.document.id,
-          name: data.document.name,
-          url: data.document.url,
-          type: data.document.mime_type?.includes('pdf') ? 'pdf' : 'image'
-        });
-      } else {
-        alert("No se pudo obtener la información del documento.");
-      }
-    } catch (err) {
-      console.error("Error opening doc by node ID:", err);
-    }
-  };
-
   const handleViewablesLoaded = useCallback(({ urn, views }) => {
     setModelViews(prev => {
       // Avoid unnecessary updates
@@ -4300,7 +4186,6 @@ function App() {
             }
           }}
           selectedProject={selectedProject}
-          onUniversalSearch={handleUniversalSearch}
         />
       )}
       <div className="app-container" style={{ flex: 1, position: 'relative' }}>
@@ -4621,10 +4506,6 @@ function App() {
             removeDocument={removeDocument}
             toggleSpritesVisibility={toggleSpritesVisibility}
             requestSpritePlacement={requestSpritePlacement}
-            onUniversalSearch={handleUniversalSearch}
-            universalSearch={universalSearch}
-            onOpenDocument={handleOpenDocByNodeId}
-            onCloseUniversalSearch={() => setPanelVisible(false)}
             onClosePanel={() => setPanelVisible(false)}
             BACKEND_URL={BACKEND_URL}
 
@@ -4782,7 +4663,6 @@ function App() {
                     relocatingPin={relocatingPin}
                     onPinRelocateComplete={handlePinRelocateComplete}
                     onSelectionChanged={setSelectedElement}
-                    aiModelCommand={aiModelCommand}
                     hideToolbar={activePanel === 'progress'}
                   />
                   </ErrorBoundary>

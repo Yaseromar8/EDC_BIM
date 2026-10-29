@@ -168,7 +168,6 @@ const Viewer = ({
 
     // Gemelo / General Selection (removed - was only used for GemeloPropertiesPanel)
     onSelectionChanged,
-    aiModelCommand,
     hideToolbar = false,
     // Pin Relocation
     relocatingPin,
@@ -245,57 +244,6 @@ const Viewer = ({
     useEffect(() => {
         viewerReadyRef.current = viewerReady;
     }, [viewerReady]);
-
-    // AI-Driven Model Isolation (Aislamiento Inteligente)
-    useEffect(() => {
-        const viewer = viewerRef.current;
-        if (!viewer || !viewerReady || !aiModelCommand) return;
-
-        console.log('[AI] Recibiendo comando:', aiModelCommand);
-        const { parameter, value, operator, action } = aiModelCommand;
-
-        // Limpiar selección previa
-        viewer.clearSelection();
-        viewer.isolate([]);
-
-        const executeAiCommand = async () => {
-            // Utilizamos viewer.search que es más robusto a nivel de vista
-            // Busca en la base de datos de propiedades de todo lo que está visible
-            const doSearch = (attrNames) => {
-                viewer.search(
-                    value,
-                    (dbIds) => {
-                        if (dbIds && dbIds.length > 0) {
-                            console.log(`[AI] Se encontraron ${dbIds.length} elementos coincidentes.`);
-                            // Aislar resultados en el visor
-                            viewer.isolate(dbIds);
-                            // Hacer un Fit to View a los elementos seleccionados
-                            viewer.fitToView(dbIds);
-                        } else if (attrNames !== null) {
-                            console.warn('[AI] No se encontraron elementos en el parámetro específico. Intentando búsqueda general...');
-                            // Fallback: Si no lo encuentra, buscar en todas las propiedades
-                            doSearch(null);
-                        } else {
-                            console.warn('[AI] No se encontraron elementos coincidentes completos.');
-                            // Fallback: restablecer
-                            viewer.isolate();
-                        }
-                    },
-                    (error) => {
-                        console.error('[AI] Error en búsqueda global:', error);
-                        viewer.isolate();
-                    },
-                    attrNames,
-                    { searchHidden: true }
-                );
-            };
-
-            const initialAttrs = (parameter && parameter.trim() !== '') ? [parameter] : null;
-            doSearch(initialAttrs);
-        };
-
-        executeAiCommand();
-    }, [viewerReady, aiModelCommand]);
 
     // EFECTO: Ocultar/Mostrar barra de herramientas de APS
     useEffect(() => {

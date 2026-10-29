@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import './DocPinPanel.css';
 import { apiFetch, getUploadAuthHeaders } from '../utils/apiFetch';
 import { Document, Page, pdfjs } from 'react-pdf';
@@ -109,12 +109,6 @@ const IconDelete = ({ size = 16 }) => (
     </svg>
 );
 
-const IconSparkles = ({ size = 16, color = "currentColor" }) => (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M12 3l1.912 5.813a2 2 0 001.275 1.275L21 12l-5.813 1.912a2 2 0 00-1.275 1.275L12 21l-1.912-5.813a2 2 0 00-1.275-1.275L3 12l5.813-1.912a2 2 0 001.275-1.275L12 3z"></path>
-    </svg>
-);
-
 const IconGrid = ({ size = 16 }) => (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <rect x="3" y="3" width="7" height="7"></rect>
@@ -172,25 +166,6 @@ const DocPinPanel = ({
     const [loading, setLoading] = useState(false);
     const [viewingDoc, setViewingDoc] = useState(null); // { name, url }
 
-    // AI Chat State (panel separado - flujo existente sin cambios)
-    const [aiDoc, setAiDoc] = useState(null);
-    const [aiQuestion, setAiQuestion] = useState('');
-    const [aiResponse, setAiResponse] = useState('');
-    const [aiLoading, setAiLoading] = useState(false);
-
-    // Estado de precarga del documento
-    const [warmupStatus, setWarmupStatus] = useState('idle'); // 'idle' | 'loading' | 'ready' | 'error'
-    const [warmupDocType, setWarmupDocType] = useState('text'); // 'text' | 'images'
-
-    // AI Command Bar State (nueva barra tipo AutoCAD dentro del viewer)
-    const [cmdMessages, setCmdMessages] = useState([]);  // [{role:'user'|'ai', text}]
-    const [cmdInput, setCmdInput] = useState('');
-    const [cmdLoading, setCmdLoading] = useState(false);
-    const [cmdActive, setCmdActive] = useState(false); // hover/scroll activo → opaco
-    const [cmdExpanded, setCmdExpanded] = useState(false); // true = historial completo opaco
-    const cmdFadeTimer = React.useRef(null);
-    const cmdHistoryRef = React.useRef(null);
-
     // Búsqueda Avanzada
     const [searchQuery, setSearchQuery] = useState('');
     const [searchResults, setSearchResults] = useState([]);
@@ -203,7 +178,7 @@ const DocPinPanel = ({
     // Notificaciones (Toasts)
     const [notification, setNotification] = useState(null); // { message, type: 'success'|'error' }
 
-    // Control de vista: Cuadrícula (miniaturas) o Lista (Detalle IA)
+    // Control de vista: Cuadrícula (miniaturas) o Lista (Detalle)
     const [viewMode, setViewMode] = useState('grid'); // 'grid' | 'list'
     const attachedDocs = pin.docs || [];
 
@@ -223,113 +198,6 @@ const DocPinPanel = ({
     const showNotify = (message, type = 'success') => {
         setNotification({ message, type });
         setTimeout(() => setNotification(null), 3500);
-    };
-
-    // EFECTO: Análisis automático de títulos de planos faltantes
-    // Lo ya intentado, para NO repetirlo. Sin esto, un PDF cuyo analisis falla
-    // nunca guarda titulo, nunca sale del filtro de abajo, y se vuelve a pedir
-    // en cada pasada: un bucle de llamadas DE PAGO que no termina nunca.
-    const titulosIntentados = useRef(new Set());
-
-    useEffect(() => {
-        if (!pin?.docs || browsing) return;
-
-        const docsToAnalyze = pin.docs.filter(d =>
-            (d.type === 'pdf' || d.name?.toLowerCase().endsWith('.pdf')) &&
-            !d.plano_titulo &&
-            d.nodeId &&
-            !titulosIntentados.current.has(d.nodeId)
-        );
-
-        if (docsToAnalyze.length === 0) return;
-
-        // Analizar solo de a uno para no saturar con 500s si hay errores de red/storage
-        const doc = docsToAnalyze[0];
-        titulosIntentados.current.add(doc.nodeId);
-
-        console.log(`[IA] Analizando título: ${doc.name}`);
-        fetch(`${BACKEND_URL}/api/ai/analyze-title`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                fullPath: doc.fullPath,
-                nodeId: doc.nodeId
-            })
-        })
-            .then(res => res.json())
-            .then(data => {
-                if (data.success && data.title) {
-                    if (onAttachDoc) {
-                        onAttachDoc(pin.id, { ...doc, plano_titulo: data.title }, true);
-                    }
-                }
-            })
-            .catch(err => console.error("Error analizando título:", err));
-
-        // OJO CON ESTAS DEPENDENCIAS. Aqui estaba 'onAttachDoc', que App crea con
-        // una funcion flecha escrita en linea: es una funcion NUEVA en cada
-        // renderizado de App. Y App se renderiza mucho — tiene un latido cada 5
-        // segundos y varios sondeos. Resultado: este efecto se re-ejecutaba una y
-        // otra vez, y cada vuelta era una llamada de pago a Gemini.
-        //
-        // Hoy no explotaba porque la llamada usa fetch sin cabecera de sesion y
-        // /api/ai/* devuelve 401. Era una mina esperando a que alguien
-        // "arreglara" eso cambiando fetch por apiFetch.
-    }, [pin.id, pin.docs, browsing]);
-
-    // Activa opacidad y la resetea tras 4 seg de inactividad
-    const activateCmd = () => {
-        setCmdActive(true);
-        if (cmdFadeTimer.current) clearTimeout(cmdFadeTimer.current);
-        cmdFadeTimer.current = setTimeout(() => setCmdActive(false), 4000);
-    };
-
-    // Enviar pregunta desde la Command Bar (usa el mismo endpoint /api/ai/ask)
-    const handleCmdAsk = async (e) => {
-        if (e) e.preventDefault();
-        const q = cmdInput.trim();
-        if (!q || !viewingDoc) return;
-
-        const userMsg = { role: 'user', text: q };
-        setCmdMessages(prev => [...prev, userMsg]);
-        setCmdInput('');
-        setCmdLoading(true);
-        activateCmd();
-
-        // Auto-scroll al fondo del historial
-        setTimeout(() => {
-            if (cmdHistoryRef.current) {
-                cmdHistoryRef.current.scrollTop = cmdHistoryRef.current.scrollHeight;
-            }
-        }, 50);
-
-        try {
-            const res = await apiFetch(`${BACKEND_URL}/api/ai/ask`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    question: q,
-                    fullPath: viewingDoc.fullPath,
-                    nodeId: viewingDoc.nodeId
-                })
-            });
-            const data = await res.json();
-            const aiMsg = {
-                role: 'ai',
-                text: data.success ? data.answer : `Error: ${data.error || 'Sin respuesta'}`
-            };
-            setCmdMessages(prev => [...prev, aiMsg]);
-            activateCmd();
-        } catch (err) {
-            setCmdMessages(prev => [...prev, { role: 'ai', text: 'Error de conexión con Gemini.' }]);
-        } finally {
-            setCmdLoading(false);
-            setTimeout(() => {
-                if (cmdHistoryRef.current) {
-                    cmdHistoryRef.current.scrollTop = cmdHistoryRef.current.scrollHeight;
-                }
-            }, 80);
-        }
     };
 
     // Fetch folder contents from the DB-backed backend
@@ -358,59 +226,6 @@ const DocPinPanel = ({
             fetchContents(currentPath);
         }
     }, [browsing, currentPath, fetchContents]);
-
-    // ── Warmup al abrir el viewer (Command Bar) ──────────────────────────────
-    // Se lanza en background cuando el usuario abre un PDF en el viewer.
-    // Si ya está cacheado en el servidor, responde al instante.
-    useEffect(() => {
-        if (!viewingDoc) {
-            setWarmupStatus('idle');
-            return;
-        }
-        const isPdf = (viewingDoc.name || '').toLowerCase().endsWith('.pdf');
-        if (!isPdf || !viewingDoc.fullPath) return;
-
-        setWarmupStatus('loading');
-        setWarmupDocType('text');
-        fetch(`${BACKEND_URL}/api/ai/warmup`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                fullPath: viewingDoc.fullPath,
-                nodeId: viewingDoc.nodeId
-            })
-        })
-            .then(r => r.json())
-            .then(d => {
-                if (d.status === 'ready' || d.status === 'already_cached') {
-                    setWarmupStatus('ready');
-                    setWarmupDocType(d.type || 'text'); // 'text' o 'images'
-                    console.log('[AI Warmup] Doc listo en caché:', d);
-                } else if (d.status === 'skipped') {
-                    setWarmupStatus('idle');
-                } else {
-                    setWarmupStatus('error');
-                }
-            })
-            .catch(() => setWarmupStatus('error'));
-    }, [viewingDoc]);
-
-    // ── Warmup al abrir el panel IA (botón ✨IA de la tarjeta) ───────────────
-    useEffect(() => {
-        if (!aiDoc) return;
-        const isPdf = (aiDoc.name || '').toLowerCase().endsWith('.pdf');
-        if (!isPdf || !aiDoc.fullPath) return;
-
-        // Precarga silenciosa; si falla, el ask normal hace fallback
-        fetch(`${BACKEND_URL}/api/ai/warmup`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                fullPath: aiDoc.fullPath,
-                nodeId: aiDoc.nodeId
-            })
-        }).catch(() => { });
-    }, [aiDoc]);
 
     const handleCreateFolder = async () => {
         const name = window.prompt("Nombre de la nueva carpeta:");
@@ -648,37 +463,6 @@ const DocPinPanel = ({
         setViewingDoc({ ...doc, url: freshUrl });
     };
 
-    const handleAskAI = async (e) => {
-        if (e) e.preventDefault();
-        if (!aiQuestion.trim() || !aiDoc) return;
-
-        setAiLoading(true);
-        setAiResponse('');
-        try {
-            const res = await apiFetch(`${BACKEND_URL}/api/ai/ask`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    question: aiQuestion,
-                    fullPath: aiDoc.fullPath,
-                    nodeId: aiDoc.nodeId
-                })
-            });
-            const data = await res.json();
-            if (data.success) {
-                setAiResponse(data.answer);
-            } else {
-                setAiResponse(`Error: ${data.error || 'No se pudo obtener respuesta'}`);
-            }
-        } catch (err) {
-            console.error('[AI] Error:', err);
-            setAiResponse('Error de conexión con el servicio de IA.');
-        } finally {
-            setAiLoading(false);
-        }
-    };
-
-
     // Breadcrumb for browsing
     const breadcrumbParts = currentPath.replace(/\/$/, '').split('/').filter(Boolean);
 
@@ -786,23 +570,19 @@ const DocPinPanel = ({
                 </div>
             </header>
 
-            {/* VIEWING A DOC — con Command Bar tipo AutoCAD */}
+            {/* VIEWING A DOC */}
             {viewingDoc ? (
                 <div className="docpin-viewer">
                     <div className="docpin-viewer-bar">
-                        <button className="docpin-back-btn" onClick={() => { setViewingDoc(null); setCmdMessages([]); }}>
+                        <button className="docpin-back-btn" onClick={() => setViewingDoc(null)}>
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                                 <polyline points="15 18 9 12 15 6"></polyline>
                             </svg>
                             Volver
                         </button>
                         <span className="docpin-viewer-name">{viewingDoc.name}</span>
-                        <span className={`docpin-ai-badge ${warmupStatus === 'loading' ? 'is-warming' : ''}`}>
-                            {warmupStatus === 'loading' ? '⏳ Preparando IA...' : (warmupDocType === 'images' ? '📐 Plano detectado' : '✨ IA activa')}
-                        </span>
                     </div>
 
-                    {/* Wrapper relativo para superponer la command bar sobre el iframe */}
                     <div className="docpin-viewer-body">
                         {viewingDoc.type === 'pdf' || viewingDoc.name?.toLowerCase().endsWith('.pdf') ? (
                             <PdfReader url={viewingDoc.nodeId ? `${PROXY_API}?id=${viewingDoc.nodeId}` : viewingDoc.url} fileName={viewingDoc.name || 'documento.pdf'} />
@@ -813,145 +593,6 @@ const DocPinPanel = ({
                                 title={viewingDoc.name}
                             />
                         )}
-
-                        {/* ═══ AUTOCAD-STYLE COMMAND BAR ═══ */}
-                        <div
-                            className={`docpin-cmdbar ${cmdActive ? 'is-active' : ''} ${cmdExpanded ? 'is-expanded' : ''}`}
-                            onMouseEnter={activateCmd}
-                            onMouseLeave={() => {
-                                if (cmdExpanded) return; // si está expandido no auto-fade
-                                if (cmdFadeTimer.current) clearTimeout(cmdFadeTimer.current);
-                                cmdFadeTimer.current = setTimeout(() => setCmdActive(false), 2000);
-                            }}
-                        >
-                            {/* Botón toggle historial (esquina superior derecha del cmd) */}
-                            {cmdMessages.length > 0 && (
-                                <button
-                                    className={`docpin-cmd-toggle ${cmdExpanded ? 'is-expanded' : ''}`}
-                                    onClick={() => {
-                                        setCmdExpanded(prev => !prev);
-                                        activateCmd();
-                                        setTimeout(() => {
-                                            if (cmdHistoryRef.current) {
-                                                cmdHistoryRef.current.scrollTop = cmdHistoryRef.current.scrollHeight;
-                                            }
-                                        }, 50);
-                                    }}
-                                    title={cmdExpanded ? 'Contraer historial' : 'Ver historial completo'}
-                                >
-                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                                        <polyline points={cmdExpanded ? '18 15 12 9 6 15' : '6 9 12 15 18 9'} />
-                                    </svg>
-                                    {cmdExpanded ? 'Contraer' : `Historial (${cmdMessages.length})`}
-                                </button>
-                            )}
-
-                            {/* Historial: flotante con filas resaltadas (estado 1) 
-                                         o panel opaco expandido (estado 2) */}
-                            {cmdMessages.length > 0 && (
-                                <div
-                                    className={`docpin-cmd-history ${cmdExpanded ? 'is-expanded' : ''}`}
-                                    ref={cmdHistoryRef}
-                                    onScroll={activateCmd}
-                                >
-                                    {cmdMessages.map((msg, i) => (
-                                        <div key={i} className={`docpin-cmd-msg docpin-cmd-msg--${msg.role}`}>
-                                            <span className="docpin-cmd-prefix">
-                                                {msg.role === 'user' ? '› ' : '✦ '}
-                                            </span>
-                                            <span className="docpin-cmd-text">{msg.text}</span>
-                                        </div>
-                                    ))}
-                                    {cmdLoading && (
-                                        <div className="docpin-cmd-msg docpin-cmd-msg--ai docpin-cmd-typing">
-                                            <span className="docpin-cmd-prefix">✦ </span>
-                                            <span className="docpin-cmd-dots">
-                                                <span /><span /><span />
-                                            </span>
-                                        </div>
-                                    )}
-                                </div>
-                            )}
-
-                            {/* Barra de input fija */}
-                            <form className="docpin-cmd-input-row" onSubmit={handleCmdAsk}>
-                                <span className="docpin-cmd-label">Gemini›</span>
-                                <input
-                                    className="docpin-cmd-input"
-                                    type="text"
-                                    placeholder="Consulta sobre este documento..."
-                                    value={cmdInput}
-                                    onChange={e => { setCmdInput(e.target.value); activateCmd(); }}
-                                    onFocus={activateCmd}
-                                    disabled={cmdLoading}
-                                    autoComplete="off"
-                                />
-                                <button
-                                    className="docpin-cmd-send"
-                                    type="submit"
-                                    disabled={cmdLoading || !cmdInput.trim()}
-                                    title="Enviar"
-                                >
-                                    {cmdLoading ? '…' : '↵'}
-                                </button>
-                            </form>
-                        </div>
-                    </div>
-                </div>
-            ) : aiDoc ? (
-                /* AI CHAT VIEW */
-                <div className="docpin-ai-chat">
-                    <div className="docpin-viewer-bar">
-                        <button className="docpin-back-btn" onClick={() => { setAiDoc(null); setAiResponse(''); setAiQuestion(''); }}>
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                <polyline points="15 18 9 12 15 6"></polyline>
-                            </svg>
-                            Volver
-                        </button>
-                        <span className="docpin-viewer-name">Consultar IA: {aiDoc.name}</span>
-                    </div>
-
-                    <div className="docpin-ai-content">
-                        <div className="docpin-ai-instruction">
-                            <span className="ai-sparkle">✨</span>
-                            <p>Pregunta cualquier detalle sobre este plano o documento. La IA de Google lo analizará por ti.</p>
-                        </div>
-
-                        <div className="docpin-ai-messages">
-                            {aiResponse ? (
-                                <div className="docpin-ai-bubble">
-                                    <div className="ai-bubble-header">Respuesta de IA:</div>
-                                    <div className="ai-bubble-text">{aiResponse}</div>
-                                </div>
-                            ) : aiLoading ? (
-                                <div className="docpin-ai-loading">
-                                    <div className="docpin-spinner" />
-                                    <span>Gemini está analizando el documento...</span>
-                                </div>
-                            ) : (
-                                <div className="docpin-ai-empty">
-                                    <p>Ejemplos:</p>
-                                    <ul>
-                                        <li>"¿Cuál es el presupuesto total de esta partida?"</li>
-                                        <li>"Resúmeme las notas técnicas de este plano"</li>
-                                        <li>"¿Qué diámetros de tubería se especifican?"</li>
-                                    </ul>
-                                </div>
-                            )}
-                        </div>
-
-                        <form className="docpin-ai-input-group" onSubmit={handleAskAI}>
-                            <input
-                                type="text"
-                                placeholder="Escribe tu pregunta aquí..."
-                                value={aiQuestion}
-                                onChange={(e) => setAiQuestion(e.target.value)}
-                                disabled={aiLoading}
-                            />
-                            <button type="submit" disabled={aiLoading || !aiQuestion.trim()}>
-                                {aiLoading ? '...' : 'Preguntar'}
-                            </button>
-                        </form>
                     </div>
                 </div>
             ) : browsing ? (
@@ -1244,15 +885,6 @@ const DocPinPanel = ({
                                                 <div className="docpin-pdf-date">
                                                     {doc.addedAt ? new Date(doc.addedAt).toLocaleDateString() : ''}
                                                 </div>
-                                                {isPdf && (
-                                                    <button
-                                                        className="docpin-ai-btn-small"
-                                                        onClick={(e) => { e.stopPropagation(); setAiDoc(doc); }}
-                                                        title="Preguntar a la IA"
-                                                    >
-                                                        <IconSparkles size={10} /> IA
-                                                    </button>
-                                                )}
                                             </div>
                                         </div>
                                     </div>
@@ -1269,7 +901,6 @@ const DocPinPanel = ({
                             </div>
                             <div className="modern-list-body">
                                 {attachedDocs.map(doc => {
-                                    const isPdf = doc.type === 'pdf' || (doc.name && doc.name.toLowerCase().endsWith('.pdf'));
                                     return (
                                         <div key={doc.id} className="modern-list-row" onClick={() => handleOpenDoc(doc)}>
                                             <div className="row-col code">
@@ -1317,15 +948,6 @@ const DocPinPanel = ({
                                                 {doc.addedAt ? new Date(doc.addedAt).toLocaleDateString() : '-'}
                                             </div>
                                             <div className="row-col actions">
-                                                {isPdf && (
-                                                    <button
-                                                        className="action-btn ai"
-                                                        onClick={(e) => { e.stopPropagation(); setAiDoc(doc); }}
-                                                        title="Consultar IA"
-                                                    >
-                                                        <IconSparkles size={14} />
-                                                    </button>
-                                                )}
                                                 <button
                                                     className="action-btn delete"
                                                     onClick={(e) => {

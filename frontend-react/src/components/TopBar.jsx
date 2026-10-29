@@ -36,13 +36,6 @@ const ChevronDown = () => (
     </svg>
 );
 
-const SearchIcon = () => (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <circle cx="11" cy="11" r="8" />
-        <line x1="21" y1="21" x2="16.65" y2="16.65" />
-    </svg>
-);
-
 const BookmarkIcon = () => (
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
         <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
@@ -122,16 +115,11 @@ const HeatmapIcon = () => (
 const TopBar = ({
     user,
     onLogout,
-    activePanel,
     togglePanel,
     isViewsActive,
     onLogoClick,
-    selectedProject,
-    onUniversalSearch
+    selectedProject
 }) => {
-    const [timer, setTimer] = useState(null);
-    const [isLongPress, setIsLongPress] = useState(false);
-    
     // Obra Lineal Toolbox
     const [isProjectToolsOpen, setIsProjectToolsOpen] = useState(false);
     const toolsRef = useRef(null);
@@ -146,46 +134,19 @@ const TopBar = ({
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
-    const handleStart = () => {
-        setIsLongPress(false);
-        const t = setTimeout(() => {
-            setIsLongPress(true);
-            togglePanel('search'); // Activar IA en pulsación larga
-        }, 800);
-        setTimer(t);
-    };
-
-    const handleEnd = (e) => {
-        if (timer) clearTimeout(timer);
-        if (!isLongPress && e.type === 'click') {
-            onLogoClick(); // Clic corto: Inicio
-        } else if (isLongPress) {
-            // Pulsación larga: Toggle IA
-            if (activePanel === 'search') {
-                togglePanel(null); // Desactivar si ya está activo
-            } else {
-                togglePanel('search'); // Activar si no está activo
-            }
-        }
-    };
-
     return (
         <header className="top-bar">
             <div className="top-bar-left">
                 <div
                     className="logo-section"
-                    onMouseDown={handleStart}
-                    onMouseUp={handleEnd}
-                    onTouchStart={handleStart}
-                    onTouchEnd={handleEnd}
-                    onClick={handleEnd}
-                    title="Clic para inicio / Mantener para IA"
+                    onClick={onLogoClick}
+                    title="Inicio"
                     style={{ position: 'relative' }}
                 >
                     {/* Espacio compacto de marca ⇒ SÍMBOLO oficial (blanco sobre
                         cabecera oscura), como manda el manual: 28px ≥ mínimo de
-                        24px. Los gestos (clic=inicio, mantener=IA) no cambian. */}
-                    <div className={`logo-wrapper ${activePanel === 'search' ? 'ai-active-glow' : ''}`}>
+                        24px. Clic = inicio. */}
+                    <div className="logo-wrapper">
                         <img src="/brand/ALEPHIA_Symbol_Light.svg" alt="ALEPHIA" style={{ height: '28px', width: 'auto', display: 'block', zIndex: 2, position: 'relative' }} />
                     </div>
 
@@ -274,23 +235,6 @@ const TopBar = ({
                             </div>
                         </div>
                     )}
-                </div>
-            </div>
-
-            <div className="top-bar-center">
-                <div className="top-search" style={{ maxWidth: '400px' }}>
-                    <div className="search-icon-wrapper">
-                        <SearchIcon />
-                    </div>
-                    <input
-                        type="text"
-                        placeholder="Preguntar a la IA sobre el proyecto..."
-                        onKeyDown={(e) => {
-                            if (e.key === 'Enter' && onUniversalSearch) {
-                                onUniversalSearch(e.target.value);
-                            }
-                        }}
-                    />
                 </div>
             </div>
 
