@@ -9,13 +9,8 @@
 // ESCALABILIDAD: `SOURCES` es un registro — para añadir una fuente nueva
 // (metrados, avance, EVM) se registra aquí y el resto del tablero la hereda.
 
-// ── Paleta categórica (tema oscuro, contraste alto) ──────────────────────────
-export const PALETTE = [
-  '#5b8fd6', '#8b6cf0', '#3fb27f', '#e0a63f', '#d66a6a',
-  '#4fc1c9', '#c477c9', '#9aa856', '#6f83a8', '#c98a5e',
-  '#7dd3a0', '#e08fb2', '#8fa3e0', '#d6c05b', '#a08bd6',
-];
-export const colorAt = (i) => PALETTE[i % PALETTE.length];
+// Los colores salen de tema.js (paleta oficial, la misma de la Planilla).
+import { colorDeGrupo } from './tema';
 
 // Campos internos del pipeline que no son "propiedades" para el usuario.
 const HIDDEN_FIELDS = new Set(['dbId', 'model_urn', 'source_urn', '__category__']);
@@ -39,7 +34,7 @@ async function getInventoryRows() {
 export const SOURCES = {
   inventory: {
     id: 'inventory',
-    label: 'Inventario (nube)',
+    label: 'Inventario de la nube',
     getRows: getInventoryRows,
   },
   // futuro: metrados (link_reports), avance (progress), presupuesto (5D)…
@@ -110,7 +105,9 @@ export function distinctValues(rows, field, limit = 30) {
 // Devuelve { groups: [{ key, value, count, externalIds }], total, totalCount }.
 // Cada grupo CONSERVA sus externalIds → el 3D puede aislar/colorear el grupo.
 export function aggregate(rows, config) {
-  const { groupBy, metric = 'count', valueField, topN = 12, filter } = config || {};
+  const { groupBy, metric = 'count', valueField, filter } = config || {};
+  // La dona solo se lee con pocas partes: como mucho tres y «Otros» (docs/visor/41).
+  const topN = config?.type === 'donut' ? Math.min(config?.topN || 3, 3) : (config?.topN ?? 12);
   let data = rows || [];
   if (filter?.field && filter.values?.length) {
     const allow = new Set(filter.values.map(String));
@@ -264,10 +261,11 @@ export async function isolateInViewer(externalIds) {
   return true;
 }
 
-// Pintar los grupos de un gráfico en el 3D con la paleta del tablero.
+// Pintar los grupos de un gráfico en el 3D con LOS MISMOS colores del gráfico
+// (tema.js: estados con los de la Planilla, el resto con la paleta de categorías).
 // Emite 'viewer-colors-applied' con la MISMA forma que el filtro de colores →
 // si el Live Link con Revit está activo, estos colores se replican en Revit.
-export async function colorizeInViewer(groups) {
+export async function colorizeInViewer(groups, config = null) {
   const viewer = getViewer();
   const THREE = window.THREE;
   if (!viewer || !THREE) return false;
@@ -277,7 +275,7 @@ export async function colorizeInViewer(groups) {
   const linkGroups = [];
   for (let i = 0; i < (groups || []).length; i++) {
     const g = groups[i];
-    const hex = colorAt(i);
+    const hex = colorDeGrupo(config, g, i);
     const r = parseInt(hex.slice(1, 3), 16) / 255;
     const gc = parseInt(hex.slice(3, 5), 16) / 255;
     const b = parseInt(hex.slice(5, 7), 16) / 255;

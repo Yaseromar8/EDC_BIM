@@ -5,9 +5,14 @@
 // Interacción (heredada del engine, no del dibujo):
 //   · clic en barra/segmento/punto → aislar en el 3D
 //   · "Pintar" → colorear grupos en el 3D (y en Revit vía Live Link)
+//
+// Diseño (docs/visor/41): todas las tarjetas tienen las mismas partes —
+// cabecera (título + pregunta), cuerpo y pie con de dónde sale el dato— y los
+// colores de tema.js (paleta oficial): un color solo dice algo si el dato lo dice.
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import Chart from './chartjsTheme';
-import { aggregate, scatterPoints, distinctValues, colorAt, fmt, groupsToCsv } from './engine';
+import { aggregate, scatterPoints, distinctValues, fmt, groupsToCsv } from './engine';
+import { C, FUENTE, RADIO, colorDeGrupo, tieneColoresPropios, nombreCampo, nombreValor } from './tema';
 
 // Línea de referencia (patrón de los tableros Plotly: umbral/meta punteada con
 // etiqueta). Plugin propio de chart.js — sin dependencias extra.
@@ -23,7 +28,7 @@ const refLinePlugin = {
     const px = scale.getPixelForValue(v);
     if (!Number.isFinite(px)) return;
     ctx.save();
-    ctx.strokeStyle = '#e0a63f';
+    ctx.strokeStyle = C.orange30D;
     ctx.setLineDash([5, 4]);
     ctx.lineWidth = 1.4;
     ctx.beginPath();
@@ -31,8 +36,8 @@ const refLinePlugin = {
     else { ctx.moveTo(chartArea.left, px); ctx.lineTo(chartArea.right, px); }
     ctx.stroke();
     if (opts.label) {
-      ctx.fillStyle = '#e0a63f';
-      ctx.font = "600 10px 'IBM Plex Sans', sans-serif";
+      ctx.fillStyle = C.orange30D;
+      ctx.font = `600 10px ${FUENTE}`;
       if (onX) { ctx.textAlign = 'left'; ctx.fillText(opts.label, px + 5, chartArea.top + 11); }
       else { ctx.textAlign = 'right'; ctx.fillText(opts.label, chartArea.right - 5, px - 5); }
     }
@@ -40,18 +45,61 @@ const refLinePlugin = {
   },
 };
 
+// La cifra al final de cada barra: se lee sin ir al eje (Few; Bach «números»).
+const valorEnBarraPlugin = {
+  id: 'ecdValorEnBarra',
+  afterDatasetsDraw(chart) {
+    const meta = chart.getDatasetMeta(0);
+    const valores = chart.data.datasets[0]?.data || [];
+    const { ctx } = chart;
+    ctx.save();
+    ctx.font = `500 11px ${FUENTE}`;
+    ctx.fillStyle = C.dark;
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    meta.data.forEach((barra, i) => {
+      const v = valores[i];
+      if (!Number.isFinite(v)) return;
+      ctx.fillText(fmt(v), barra.x + 6, barra.y);
+    });
+    ctx.restore();
+  },
+};
+
+// El total en el centro de la dona.
+const totalEnDonaPlugin = {
+  id: 'ecdTotalEnDona',
+  afterDraw(chart, _args, opts) {
+    const meta = chart.getDatasetMeta(0);
+    const arco = meta?.data?.[0];
+    if (!arco || !Number.isFinite(opts?.total)) return;
+    const { ctx } = chart;
+    ctx.save();
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = C.dark;
+    ctx.font = `600 18px ${FUENTE}`;
+    ctx.fillText(fmt(opts.total), arco.x, arco.y - 6);
+    ctx.fillStyle = C.gris600;
+    ctx.font = `400 10.5px ${FUENTE}`;
+    ctx.fillText(opts.unidad || '', arco.x, arco.y + 12);
+    ctx.restore();
+  },
+};
+
 const METRIC_LABEL = { count: 'Cantidad', sum: 'Suma', avg: 'Promedio' };
-const ACCENT = '#5b8fd6';
 const CJS_TYPES = new Set(['bar', 'donut', 'line', 'area', 'scatter']);
+// Atenuar lo no elegido: el color del grupo con poca opacidad (sigue siendo el suyo).
+const atenuar = (hex) => hex + '40';
 
 function IconBtn({ title, onClick, children, danger }) {
   return (
     <button onClick={onClick} title={title} style={{
       width: 26, height: 26, display: 'flex', alignItems: 'center', justifyContent: 'center',
       background: 'transparent', border: 'none', borderRadius: 6, cursor: 'pointer',
-      color: danger ? '#c65555' : '#66707e', padding: 0,
+      color: danger ? C.error : C.gris600, padding: 0,
     }}
-      onMouseEnter={e => { e.currentTarget.style.background = '#eef1f5'; }}
+      onMouseEnter={e => { e.currentTarget.style.background = C.light50; }}
       onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
     >{children}</button>
   );
@@ -61,6 +109,17 @@ function IconBtn({ title, onClick, children, danger }) {
 // transform:scale() — si no subimos su devicePixelRatio al acercarse, el bitmap
 // se estira y se ve borroso. Tope 4 para no comer memoria en nodos grandes.
 const dprFor = (zoom) => Math.min(Math.max((window.devicePixelRatio || 1) * (zoom || 1), 1), 4);
+
+// Color de cada grupo según el tipo de gráfico y lo elegido (aislado).
+function coloresDe(config, groups, activeKey) {
+  const unaSerie = config.type === 'bar' && !tieneColoresPropios(config.groupBy);
+  return groups.map((g, i) => {
+    const base = colorDeGrupo(config, g, i, { unaSerie });
+    if (!activeKey) return base;
+    if (g.key === activeKey) return unaSerie ? C.blue : base;   // lo elegido, en el azul de selección
+    return unaSerie ? C.gris300 : atenuar(base);
+  });
+}
 
 // ── Gráficos Chart.js (un componente, todos los tipos) ───────────────────────
 function CjsChart({ config, agg, points, onSegment, activeKey, metricLabel, zoom = 1 }) {
@@ -79,9 +138,9 @@ function CjsChart({ config, agg, points, onSegment, activeKey, metricLabel, zoom
     t: config.type,
     g: (agg?.groups || []).map(g => [g.key, g.value]),
     p: points?.points?.length || 0,
-    x: config.xField, y: config.yField,
+    x: config.xField, y: config.yField, by: config.groupBy,
     r: [config.refValue, config.refLabel],
-  }), [config.type, config.xField, config.yField, config.refValue, config.refLabel, agg, points]);
+  }), [config.type, config.xField, config.yField, config.groupBy, config.refValue, config.refLabel, agg, points]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -89,9 +148,9 @@ function CjsChart({ config, agg, points, onSegment, activeKey, metricLabel, zoom
     try { chartRef.current?.destroy(); } catch { /* */ }
 
     const groups = agg?.groups || [];
-    const labels = groups.map(g => g.key);
+    const labels = groups.map(g => nombreValor(g.key));
     const values = groups.map(g => g.value);
-    const colors = groups.map((g, i) => (g.isOthers ? '#525a66' : colorAt(i)));
+    const colors = coloresDe(config, groups, null);
 
     const onClick = (evt, els) => {
       const el = els?.[0];
@@ -111,23 +170,25 @@ function CjsChart({ config, agg, points, onSegment, activeKey, metricLabel, zoom
     const base = { responsive: true, maintainAspectRatio: false, onClick, onHover, devicePixelRatio: dprFor(zoomRef.current) };
     // Línea de referencia: en barras horizontales el valor vive en X; en el resto, en Y.
     const refOpts = { value: config.refValue, label: config.refLabel, axis: config.type === 'bar' ? 'x' : 'y' };
-    const axisTitle = (text) => ({ display: !!text, text: text || '', font: { size: 10 }, color: '#6f7987' });
+    const axisTitle = (text) => ({ display: !!text, text: text || '', font: { size: 10 }, color: C.gris600 });
 
     let cfg;
     if (config.type === 'donut') {
+      const total = values.reduce((s, v) => s + v, 0);
       cfg = {
         type: 'doughnut',
-        data: { labels, datasets: [{ data: values, backgroundColor: colors, borderColor: '#ffffff', borderWidth: 2, hoverOffset: 7 }] },
+        plugins: [totalEnDonaPlugin],
+        data: { labels, datasets: [{ data: values, backgroundColor: colors, borderColor: C.blanco, borderWidth: 2, hoverOffset: 4 }] },
         options: {
-          ...base, cutout: '62%',
+          ...base, cutout: '66%',
           plugins: {
-            legend: { position: 'right', labels: { font: { size: 10.5 } } },
+            legend: { display: false },   // la leyenda va en la tarjeta, completa y con cifras
+            ecdTotalEnDona: { total, unidad: config.metric === 'count' ? 'elementos' : metricLabel.toLowerCase() },
             tooltip: {
               callbacks: {
                 label: (c) => {
-                  const total = values.reduce((s, v) => s + v, 0) || 1;
                   const g = groups[c.dataIndex];
-                  return ` ${fmt(c.parsed)} (${Math.round((c.parsed / total) * 100)}%) · ${fmt(g?.count ?? 0)} elem.`;
+                  return ` ${fmt(c.parsed)} (${Math.round((c.parsed / (total || 1)) * 100)} %) · ${fmt(g?.count ?? 0)} elem.`;
                 },
               },
             },
@@ -141,9 +202,9 @@ function CjsChart({ config, agg, points, onSegment, activeKey, metricLabel, zoom
         data: {
           labels,
           datasets: [{
-            data: values, borderColor: ACCENT, borderWidth: 2, tension: 0.35,
-            fill: config.type === 'area', backgroundColor: 'rgba(91,143,214,0.16)',
-            pointRadius: 2.5, pointHoverRadius: 5.5, pointBackgroundColor: ACCENT,
+            data: values, borderColor: C.gris700, borderWidth: 2, tension: 0.3,
+            fill: config.type === 'area', backgroundColor: 'rgba(82, 82, 77, 0.10)',
+            pointRadius: 2.5, pointHoverRadius: 5, pointBackgroundColor: C.gris700,
           }],
         },
         options: {
@@ -161,7 +222,7 @@ function CjsChart({ config, agg, points, onSegment, activeKey, metricLabel, zoom
             },
           },
           scales: {
-            x: { grid: { display: false }, ticks: { maxRotation: 45, font: { size: 10 }, autoSkipPadding: 8 }, title: axisTitle(config.groupBy) },
+            x: { grid: { display: false }, ticks: { maxRotation: 45, font: { size: 10 }, autoSkipPadding: 8 }, title: axisTitle(nombreCampo(config.groupBy)) },
             y: { ticks: { callback: (v) => fmt(v) }, title: axisTitle(metricLabel) },
           },
         },
@@ -171,7 +232,7 @@ function CjsChart({ config, agg, points, onSegment, activeKey, metricLabel, zoom
       cfg = {
         type: 'scatter',
         plugins: [refLinePlugin],
-        data: { datasets: [{ data: pts.map(p => ({ x: p.x, y: p.y })), backgroundColor: 'rgba(91,143,214,0.55)', pointRadius: 2.6, pointHoverRadius: 6, pointHoverBackgroundColor: '#8fb8e8' }] },
+        data: { datasets: [{ data: pts.map(p => ({ x: p.x, y: p.y })), backgroundColor: 'rgba(106, 155, 204, 0.55)', pointRadius: 2.6, pointHoverRadius: 6, pointHoverBackgroundColor: C.blue30D }] },
         options: {
           ...base,
           plugins: {
@@ -180,29 +241,32 @@ function CjsChart({ config, agg, points, onSegment, activeKey, metricLabel, zoom
             tooltip: {
               callbacks: {
                 title: (items) => liveRef.current.points[items[0]?.dataIndex]?.name || '',
-                label: (c) => ` ${config.xField}: ${fmt(c.parsed.x)} · ${config.yField}: ${fmt(c.parsed.y)}`,
+                label: (c) => ` ${nombreCampo(config.xField)}: ${fmt(c.parsed.x)} · ${nombreCampo(config.yField)}: ${fmt(c.parsed.y)}`,
               },
             },
           },
           scales: {
-            x: { title: { display: true, text: config.xField, font: { size: 10 } }, ticks: { callback: (v) => fmt(v) } },
-            y: { title: { display: true, text: config.yField, font: { size: 10 } }, ticks: { callback: (v) => fmt(v) } },
+            x: { title: { display: true, text: nombreCampo(config.xField), font: { size: 10 } }, ticks: { callback: (v) => fmt(v) } },
+            y: { title: { display: true, text: nombreCampo(config.yField), font: { size: 10 } }, ticks: { callback: (v) => fmt(v) } },
           },
         },
       };
     } else {
-      // barras horizontales (nombres largos de obra se leen mejor así)
+      // Barras horizontales (los nombres largos de obra se leen mejor así), con la
+      // cifra al final de cada barra: el eje de valores sobra y se oculta.
       cfg = {
         type: 'bar',
-        plugins: [refLinePlugin],
-        data: { labels, datasets: [{ data: values, backgroundColor: colors, borderRadius: 4, borderSkipped: false, maxBarThickness: 24 }] },
+        plugins: [refLinePlugin, valorEnBarraPlugin],
+        data: { labels, datasets: [{ data: values, backgroundColor: colors, borderRadius: 2, borderSkipped: false, maxBarThickness: 18 }] },
         options: {
           ...base, indexAxis: 'y',
+          layout: { padding: { right: 56 } },
           plugins: {
             legend: { display: false },
             ecdRefLine: refOpts,
             tooltip: {
               callbacks: {
+                title: (items) => nombreValor(groups[items[0]?.dataIndex]?.key),
                 label: (c) => {
                   const g = groups[c.dataIndex];
                   return ` ${metricLabel}: ${fmt(c.parsed.x)} · ${fmt(g?.count ?? 0)} elem.`;
@@ -211,12 +275,19 @@ function CjsChart({ config, agg, points, onSegment, activeKey, metricLabel, zoom
             },
           },
           scales: {
-            x: { ticks: { callback: (v) => fmt(v) }, title: axisTitle(metricLabel) },
+            x: { display: false, beginAtZero: true },
             y: {
               grid: { display: false },
+              border: { display: false },
               ticks: {
-                autoSkip: false, font: { size: 10.5 },
-                callback(v) { const l = this.getLabelForValue(v); return l.length > 22 ? l.slice(0, 21) + '…' : l; },
+                autoSkip: false, font: { size: 11 }, color: C.dark,
+                // Recorte según el ancho real de la tarjeta (en una S no caben 26 letras):
+                // la etiqueta entera sigue en el aviso al pasar el ratón.
+                callback(v) {
+                  const l = this.getLabelForValue(v);
+                  const max = Math.max(8, Math.floor((this.chart.width * 0.4) / 6.4));
+                  return l.length > max ? l.slice(0, max - 1) + '…' : l;
+                },
               },
             },
           },
@@ -248,12 +319,7 @@ function CjsChart({ config, agg, points, onSegment, activeKey, metricLabel, zoom
   useEffect(() => {
     const ch = chartRef.current;
     if (!ch || (config.type !== 'bar' && config.type !== 'donut')) return;
-    const groups = agg?.groups || [];
-    ch.data.datasets[0].backgroundColor = groups.map((g, i) => {
-      const baseColor = g.isOthers ? '#525a66' : colorAt(i);
-      if (!activeKey) return baseColor;
-      return g.key === activeKey ? baseColor : baseColor + '3d';
-    });
+    ch.data.datasets[0].backgroundColor = coloresDe(config, agg?.groups || [], activeKey);
     ch.update('none');
   }, [activeKey, sig]);
 
@@ -264,39 +330,76 @@ function CjsChart({ config, agg, points, onSegment, activeKey, metricLabel, zoom
   );
 }
 
-// ── Renderizadores DOM (tabla / KPI / fuente QA) ─────────────────────────────
+// ── Renderizadores DOM (tabla / KPI / leyenda de la dona / fuente QA) ────────
 
 function Kpi({ total, totalCount, config }) {
+  const ref = Number(config.refValue);
+  const conRef = Number.isFinite(ref) && ref > 0;
+  const pct = conRef ? Math.min(total / ref, 1) : 0;
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
-      <div style={{ fontSize: 40, fontWeight: 700, color: '#171c24', letterSpacing: -1, fontVariantNumeric: 'tabular-nums', fontFamily: "'IBM Plex Sans', sans-serif" }}>{fmt(total)}</div>
-      <div style={{ fontSize: 12, color: '#7a8494', marginTop: 6, textAlign: 'center' }}>
-        {METRIC_LABEL[config.metric || 'count']}{config.metric !== 'count' && config.valueField ? ` de ${config.valueField}` : ''} · {fmt(totalCount)} elementos
+    <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', height: '100%', gap: 8 }}>
+      <div style={{ fontSize: 34, fontWeight: 600, color: C.dark, letterSpacing: -0.5, fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>{fmt(total)}</div>
+      <div style={{ fontSize: 11.5, color: C.gris600 }}>
+        {METRIC_LABEL[config.metric || 'count']}{config.metric !== 'count' && config.valueField ? ` de ${nombreCampo(config.valueField)}` : ''} · {fmt(totalCount)} elementos
       </div>
+      {/* Barra contra la referencia (bullet graph de Few): cuánto falta para la meta */}
+      {conRef && (
+        <div>
+          <div style={{ position: 'relative', height: 8, background: C.light50, borderRadius: 2 }}>
+            <div style={{ width: `${pct * 100}%`, height: '100%', background: C.gris700, borderRadius: 2 }} />
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: C.gris600, marginTop: 4 }}>
+            <span>{Math.round((total / ref) * 100)} % de {config.refLabel || 'la referencia'}</span>
+            <span style={{ color: C.orange30D }}>{fmt(ref)}</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-function TableView({ groups, total, metricLabel, onSegment, activeKey }) {
+function LeyendaDona({ config, groups, total, activeKey, onSegment }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 6, minWidth: 0 }}>
+      {groups.map((g, i) => (
+        <button key={g.key} onClick={() => onSegment(g)} title={`${nombreValor(g.key)} · clic: aislar en el 3D`}
+          style={{
+            display: 'grid', gridTemplateColumns: '10px 1fr auto', alignItems: 'center', gap: 8, padding: '3px 6px',
+            border: 'none', borderRadius: 4, cursor: 'pointer', textAlign: 'left', font: 'inherit', fontSize: 11.5,
+            background: activeKey === g.key ? C.blueTinte : 'transparent', color: C.dark,
+          }}>
+          <span style={{ width: 9, height: 9, borderRadius: 2, background: colorDeGrupo(config, g, i) }} />
+          <span style={{ lineHeight: 1.3 }}>{nombreValor(g.key)}</span>
+          <span style={{ fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
+            {fmt(g.value)} <span style={{ color: C.gris600 }}>{total > 0 ? Math.round((g.value / total) * 100) : 0} %</span>
+          </span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function TableView({ config, groups, total, metricLabel, onSegment, activeKey }) {
+  const conColor = tieneColoresPropios(config.groupBy);
   return (
     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11.5 }}>
       <thead>
         <tr>
           {['Grupo', metricLabel, '%'].map(h => (
-            <th key={h} style={{ position: 'sticky', top: 0, background: '#f3f5f7', textAlign: h === 'Grupo' ? 'left' : 'right', color: '#66707e', fontWeight: 600, padding: '5px 8px', borderBottom: '1px solid #e2e6ea' }}>{h}</th>
+            <th key={h} style={{ position: 'sticky', top: 0, background: C.light50, textAlign: h === 'Grupo' ? 'left' : 'right', color: C.gris600, fontWeight: 600, padding: '5px 8px', borderBottom: `1px solid ${C.lightGray}` }}>{h}</th>
           ))}
         </tr>
       </thead>
       <tbody>
         {groups.map((g, i) => (
           <tr key={g.key} onClick={() => onSegment(g)}
-            style={{ cursor: 'pointer', background: activeKey === g.key ? '#e8f0fa' : (i % 2 ? '#f8fafb' : 'transparent') }}>
-            <td style={{ padding: '4px 8px', color: '#2a313c' }}>
-              <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 2, background: g.isOthers ? '#9aa3ae' : colorAt(i), marginRight: 6 }} />
-              {g.key}
+            style={{ cursor: 'pointer', background: activeKey === g.key ? C.blueTinte : 'transparent', borderBottom: `1px solid ${C.light50}` }}>
+            <td style={{ padding: '4px 8px', color: C.dark }}>
+              {conColor && <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 2, background: colorDeGrupo(config, g, i), marginRight: 6 }} />}
+              {nombreValor(g.key)}
             </td>
-            <td style={{ padding: '4px 8px', textAlign: 'right', color: '#171c24', fontVariantNumeric: 'tabular-nums' }}>{fmt(g.value)}</td>
-            <td style={{ padding: '4px 8px', textAlign: 'right', color: '#7a8494', fontVariantNumeric: 'tabular-nums' }}>{total > 0 ? Math.round((g.value / total) * 100) : 0}%</td>
+            <td style={{ padding: '4px 8px', textAlign: 'right', color: C.dark, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', verticalAlign: 'top' }}>{fmt(g.value)}</td>
+            <td style={{ padding: '4px 8px', textAlign: 'right', color: C.gris600, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', verticalAlign: 'top' }}>{total > 0 ? Math.round((g.value / total) * 100) : 0} %</td>
           </tr>
         ))}
       </tbody>
@@ -304,40 +407,66 @@ function TableView({ groups, total, metricLabel, onSegment, activeKey }) {
   );
 }
 
+// Completitud: verde completo, naranja a medias, rojo casi vacío (paleta oficial).
+const colorCompletitud = (pct) => (pct >= 90 ? C.green : pct >= 50 ? C.orange : C.error);
+
 // Nodo FUENTE: parámetros del modelo con su completitud (QA). Clic en uno →
-// crear un gráfico agrupado por ese parámetro (flujo Vyssuals).
+// crear un gráfico agrupado por ese parámetro (flujo Vyssuals). Agrupados por su
+// grupo de Revit y, dentro, los INCOMPLETOS primero: es lo que interesa revisar.
 function ParamsSource({ fields, onCreateFromField }) {
   const [q, setQ] = useState('');
-  const list = useMemo(() => {
+  const grupos = useMemo(() => {
     let f = fields;
     if (q.trim()) f = f.filter(x => x.key.toLowerCase().includes(q.toLowerCase()));
-    return f.slice(0, 120);
+    const por = new Map();
+    for (const x of f.slice(0, 400)) {
+      const i = x.key.indexOf('::');
+      const grupo = i > 0 ? x.key.slice(0, i) : 'Generales';
+      if (!por.has(grupo)) por.set(grupo, []);
+      por.get(grupo).push({ ...x, nombre: i > 0 ? x.key.slice(i + 2) : x.key });
+    }
+    const out = [...por.entries()].map(([grupo, lista]) => ({
+      grupo,
+      lista: lista.sort((a, b) => a.fillPct - b.fillPct || a.nombre.localeCompare(b.nombre, 'es', { numeric: true })),
+    }));
+    out.sort((a, b) => a.grupo.localeCompare(b.grupo, 'es'));
+    return out;
   }, [fields, q]);
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8, height: '100%' }}>
       <input
         value={q} onChange={e => setQ(e.target.value)} placeholder="Buscar parámetro…"
         onPointerDown={e => e.stopPropagation()}
-        style={{ padding: '6px 10px', borderRadius: 7, border: '1px solid #d5dae1', background: '#ffffff', color: '#1f242c', fontSize: 12, outline: 'none', flexShrink: 0 }}
+        style={{ padding: '6px 10px', borderRadius: 6, border: `1px solid ${C.gris300}`, background: C.blanco, color: C.dark, fontSize: 12, outline: 'none', flexShrink: 0, fontFamily: FUENTE }}
       />
-      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: '#98a2b0', padding: '0 2px', flexShrink: 0 }}>
-        <span>Parámetro · clic para graficar</span><span>Completitud</span>
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10.5, color: C.gris600, padding: '0 2px', flexShrink: 0 }}>
+        <span>Clic en un parámetro para graficarlo</span><span>Con dato</span>
       </div>
-      <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 2 }}>
-        {list.map(f => (
-          <div key={f.key} onClick={() => onCreateFromField(f)}
-            title={`${f.key} — ${f.fillPct}% con dato · clic: crear gráfico`}
-            style={{ padding: '5px 8px', borderRadius: 6, cursor: 'pointer' }}
-            onMouseEnter={e => { e.currentTarget.style.background = '#eef2f6'; }}
-            onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
-          >
-            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 11.5 }}>
-              <span style={{ color: '#39424e', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.key}</span>
-              <span style={{ flexShrink: 0, fontVariantNumeric: 'tabular-nums', color: f.fillPct >= 90 ? '#2f9e66' : f.fillPct >= 50 ? '#c98f2a' : '#c65555' }}>{f.fillPct}%</span>
+      <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
+        {grupos.map(({ grupo, lista }) => (
+          <div key={grupo}>
+            <div style={{ position: 'sticky', top: 0, background: C.blanco, fontSize: 10.5, fontWeight: 600, color: C.gris600, padding: '6px 8px 3px', borderBottom: `1px solid ${C.light50}` }}>
+              {grupo} <span style={{ fontWeight: 400 }}>· {lista.length}</span>
             </div>
-            <div style={{ height: 3, background: '#e8ebef', borderRadius: 2, marginTop: 3 }}>
-              <div style={{ width: `${f.fillPct}%`, height: '100%', borderRadius: 2, background: f.fillPct >= 90 ? '#3fb27f' : f.fillPct >= 50 ? '#e0a63f' : '#d66a6a' }} />
-            </div>
+            {lista.map(f => (
+              <div key={f.key} onClick={() => onCreateFromField(f)}
+                title={`${nombreCampo(f.key)} — ${f.fillPct} % de los elementos con dato · ${f.isNumeric ? 'número' : 'texto'} · ${f.distinct >= 60 ? '60 o más' : f.distinct} valores distintos · clic: crear gráfico`}
+                style={{ padding: '5px 8px', borderRadius: 4, cursor: 'pointer' }}
+                onMouseEnter={e => { e.currentTarget.style.background = C.light50; }}
+                onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 11.5 }}>
+                  <span style={{ color: C.dark, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.nombre}</span>
+                  <span style={{ flexShrink: 0, fontVariantNumeric: 'tabular-nums', color: colorCompletitud(f.fillPct) }}>{f.fillPct} %</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 3 }}>
+                  <div style={{ flex: 1, height: 3, background: C.light50, borderRadius: 2 }}>
+                    <div style={{ width: `${f.fillPct}%`, height: '100%', borderRadius: 2, background: colorCompletitud(f.fillPct) }} />
+                  </div>
+                  <span style={{ fontSize: 10, color: C.gris600, flexShrink: 0 }}>{f.isNumeric ? 'número' : 'texto'} · {f.distinct >= 60 ? '60+' : f.distinct}</span>
+                </div>
+              </div>
+            ))}
           </div>
         ))}
       </div>
@@ -346,7 +475,7 @@ function ParamsSource({ fields, onCreateFromField }) {
 }
 
 // ── Nodo ─────────────────────────────────────────────────────────────────────
-export default function ChartCard({ config, rows, fields = [], onEdit, onUpdate, onDelete, onIsolate, onPaint, onCreateFromField, activeKey, dragHandlers, zoom = 1 }) {
+export default function ChartCard({ config, rows, fields = [], meta = null, onEdit, onUpdate, onDelete, onIsolate, onPaint, onCreateFromField, activeKey, dragHandlers, zoom = 1 }) {
   const [painted, setPainted] = useState(false);
   const isQa = config.type === 'qa';
   const isScatter = config.type === 'scatter';
@@ -373,7 +502,7 @@ export default function ChartCard({ config, rows, fields = [], onEdit, onUpdate,
     [rows, config, isScatter]
   );
 
-  const metricLabel = METRIC_LABEL[config.metric || 'count'] + (config.metric !== 'count' && config.valueField ? ` · ${config.valueField}` : '');
+  const metricLabel = METRIC_LABEL[config.metric || 'count'] + (config.metric !== 'count' && config.valueField ? ` · ${nombreCampo(config.valueField)}` : '');
 
   const handleSegment = (g) => onIsolate(g, config);
   const handlePaint = async () => {
@@ -395,48 +524,66 @@ export default function ChartCard({ config, rows, fields = [], onEdit, onUpdate,
     setTimeout(() => URL.revokeObjectURL(url), 800);
   };
 
+  // Título legible: el que puso el usuario o el del campo («Planilla › Capítulo»).
+  const titulo = nombreCampo(config.title || config.groupBy) || (isQa ? 'Parámetros del modelo' : 'Gráfico');
   const subtitle = isQa
     ? `${fields.length} parámetros · % de elementos con dato`
     : isScatter
-      ? `${config.yField || '?'} vs ${config.xField || '?'} · ${fmt(points?.total || 0)} puntos${points?.sampled ? ' (muestreado)' : ''}`
-      : `${config.groupBy ? `por ${config.groupBy}` : 'total'} · ${metricLabel}${config.filter?.values?.length ? ` · filtro: ${config.filter.field}` : ''}`;
+      ? `${nombreCampo(config.yField) || '?'} frente a ${nombreCampo(config.xField) || '?'}`
+      : `${config.groupBy ? `por ${nombreCampo(config.groupBy)}` : 'total'} · ${metricLabel}`;
 
+  // Pie: de dónde sale el dato y sobre cuántos elementos (Bach: metainformación).
+  const pie = isQa
+    ? `${meta?.fuente || 'Inventario'} · ${fmt(rows?.length || 0)} elementos${meta?.hora ? ` · ${meta.hora}` : ''}`
+    : [
+      meta?.fuente || 'Inventario',
+      isScatter ? `${fmt(points?.total || 0)} elementos${points?.sampled ? ' (muestreo)' : ''}` : `${fmt(agg.totalCount)} elementos`,
+      config.filter?.values?.length ? `filtro: ${nombreCampo(config.filter.field)}` : null,
+      meta?.hora || null,
+    ].filter(Boolean).join(' · ');
+
+  const vacio = (texto) => <div style={{ padding: 18, color: C.gris600, fontSize: 12 }}>{texto}</div>;
   const body = isQa
     ? <ParamsSource fields={fields} onCreateFromField={onCreateFromField} />
     : config.type === 'kpi'
       ? <Kpi total={agg.total} totalCount={agg.totalCount} config={config} />
       : config.type === 'table'
-        ? <TableView groups={agg.groups} total={agg.total} metricLabel={METRIC_LABEL[config.metric || 'count']} onSegment={handleSegment} activeKey={activeKey} />
+        ? <TableView config={config} groups={agg.groups} total={agg.total} metricLabel={METRIC_LABEL[config.metric || 'count']} onSegment={handleSegment} activeKey={activeKey} />
         : (!isScatter && !agg.groups.length)
-          ? <div style={{ padding: 18, color: '#98a2b0', fontSize: 12 }}>Sin datos para esta configuración.</div>
+          ? vacio('Sin datos para esta configuración.')
           : (isScatter && !(points?.points?.length))
-            ? <div style={{ padding: 18, color: '#98a2b0', fontSize: 12 }}>Sin pares numéricos para {config.xField || '?'} / {config.yField || '?'}.</div>
-            : <CjsChart config={config} agg={agg} points={points} onSegment={handleSegment} activeKey={activeKey} metricLabel={METRIC_LABEL[config.metric || 'count']} zoom={zoom} />;
+            ? vacio(`Sin pares numéricos para ${nombreCampo(config.xField) || '?'} / ${nombreCampo(config.yField) || '?'}.`)
+            : config.type === 'donut'
+              ? (
+                <div style={{ display: 'grid', gridTemplateColumns: 'minmax(120px, 44%) 1fr', gap: 12, height: '100%' }}>
+                  <CjsChart config={config} agg={agg} points={points} onSegment={handleSegment} activeKey={activeKey} metricLabel={METRIC_LABEL[config.metric || 'count']} zoom={zoom} />
+                  <LeyendaDona config={config} groups={agg.groups} total={agg.total} activeKey={activeKey} onSegment={handleSegment} />
+                </div>
+              )
+              : <CjsChart config={config} agg={agg} points={points} onSegment={handleSegment} activeKey={activeKey} metricLabel={METRIC_LABEL[config.metric || 'count']} zoom={zoom} />;
 
   return (
     <div style={{
       width: '100%', height: '100%', boxSizing: 'border-box',
-      background: '#ffffff', border: '1px solid #e4e7eb', borderRadius: 14,
-      padding: '14px 16px 16px', display: 'flex', flexDirection: 'column', gap: 10, minWidth: 0,
-      boxShadow: '0 8px 22px -12px rgba(23,28,38,0.20)',
+      background: C.blanco, border: `1px solid ${C.lightGray}`, borderRadius: RADIO,
+      padding: '12px 14px 0', display: 'flex', flexDirection: 'column', gap: 10, minWidth: 0,
+      fontFamily: FUENTE, color: C.dark,
     }}>
       {/* Cabecera = asa de arrastre del nodo en el lienzo */}
       <div {...dragHandlers}
         style={{ display: 'flex', alignItems: 'flex-start', gap: 8, cursor: 'grab', flexShrink: 0, userSelect: 'none', touchAction: 'none' }}>
         <div style={{ flex: 1, minWidth: 0 }}>
-          {/* Título en IBM Plex Sans, la letra del sistema (D-26) */}
-          <div style={{ fontSize: 14, fontWeight: 600, color: '#171c24', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontFamily: "'IBM Plex Sans', system-ui, sans-serif", letterSpacing: 0.1 }}>{config.title || config.groupBy || (isQa ? 'Parámetros del modelo' : 'Gráfico')}</div>
-          <div style={{ fontSize: 10.5, color: '#8a93a1', marginTop: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{subtitle}</div>
-          {/* La PREGUNTA que responde el gráfico (patrón editorial de Plotly/Dash) */}
-          {config.question && (
-            <div style={{ fontSize: 11, fontStyle: 'italic', color: '#6b7280', marginTop: 6, lineHeight: 1.5 }}>{config.question}</div>
-          )}
+          <div style={{ fontSize: 13, fontWeight: 600, color: C.dark, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={titulo}>{titulo}</div>
+          {/* La PREGUNTA que responde el gráfico (patrón editorial); si no hay, de qué es */}
+          <div style={{ fontSize: 11, color: C.gris600, marginTop: 2, lineHeight: 1.45, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: config.question ? 'normal' : 'nowrap' }}>
+            {config.question || subtitle}
+          </div>
         </div>
         <div style={{ display: 'flex', gap: 2, flexShrink: 0 }} onPointerDown={e => e.stopPropagation()}>
           {!isQa && !isScatter && config.type !== 'kpi' && (
-            <IconBtn title={painted ? '¡Pintado en el 3D!' : 'Pintar grupos en el 3D (y en Revit si está vinculado)'} onClick={handlePaint}>
+            <IconBtn title={painted ? 'Pintado en el 3D' : 'Pintar grupos en el 3D (y en Revit si está vinculado)'} onClick={handlePaint}>
               {painted
-                ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3fb27f" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5" /></svg>
+                ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={C.green} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5" /></svg>
                 : <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2l7 7-9 9H4v-6l8-8z" /><path d="M15 5l4 4" /></svg>}
             </IconBtn>
           )}
@@ -453,23 +600,23 @@ export default function ChartCard({ config, rows, fields = [], onEdit, onUpdate,
           </IconBtn>
         </div>
       </div>
-      {/* Filtro rápido: chips de valores del campo filtrado (sin abrir el editor).
+      {/* Filtro rápido: valores del campo filtrado (sin abrir el editor).
           Ninguno seleccionado = mostrar todo. */}
       {filterOpts.length > 0 && (
         <div onPointerDown={e => e.stopPropagation()}
-          style={{ display: 'flex', gap: 4, alignItems: 'center', overflowX: 'auto', flexShrink: 0, paddingBottom: 2, scrollbarWidth: 'thin' }}>
-          <span style={{ fontSize: 10, color: '#98a2b0', flexShrink: 0 }}>{config.filter.field}:</span>
+          style={{ display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center', flexShrink: 0, maxHeight: 46, overflow: 'hidden' }}>
+          <span style={{ fontSize: 10.5, color: C.gris600, flexShrink: 0 }}>{nombreCampo(config.filter.field)}:</span>
           {filterOpts.map(o => {
             const on = config.filter?.values?.includes(o.value);
             return (
               <button key={o.value} onClick={() => toggleFilterValue(o.value)}
-                title={`${o.value} · ${fmt(o.count)} elem.`}
+                title={`${nombreValor(o.value)} · ${fmt(o.count)} elem.`}
                 style={{
-                  flexShrink: 0, padding: '2px 9px', borderRadius: 11, fontSize: 10.5, cursor: 'pointer',
-                  border: `1px solid ${on ? '#7aa4d4' : '#d5dae1'}`,
-                  background: on ? '#e3edf8' : '#ffffff', color: on ? '#28527e' : '#66707e',
+                  flexShrink: 0, padding: '2px 8px', borderRadius: 4, fontSize: 10.5, cursor: 'pointer', fontFamily: FUENTE,
+                  border: `1px solid ${on ? C.blue : C.gris300}`,
+                  background: on ? C.blueTinte : C.blanco, color: on ? C.blue30D : C.texto2,
                   maxWidth: 130, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                }}>{o.value}</button>
+                }}>{nombreValor(o.value)}</button>
             );
           })}
         </div>
@@ -478,6 +625,11 @@ export default function ChartCard({ config, rows, fields = [], onEdit, onUpdate,
       {/* Cuerpo: los gráficos canvas llenan sin scroll; tabla/QA sí se desplazan */}
       <div style={{ flex: 1, minHeight: 0, overflowY: isCjs ? 'hidden' : 'auto' }} onPointerDown={e => e.stopPropagation()}>
         {body}
+      </div>
+
+      {/* Pie: de dónde sale el dato */}
+      <div style={{ flexShrink: 0, borderTop: `1px solid ${C.light50}`, padding: '6px 0 8px', fontSize: 10.5, color: C.gris600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={pie}>
+        {pie}
       </div>
     </div>
   );
