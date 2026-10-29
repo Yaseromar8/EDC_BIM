@@ -964,7 +964,6 @@ if PERFIL_DESPLIEGUE != 'portal':
     from routes.views import views_bp
     from routes.pins import pins_bp
     from routes.tracking import tracking_bp
-    from routes.ai import ai_bp
     from routes.schedule import schedule_bp
     from routes.inventory import inventory_bp
     from routes.rfis import rfis_bp
@@ -988,7 +987,9 @@ if PERFIL_DESPLIEGUE != 'portal':
     app.register_blueprint(views_bp)
     app.register_blueprint(pins_bp)
     app.register_blueprint(tracking_bp)
-    app.register_blueprint(ai_bp)
+    # /api/ai/* retirado (29-oct-2026, decision del dueño: nada de IA en View).
+    # routes/ai.py sigue existiendo solo porque crea la tabla
+    # ia_documentos_preparados para bootstrap_esquema (sql/26 la nombra).
     app.register_blueprint(schedule_bp, url_prefix='/api/schedule')
     app.register_blueprint(inventory_bp)
     app.register_blueprint(rfis_bp, url_prefix='/api/rfis')
