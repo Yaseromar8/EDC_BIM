@@ -11,14 +11,15 @@ import { C, RADIO } from './tema';
 const COLUMNAS = { s: 1, m: 2, l: 3 };
 const nombreArchivo = (t) => (t || 'vista').replace(/[\\/:*?"<>|]/g, '_').slice(0, 80);
 
-// Reparto en filas de tres columnas, en el orden elegido. Una tarjeta que no cabe en lo que queda de la
-// fila abre otra, y la última de la fila se estira hasta el borde: ninguna fila queda con hueco.
-function repartir(tarjetas) {
+// Reparto en filas de `n` columnas (3, o 2 si el panel es estrecho), en el orden elegido. Una tarjeta que
+// no cabe en lo que queda de la fila abre otra, y la última de la fila se estira hasta el borde: ninguna
+// fila queda con hueco.
+function repartir(tarjetas, n) {
   const filas = [];
-  let fila = [], libres = 3;
+  let fila = [], libres = n;
   for (const cfg of tarjetas) {
-    const ancho = Math.min(COLUMNAS[cfg.size] || (cfg.type === 'kpi' ? 1 : 2), 3);
-    if (ancho > libres && fila.length) { fila[fila.length - 1].span += libres; filas.push(fila); fila = []; libres = 3; }
+    const ancho = Math.min(COLUMNAS[cfg.size] || (cfg.type === 'kpi' ? 1 : 2), n);
+    if (ancho > libres && fila.length) { fila[fila.length - 1].span += libres; filas.push(fila); fila = []; libres = n; }
     fila.push({ cfg, span: ancho });
     libres -= ancho;
   }
@@ -27,12 +28,12 @@ function repartir(tarjetas) {
 }
 
 const VistaDePagina = forwardRef(function VistaDePagina({
-  vista, charts, rows, fields, meta, itemizado, contexto, activo,
+  vista, charts, rows, fields, meta, itemizado, contexto, activo, columnas = 3,
   onIsolate, onPaint, onEdit, onUpdateChart, onQuitarDeVista,
 }, ref) {
   const rejilla = useRef(null);
   const tarjetas = vista.cards.map(id => charts.find(c => c.id === id)).filter(Boolean);
-  const filas = repartir(tarjetas);
+  const filas = repartir(tarjetas, columnas);
 
   // Fuera de la captura: los botones de cada tarjeta y el recuadro de ayuda del ratón (el de ECharts va
   // con z-index 9999999): en la imagen solo van los gráficos.
@@ -75,7 +76,7 @@ const VistaDePagina = forwardRef(function VistaDePagina({
           flex: 1, minHeight: 0, overflowY: 'auto', padding: 14, boxSizing: 'border-box', background: C.light,
           // Todas las filas reparten el alto del panel: la vista entera cabe sin desplazarse (si hay
           // muchas filas, cada una se queda en 200 px como mínimo y entonces sí aparece la barra).
-          display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gridTemplateRows: `repeat(${filas.length}, minmax(200px, 1fr))`, gap: 12,
+          display: 'grid', gridTemplateColumns: `repeat(${columnas}, minmax(0, 1fr))`, gridTemplateRows: `repeat(${filas.length}, minmax(200px, 1fr))`, gap: 12,
         }}>
           {filas.flat().map(({ cfg, span }) => (
             <div key={cfg.id} style={{ gridColumn: `span ${span}`, minWidth: 0, minHeight: 0, borderRadius: RADIO }}>

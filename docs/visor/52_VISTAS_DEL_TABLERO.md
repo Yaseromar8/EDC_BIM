@@ -177,3 +177,17 @@ Medido con Chrome sin ventana, con la sesión del dueño y su GPU, en el Frente 
 | Reducir | 720 px; el 3D, 1 vez; se recuerda `normal` |
 | Abrir «Vista 1» y volver al lienzo | 911 px y luego 720 px |
 | Cerrar | El 3D vuelve a 1.518 px y el margen a 0; no queda ninguna capa |
+
+**Ajustes del dueño, el mismo día:**
+- «que sea más ancho»: Normal pasa a **55 %** de la ventana (nunca menos de 720 px) y Amplio a **70 %**. Van en porcentaje para que acompañen al zoom del navegador, y al 3D siempre le quedan 300 px.
+- «cuando le doy fijar como vista, se crece»: el ancho ya **no cambia solo** al abrir o fijar una vista; solo con el botón. La vista se acomoda: **2 columnas** por debajo de 1.000 px y 3 por encima.
+- «debe aparecer en blanco y yo crear mis gráficas»:
+  - se quita el botón «Auditoría del presupuesto», que fabricaba una sección con las 10 gráficas; esas gráficas siguen disponibles una a una en «Nuevo gráfico», tipo «Presupuesto»;
+  - se quita la línea «N elementos · N parámetros · Inventario de la nube · leído …», que solo aparece si hay un aviso;
+  - **doble clic sobre una gráfica abre su editor**; en el título, lo renombra.
+- Barra lateral del visor (`App.css`): botones de 52 px de alto (antes 64) para el navegador al 100 %; el grupo de arriba sube y BIM 5D y Planilla siguen pegados al fondo.
+
+Verificado con Chrome sin ventana y la sesión del dueño:
+- sin el botón de auditoría ni la línea de datos;
+- el doble clic abrió «Editar gráfico» de «Cobertura del itemizado por capítulo»;
+- barra lateral: grupo de arriba de 54 a 574 px y de abajo de 610 a 714 px, en una ventana de 720 px de alto.

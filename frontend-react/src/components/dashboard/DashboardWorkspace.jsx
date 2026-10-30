@@ -11,13 +11,13 @@
 // incluye posición/tamaño de cada nodo y el encuadre del lienzo.
 import React, { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { apiFetch } from '../../utils/apiFetch';
-import { SOURCES, discoverFields, isolateInViewer, colorizeInViewer, clearViewerViz, resetEngineCaches, fmt } from './engine';
+import { SOURCES, discoverFields, isolateInViewer, colorizeInViewer, clearViewerViz, resetEngineCaches } from './engine';
 import ChartCard from './ChartCard';
 import ChartEditor from './ChartEditor';
 import VistaDePagina from './VistaDePagina';
 import BarraDeVistas from './BarraDeVistas';
 import Herramienta, { CSS_HERRAMIENTAS, Icono, Separador } from './Herramienta';
-import { ANALISIS, ORDEN_ANALISIS } from './analisisDeAuditoria';
+import { ANALISIS } from './analisisDeAuditoria';
 // El itemizado vigente del frente abierto: el que se subió a la Planilla (docs/visor/51).
 import { itemizadoDeObra } from '../../utils/itemizadoDeObraVisor';
 import { C, FUENTE, RADIO, REJILLA, COLUMNA, HUECO, ANCHOS, ALTO_DEFECTO, anchoCercano, altoMinimo, nombreCampo } from './tema';
@@ -116,13 +116,16 @@ const ajustar3d = (antes, ahora) => {
 };
 
 // Dos anchos fijos (docs/visor/52 §8): arrastrar el borde no puede ir fluido porque el 3D de esta obra
-// tarda ≈ 220 ms en redibujarse (§7). Normal = dos columnas de tarjetas (2 × 320 + 16 y márgenes);
-// Amplio = 60 % de la pantalla, para las vistas (página de tres columnas).
+// tarda ≈ 220 ms en redibujarse (§7). Normal = 55 % de la ventana (nunca menos de dos columnas de
+// tarjetas: 2 × 320 + 16 y márgenes); Amplio = 70 % (ahí las vistas usan tres columnas; en Normal, dos). En
+// porcentaje, para que acompañen al zoom del navegador. Al 3D siempre le quedan 300 px como mínimo.
 const ANCHO_NORMAL = 720;
 const MODO_GUARDADO = 'tablero-modo';
-const anchoDeModo = (modo) => (modo === 'amplio'
-  ? Math.max(ANCHO_NORMAL, Math.round(window.innerWidth * 0.6))
-  : Math.min(ANCHO_NORMAL, window.innerWidth - 300));
+const anchoDeModo = (modo) => {
+  const tope = window.innerWidth - 300;
+  const normal = Math.min(Math.max(ANCHO_NORMAL, Math.round(window.innerWidth * 0.55)), tope);
+  return modo === 'amplio' ? Math.min(Math.max(normal, Math.round(window.innerWidth * 0.7)), tope) : normal;
+};
 const horaCorta = () => new Date().toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' });
 
 // Posición por defecto en cascada para tableros guardados sin layout (migración
@@ -148,7 +151,6 @@ export default function DashboardWorkspace({ project, backendUrl, onClose, proye
   const [active, setActive] = useState(null);       // { chartId, key } aislado
   const [saveState, setSaveState] = useState('');
   const [modo, setModo] = useState(() => { try { return localStorage.getItem(MODO_GUARDADO) === 'amplio' ? 'amplio' : 'normal'; } catch { return 'normal'; } });
-  const [modoVista, setModoVista] = useState('amplio');   // una vista se abre en Amplio
   const [view, setView] = useState({ tx: 30, ty: 30, s: 0.85 }); // encuadre del lienzo
   const itemizado = useSyncExternalStore(itemizadoDeObra.suscribir, itemizadoDeObra.estado);
   // Vistas (docs/visor/52): grupos de tarjetas elegidas por el usuario, con su botón; se ven encajadas.
@@ -178,9 +180,8 @@ export default function DashboardWorkspace({ project, backendUrl, onClose, proye
   // ── Split REAL con el visor: anunciar nuestro ancho para que el contenedor
   // del 3D se encoja (su ResizeObserver llama a viewer.resize()). Al cerrar,
   // se anuncia 0 y el visor recupera todo el lienzo. Nada queda tapado.
-  // Una vista se abre en Amplio (es una página de tres columnas); al volver al lienzo rige el modo elegido.
-  useEffect(() => { if (vistaActiva) setModoVista('amplio'); }, [vistaActiva]);
-  const modoActual = vistaActiva ? modoVista : modo;
+  // El ancho lo decide solo el usuario (botón junto a la ✕), también en las vistas: la vista se acomoda.
+  const modoActual = modo;
   const width = anchoDeModo(modoActual);
   const anchoAnunciado = useRef(0);
   useEffect(() => {
@@ -606,9 +607,7 @@ export default function DashboardWorkspace({ project, backendUrl, onClose, proye
     setVistaActiva(null);
   };
   const alternarModo = () => {
-    const otro = (m) => (m === 'amplio' ? 'normal' : 'amplio');
-    if (vistaActiva) { setModoVista(otro); return; }
-    setModo(m => { const n = otro(m); try { localStorage.setItem(MODO_GUARDADO, n); } catch { /* sin almacenamiento */ } return n; });
+    setModo(m => { const n = m === 'amplio' ? 'normal' : 'amplio'; try { localStorage.setItem(MODO_GUARDADO, n); } catch { /* sin almacenamiento */ } return n; });
   };
   // Enlace de una vista para la gente de la obra: abre el visor en el frente y el Tablero en la vista.
   const enlaceDe = (v) => {
@@ -621,42 +620,6 @@ export default function DashboardWorkspace({ project, backendUrl, onClose, proye
     if (proyecto?.frontName) u.searchParams.set('fn', proyecto.frontName);
     u.searchParams.set('tablero', `${dashId}.${v.id}`);
     return u.toString();
-  };
-
-  // Plantilla «Auditoría del presupuesto» (docs/visor/50): una sección con los diez análisis frente al
-  // itemizado del frente, como tarjetas normales (se mueven, se editan, se borran o se duplican).
-  const addAuditoriaPresupuesto = () => {
-    const vigente = itemizado?.vigente;
-    if (!vigente?.items?.length) {
-      setAviso('Primero carga el itemizado del frente en la Planilla (ítem, descripción y unidad): la auditoría se hace contra él.');
-      return;
-    }
-    setAviso('');
-    const ancho = ANCHOS.l;
-    const nuevas = [];
-    let x = 0, y = 0, altoFila = 0;
-    for (const analisis of ORDEN_ANALISIS) {
-      const def = ANALISIS[analisis];
-      const cfg = { type: 'presupuesto', analisis, size: def.size, title: def.titulo };
-      const { w, h } = tamanoDe(cfg);
-      if (x && x + w > ancho) { x = 0; y += altoFila + HUECO; altoFila = 0; }
-      nuevas.push({ ...cfg, id: uid(), w, h, dx: x, dy: y });
-      x += w + HUECO;
-      altoFila = Math.max(altoFila, h);
-    }
-    const altoTotal = y + altoFila;
-    const marco = { w: ancho + HUECO * 2, h: altoTotal + HUECO * 2 };
-    // Debajo de todo lo que ya hay en el lienzo: nunca encima de otras tarjetas o secciones.
-    const todo = [...chartsRef.current, ...framesRef.current];
-    const fx = snap(todo.length ? Math.min(...todo.map(c => c.x)) : 0);
-    const fy = snap(todo.length ? Math.max(...todo.map(c => c.y + c.h)) + REJILLA * 4 : 0);
-    // Y la vista va a la sección nueva (arriba a la izquierda, con el zoom de ahora).
-    const s = viewRef.current.s;
-    setView({ s, tx: 30 - fx * s, ty: 30 - fy * s });
-    const deQuien = itemizado.heredado ? 'de la obra' : (itemizado.porFrente && itemizado.frente) ? `frente ${itemizado.frente}` : 'de la obra';
-    setFrames(fs => [...fs, { id: uid(), title: `Auditoría del presupuesto · ${deQuien} · ${vigente.archivo}`,
-      color: fs.length % FRAME_COLORS.length, x: fx, y: fy, ...marco }]);
-    setCharts(cs => [...cs, ...nuevas.map(({ dx, dy, ...c }) => ({ ...c, x: fx + HUECO + dx, y: fy + HUECO + dy }))]);
   };
 
   // Flujo Vyssuals: clic en un parámetro de la fuente → gráfico pre-armado.
@@ -698,18 +661,17 @@ export default function DashboardWorkspace({ project, backendUrl, onClose, proye
         <span className="tablero-guardado" style={{ fontSize: 11, color: C.gris600, minWidth: 62 }}>
           {saveState === 'saving' ? 'Guardando…' : saveState === 'saved' ? 'Guardado' : ''}
         </span>
-        {/* Herramientas: añadir (sección, parámetros, auditoría) · organizar (ordenar, limpiar 3D) · crear */}
+        {/* Herramientas: añadir (sección, parámetros) · organizar (ordenar, limpiar 3D) · crear */}
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 2, alignItems: 'center', minWidth: 0 }}>
           <Herramienta icono="seccion" texto="Sección" ayuda="Añadir una sección con título para agrupar tarjetas" onClick={addFrame} />
           <Herramienta icono="parametros" texto="Parámetros" ayuda="Añadir la lista de parámetros del modelo con su completitud" onClick={addParamsNode} apagada={loading} />
-          <Herramienta icono="auditoria" texto="Auditoría del presupuesto" ayuda="Añadir una sección con la auditoría de los elementos frente al itemizado del frente (ítem, descripción y unidad)" onClick={addAuditoriaPresupuesto} apagada={loading} />
           <Separador />
           <Herramienta icono="ordenar" texto="Ordenar" ayuda="Acomodar las tarjetas de cada sección en filas, con el mismo hueco entre todas" onClick={ordenar} />
           <Herramienta icono="limpiar" texto="Limpiar 3D" ayuda="Restaurar el 3D (quitar colores y aislamientos)" onClick={handleClear3D} />
           <Separador />
           <Herramienta icono="nuevo" texto="Nuevo gráfico" onClick={() => setEditing('new')} apagada={loading} principal />
           <button onClick={alternarModo} aria-label={modoActual === 'amplio' ? 'Reducir el tablero' : 'Ampliar el tablero'}
-            title={modoActual === 'amplio' ? 'Reducir el tablero (720 px)' : 'Ampliar el tablero (60 % de la pantalla)'}
+            title={modoActual === 'amplio' ? 'Reducir el tablero (55 % de la pantalla)' : 'Ampliar el tablero (70 % de la pantalla)'}
             style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 28, height: 28, marginLeft: 4, background: 'none', border: 'none', borderRadius: 6, color: C.gris600, cursor: 'pointer' }}
             onMouseEnter={e => { e.currentTarget.style.background = C.light50; }} onMouseLeave={e => { e.currentTarget.style.background = 'none'; }}>
             <Icono nombre={modoActual === 'amplio' ? 'reducir' : 'ampliar'} tam={16} />
@@ -722,24 +684,13 @@ export default function DashboardWorkspace({ project, backendUrl, onClose, proye
         </div>
       </div>
 
-      {/* Barra de datos: solo de dónde sale lo que se ve; la ayuda, en el ⓘ */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 14px', fontSize: 11, color: C.gris600, borderBottom: `1px solid ${C.lightGray}`, background: C.blanco, flexShrink: 0 }}>
-        <span>
-          {loading
-            ? 'Cargando el inventario de la nube…'
-            : `${fmt(rows.length)} elementos · ${fmt(fields.length)} parámetros · ${SOURCES.inventory.label}${hora ? ` · leído ${hora}` : ''}`}
-        </span>
-        <span title="Rueda: acercar o alejar · arrastrar el fondo: mover el lienzo · arrastrar la cabecera de una tarjeta: moverla · esquina: cambiar su tamaño (S, M o L)"
-          style={{ cursor: 'help', display: 'inline-flex' }}>
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><circle cx="12" cy="12" r="9" /><line x1="12" y1="11" x2="12" y2="16" /><circle cx="12" cy="8" r="0.6" fill="currentColor" /></svg>
-        </span>
-        {aviso && (
-          <span style={{ marginLeft: 'auto', color: C.orange30D, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-            {aviso}
-            <button onClick={() => setAviso('')} title="Cerrar el aviso" style={{ background: 'none', border: 'none', color: C.gris600, cursor: 'pointer', padding: 0, fontSize: 13, lineHeight: 1 }}>×</button>
-          </span>
-        )}
-      </div>
+      {/* Sin línea de datos (el dueño la quitó): solo aparece un aviso cuando lo hay. */}
+      {aviso && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 14px', fontSize: 11, color: C.orange30D, borderBottom: `1px solid ${C.lightGray}`, background: C.blanco, flexShrink: 0 }}>
+          {aviso}
+          <button onClick={() => setAviso('')} title="Cerrar el aviso" style={{ marginLeft: 'auto', background: 'none', border: 'none', color: C.gris600, cursor: 'pointer', padding: 0, fontSize: 13, lineHeight: 1 }}>×</button>
+        </div>
+      )}
 
       {/* Vistas: pestañas (Lienzo y una por vista) y, en una vista, el menú «⋯» (docs/visor/52) */}
       <BarraDeVistas
@@ -911,6 +862,7 @@ export default function DashboardWorkspace({ project, backendUrl, onClose, proye
         <VistaDePagina
           ref={vistaRef}
           key={vistaVisible.id}
+          columnas={width < 1000 ? 2 : 3}
           vista={vistaVisible}
           charts={charts}
           rows={rows || []}

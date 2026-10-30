@@ -557,7 +557,7 @@ function TituloEditable({ titulo, onCambiar }) {
   const [texto, setTexto] = useState(titulo);
   if (!editando) {
     return (
-      <div onDoubleClick={() => { if (onCambiar) { setTexto(titulo); setEditando(true); } }}
+      <div onDoubleClick={(e) => { if (onCambiar) { e.stopPropagation(); setTexto(titulo); setEditando(true); } }}
         style={{ fontSize: 13, fontWeight: 600, color: C.dark, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
         title={onCambiar ? `${titulo} · doble clic: cambiar el título` : titulo}>{titulo}</div>
     );
@@ -709,8 +709,15 @@ export default function ChartCard({ config, rows, fields = [], meta = null, item
               )
               : <CjsChart config={config} agg={agg} points={points} onSegment={handleSegment} activeKey={activeKey} metricLabel={METRIC_LABEL[config.metric || 'count']} zoom={zoom} />;
 
+  // Doble clic en la gráfica = editarla (como en Miro o Excel); en el título, cambiar el título. El clic
+  // simple sigue aislando en el 3D. Los botones, campos y la lista de parámetros no lo disparan.
+  const editarConDobleClic = (e) => {
+    if (isQa || !onEdit || e.target.closest?.('button, input, select, textarea, a')) return;
+    onEdit(config);
+  };
+
   return (
-    <div style={{
+    <div onDoubleClick={editarConDobleClic} style={{
       width: '100%', height: '100%', boxSizing: 'border-box',
       background: C.blanco, border: `1px solid ${C.lightGray}`, borderRadius: RADIO,
       padding: '12px 14px 0', display: 'flex', flexDirection: 'column', gap: 10, minWidth: 0,
