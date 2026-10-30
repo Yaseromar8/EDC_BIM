@@ -14,6 +14,7 @@ import { apiFetch } from '../../utils/apiFetch';
 import { SOURCES, discoverFields, isolateInViewer, colorizeInViewer, clearViewerViz, resetEngineCaches, fmt } from './engine';
 import ChartCard from './ChartCard';
 import ChartEditor from './ChartEditor';
+import VistaDePagina from './VistaDePagina';
 import { ANALISIS, ORDEN_ANALISIS } from './analisisDeAuditoria';
 // El itemizado vigente del frente abierto: el que se subió a la Planilla (docs/visor/51).
 import { itemizadoDeObra } from '../../utils/itemizadoDeObraVisor';
@@ -52,7 +53,7 @@ const withLayout = (list) => list.map((c, i) => ({
   h: c.h ?? (c.type === 'kpi' ? NODE_KPI.h : NODE_DEFAULT.h),
 }));
 
-export default function DashboardWorkspace({ project, backendUrl, onClose }) {
+export default function DashboardWorkspace({ project, backendUrl, onClose, proyecto = null, vistaInicial = null }) {
   const [rows, setRows] = useState(null);          // dataset (null = cargando)
   const [fields, setFields] = useState([]);
   const [hora, setHora] = useState('');             // cuándo se leyó el inventario
@@ -67,6 +68,12 @@ export default function DashboardWorkspace({ project, backendUrl, onClose }) {
   const [width, setWidth] = useState(() => Math.min(Math.round(window.innerWidth * 0.5), 820));
   const [view, setView] = useState({ tx: 30, ty: 30, s: 0.85 }); // encuadre del lienzo
   const itemizado = useSyncExternalStore(itemizadoDeObra.suscribir, itemizadoDeObra.estado);
+  // Vistas (docs/visor/52): grupos de tarjetas elegidas por el usuario, con su botón; se ven encajadas.
+  const [vistas, setVistas] = useState([]);
+  const [vistaActiva, setVistaActiva] = useState(null);
+  const [eligiendo, setEligiendo] = useState(false);
+  const [elegidas, setElegidas] = useState(() => new Set());
+  const [nombreVista, setNombreVista] = useState('');
   const [aviso, setAviso] = useState('');
   const [locked, setLocked] = useState(false); // candado: bloquea mover/redimensionar nodos
   const lockedRef = useRef(false);
@@ -123,6 +130,13 @@ export default function DashboardWorkspace({ project, backendUrl, onClose }) {
           setDashName(dd.name || 'General');
           setCharts(withLayout(Array.isArray(dd.config?.charts) ? dd.config.charts : []));
           setFrames(Array.isArray(dd.config?.frames) ? dd.config.frames : []);
+          const vs = Array.isArray(dd.config?.vistas) ? dd.config.vistas : [];
+          setVistas(vs);
+          // Enlace recibido: «<tablero>.<vista>». Solo si la vista es de ESTE tablero.
+          if (vistaInicial) {
+            const [tab, vid] = String(vistaInicial).split('.');
+            if (String(tab) === String(first.id) && vs.some(v => v.id === vid)) setVistaActiva(vid);
+          }
           if (dd.config?.view) setView(dd.config.view);
         } else {
           const rr = await apiFetch(`${backendUrl}/api/dashboards`, {
@@ -147,14 +161,14 @@ export default function DashboardWorkspace({ project, backendUrl, onClose }) {
       try {
         await apiFetch(`${backendUrl}/api/dashboards/${dashId}`, {
           method: 'PUT',
-          body: JSON.stringify({ config: { version: 2, charts, frames, view: viewRef.current } }),
+          body: JSON.stringify({ config: { version: 2, charts, frames, vistas, view: viewRef.current } }),
         });
         setSaveState('saved');
         setTimeout(() => setSaveState(''), 1600);
       } catch { setSaveState(''); }
     }, 1200);
     return () => clearTimeout(saveTimer.current);
-  }, [charts, frames, dashId, backendUrl]);
+  }, [charts, frames, vistas, dashId, backendUrl]);
 
   // ── Lienzo: zoom con la rueda HACIA el cursor (listener nativo, no pasivo) ─
   useEffect(() => {
@@ -441,7 +455,10 @@ export default function DashboardWorkspace({ project, backendUrl, onClose }) {
     }
     setEditing(null);
   };
-  const deleteChart = (id) => setCharts(cs => cs.filter(c => c.id !== id));
+  const deleteChart = (id) => {
+    setCharts(cs => cs.filter(c => c.id !== id));
+    setVistas(vs => vs.map(v => (v.cards.includes(id) ? { ...v, cards: v.cards.filter(x => x !== id) } : v)));   // y de sus vistas
+  };
   const addParamsNode = () => {
     if (chartsRef.current.some(c => c.type === 'qa')) return; // una fuente basta
     const size = { w: ANCHOS.s, h: ALTO_DEFECTO.qa };
@@ -449,6 +466,33 @@ export default function DashboardWorkspace({ project, backendUrl, onClose }) {
     setCharts(cs => [...cs, { id: uid(), type: 'qa', title: 'Parámetros del modelo', ...size, x, y }]);
     crecerSeccion(marco, x, y, size.w, size.h);
   };
+  // ── Vistas: elegir tarjetas → fijar con un nombre → botón que las muestra encajadas ──
+  const alternarElegida = (id) => setElegidas(prev => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  const cancelarEleccion = () => { setEligiendo(false); setElegidas(new Set()); setNombreVista(''); };
+  const fijarVista = () => {
+    const cards = chartsRef.current.filter(c => elegidas.has(c.id)).sort((a, b) => a.y - b.y || a.x - b.x).map(c => c.id);
+    if (!cards.length) return;
+    const v = { id: uid(), titulo: nombreVista.trim() || `Vista ${vistas.length + 1}`, cards };
+    setVistas(vs => [...vs, v]);
+    cancelarEleccion();
+    setVistaActiva(v.id);
+  };
+  const vistaVisible = vistas.find(v => v.id === vistaActiva) || null;
+  // Al abrir una vista el panel se ensancha para mostrarla (como una página); el usuario puede achicarlo.
+  useEffect(() => { if (vistaActiva) setWidth(w => Math.max(w, Math.round(window.innerWidth * 0.62))); }, [vistaActiva]);
+  // Enlace de una vista para la gente de la obra: abre el visor en el frente y el Tablero en la vista.
+  const enlaceDe = (v) => {
+    const frente = proyecto?.frontId;
+    const id = String(proyecto?.id || project);
+    const base = frente && id.endsWith('_' + frente) ? id.slice(0, -(frente.length + 1)) : id;
+    const u = new URL(window.location.origin + window.location.pathname);
+    u.searchParams.set('project', base);
+    if (frente) u.searchParams.set('frente', frente);
+    if (proyecto?.frontName) u.searchParams.set('fn', proyecto.frontName);
+    u.searchParams.set('tablero', `${dashId}.${v.id}`);
+    return u.toString();
+  };
+
   // Plantilla «Auditoría del presupuesto» (docs/visor/50): una sección con los diez análisis frente al
   // itemizado del frente, como tarjetas normales (se mueven, se editan, se borran o se duplican).
   const addAuditoriaPresupuesto = () => {
@@ -574,6 +618,34 @@ export default function DashboardWorkspace({ project, backendUrl, onClose }) {
         )}
       </div>
 
+      {/* Vistas: el lienzo y un botón por cada vista fijada; y el modo de elegir tarjetas */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 14px', borderBottom: `1px solid ${C.lightGray}`, background: C.blanco, flexShrink: 0, flexWrap: 'wrap', fontSize: 12 }}>
+        {eligiendo ? (
+          <>
+            <span style={{ color: C.dark, fontWeight: 600 }}>Elige las gráficas de la vista</span>
+            <span style={{ color: C.gris600 }}>· {elegidas.size} {elegidas.size === 1 ? 'elegida' : 'elegidas'} (clic en una tarjeta para marcarla)</span>
+            <input value={nombreVista} onChange={e => setNombreVista(e.target.value)} placeholder="Título de la vista (ej. Auditoría Canal – reunión)"
+              onKeyDown={e => { if (e.key === 'Enter') fijarVista(); if (e.key === 'Escape') cancelarEleccion(); }}
+              style={{ flex: '1 1 220px', minWidth: 180, padding: '4px 8px', borderRadius: 6, border: `1px solid ${C.gris300}`, fontFamily: FUENTE, fontSize: 12, outline: 'none' }} />
+            <button onClick={fijarVista} disabled={!elegidas.size} style={boton(true, !elegidas.size)}>Fijar como vista</button>
+            <button onClick={cancelarEleccion} style={boton()}>Cancelar</button>
+          </>
+        ) : (
+          <>
+            <span style={{ color: C.gris600, marginRight: 2 }}>Vistas:</span>
+            <button onClick={() => setVistaActiva(null)} style={{ ...boton(!vistaActiva), padding: '3px 10px' }}>Lienzo</button>
+            {vistas.map(v => (
+              <button key={v.id} onClick={() => setVistaActiva(v.id)} title={`${v.cards.length} gráficas`}
+                style={{ ...boton(vistaActiva === v.id), padding: '3px 10px', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{v.titulo}</button>
+            ))}
+            <button onClick={() => { setVistaActiva(null); setEligiendo(true); }} disabled={loading || !charts.length}
+              title="Elige en el lienzo las gráficas que quieres mostrar juntas y fíjalas con un nombre"
+              style={{ ...boton(false, loading || !charts.length), padding: '3px 10px' }}>+ Nueva vista</button>
+          </>
+        )}
+      </div>
+
+      <div style={{ flex: 1, minHeight: 0, position: 'relative', display: 'flex', flexDirection: 'column' }}>
       {/* ── LIENZO INFINITO ── */}
       {(() => {
         // Cuadrícula estilo Miro: LÍNEAS cuadradas, con celda menor y mayor
@@ -667,6 +739,17 @@ export default function DashboardWorkspace({ project, backendUrl, onClose }) {
                 dragHandlers={{ onPointerDown: startMove(cfg.id) }}
                 zoom={view.s}
               />
+              {eligiendo && (
+                <div onClick={() => alternarElegida(cfg.id)} title={elegidas.has(cfg.id) ? 'Quitar de la vista' : 'Añadir a la vista'}
+                  style={{ position: 'absolute', inset: 0, zIndex: 4, cursor: 'pointer', borderRadius: RADIO,
+                    background: elegidas.has(cfg.id) ? 'rgba(106, 155, 204, 0.16)' : 'rgba(250, 249, 245, 0.35)',
+                    outline: elegidas.has(cfg.id) ? `3px solid ${C.blue}` : `1px dashed ${C.gris300}` }}>
+                  <span style={{ position: 'absolute', top: 8, right: 8, width: 22, height: 22, borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    background: elegidas.has(cfg.id) ? C.blue : C.blanco, border: `1px solid ${elegidas.has(cfg.id) ? C.blue : C.gris300}`, color: C.blanco, fontSize: 14 }}>
+                    {elegidas.has(cfg.id) ? '✓' : ''}
+                  </span>
+                </div>
+              )}
               {/* Esquina de redimensionado (oculta con el candado activo) */}
               {!locked && (
                 <div onPointerDown={startResize(cfg.id)} title="Cambiar el tamaño (el ancho salta a S, M o L)"
@@ -714,6 +797,30 @@ export default function DashboardWorkspace({ project, backendUrl, onClose }) {
       </div>
         );
       })()}
+
+      {vistaVisible && (
+        <VistaDePagina
+          key={vistaVisible.id}
+          vista={vistaVisible}
+          charts={charts}
+          rows={rows || []}
+          fields={fields}
+          meta={{ fuente: SOURCES.inventory.label, hora }}
+          itemizado={itemizado}
+          contexto={[proyecto?.displayName || proyecto?.name, dashName].filter(Boolean).join(' · ')}
+          enlace={enlaceDe(vistaVisible)}
+          activo={active}
+          onIsolate={handleIsolate}
+          onPaint={handlePaint}
+          onEdit={setEditing}
+          onUpdateChart={(next) => setCharts(cs => cs.map(c => (c.id === next.id ? next : c)))}
+          onQuitarDeVista={(id) => setVistas(vs => vs.map(v => (v.id === vistaVisible.id ? { ...v, cards: v.cards.filter(x => x !== id) } : v)))}
+          onRenombrar={(t) => setVistas(vs => vs.map(v => (v.id === vistaVisible.id ? { ...v, titulo: t } : v)))}
+          onBorrar={() => { setVistas(vs => vs.filter(v => v.id !== vistaVisible.id)); setVistaActiva(null); }}
+          onVolver={() => setVistaActiva(null)}
+        />
+      )}
+      </div>
 
       {/* Editor */}
       {editing && (

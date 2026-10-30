@@ -882,7 +882,10 @@ function App() {
   const [lob4dTabOpen, setLob4dTabOpen] = useState(false);
   // Topografía: puntos de control + amarre modelo↔UTM (base del AR georref.)
   const [geoPanelOpen, setGeoPanelOpen] = useState(false);
-  const [tableroOpen, setTableroOpen] = useState(false); // Tablero de análisis (gráficos desde Inventory)
+  const [tableroOpen, setTableroOpen] = useState(() => !!new URLSearchParams(window.location.search).get('tablero')); // Tablero de análisis (gráficos desde Inventory)
+  // Enlace de una vista del Tablero («<tablero>.<vista>», docs/visor/52): se lee una vez al abrir.
+  const [vistaDelEnlace] = useState(() => new URLSearchParams(window.location.search).get('tablero'));
+  const tableroDelEnlace = useRef(!!vistaDelEnlace);
   // Split real con el Tablero: el panel anuncia su ancho y el contenedor del
   // visor lo reserva (el ResizeObserver del Viewer hace viewer.resize()).
   const [tableroW, setTableroW] = useState(0);
@@ -1153,6 +1156,7 @@ function App() {
       url.searchParams.delete('project');
       url.searchParams.delete('frente');
       url.searchParams.delete('fn');
+      url.searchParams.delete('tablero');
       window.history.replaceState({}, document.title, url.pathname + url.search);
     }
   }, []);
@@ -1204,8 +1208,10 @@ function App() {
     setFilterConfiguratorOpen(false);
     // Lámina 2D abierta (pertenece a un modelo del frente anterior)
     setActiveLmvSheet(null);
-    // Tablero de análisis (sus gráficos son del inventario del frente anterior)
-    setTableroOpen(false);
+    // Tablero de análisis (sus gráficos son del inventario del frente anterior). Al abrir desde el enlace
+    // de una vista, la PRIMERA vez (el frente del propio enlace) se deja abierto.
+    if (tableroDelEnlace.current) tableroDelEnlace.current = false;
+    else setTableroOpen(false);
   }, [selectedProject?.id]);
 
   // Presencia web para AUTO-DETECCIÓN de frente desde Revit: mientras haya un
@@ -4693,6 +4699,8 @@ function App() {
                   <React.Suspense fallback={null}>
                     <DashboardWorkspace
                       project={selectedProject.id}
+                      proyecto={selectedProject}
+                      vistaInicial={vistaDelEnlace}
                       backendUrl={BACKEND_URL}
                       onClose={() => setTableroOpen(false)}
                     />

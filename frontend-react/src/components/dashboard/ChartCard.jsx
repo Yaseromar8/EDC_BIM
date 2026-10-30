@@ -726,7 +726,7 @@ export default function ChartCard({ config, rows, fields = [], meta = null, item
             {config.question || subtitle}
           </div>
         </div>
-        <div style={{ display: 'flex', gap: 2, flexShrink: 0 }} onPointerDown={e => e.stopPropagation()}>
+        <div data-sin-exportar="" style={{ display: 'flex', gap: 2, flexShrink: 0 }} onPointerDown={e => e.stopPropagation()}>
           {!isQa && !isScatter && config.type !== 'kpi' && (
             <IconBtn title={painted ? 'Pintado en el 3D' : 'Pintar grupos en el 3D (y en Revit si está vinculado)'} onClick={handlePaint}>
               {painted
@@ -770,7 +770,7 @@ export default function ChartCard({ config, rows, fields = [], meta = null, item
       )}
 
       {/* Cuerpo: los gráficos canvas llenan sin scroll; tabla/QA sí se desplazan */}
-      <div style={{ flex: 1, minHeight: 0, overflowY: (isCjs || isPresupuesto) ? 'hidden' : 'auto' }} onPointerDown={e => e.stopPropagation()}>
+      <div style={{ flex: 1, minHeight: 0, minWidth: 0, overflowY: (isCjs || isPresupuesto) ? 'hidden' : 'auto', overflowX: (isCjs || isPresupuesto) ? 'hidden' : 'auto' }} onPointerDown={e => e.stopPropagation()}>
         {body}
       </div>
 
