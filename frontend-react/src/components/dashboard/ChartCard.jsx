@@ -9,10 +9,13 @@
 // Diseño (docs/visor/41): todas las tarjetas tienen las mismas partes —
 // cabecera (título + pregunta), cuerpo y pie con de dónde sale el dato— y los
 // colores de tema.js (paleta oficial): un color solo dice algo si el dato lo dice.
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Chart from './chartjsTheme';
-import { aggregate, scatterPoints, distinctValues, fmt, groupsToCsv } from './engine';
+import { aggregate, auditar, scatterPoints, distinctValues, fmt, groupsToCsv } from './engine';
 import { C, FUENTE, RADIO, colorDeGrupo, tieneColoresPropios, nombreCampo, nombreValor } from './tema';
+import GraficoAuditoria from './GraficoAuditoria';
+import { ANALISIS } from './analisisDeAuditoria';
+import { CLASES, auditarConMemoria, gruposDeClases } from './auditoriaPresupuesto';
 
 // Línea de referencia (patrón de los tableros Plotly: umbral/meta punteada con
 // etiqueta). Plugin propio de chart.js — sin dependencias extra.
@@ -410,6 +413,79 @@ function TableView({ config, groups, total, metricLabel, onSegment, activeKey })
 // Completitud: verde completo, naranja a medias, rojo casi vacío (paleta oficial).
 const colorCompletitud = (pct) => (pct >= 90 ? C.green : pct >= 50 ? C.orange : C.error);
 
+// Grupos de la auditoría para aislar y pintar: verde con todos los datos, rojo con alguno vacío.
+const AUD_COMPLETOS = 'Con todos los datos';
+const AUD_INCOMPLETOS = 'Les falta algún dato';
+const gruposAuditoria = (res) => [
+  { key: AUD_COMPLETOS, value: res.completos.count, count: res.completos.count, externalIds: res.completos.externalIds, color: C.green },
+  { key: AUD_INCOMPLETOS, value: res.incompletos.count, count: res.incompletos.count, externalIds: res.incompletos.externalIds, color: C.error },
+];
+
+// Auditoría: cuántos elementos tienen los parámetros pedidos y cuáles no.
+// Clic en una cifra → aislar en el 3D esos elementos.
+function AuditView({ res, onSegment, activeKey }) {
+  const [completos, incompletos] = gruposAuditoria(res);
+  const boton = (g, color) => (
+    <button onClick={() => onSegment(g)} title={`${g.key} · clic: aislar en el 3D`}
+      style={{
+        display: 'flex', alignItems: 'center', gap: 6, padding: '4px 8px', borderRadius: 4, cursor: 'pointer', font: 'inherit', fontSize: 11.5,
+        border: `1px solid ${activeKey === g.key ? C.blue : C.lightGray}`, background: activeKey === g.key ? C.blueTinte : C.blanco, color: C.dark,
+      }}>
+      <span style={{ width: 9, height: 9, borderRadius: 2, background: color }} />
+      {g.key} <b style={{ fontVariantNumeric: 'tabular-nums' }}>{fmt(g.count)}</b>
+    </button>
+  );
+  const parte = (n) => (res.total ? (n / res.total) * 100 : 0);
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+          <span style={{ fontSize: 28, fontWeight: 600, color: colorCompletitud(res.pct), fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>{res.pct} %</span>
+          <span style={{ fontSize: 11.5, color: C.gris600 }}>{fmt(res.completos.count)} de {fmt(res.total)} elementos con todos los datos</span>
+        </div>
+        <div style={{ display: 'flex', height: 8, borderRadius: 2, overflow: 'hidden', background: C.light50, marginTop: 8 }}>
+          <div style={{ width: `${parte(res.completos.count)}%`, background: C.green }} />
+          <div style={{ width: `${parte(res.incompletos.count)}%`, background: C.error }} />
+        </div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+          {boton(completos, C.green)}
+          {boton(incompletos, C.error)}
+        </div>
+      </div>
+      <div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10.5, color: C.gris600, padding: '0 2px 4px', borderBottom: `1px solid ${C.light50}` }}>
+          <span>Parámetro (lo que más falta, primero)</span><span>Con dato · Sin dato</span>
+        </div>
+        {res.porCampo.map(f => {
+          const gCon = { key: `${f.key} · con dato`, count: f.con, externalIds: f.idsCon };
+          const gSin = { key: `${f.key} · sin dato`, count: f.sin, externalIds: f.idsSin };
+          return (
+            <div key={f.key} style={{ padding: '6px 2px', borderBottom: `1px solid ${C.light50}` }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 11.5 }}>
+                <span title={nombreCampo(f.key)} style={{ color: C.dark, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{nombreCampo(f.key)}</span>
+                <span style={{ flexShrink: 0, fontVariantNumeric: 'tabular-nums', color: colorCompletitud(f.pct) }}>{f.pct} %</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
+                <div style={{ flex: 1, display: 'flex', height: 6, borderRadius: 2, overflow: 'hidden', background: C.light50 }}>
+                  <div style={{ width: `${parte(f.con)}%`, background: C.green }} />
+                  <div style={{ width: `${parte(f.sin)}%`, background: C.error }} />
+                </div>
+                <span style={{ flexShrink: 0, fontSize: 11, fontVariantNumeric: 'tabular-nums', display: 'flex', gap: 4 }}>
+                  <button onClick={() => onSegment(gCon)} disabled={!f.con} title="Aislar en el 3D los que tienen el dato"
+                    style={{ border: 'none', background: activeKey === gCon.key ? C.blueTinte : 'transparent', padding: '1px 4px', borderRadius: 3, cursor: f.con ? 'pointer' : 'default', font: 'inherit', color: C.green20D }}>{fmt(f.con)}</button>
+                  <span style={{ color: C.gris300 }}>·</span>
+                  <button onClick={() => onSegment(gSin)} disabled={!f.sin} title="Aislar en el 3D los que NO tienen el dato"
+                    style={{ border: 'none', background: activeKey === gSin.key ? C.blueTinte : 'transparent', padding: '1px 4px', borderRadius: 3, cursor: f.sin ? 'pointer' : 'default', font: 'inherit', color: f.sin ? C.error : C.gris600, fontWeight: f.sin ? 600 : 400 }}>{fmt(f.sin)}</button>
+                </span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // Nodo FUENTE: parámetros del modelo con su completitud (QA). Clic en uno →
 // crear un gráfico agrupado por ese parámetro (flujo Vyssuals). Agrupados por su
 // grupo de Revit y, dentro, los INCOMPLETOS primero: es lo que interesa revisar.
@@ -475,10 +551,33 @@ function ParamsSource({ fields, onCreateFromField }) {
 }
 
 // ── Nodo ─────────────────────────────────────────────────────────────────────
-export default function ChartCard({ config, rows, fields = [], meta = null, onEdit, onUpdate, onDelete, onIsolate, onPaint, onCreateFromField, activeKey, dragHandlers, zoom = 1 }) {
+// Título editable con doble clic (todas las tarjetas): Intro guarda, Escape deja el que había.
+function TituloEditable({ titulo, onCambiar }) {
+  const [editando, setEditando] = useState(false);
+  const [texto, setTexto] = useState(titulo);
+  if (!editando) {
+    return (
+      <div onDoubleClick={() => { if (onCambiar) { setTexto(titulo); setEditando(true); } }}
+        style={{ fontSize: 13, fontWeight: 600, color: C.dark, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+        title={onCambiar ? `${titulo} · doble clic: cambiar el título` : titulo}>{titulo}</div>
+    );
+  }
+  const guardar = () => { setEditando(false); const t = texto.trim(); if (t && t !== titulo) onCambiar(t); };
+  return (
+    <input autoFocus value={texto} onChange={e => setTexto(e.target.value)} onBlur={guardar}
+      onKeyDown={e => { if (e.key === 'Enter') guardar(); if (e.key === 'Escape') setEditando(false); }}
+      onPointerDown={e => e.stopPropagation()}
+      style={{ width: '100%', boxSizing: 'border-box', fontSize: 13, fontWeight: 600, color: C.dark, fontFamily: FUENTE,
+        border: `1px solid ${C.blue}`, borderRadius: 4, padding: '1px 4px', outline: 'none' }} />
+  );
+}
+
+export default function ChartCard({ config, rows, fields = [], meta = null, itemizado = null, onEdit, onUpdate, onDelete, onIsolate, onPaint, onCreateFromField, activeKey, dragHandlers, zoom = 1 }) {
   const [painted, setPainted] = useState(false);
   const isQa = config.type === 'qa';
   const isScatter = config.type === 'scatter';
+  const isAudit = config.type === 'audit';
+  const isPresupuesto = config.type === 'presupuesto';   // auditoría frente al itemizado del frente (docs/visor/50)
   const isCjs = CJS_TYPES.has(config.type);
 
   // Filtro rápido DENTRO de la tarjeta (patrón Plotly/Dash: controles en el
@@ -494,9 +593,28 @@ export default function ChartCard({ config, rows, fields = [], meta = null, onEd
   };
 
   const agg = useMemo(
-    () => ((isQa || isScatter) ? { groups: [], total: 0, totalCount: rows?.length || 0 } : aggregate(rows, config)),
-    [rows, config, isQa, isScatter]
+    () => ((isQa || isScatter || isAudit || isPresupuesto) ? { groups: [], total: 0, totalCount: rows?.length || 0 } : aggregate(rows, config)),
+    [rows, config, isQa, isScatter, isAudit, isPresupuesto]
   );
+  // Presupuesto: las filas del filtro de la tarjeta (sin filtro, las MISMAS filas: las tarjetas de la
+  // plantilla comparten un solo cálculo) contra el itemizado vigente del frente.
+  const items = itemizado?.vigente?.items || null;
+  const filasPresupuesto = useMemo(() => {
+    if (!isPresupuesto) return null;
+    const f = config.filter;
+    if (!f?.field || !f.values?.length) return rows;
+    const permitidos = new Set(f.values.map(String));
+    return (rows || []).filter(r => permitidos.has(String(r[f.field] ?? '')));
+  }, [isPresupuesto, rows, config.filter]);
+  const presupuesto = useMemo(
+    () => (isPresupuesto && items ? auditarConMemoria(filasPresupuesto, items, itemizado.vigente.huella || String(itemizado.vigente.version)) : null),
+    [isPresupuesto, filasPresupuesto, items, itemizado]
+  );
+  // El gráfico no se redibuja por cada render de la tarjeta: su «aislar» lee lo último por referencia.
+  const ultimo = useRef({});
+  ultimo.current = { onIsolate, config };
+  const aislarIds = useCallback((ids, que) => ultimo.current.onIsolate({ key: que, count: ids.length, externalIds: ids }, ultimo.current.config), []);
+  const audit = useMemo(() => (isAudit ? auditar(rows, config) : null), [rows, config, isAudit]);
   const points = useMemo(
     () => (isScatter ? scatterPoints(rows, config) : null),
     [rows, config, isScatter]
@@ -506,13 +624,24 @@ export default function ChartCard({ config, rows, fields = [], meta = null, onEd
 
   const handleSegment = (g) => onIsolate(g, config);
   const handlePaint = async () => {
-    const ok = await onPaint(agg.groups, config);
+    const ok = await onPaint(isAudit ? gruposAuditoria(audit) : isPresupuesto ? (presupuesto ? gruposDeClases(presupuesto) : []) : agg.groups, config);
     setPainted(!!ok);
     setTimeout(() => setPainted(false), 1800);
   };
   const exportCsv = () => {
     let csv;
     if (isQa) csv = '﻿' + ['Parámetro;Completitud %;Tipo', ...fields.map(f => `${f.key};${f.fillPct};${f.isNumeric ? 'numérico' : 'texto'}`)].join('\r\n');
+    else if (isAudit) csv = '﻿' + [
+      `Elementos;${audit.total}`, `${AUD_COMPLETOS};${audit.completos.count}`, `${AUD_INCOMPLETOS};${audit.incompletos.count}`, '',
+      'Parámetro;Con dato;Sin dato;% con dato', ...audit.porCampo.map(f => `${f.key};${f.con};${f.sin};${f.pct}`),
+    ].join('\r\n');
+    else if (isPresupuesto && presupuesto) csv = '\uFEFF' + [
+      `Elementos;${presupuesto.total}`, `Con partida;${presupuesto.conPartida}`, '', 'Resultado;Elementos',
+      ...CLASES.map(c => `${c.nombre};${presupuesto.clases[c.id].length}`), '', 'Prueba;Resultado;Partidas asignadas',
+      ...Object.entries(presupuesto.pruebas).flatMap(([pr, o]) => Object.entries(o).map(([e, n]) => `${pr};${e};${n}`)),
+      '', 'Código;Elementos con problema;Tipo;Descripción del itemizado',
+      ...presupuesto.pareto.map(x => `${x.codigo};${x.n};${x.tipos};${String(x.nombre).replace(/;/g, ',')}`),
+    ].join('\r\n');
     else if (isScatter) csv = '﻿' + [`Elemento;${config.xField};${config.yField}`, ...(points?.points || []).map(p => `${String(p.name).replace(/;/g, ',')};${p.x};${p.y}`)].join('\r\n');
     else csv = groupsToCsv(config.groupBy || 'Total', metricLabel, agg.groups);
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
@@ -525,26 +654,44 @@ export default function ChartCard({ config, rows, fields = [], meta = null, onEd
   };
 
   // Título legible: el que puso el usuario o el del campo («Planilla › Capítulo»).
-  const titulo = nombreCampo(config.title || config.groupBy) || (isQa ? 'Parámetros del modelo' : 'Gráfico');
-  const subtitle = isQa
+  const titulo = nombreCampo(config.title || config.groupBy) || (isQa ? 'Parámetros del modelo' : isAudit ? 'Auditoría de datos'
+    : isPresupuesto ? (ANALISIS[config.analisis]?.titulo || 'Auditoría del presupuesto') : 'Gráfico');
+  const deQuien = itemizado?.heredado ? 'de la obra' : (itemizado?.porFrente && itemizado?.frente) ? `del frente ${itemizado.frente}` : 'de la obra';
+  const subtitle = isPresupuesto
+    ? (ANALISIS[config.analisis]?.pregunta || '')
+    : isQa
     ? `${fields.length} parámetros · % de elementos con dato`
+    : isAudit
+      ? `${(config.auditFields || []).length} parámetros revisados${config.filter?.values?.length ? ` · ${config.filter.values.map(nombreValor).join(', ')}` : ' · todos los elementos'}`
     : isScatter
       ? `${nombreCampo(config.yField) || '?'} frente a ${nombreCampo(config.xField) || '?'}`
       : `${config.groupBy ? `por ${nombreCampo(config.groupBy)}` : 'total'} · ${metricLabel}`;
 
   // Pie: de dónde sale el dato y sobre cuántos elementos (Bach: metainformación).
-  const pie = isQa
+  const pie = isPresupuesto
+    ? [items ? `Itemizado ${deQuien} «${itemizado.vigente.archivo}» v${itemizado.vigente.version}` : 'Sin itemizado',
+      `${fmt(presupuesto?.total ?? filasPresupuesto?.length ?? 0)} elementos`,
+      config.filter?.values?.length ? `filtro: ${nombreCampo(config.filter.field)}` : null, meta?.hora || null].filter(Boolean).join(' · ')
+    : isQa
     ? `${meta?.fuente || 'Inventario'} · ${fmt(rows?.length || 0)} elementos${meta?.hora ? ` · ${meta.hora}` : ''}`
     : [
       meta?.fuente || 'Inventario',
-      isScatter ? `${fmt(points?.total || 0)} elementos${points?.sampled ? ' (muestreo)' : ''}` : `${fmt(agg.totalCount)} elementos`,
+      isScatter ? `${fmt(points?.total || 0)} elementos${points?.sampled ? ' (muestreo)' : ''}` : isAudit ? `${fmt(audit.total)} elementos` : `${fmt(agg.totalCount)} elementos`,
       config.filter?.values?.length ? `filtro: ${nombreCampo(config.filter.field)}` : null,
       meta?.hora || null,
     ].filter(Boolean).join(' · ');
 
   const vacio = (texto) => <div style={{ padding: 18, color: C.gris600, fontSize: 12 }}>{texto}</div>;
-  const body = isQa
+  const body = isPresupuesto
+    ? (!items ? vacio('Carga el itemizado del frente en la Planilla (ítem, descripción y unidad): la auditoría se hace contra él.')
+      : !presupuesto?.total ? vacio('Ningún elemento cumple el filtro.')
+        : <GraficoAuditoria analisis={config.analisis} res={presupuesto} onIds={aislarIds} />)
+    : isQa
     ? <ParamsSource fields={fields} onCreateFromField={onCreateFromField} />
+    : isAudit
+      ? (!(config.auditFields || []).length ? vacio('Elige en «Editar» qué parámetros revisar.')
+        : !audit.total ? vacio('Ningún elemento cumple el filtro.')
+          : <AuditView res={audit} onSegment={handleSegment} activeKey={activeKey} />)
     : config.type === 'kpi'
       ? <Kpi total={agg.total} totalCount={agg.totalCount} config={config} />
       : config.type === 'table'
@@ -573,7 +720,7 @@ export default function ChartCard({ config, rows, fields = [], meta = null, onEd
       <div {...dragHandlers}
         style={{ display: 'flex', alignItems: 'flex-start', gap: 8, cursor: 'grab', flexShrink: 0, userSelect: 'none', touchAction: 'none' }}>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: C.dark, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={titulo}>{titulo}</div>
+          <TituloEditable titulo={titulo} onCambiar={onUpdate ? (t) => onUpdate({ ...config, title: t }) : null} />
           {/* La PREGUNTA que responde el gráfico (patrón editorial); si no hay, de qué es */}
           <div style={{ fontSize: 11, color: C.gris600, marginTop: 2, lineHeight: 1.45, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: config.question ? 'normal' : 'nowrap' }}>
             {config.question || subtitle}
@@ -623,7 +770,7 @@ export default function ChartCard({ config, rows, fields = [], meta = null, onEd
       )}
 
       {/* Cuerpo: los gráficos canvas llenan sin scroll; tabla/QA sí se desplazan */}
-      <div style={{ flex: 1, minHeight: 0, overflowY: isCjs ? 'hidden' : 'auto' }} onPointerDown={e => e.stopPropagation()}>
+      <div style={{ flex: 1, minHeight: 0, overflowY: (isCjs || isPresupuesto) ? 'hidden' : 'auto' }} onPointerDown={e => e.stopPropagation()}>
         {body}
       </div>
 

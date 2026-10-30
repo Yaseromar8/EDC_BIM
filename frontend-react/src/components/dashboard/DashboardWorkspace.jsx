@@ -9,11 +9,14 @@
 // (y se replica a Revit si el Live Link está activo).
 // Persistencia por frente en Postgres (/api/dashboards) con autoguardado —
 // incluye posición/tamaño de cada nodo y el encuadre del lienzo.
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { apiFetch } from '../../utils/apiFetch';
 import { SOURCES, discoverFields, isolateInViewer, colorizeInViewer, clearViewerViz, resetEngineCaches, fmt } from './engine';
 import ChartCard from './ChartCard';
 import ChartEditor from './ChartEditor';
+import { ANALISIS, ORDEN_ANALISIS } from './analisisDeAuditoria';
+// El itemizado vigente del frente abierto: el que se subió a la Planilla (docs/visor/51).
+import { itemizadoDeObra } from '../../utils/itemizadoDeObraVisor';
 import { C, FUENTE, RADIO, REJILLA, COLUMNA, HUECO, ANCHOS, ALTO_DEFECTO, anchoCercano, altoMinimo, nombreCampo } from './tema';
 
 const uid = () => Math.random().toString(36).slice(2, 9) + Date.now().toString(36).slice(-3);
@@ -22,7 +25,9 @@ const clamp = (v, a, b) => Math.min(Math.max(v, a), b);
 // para que los bordes de las tarjetas siempre coincidan (docs/visor/41).
 const NODE_DEFAULT = { w: ANCHOS.m, h: ALTO_DEFECTO.grafico };
 const NODE_KPI = { w: ANCHOS.s, h: ALTO_DEFECTO.kpi };
-const tamanoDe = (cfg) => (cfg.type === 'kpi' ? NODE_KPI : { w: ANCHOS[cfg.size] || NODE_DEFAULT.w, h: NODE_DEFAULT.h });
+const altoDe = (cfg) => (cfg.type === 'audit' || (cfg.type === 'presupuesto' && ANALISIS[cfg.analisis]?.alto) ? ALTO_DEFECTO.qa : NODE_DEFAULT.h);
+const tamanoDe = (cfg) => (cfg.type === 'kpi' ? NODE_KPI
+  : { w: ANCHOS[cfg.size] || NODE_DEFAULT.w, h: altoDe(cfg) });  // la auditoría, el flujo y el recorrido: más altos
 // Encaje a rejilla al mover/redimensionar (patrón Vyssuals: lienzo ordenado,
 // nodos alineados sin esfuerzo).
 const SNAP = REJILLA;
@@ -61,6 +66,8 @@ export default function DashboardWorkspace({ project, backendUrl, onClose }) {
   const [saveState, setSaveState] = useState('');
   const [width, setWidth] = useState(() => Math.min(Math.round(window.innerWidth * 0.5), 820));
   const [view, setView] = useState({ tx: 30, ty: 30, s: 0.85 }); // encuadre del lienzo
+  const itemizado = useSyncExternalStore(itemizadoDeObra.suscribir, itemizadoDeObra.estado);
+  const [aviso, setAviso] = useState('');
   const [locked, setLocked] = useState(false); // candado: bloquea mover/redimensionar nodos
   const lockedRef = useRef(false);
   useEffect(() => { lockedRef.current = locked; }, [locked]);
@@ -442,6 +449,42 @@ export default function DashboardWorkspace({ project, backendUrl, onClose }) {
     setCharts(cs => [...cs, { id: uid(), type: 'qa', title: 'Parámetros del modelo', ...size, x, y }]);
     crecerSeccion(marco, x, y, size.w, size.h);
   };
+  // Plantilla «Auditoría del presupuesto» (docs/visor/50): una sección con los diez análisis frente al
+  // itemizado del frente, como tarjetas normales (se mueven, se editan, se borran o se duplican).
+  const addAuditoriaPresupuesto = () => {
+    const vigente = itemizado?.vigente;
+    if (!vigente?.items?.length) {
+      setAviso('Primero carga el itemizado del frente en la Planilla (ítem, descripción y unidad): la auditoría se hace contra él.');
+      return;
+    }
+    setAviso('');
+    const ancho = ANCHOS.l;
+    const nuevas = [];
+    let x = 0, y = 0, altoFila = 0;
+    for (const analisis of ORDEN_ANALISIS) {
+      const def = ANALISIS[analisis];
+      const cfg = { type: 'presupuesto', analisis, size: def.size, title: def.titulo };
+      const { w, h } = tamanoDe(cfg);
+      if (x && x + w > ancho) { x = 0; y += altoFila + HUECO; altoFila = 0; }
+      nuevas.push({ ...cfg, id: uid(), w, h, dx: x, dy: y });
+      x += w + HUECO;
+      altoFila = Math.max(altoFila, h);
+    }
+    const altoTotal = y + altoFila;
+    const marco = { w: ancho + HUECO * 2, h: altoTotal + HUECO * 2 };
+    // Debajo de todo lo que ya hay en el lienzo: nunca encima de otras tarjetas o secciones.
+    const todo = [...chartsRef.current, ...framesRef.current];
+    const fx = snap(todo.length ? Math.min(...todo.map(c => c.x)) : 0);
+    const fy = snap(todo.length ? Math.max(...todo.map(c => c.y + c.h)) + REJILLA * 4 : 0);
+    // Y la vista va a la sección nueva (arriba a la izquierda, con el zoom de ahora).
+    const s = viewRef.current.s;
+    setView({ s, tx: 30 - fx * s, ty: 30 - fy * s });
+    const deQuien = itemizado.heredado ? 'de la obra' : (itemizado.porFrente && itemizado.frente) ? `frente ${itemizado.frente}` : 'de la obra';
+    setFrames(fs => [...fs, { id: uid(), title: `Auditoría del presupuesto · ${deQuien} · ${vigente.archivo}`,
+      color: fs.length % FRAME_COLORS.length, x: fx, y: fy, ...marco }]);
+    setCharts(cs => [...cs, ...nuevas.map(({ dx, dy, ...c }) => ({ ...c, x: fx + HUECO + dx, y: fy + HUECO + dy }))]);
+  };
+
   // Flujo Vyssuals: clic en un parámetro de la fuente → gráfico pre-armado.
   const createFromField = (f) => {
     setEditing({ title: nombreCampo(f.key), type: 'bar', metric: 'count', groupBy: f.key, topN: 12, size: 'm' });
@@ -506,6 +549,7 @@ export default function DashboardWorkspace({ project, backendUrl, onClose }) {
           <button onClick={addFrame} title="Añadir una sección con título para agrupar tarjetas" style={boton()}>Sección</button>
           <button onClick={addParamsNode} disabled={loading} title="Añadir la lista de parámetros del modelo con su completitud" style={boton(false, loading)}>Parámetros</button>
           <button onClick={handleClear3D} title="Restaurar el 3D (quitar colores y aislamientos)" style={boton()}>Limpiar 3D</button>
+          <button onClick={addAuditoriaPresupuesto} disabled={loading} title="Añadir una sección con la auditoría de los elementos frente al itemizado del frente (ítem, descripción y unidad)" style={boton(false, loading)}>Auditoría del presupuesto</button>
           <button onClick={() => setEditing('new')} disabled={loading} style={boton(true, loading)}>Nuevo gráfico</button>
           <button onClick={onClose} title="Cerrar tablero" style={{ background: 'none', border: 'none', color: C.gris600, fontSize: 20, cursor: 'pointer', lineHeight: 1, padding: '0 2px' }}>×</button>
         </div>
@@ -522,6 +566,12 @@ export default function DashboardWorkspace({ project, backendUrl, onClose }) {
           style={{ cursor: 'help', display: 'inline-flex' }}>
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><circle cx="12" cy="12" r="9" /><line x1="12" y1="11" x2="12" y2="16" /><circle cx="12" cy="8" r="0.6" fill="currentColor" /></svg>
         </span>
+        {aviso && (
+          <span style={{ marginLeft: 'auto', color: C.orange30D, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            {aviso}
+            <button onClick={() => setAviso('')} title="Cerrar el aviso" style={{ background: 'none', border: 'none', color: C.gris600, cursor: 'pointer', padding: 0, fontSize: 13, lineHeight: 1 }}>×</button>
+          </span>
+        )}
       </div>
 
       {/* ── LIENZO INFINITO ── */}
@@ -606,6 +656,7 @@ export default function DashboardWorkspace({ project, backendUrl, onClose }) {
                 rows={rows || []}
                 fields={fields}
                 meta={{ fuente: SOURCES.inventory.label, hora }}
+                itemizado={itemizado}
                 onEdit={setEditing}
                 onUpdate={(next) => setCharts(cs => cs.map(c => (c.id === next.id ? next : c)))}
                 onDelete={deleteChart}

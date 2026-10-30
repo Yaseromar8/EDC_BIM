@@ -170,6 +170,49 @@ export function aggregate(rows, config) {
   };
 }
 
+// ── Auditoría de datos: ¿qué elementos tienen los parámetros pedidos? ─────────
+// config: { filter, auditFields: [claves] }. Un elemento está COMPLETO si tiene
+// valor en TODOS los parámetros pedidos. Cada cifra conserva sus elementos →
+// clic = aislar en el 3D justo los que tienen (o les falta) el dato.
+const sinDato = (v) => v == null || String(v).trim() === '';
+
+export function auditar(rows, config) {
+  const { filter, auditFields = [] } = config || {};
+  let data = rows || [];
+  if (filter?.field && filter.values?.length) {
+    const allow = new Set(filter.values.map(String));
+    data = data.filter(r => allow.has(String(r[filter.field] ?? '')));
+  }
+  const campos = auditFields.map(key => ({ key, con: [], sin: [] }));
+  const completos = [];
+  const incompletos = [];
+  for (const row of data) {
+    let falta = false;
+    for (const c of campos) {
+      if (sinDato(row[c.key])) { c.sin.push(row.dbId); falta = true; } else c.con.push(row.dbId);
+    }
+    (falta ? incompletos : completos).push(row.dbId);
+  }
+  const total = data.length;
+  const porCampo = campos.map(c => ({
+    key: c.key,
+    con: c.con.length,
+    sin: c.sin.length,
+    pct: total ? Math.round((c.con.length / total) * 100) : 0,
+    idsCon: c.con,
+    idsSin: c.sin,
+  }));
+  // Lo que más falta, primero: es lo que hay que corregir.
+  porCampo.sort((a, b) => a.pct - b.pct || a.key.localeCompare(b.key, 'es', { numeric: true }));
+  return {
+    total,
+    completos: { count: completos.length, externalIds: completos },
+    incompletos: { count: incompletos.length, externalIds: incompletos },
+    pct: total ? Math.round((completos.length / total) * 100) : 0,
+    porCampo,
+  };
+}
+
 // ── Dispersión: puntos por ELEMENTO (dos campos numéricos) ───────────────────
 // Cada punto conserva su externalId → clic en el punto = aislar ese elemento.
 // Con modelos grandes se muestrea uniforme (chart.js se arrastra con >5k puntos).

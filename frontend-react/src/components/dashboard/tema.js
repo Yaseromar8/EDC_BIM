@@ -55,6 +55,7 @@ export const tieneColoresPropios = (campo) => !!COLORES_POR_CAMPO[campo];
  */
 export function colorDeGrupo(config, grupo, i, { unaSerie = false } = {}) {
   if (grupo?.isOthers) return OTROS;
+  if (grupo?.color) return grupo.color;       // la auditoría trae el suyo: verde con dato, rojo sin dato
   const propios = COLORES_POR_CAMPO[config?.groupBy];
   if (propios && propios[grupo?.key]) return propios[grupo.key];
   if (unaSerie) return C.gris700;

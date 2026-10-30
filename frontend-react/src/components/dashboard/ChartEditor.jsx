@@ -3,8 +3,9 @@
 // elementos lo tienen lleno) — QA de datos integrado: antes de graficar ya ves
 // qué tan poblado está el parámetro. Colores y letra de tema.js (paleta oficial).
 import React, { useMemo, useState } from 'react';
-import { distinctValues } from './engine';
+import { distinctValues, discoverFields } from './engine';
 import { C, FUENTE, RADIO, nombreCampo, nombreValor } from './tema';
+import { ANALISIS, ORDEN_ANALISIS } from './analisisDeAuditoria';
 
 const TYPES = [
   { id: 'bar', label: 'Barras' },
@@ -14,6 +15,8 @@ const TYPES = [
   { id: 'scatter', label: 'Dispersión' },
   { id: 'table', label: 'Tabla' },
   { id: 'kpi', label: 'Cifra' },
+  { id: 'audit', label: 'Auditoría' },
+  { id: 'presupuesto', label: 'Presupuesto' },
 ];
 const METRICS = [
   { id: 'count', label: 'Contar' },
@@ -50,6 +53,44 @@ function Segmented({ options, value, onChange }) {
 }
 
 // Selector de campo con búsqueda + barra de completitud (fillPct).
+// Varios parámetros a la vez (auditoría): búsqueda + casillas, con la completitud
+// medida SOLO sobre los elementos elegidos.
+function MultiFieldPicker({ fields, value = [], onChange }) {
+  const [q, setQ] = useState('');
+  const elegidos = new Set(value);
+  const list = useMemo(() => {
+    const f = q.trim() ? fields.filter(x => x.key.toLowerCase().includes(q.toLowerCase())) : fields;
+    return f.slice(0, 150);
+  }, [fields, q]);
+  const alternar = (k) => onChange(elegidos.has(k) ? value.filter(x => x !== k) : [...value, k]);
+  return (
+    <div>
+      <input style={inputStyle} value={q} placeholder="Buscar parámetro…" onChange={e => setQ(e.target.value)} />
+      <div style={{ marginTop: 6, maxHeight: 200, overflowY: 'auto', border: `1px solid ${C.lightGray}`, borderRadius: 6 }}>
+        {!list.length && <div style={{ padding: 10, fontSize: 12, color: C.gris600 }}>Sin coincidencias.</div>}
+        {list.map(f => (
+          <label key={f.key} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 8px', cursor: 'pointer', borderBottom: `1px solid ${C.light50}`, fontSize: 12 }}>
+            <input type="checkbox" checked={elegidos.has(f.key)} onChange={() => alternar(f.key)} style={{ accentColor: C.dark }} />
+            <span style={{ flex: 1, minWidth: 0, color: C.dark, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{nombreCampo(f.key)}</span>
+            <span style={{ color: colorCompletitud(f.fillPct), flexShrink: 0, fontVariantNumeric: 'tabular-nums' }}>{f.fillPct} %</span>
+          </label>
+        ))}
+      </div>
+      {/* Debajo de la lista: si van encima, al marcar uno la lista se desplaza bajo el ratón */}
+      {value.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 6 }}>
+          {value.map(k => (
+            <button key={k} onClick={() => alternar(k)} title="Quitar" style={{
+              padding: '2px 8px', borderRadius: 4, fontSize: 11, cursor: 'pointer', fontFamily: FUENTE,
+              border: `1px solid ${C.blue}`, background: C.blueTinte, color: C.blue30D,
+            }}>{nombreCampo(k)} ×</button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function FieldPicker({ fields, value, onChange, numericOnly, placeholder }) {
   const [q, setQ] = useState('');
   const [open, setOpen] = useState(false);
@@ -109,12 +150,30 @@ export default function ChartEditor({ initial, fields, rows, onSave, onCancel })
   const set = (patch) => setCfg(c => ({ ...c, ...patch }));
 
   const filterOptions = useMemo(
-    () => (cfg.filter?.field ? distinctValues(rows, cfg.filter.field, 30) : []),
+    () => (cfg.filter?.field ? distinctValues(rows, cfg.filter.field, 60) : []),
     [rows, cfg.filter?.field]
   );
 
   const isScatter = cfg.type === 'scatter';
-  const valid = isScatter
+  const isAudit = cfg.type === 'audit';
+  const isPresupuesto = cfg.type === 'presupuesto';   // frente al itemizado del frente (docs/visor/50)
+  // Auditoría: la completitud de cada parámetro se mide en los elementos elegidos, no en todo el modelo.
+  const camposAuditables = useMemo(() => {
+    if (!isAudit) return fields;
+    const f = cfg.filter;
+    if (!f?.field || !f.values?.length) return fields;
+    const allow = new Set(f.values.map(String));
+    return discoverFields((rows || []).filter(r => allow.has(String(r[f.field] ?? ''))));
+  }, [isAudit, fields, rows, cfg.filter]);
+  const elegirTipo = (t) => {
+    // La auditoría empieza filtrando por categoría de Revit: es lo que se revisa casi siempre.
+    if (t === 'audit' && !cfg.filter && fields.some(f => f.key === 'Revit Category')) {
+      set({ type: t, filter: { field: 'Revit Category', values: [] } });
+    } else if (t === 'presupuesto') {
+      set({ type: t, analisis: cfg.analisis || 'resumen', size: ANALISIS[cfg.analisis || 'resumen'].size });
+    } else set({ type: t });
+  };
+  const valid = isPresupuesto ? !!ANALISIS[cfg.analisis] : isAudit ? !!cfg.auditFields?.length : isScatter
     ? (!!cfg.xField && !!cfg.yField)
     : cfg.type === 'kpi'
       ? (cfg.metric === 'count' || !!cfg.valueField)
@@ -163,7 +222,9 @@ export default function ChartEditor({ initial, fields, rows, onSave, onCancel })
 
         <div>
           <div style={labelStyle}>Tipo</div>
-          <Segmented options={TYPES} value={cfg.type} onChange={t => set({ type: t })} />
+          <Segmented options={TYPES} value={cfg.type} onChange={elegirTipo} />
+          {isPresupuesto && <div style={ayudaStyle}>Audita los elementos contra el itemizado que se subió a la Planilla de este frente: ítem, descripción y unidad. Clic en una parte del gráfico: aísla esos elementos en el 3D.</div>}
+          {isAudit && <div style={ayudaStyle}>Cuenta cuántos de los elementos elegidos tienen lleno cada parámetro y cuáles no. Clic en una cifra: aísla esos elementos en el 3D.</div>}
           {cfg.type === 'donut' && <div style={ayudaStyle}>La dona se lee con pocas partes: muestra las tres mayores y el resto en «Otros». Para más grupos, usa barras.</div>}
         </div>
 
@@ -174,7 +235,15 @@ export default function ChartEditor({ initial, fields, rows, onSave, onCancel })
           </div>
         )}
 
-        {isScatter ? (
+        {isPresupuesto ? (
+          <div>
+            <div style={labelStyle}>Qué quieres ver</div>
+            <select value={cfg.analisis || 'resumen'} onChange={e => set({ analisis: e.target.value, size: ANALISIS[e.target.value].size })} style={{ ...inputStyle, cursor: 'pointer' }}>
+              {ORDEN_ANALISIS.map(a => <option key={a} value={a}>{ANALISIS[a].titulo}</option>)}
+            </select>
+            <div style={ayudaStyle}>{ANALISIS[cfg.analisis || 'resumen']?.pregunta}</div>
+          </div>
+        ) : isAudit ? null : isScatter ? (
           // Dispersión: cada ELEMENTO es un punto (X e Y numéricos)
           <div style={{ display: 'flex', gap: 12 }}>
             <div style={{ flex: 1 }}>
@@ -209,7 +278,7 @@ export default function ChartEditor({ initial, fields, rows, onSave, onCancel })
 
         {/* Filtro opcional: acota el universo del gráfico (ej. solo una categoría) */}
         <div>
-          <div style={labelStyle}>Filtro <span style={{ fontWeight: 400, color: C.gris600 }}>(opcional)</span></div>
+          <div style={labelStyle}>{(isAudit || isPresupuesto) ? 'Elementos a revisar' : 'Filtro'} <span style={{ fontWeight: 400, color: C.gris600 }}>{(isAudit || isPresupuesto) ? '(sin elegir valores: todos)' : '(opcional)'}</span></div>
           <FieldPicker fields={fields} value={cfg.filter?.field} onChange={k => set({ filter: { field: k, values: [] } })} placeholder="Campo a filtrar (ej. Revit Category)" />
           {cfg.filter?.field && (
             <>
@@ -230,7 +299,15 @@ export default function ChartEditor({ initial, fields, rows, onSave, onCancel })
           )}
         </div>
 
-        {!['kpi', 'scatter', 'line', 'area', 'donut'].includes(cfg.type) && (
+        {isAudit && (
+          <div>
+            <div style={labelStyle}>Parámetros a revisar</div>
+            <MultiFieldPicker fields={camposAuditables} value={cfg.auditFields || []} onChange={k => set({ auditFields: k })} />
+            <div style={ayudaStyle}>El % es la parte de los elementos elegidos que ya tiene el dato.</div>
+          </div>
+        )}
+
+        {!['kpi', 'scatter', 'line', 'area', 'donut', 'audit', 'presupuesto'].includes(cfg.type) && (
           <div>
             <div style={labelStyle}>Máximo de grupos: {cfg.topN}</div>
             <input type="range" min="4" max="30" value={cfg.topN} onChange={e => set({ topN: Number(e.target.value) })} style={{ width: '100%', accentColor: C.dark }} />
@@ -239,7 +316,7 @@ export default function ChartEditor({ initial, fields, rows, onSave, onCancel })
         )}
 
         {/* Línea de referencia: umbral/meta punteada sobre el gráfico; en la cifra, su barra de avance */}
-        {['bar', 'line', 'area', 'scatter', 'kpi'].includes(cfg.type) && (
+        {!isPresupuesto && ['bar', 'line', 'area', 'scatter', 'kpi'].includes(cfg.type) && (
           <div style={{ display: 'flex', gap: 12 }}>
             <div style={{ flex: 1 }}>
               <div style={labelStyle}>{cfg.type === 'kpi' ? 'Meta' : 'Línea de referencia'} <span style={{ fontWeight: 400, color: C.gris600 }}>(opcional)</span></div>
