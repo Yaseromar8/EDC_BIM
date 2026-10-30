@@ -38,6 +38,8 @@ const snap = (v) => Math.round(v / SNAP) * SNAP;
 // Tipografía: IBM Plex Sans para todo, la letra del sistema (D-26).
 const FONT_UI = FUENTE;
 const ANCHO_COMPACTO = 1000;   // por debajo, la cabecera muestra las herramientas solo con icono
+const ANCHO_MINIMO = 640;      // por debajo, también «Nuevo gráfico» va solo con icono
+const compactaDe = (w) => (w < ANCHO_MINIMO ? '2' : w < ANCHO_COMPACTO ? '1' : '0');
 export const FONT_TITLE = FUENTE;
 // Secciones (frames) estilo Miro: título sobre una región que agrupa nodos — la
 // estructura narrativa del tablero del usuario en Miro. Una línea de color de la
@@ -83,7 +85,6 @@ export default function DashboardWorkspace({ project, backendUrl, onClose, proye
   const [listo, setListo] = useState(null);         // archivo hecho que el navegador no dejó bajar solo
   const panelRef = useRef(null);
   const capaRef = useRef(null);                     // capa invisible sobre la ventana mientras se arrastra el borde
-  const rellenoRef = useRef(null);                  // tapa la franja que deja el panel al estrecharse, con el fondo del 3D
   const contenidoRef = useRef(null);                // lo que se mueve con el encuadre del lienzo (tarjetas y secciones)
   const [aviso, setAviso] = useState('');
   const [locked, setLocked] = useState(false); // candado: bloquea mover/redimensionar nodos
@@ -578,57 +579,125 @@ export default function DashboardWorkspace({ project, backendUrl, onClose, proye
   };
 
   // ── Redimensionado del panel (borde izquierdo) ────────────────────────────
-  // Borde como en Miro: el tablero sigue al ratón cuadro a cuadro (solo cambia el ancho del panel en el
-  // DOM, sin React; las tarjetas del lienzo no cambian de tamaño). El 3D NO se toca mientras se arrastra:
-  // al ensanchar, el panel lo tapa; al estrechar, la franja que queda se cubre con el fondo del 3D. Al
-  // soltar, el 3D se ajusta UNA vez y sin la transición de 0,22 s del margen (que redimensionaba el visor
-  // una docena de veces). Antes cada movimiento repintaba la App entera y redimensionaba el WebGL: temblaba.
-  // Como en Miro, el contenido del lienzo se queda quieto en la pantalla: el borde izquierdo se mueve,
-  // así que el encuadre se corre lo mismo (sin eso las tarjetas viajaban con el borde). Y mientras se
-  // arrastra no se selecciona texto (se pintaba de azul la cabecera).
+  // Borde como en Miro: el tablero Y el 3D siguen al ratón cuadro a cuadro, sin temblar.
+  // - El tablero: solo cambia el ancho del panel en el DOM (sin React). El encuadre del lienzo se corre lo
+  //   mismo que el borde, así que las tarjetas se quedan quietas en la pantalla.
+  // - El 3D: redibujar el modelo a otro tamaño le cuesta al visor 90–140 ms (medido), así que mientras se
+  //   arrastra NO se redibuja: su hueco (`.split-view-container` de App.jsx) cambia en vivo y la imagen ya
+  //   dibujada se corre la mitad de lo que cambia el hueco, que es justo donde el visor dejará el modelo
+  //   (al redimensionar mantiene la escala y lo recentra). Al soltar se redibuja UNA vez, ya en su sitio:
+  //   sin salto. Antes cada movimiento repintaba la App entera y redimensionaba el WebGL: temblaba.
+  // Para que el borde vaya pegado al cursor: se pinta en el mismo cuadro del movimiento (Chrome ya agrupa
+  // los pointermove por cuadro) y con la posición PREDICHA del puntero (getPredictedEvents, como Figma y
+  // Miro), que compensa los milisegundos entre el ratón y la pantalla.
+  // Mientras se arrastra no se selecciona texto (se pintaba de azul la cabecera).
+  // Fondo del 3D para los bordes que quedan al descubierto mientras se arrastra: se lee del propio lienzo
+  // (preserveDrawingBuffer), arriba, al medio y abajo de su columna izquierda y derecha, porque el fondo
+  // del visor no es un color plano (sombra ambiental, iluminación).
+  const fondoDel3d = (lienzo3d) => {
+    try {
+      const c = document.createElement('canvas'); c.width = 1; c.height = 1;
+      const g = c.getContext('2d', { willReadFrequently: true });
+      const W = lienzo3d.width, H = lienzo3d.height;
+      const px = (x, y) => { g.drawImage(lienzo3d, x, y, 1, 1, 0, 0, 1, 1); const d = g.getImageData(0, 0, 1, 1).data; return `rgb(${d[0]},${d[1]},${d[2]})`; };
+      const columna = (x) => `linear-gradient(${px(x, 2)}, ${px(x, H >> 1)}, ${px(x, H - 3)})`;
+      return `${columna(1)} left / 50% 100% no-repeat, ${columna(W - 2)} right / 50% 100% no-repeat`;
+    } catch { return ''; }
+  };
+  // Doble búfer al soltar: el visor redibuja el modelo por partes (unos 500 ms en esta obra, medido) y
+  // dibujarlo de golpe congela la página. Así que encima de su lienzo se pone el ÚLTIMO CUADRO COMPLETO
+  // (lo que ya se veía, en su sitio y con el fondo del 3D en los bordes nuevos) y se retira cuando el visor
+  // termina el cuadro nuevo (su cola de dibujo, modelQueue().isDone()). Ni trozos, ni congelación.
+  const dobleBufer = (visor, lienzo3d, corrimiento, fondo) => {
+    const marco = lienzo3d?.parentElement;
+    if (!visor || !marco) { visor?.resize(); return; }
+    let tapa = null;
+    try {
+      const ancho = marco.clientWidth, alto = marco.clientHeight, k = lienzo3d.width / lienzo3d.clientWidth;
+      tapa = document.createElement('canvas');
+      tapa.width = Math.round(ancho * k); tapa.height = Math.round(alto * k);
+      tapa.getContext('2d').drawImage(lienzo3d, Math.round(corrimiento * k), 0);
+      Object.assign(tapa.style, { position: 'absolute', left: '0px', top: '0px', width: `${ancho}px`, height: `${alto}px`, background: fondo, pointerEvents: 'none', zIndex: 1 });
+      marco.appendChild(tapa);
+    } catch { tapa = null; }
+    lienzo3d.style.transform = '';
+    lienzo3d.style.willChange = '';
+    visor.resize();
+    if (!tapa) return;
+    let hecho = false, cuadros = 0;
+    const quitar = () => {
+      if (hecho) return;
+      hecho = true;
+      tapa.remove();
+      window.removeEventListener('pointerdown', quitar, true);
+      window.removeEventListener('wheel', quitar, true);
+    };
+    // Si el usuario toca el 3D antes de que termine, se le devuelve el lienzo vivo al momento.
+    window.addEventListener('pointerdown', quitar, true);
+    window.addEventListener('wheel', quitar, true);
+    const vigilar = () => {
+      if (hecho) return;
+      cuadros += 1;
+      const cola = visor.impl?.modelQueue?.();
+      const listo = cuadros > 2 && !visor.impl?._needsResize && (!cola?.isDone || cola.isDone());
+      if (listo || cuadros > 240) requestAnimationFrame(quitar);
+      else requestAnimationFrame(vigilar);
+    };
+    requestAnimationFrame(vigilar);
+  };
   const onResizeStart = (e) => {
     e.preventDefault();
     const startX = e.clientX, startW = width;
-    let w = startW, cuadro = 0;
-    const panel = panelRef.current, relleno = rellenoRef.current;
-    const bg = window.__vqBg || [241, 240, 232];
+    let w = startW;
+    const panel = panelRef.current;
     const lienzo = canvasRef.current, contenido = contenidoRef.current, v0 = viewRef.current;
-    const seleccion = document.body.style.userSelect;
+    const split = document.querySelector('.split-view-container');
+    const visor = window.NOP_VIEWER;
+    const lienzo3d = visor?.canvas || null;
+    const marco3d = lienzo3d?.parentElement || null;
+    const bg = window.__vqBg || [241, 240, 232];
+    const antes = {
+      seleccion: document.body.style.userSelect,
+      transicion: split?.style.transition,
+      fondo: marco3d?.style.background,
+      resize: visor?.resize,
+    };
     document.body.style.userSelect = 'none';
     window.getSelection?.()?.removeAllRanges();
-    if (relleno) relleno.style.background = `rgb(${bg.join(',')})`;
     if (capaRef.current) capaRef.current.style.display = 'block';
+    if (split) split.style.transition = 'none';
+    const fondo3d = (lienzo3d && fondoDel3d(lienzo3d)) || `rgb(${bg.join(',')})`;
+    if (marco3d) marco3d.style.background = fondo3d;
+    if (lienzo3d) lienzo3d.style.willChange = 'transform';      // la tarjeta gráfica la mueve, sin repintar
+    // El ResizeObserver del visor (Viewer.jsx) llamaría a resize() en cada cuadro: se aplaza a soltar.
+    if (visor && antes.resize) visor.resize = () => {};
     const pintar = () => {
-      cuadro = 0;
-      if (panel) { panel.style.width = `${w}px`; panel.dataset.compacta = w < ANCHO_COMPACTO ? '1' : '0'; }
-      if (relleno) relleno.style.width = `${Math.max(0, startW - w)}px`;
+      if (panel) { panel.style.width = `${w}px`; panel.dataset.compacta = compactaDe(w); }
       const tx = v0.tx + (w - startW);
       if (contenido) contenido.style.transform = `translate(${tx}px, ${v0.ty}px) scale(${v0.s})`;
       if (lienzo) lienzo.style.backgroundPosition = `${tx}px ${v0.ty}px`;
+      if (split) split.style.marginRight = `${w}px`;
+      if (lienzo3d) lienzo3d.style.transform = `translateX(${(startW - w) / 2}px)`;
     };
     const onMove = (ev) => {
-      w = clamp(startW + (startX - ev.clientX), 400, window.innerWidth - 300);
-      if (!cuadro) cuadro = requestAnimationFrame(pintar);
+      const previsto = ev.getPredictedEvents?.().at(-1) || ev;
+      w = clamp(startW + (startX - previsto.clientX), 400, window.innerWidth - 300);
+      pintar();
     };
-    const onUp = () => {
+    const onUp = (ev) => {
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
-      if (cuadro) cancelAnimationFrame(cuadro);
+      w = clamp(startW + (startX - ev.clientX), 400, window.innerWidth - 300);   // al soltar, la posición real
       pintar();
       if (capaRef.current) capaRef.current.style.display = 'none';
-      // El 3D (`.split-view-container` de App.jsx) salta al ancho nuevo de una vez; React lo confirma
-      // después con el mismo valor, y la transición vuelve para abrir y cerrar el panel.
-      const split = document.querySelector('.split-view-container');
-      if (split && w !== startW) {
-        const transicion = split.style.transition;
-        split.style.transition = 'none';
-        split.style.marginRight = `${w}px`;
-        setTimeout(() => { split.style.transition = transicion; }, 400);
-      }
-      if (relleno) requestAnimationFrame(() => { relleno.style.width = '0px'; });
-      document.body.style.userSelect = seleccion;
-      // React (y con él la App) se pone al día en el cuadro siguiente al del 3D: los dos en el mismo
-      // cuadro daban un tirón de ~150 ms al soltar.
+      document.body.style.userSelect = antes.seleccion;
+      // El 3D se redibuja al tamaño nuevo con doble búfer (el modelo ya estaba donde el visor lo pone).
+      if (visor && antes.resize) visor.resize = antes.resize;
+      if (w !== startW && visor && lienzo3d) dobleBufer(visor, lienzo3d, (startW - w) / 2, fondo3d);
+      else if (lienzo3d) { lienzo3d.style.transform = ''; lienzo3d.style.willChange = ''; }
+      if (marco3d) marco3d.style.background = antes.fondo || '';
+      setTimeout(() => { if (split) split.style.transition = antes.transicion; }, 400);
+      // React (y con él la App) se pone al día después del 3D: los dos en el mismo cuadro daban un tirón.
       setTimeout(() => {
         if (w !== startW) setView(v => ({ ...v, tx: v.tx + (w - startW) }));
         setWidth(w);
@@ -650,7 +719,7 @@ export default function DashboardWorkspace({ project, backendUrl, onClose, proye
 
 
   return (
-    <div ref={panelRef} data-compacta={width < ANCHO_COMPACTO ? '1' : '0'} style={{
+    <div ref={panelRef} data-compacta={compactaDe(width)} style={{
       // top:48 → bajo el TopBar del visor (48px, z-index 2000)
       position: 'fixed', top: 48, right: 0, bottom: 0, width, zIndex: 1400,
       // Tema claro de la paleta oficial: página Light, tarjetas blancas, borde Light Gray
@@ -664,7 +733,6 @@ export default function DashboardWorkspace({ project, backendUrl, onClose, proye
         style={{ position: 'absolute', left: -4, top: 0, bottom: 0, width: 8, cursor: 'ew-resize', zIndex: 3 }} />
       <style>{CSS_HERRAMIENTAS}</style>
       <div ref={capaRef} style={{ display: 'none', position: 'fixed', inset: 0, cursor: 'ew-resize', zIndex: 10, userSelect: 'none' }} />
-      <div ref={rellenoRef} aria-hidden="true" style={{ position: 'absolute', top: 0, bottom: 0, right: '100%', width: 0, pointerEvents: 'none' }} />
 
       {/* Cabecera: nombre del tablero a la izquierda, acciones a la derecha */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 10px 7px 14px', borderBottom: `1px solid ${C.lightGray}`, background: C.blanco, flexShrink: 0 }}>
@@ -675,7 +743,7 @@ export default function DashboardWorkspace({ project, backendUrl, onClose, proye
           title="Nombre del tablero (clic para cambiarlo)"
           style={{ background: 'transparent', border: 'none', outline: 'none', color: C.dark, fontSize: 14, fontWeight: 600, flex: '0 1 150px', minWidth: 60, fontFamily: FUENTE }}
         />
-        <span style={{ fontSize: 11, color: C.gris600, minWidth: 62 }}>
+        <span className="tablero-guardado" style={{ fontSize: 11, color: C.gris600, minWidth: 62 }}>
           {saveState === 'saving' ? 'Guardando…' : saveState === 'saved' ? 'Guardado' : ''}
         </span>
         {/* Herramientas: añadir (sección, parámetros, auditoría) · organizar (ordenar, limpiar 3D) · crear */}

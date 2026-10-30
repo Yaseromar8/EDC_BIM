@@ -27,8 +27,10 @@ export function Separador() {
 }
 
 // El CSS que esconde el texto en modo compacto (una vez, junto al panel).
-export const CSS_HERRAMIENTAS = `[data-compacta="1"] .tablero-herramienta:not(.principal) .tablero-herramienta-texto { display: none; }
-[data-compacta="1"] .tablero-herramienta:not(.principal) { padding: 0 7px !important; }`;
+// "1": las herramientas, solo icono; "2" (muy estrecho): también «Nuevo gráfico» y el estado de guardado.
+export const CSS_HERRAMIENTAS = `[data-compacta="1"] .tablero-herramienta:not(.principal) .tablero-herramienta-texto,
+[data-compacta="2"] .tablero-herramienta-texto, [data-compacta="2"] .tablero-guardado { display: none; }
+[data-compacta="1"] .tablero-herramienta:not(.principal), [data-compacta="2"] .tablero-herramienta { padding: 0 7px !important; }`;
 
 export default function Herramienta({ icono, texto, ayuda, onClick, apagada = false, principal = false }) {
   const [encima, setEncima] = useState(false);

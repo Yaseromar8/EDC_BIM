@@ -102,3 +102,43 @@ Referencias consultadas: Allotment (la vista dividida de VS Code), react-resizab
 | Tirón al soltar | Queda uno, de 133–138 ms: el 3D redibujando el modelo a su tamaño nuevo. Antes eran unos 13 redimensionados por movimiento |
 | Descargar PDF / imagen desde «⋯» | Bajan: PDF de 149 KB y PNG de 248 KB |
 | Clic caducado (forzado sin gesto) | Sale «PDF listo · Guardar»; al pulsar Guardar, el PDF baja (149 KB) y el aviso se retira |
+
+## 7 · El borde y el 3D: lo que se midió y la decisión pendiente (30-oct, noche)
+
+El dueño, viendo las versiones de la tarde:
+- «sigue el parpadeo»;
+- con el 3D corrido, dos franjas de otro color a los lados;
+- «investiga, no pruebes; nada de parches, debe ser profesional».
+
+**Medido en el banco** (LMV 7.131.1, Frente Canal, 19.889 elementos más la ortofoto):
+
+| Medida | Resultado |
+|---|---|
+| `impl.resize()` | no redibuja: lo agenda (`_needsResize`) y el redibujo llega en el siguiente `tick`, por partes (`progressiveRender = true`). Esas partes son el parpadeo |
+| Redibujo completo, sin progresivo | **≈ 220 ms**, igual con `pixelRatio` 1,25, 0,75, 0,5 o 0,35 (218–225 ms de mediana). El coste es la geometría, no los píxeles |
+| `impl.setViewportBounds()` | no sirve: recorta modelos 2D (hojas), no desplaza la cámara |
+
+**Conclusión:** el 3D de esta obra no puede seguir al ratón cuadro a cuadro. A 220 ms por dibujo salen ≈ 4 fotogramas por segundo, o el dibujo progresivo, que parpadea. Bajar la calidad durante el gesto (lo que hace Autodesk al navegar) no ayuda, porque la resolución no pesa. Todo intento de que el 3D «acompañe» (correr la imagen, foto encima, franjas rellenas) es un remiendo alrededor de ese límite.
+
+**Las dos maneras profesionales** que quedan:
+
+| | A · Panel flotante (como Miro, Figma y los paneles del propio visor de Autodesk) | B · Reparto con ajuste al soltar (como los editores con vista pesada) |
+|---|---|---|
+| Al arrastrar | Solo cambia el panel; el 3D no se toca nunca | El panel sigue al ratón y el 3D no cambia hasta soltar |
+| Al soltar | Nada que redibujar | Un redibujo de ≈ 220 ms, con el modelo ya en su sitio |
+| Parpadeo y tirón | Ninguno | Un tirón al soltar; sin parpadeo si se tapa el dibujo progresivo |
+| Coste | El 3D queda en parte bajo el panel. Los controles del 3D (cubo de vistas, barras de herramientas) hay que llevarlos a la parte visible. Cambia el «reparto real» de App.jsx, que hoy se basa en «nada queda tapado» | Al estrechar el panel, el 3D aún no ocupa la franja que queda libre hasta soltar |
+
+**Decisión del dueño: B** («flotante no debe ser, desordena»).
+
+Cómo queda B, sin remiendos:
+
+- **Al arrastrar.** El panel y el hueco del 3D (`.split-view-container`) cambian en el DOM, una vez por fotograma, con la posición predicha del puntero (`getPredictedEvents`). Los controles del 3D se mueven con su hueco. El visor no redibuja: su `resize()` se aplaza a soltar. La imagen ya dibujada se corre la mitad de lo que cambia el hueco, que es donde el visor deja el modelo al redimensionar (mantiene la escala y lo recentra). Los bordes que quedan al descubierto llevan el fondo **real** del 3D, leído del propio lienzo (`preserveDrawingBuffer`): arriba, al medio y abajo de sus columnas izquierda y derecha. Las franjas de la captura del dueño venían de usar un color fijo de la paleta.
+- **Al soltar: doble búfer.** El último cuadro completo se pone encima del lienzo del visor, el visor redimensiona y redibuja por detrás, y esa capa se retira cuando su cola de dibujo termina (`modelQueue().isDone()` sin `_needsResize`). También se retira al tocar el 3D. Dibujarlo todo de golpe con `impl.tick()` en bucle se descartó: medido, 21 pasos y ≈ 500 ms con la página congelada.
+
+**Medido** con Chrome sin ventana, el perfil del banco con la sesión del dueño y su GPU (RTX 3050), en el Frente Canal y con los guardados bloqueados:
+- a mitad del arrastre, en los dos sentidos, no hay franjas;
+- en la grabación, ningún fotograma parpadea al soltar (índice 0,0);
+- queda el tiempo que tarda el visor en dibujar el modelo al tamaño nuevo, una vez por gesto.
+
+La ventana de pruebas con ventana no sirve para medir si se minimiza: Chrome deja de dibujarla (`visibilityState = hidden`), el visor no avanza y la capa se queda puesta hasta que vuelve a verse.
