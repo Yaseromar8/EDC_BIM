@@ -15,11 +15,22 @@ const TRAZOS = {
   cerrar: <><path d="M6 6l12 12M18 6L6 18" /></>,
   ampliar: <><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" /></>,
   reducir: <><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7" /></>,
+  // Barras flotantes del lienzo (docs/visor/54): trazo fino, como los de Forma Board.
+  puntero: <><path d="M5 3.5l13 6.2-5.6 1.6-2.4 5.4z" /><path d="M12.4 11.3l5.1 5.1" /></>,
+  mano: <><path d="M8 12V6.5a1.5 1.5 0 0 1 3 0V11" /><path d="M11 10.5V5a1.5 1.5 0 0 1 3 0v5.5" /><path d="M14 10.5V6.5a1.5 1.5 0 0 1 3 0V14a6 6 0 0 1-6 6h-.6a6 6 0 0 1-4.6-2.2L3.6 15a1.5 1.5 0 0 1 2.3-1.9L8 15.2" /></>,
+  texto: <><path d="M5 5h14M12 5v14M9.5 19h5" /></>,
+  marco: <><path d="M7 3v18M17 3v18M3 7h18M3 17h18" /></>,
+  grafico: <><path d="M4 20h16" /><rect x="6" y="11" width="3" height="7" rx="0.5" /><rect x="10.5" y="6" width="3" height="12" rx="0.5" /><rect x="15" y="9" width="3" height="9" rx="0.5" /></>,
+  deshacer: <><path d="M9 7H4.5V2.5" /><path d="M4.6 7A8 8 0 1 1 6 17.5" /></>,
+  rehacer: <><path d="M15 7h4.5V2.5" /><path d="M19.4 7A8 8 0 1 0 18 17.5" /></>,
+  menos: <><path d="M5 12h14" /></>,
+  mas: <><path d="M12 5v14M5 12h14" /></>,
+  abajo: <><path d="M6 9l6 6 6-6" /></>,
 };
 
 export function Icono({ nombre, tam = 15 }) {
   return (
-    <svg width={tam} height={tam} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"
+    <svg width={tam} height={tam} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"
       strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{TRAZOS[nombre]}</svg>
   );
 }

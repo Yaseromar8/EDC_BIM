@@ -130,3 +130,52 @@ No hace falta licencia de tldraw: desde la versión 4 es comercial de pago. Todo
 
 **Siguen:** el paso 2 (menú contextual) y el 3 (guías inteligentes al arrastrar), según §4.
 
+## 6 · Aspecto y piezas de pizarra (30-oct, noche)
+
+**El dueño, comparando con sus capturas de Forma Board:**
+- «sus selecciones son más profesionales y fluidas; las nuestras, toscas»;
+- «su mundo es más grande y profundo»;
+- «sus iconos son de líneas finas»;
+- «lo de abajo no lo tenemos».
+
+Además sugirió revisar tldraw, Excalidraw y dos clones de Miro:
+- **tldraw:** ya es la referencia; su licencia es comercial, no se copia código.
+- **Excalidraw:** MIT, para comparar.
+- **Los clones de Miro:** proyectos didácticos en Next.js y Liveblocks, sin nada que tldraw no muestre.
+
+**Hecho:**
+- **Mundo profundo.**
+  - Zoom del **1 % al 400 %**; los escalones de Ctrl + y Ctrl − son los de tldraw (1 · 10 · 25 · 50 · 75 · 100 · 125 · 150 · 200 · 400 %).
+  - Cuadrícula **por niveles**: celda de 32 px × 4ⁿ que en pantalla queda entre 12 y 48 px; la línea menor se desvanece y la mayor toma su lugar, así hay rejilla a cualquier zoom.
+- **Selección fina.**
+  - Contorno de 1,5 px que no cambia con el zoom (`calc(1.5px / var(--s))`, y `--s` lo pone la cámara).
+  - Asas blancas cuadradas en las esquinas; la de abajo a la derecha cambia el tamaño de una tarjeta o sección (ya no hay esquinas en L).
+  - Realce suave al pasar el ratón.
+  - Con varios elementos, un recuadro común.
+  - Marco de selección azul tenue.
+- **Barras flotantes** (`PiezasLienzo.jsx`):
+  - **abajo**, las herramientas: Seleccionar (V), Mano (H), **Nota (N)** (el taco con el color de la próxima y 6 colores), **Texto (T)** y **Sección (F)**, que se dibuja arrastrando o, con un clic, sale de 640 × 400;
+  - **a la izquierda**, los datos: **Gráfico** y **Parámetros**, como Data Management e Incidencias en Forma Board; debajo, **deshacer y rehacer**;
+  - **abajo a la derecha**, la **píldora de zoom** «− % ▾ +»; su menú incluye bloquear las tarjetas.
+  - La cabecera queda con Ordenar, Limpiar 3D y cerrar.
+- **Iconos** con trazo de 1,5.
+- **Notas y texto.**
+  - La nota mide 200 × 200, sale **lista para escribir** y su letra se ajusta sola.
+  - Con una nota seleccionada aparecen **cuatro puntos laterales** que crean la siguiente nota a 10 px, alineada y lista para escribir.
+  - **Doble clic en el vacío** crea un texto; un texto vacío no se queda.
+  - Doble clic o Intro sobre una nota la edita.
+  - Se guardan en **`config.notas`**, aparte de `charts`, para que el visor publicado (que no las conoce) no intente dibujarlas como gráficas.
+  - Las acciones de selección, borrar, copiar, pegar, empujar, encuadrar y deshacer incluyen las notas.
+
+**Medido** con Chrome sin ventana, la sesión del dueño y los guardados bloqueados:
+
+| Prueba | Resultado |
+|---|---|
+| Nota (botón) → clic → escribir | «Partida 03.05» |
+| Punto lateral derecho → escribir | Segunda nota «Partida 03.06», al lado |
+| Doble clic en el vacío → escribir | Texto «Revisión Canal» |
+| Ctrl+Z × 3 → Ctrl+Y | Deshace por pasos y rehace |
+| 45 muescas de rueda | El zoom llega al 1 %, con cuadrícula |
+
+**Fallo encontrado y arreglado:** al crear una nota con un clic, el navegador movía el foco al panel justo después y la nota dejaba de editarse; quedaba vacía. Se arregló con `preventDefault` al crear.
+

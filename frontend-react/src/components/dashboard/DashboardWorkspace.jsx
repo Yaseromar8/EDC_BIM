@@ -17,6 +17,8 @@ import ChartEditor from './ChartEditor';
 import VistaDePagina from './VistaDePagina';
 import BarraDeVistas from './BarraDeVistas';
 import Herramienta, { CSS_HERRAMIENTAS, Icono, Separador } from './Herramienta';
+import { Nota, TextoLibre, BarraInferior, PaletaIzquierda, PildoraZoom } from './PiezasLienzo';
+import { NOTA_LADO, NOTA_HUECO, medidaTexto } from './notas';
 import { ANALISIS } from './analisisDeAuditoria';
 // El itemizado vigente del frente abierto: el que se subió a la Planilla (docs/visor/51).
 import { itemizadoDeObra } from '../../utils/itemizadoDeObraVisor';
@@ -54,24 +56,31 @@ const ANCHO_SECCION = ANCHOS.l + HUECO * 2;
 const ANCHO_RIEL = 64;
 
 // ── Cámara del lienzo, como tldraw/Forma Board (docs/visor/54 §1) ─────────────────────────────────
-const ZOOM_MIN = 0.1;
+const ZOOM_MIN = 0.01;          // 1 %, como Forma Board: el mundo es mucho más grande que el tablero
 const ZOOM_MAX = 4;
-const PASOS_ZOOM = [0.1, 0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 4];   // Ctrl+ / Ctrl− y los botones
+const PASOS_ZOOM = [0.01, 0.1, 0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 4];   // los escalones de tldraw
 const FRICCION = 0.09;          // inercia al soltar el lienzo (cameraSlideFriction de tldraw)
 const ARRASTRE_MIN = 4;         // px antes de que un clic se convierta en arrastre
-// Cuadrícula estilo Miro: líneas con celda menor y mayor (cada 4); la menor desaparece al alejarse.
+// Cuadrícula por niveles (como tldraw): la celda del mundo es 32 px × 4ⁿ, la que en pantalla quede entre
+// 12 y 48 px; la línea menor se desvanece al acercarse a 12 px y la mayor (cada 4) toma su lugar. Así hay
+// rejilla a cualquier zoom, del 1 % al 400 %, sin saltos.
 const rejillaDe = (v) => {
-  const minor = 32 * v.s, major = minor * 4;
-  const mn = 'rgba(20,20,19,0.045)', mj = 'rgba(20,20,19,0.080)';
-  const imgs = [], tam = [];
-  if (minor >= 11) {
-    imgs.push(`linear-gradient(${mn} 1px, transparent 1px)`, `linear-gradient(90deg, ${mn} 1px, transparent 1px)`);
-    tam.push(`${minor}px ${minor}px`, `${minor}px ${minor}px`);
-  }
-  imgs.push(`linear-gradient(${mj} 1px, transparent 1px)`, `linear-gradient(90deg, ${mj} 1px, transparent 1px)`);
-  tam.push(`${major}px ${major}px`, `${major}px ${major}px`);
-  return { imagen: imgs.join(','), tamano: tam.join(',') };
+  let paso = 32;
+  while (paso * v.s < 12) paso *= 4;
+  while (paso * v.s >= 48) paso /= 4;
+  const menor = paso * v.s, mayor = menor * 4;
+  const a = Math.min(1, (menor - 12) / 18);
+  const mn = `rgba(20,20,19,${(0.05 * a).toFixed(3)})`, mj = 'rgba(20,20,19,0.075)';
+  return {
+    imagen: [`linear-gradient(${mn} 1px, transparent 1px)`, `linear-gradient(90deg, ${mn} 1px, transparent 1px)`,
+      `linear-gradient(${mj} 1px, transparent 1px)`, `linear-gradient(90deg, ${mj} 1px, transparent 1px)`].join(','),
+    tamano: [`${menor}px ${menor}px`, `${menor}px ${menor}px`, `${mayor}px ${mayor}px`, `${mayor}px ${mayor}px`].join(','),
+  };
 };
+// Selección fina (docs/visor/54): grosores en px de PANTALLA, sea cual sea el zoom (--s lo pone la cámara).
+const AZUL_SEL = '#0D66B4';
+const linea = (px) => `calc(${px}px / var(--s, 1))`;
+const CSS_LIENZO = `.tablero-nodo:hover { outline: ${linea(1.5)} solid rgba(13, 102, 180, 0.45); }`;
 const mismoConjunto = (a, b) => a.size === b.size && [...a].every(x => b.has(x));
 const suave = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
 
@@ -95,6 +104,11 @@ export default function DashboardWorkspace({ project, backendUrl, onClose, proye
   const [dashName, setDashName] = useState('General');
   const [charts, setCharts] = useState([]);
   const [frames, setFrames] = useState([]);         // secciones estilo Miro
+  const [notas, setNotas] = useState([]);           // notas adhesivas y textos libres (config.notas)
+  const notasRef = useRef(notas);
+  const [herramienta, setHerramienta] = useState('seleccionar');   // seleccionar · mano · nota · texto · seccion
+  const [colorNota, setColorNota] = useState('amarillo');
+  const [editandoNota, setEditandoNota] = useState(null);
   const framesRef = useRef(frames);
   const [editing, setEditing] = useState(null);     // config en edición | 'new'
   const [active, setActive] = useState(null);       // { chartId, key } aislado
@@ -148,6 +162,7 @@ export default function DashboardWorkspace({ project, backendUrl, onClose, proye
   useEffect(() => { chartsRef.current = charts; }, [charts]);
   useEffect(() => { framesRef.current = frames; }, [frames]);
   useEffect(() => { vistasRef.current = vistas; }, [vistas]);
+  useEffect(() => { notasRef.current = notas; }, [notas]);
 
   // ── Historial (Ctrl+Z / Ctrl+Y): fotos de {tarjetas, secciones, vistas}. Un arrastre es UN paso (se
   // confirma al soltar); escribir un título se agrupa (350 ms sin cambios).
@@ -155,9 +170,9 @@ export default function DashboardWorkspace({ project, backendUrl, onClose, proye
   const confirmarHistorial = useCallback(() => {
     const h = hist.current;
     if (!loadedRef.current) return;
-    const ahora = { charts: chartsRef.current, frames: framesRef.current, vistas: vistasRef.current };
+    const ahora = { charts: chartsRef.current, frames: framesRef.current, vistas: vistasRef.current, notas: notasRef.current };
     if (!h.actual) { h.actual = ahora; return; }
-    if (ahora.charts === h.actual.charts && ahora.frames === h.actual.frames && ahora.vistas === h.actual.vistas) return;
+    if (ahora.charts === h.actual.charts && ahora.frames === h.actual.frames && ahora.vistas === h.actual.vistas && ahora.notas === h.actual.notas) return;
     h.pasado.push(h.actual);
     if (h.pasado.length > 100) h.pasado.shift();
     h.futuro = [];
@@ -166,15 +181,16 @@ export default function DashboardWorkspace({ project, backendUrl, onClose, proye
   useEffect(() => {
     const h = hist.current;
     if (!loadedRef.current) { h.actual = null; h.pasado = []; h.futuro = []; return; }
-    if (h.aplicando) { h.aplicando = false; h.actual = { charts, frames, vistas }; return; }
+    if (h.aplicando) { h.aplicando = false; h.actual = { charts, frames, vistas, notas }; return; }
     if (h.gesto) return;
     clearTimeout(h.t);
     h.t = setTimeout(confirmarHistorial, 350);
-  }, [charts, frames, vistas, confirmarHistorial]);
+  }, [charts, frames, vistas, notas, confirmarHistorial]);
   const aplicarFoto = (foto) => {
     hist.current.aplicando = true;
     hist.current.actual = foto;
-    setCharts(foto.charts); setFrames(foto.frames); setVistas(foto.vistas);
+    setCharts(foto.charts); setFrames(foto.frames); setVistas(foto.vistas); setNotas(foto.notas || []);
+    setEditandoNota(null);
     setSeleccion(new Set());
   };
   const deshacer = () => {
@@ -236,6 +252,7 @@ export default function DashboardWorkspace({ project, backendUrl, onClose, proye
           setDashName(dd.name || 'General');
           setCharts(withLayout(Array.isArray(dd.config?.charts) ? dd.config.charts : []));
           setFrames(Array.isArray(dd.config?.frames) ? dd.config.frames : []);
+          setNotas(Array.isArray(dd.config?.notas) ? dd.config.notas : []);
           const vs = Array.isArray(dd.config?.vistas) ? dd.config.vistas : [];
           setVistas(vs);
           // Enlace recibido: «<tablero>.<vista>». Solo si la vista es de ESTE tablero.
@@ -267,21 +284,21 @@ export default function DashboardWorkspace({ project, backendUrl, onClose, proye
       try {
         await apiFetch(`${backendUrl}/api/dashboards/${dashId}`, {
           method: 'PUT',
-          body: JSON.stringify({ config: { version: 2, charts, frames, vistas, view: viewRef.current } }),
+          body: JSON.stringify({ config: { version: 2, charts, frames, vistas, notas, view: viewRef.current } }),
         });
         setSaveState('saved');
         setTimeout(() => setSaveState(''), 1600);
       } catch { setSaveState(''); }
     }, 1200);
     return () => clearTimeout(saveTimer.current);
-  }, [charts, frames, vistas, dashId, backendUrl]);
+  }, [charts, frames, vistas, notas, dashId, backendUrl]);
 
   // ── Cámara (docs/visor/54): como tldraw, se mueve en el DOM (transformación del contenido y fondo de
   // la cuadrícula) sin pasar por React, que redibujaba TODAS las tarjetas en cada movimiento. React se
   // entera cuando la cámara se queda quieta 180 ms (y entonces las gráficas se re-rasterizan nítidas).
   const pintarCamara = useCallback(() => {
     const v = viewRef.current, el = canvasRef.current, cont = contenidoRef.current;
-    if (cont) cont.style.transform = `translate(${v.tx}px, ${v.ty}px) scale(${v.s})`;
+    if (cont) { cont.style.transform = `translate(${v.tx}px, ${v.ty}px) scale(${v.s})`; cont.style.setProperty('--s', v.s); }
     if (el) {
       const g = rejillaDe(v);
       el.style.backgroundImage = g.imagen;
@@ -368,6 +385,8 @@ export default function DashboardWorkspace({ project, backendUrl, onClose, proye
     window.addEventListener('pointerup', onUp);
   };
 
+  const todosLosNodos = () => [...chartsRef.current, ...framesRef.current, ...notasRef.current];
+
   // ── Selección: clic, Mayús+clic, y marco arrastrando el fondo (tarjetas que toca; secciones enteras) ──
   const setSeleccion = (n) => { if (!mismoConjunto(n, selRef.current)) { selRef.current = n; setSel(n); } };
   const seleccionarAlPulsar = (id, e) => {
@@ -392,7 +411,7 @@ export default function DashboardWorkspace({ project, backendUrl, onClose, proye
       const v = viewRef.current;
       const W = { x1: (x1 - v.tx) / v.s, y1: (y1 - v.ty) / v.s, x2: (x2 - v.tx) / v.s, y2: (y2 - v.ty) / v.s };
       const n = new Set(base);
-      for (const c of chartsRef.current) if (c.x < W.x2 && c.x + c.w > W.x1 && c.y < W.y2 && c.y + c.h > W.y1) n.add(c.id);
+      for (const c of [...chartsRef.current, ...notasRef.current]) if (c.x < W.x2 && c.x + c.w > W.x1 && c.y < W.y2 && c.y + c.h > W.y1) n.add(c.id);
       for (const f of framesRef.current) if (f.x >= W.x1 && f.x + f.w <= W.x2 && f.y >= W.y1 && f.y + f.h <= W.y2) n.add(f.id);
       setSeleccion(n);
     };
@@ -405,10 +424,76 @@ export default function DashboardWorkspace({ project, backendUrl, onClose, proye
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp);
   };
+  const puntoDelMundo = (e) => {
+    const r = canvasRef.current.getBoundingClientRect(), v = viewRef.current;
+    return { x: (e.clientX - r.left - v.tx) / v.s, y: (e.clientY - r.top - v.ty) / v.s };
+  };
+  // Nota nueva (lista para escribir) y nota al lado de otra (los puntos laterales, como tldraw).
+  const crearNota = (x, y, color = colorNota) => {
+    const n = { id: uid(), tipo: 'nota', x: snap(x), y: snap(y), w: NOTA_LADO, h: NOTA_LADO, texto: '', color };
+    setNotas(ns => [...ns, n]);
+    setSeleccion(new Set([n.id]));
+    setEditandoNota(n.id);
+    setHerramienta('seleccionar');
+  };
+  const notaAlLado = (nota, dir) => {
+    const d = { derecha: [nota.w + NOTA_HUECO, 0], izquierda: [-(nota.w + NOTA_HUECO), 0], abajo: [0, nota.h + NOTA_HUECO], arriba: [0, -(nota.h + NOTA_HUECO)] }[dir];
+    crearNota(nota.x + d[0], nota.y + d[1], nota.color);
+  };
+  const crearTexto = (x, y) => {
+    const t = { id: uid(), tipo: 'texto', x, y: y - 16, texto: '', ...medidaTexto('') };
+    setNotas(ns => [...ns, t]);
+    setSeleccion(new Set([t.id]));
+    setEditandoNota(t.id);
+    setHerramienta('seleccionar');
+  };
+  const cambiarTextoNota = (id, texto) => setNotas(ns => ns.map(n => (n.id !== id ? n : n.tipo === 'texto' ? { ...n, texto, ...medidaTexto(texto) } : { ...n, texto })));
+  const terminarNota = (id) => {
+    setEditandoNota(null);
+    setNotas(ns => ns.filter(n => !(n.id === id && n.tipo === 'texto' && !n.texto.trim())));   // un texto vacío no se queda
+  };
+  // Sección dibujada arrastrando (o, con un clic, de 640 × 400 donde se pulsó).
+  const dibujarSeccion = (e) => {
+    const el = canvasRef.current, marco = marcoSelRef.current;
+    const r = el.getBoundingClientRect();
+    const a = { x: e.clientX - r.left, y: e.clientY - r.top }, a0 = puntoDelMundo(e);
+    let b = a;
+    const onMove = (ev) => {
+      b = { x: ev.clientX - r.left, y: ev.clientY - r.top };
+      Object.assign(marco.style, { display: 'block', left: `${Math.min(a.x, b.x)}px`, top: `${Math.min(a.y, b.y)}px`, width: `${Math.abs(b.x - a.x)}px`, height: `${Math.abs(b.y - a.y)}px` });
+    };
+    const onUp = (ev) => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      marco.style.display = 'none';
+      const b0 = puntoDelMundo(ev);
+      const grande = Math.abs(b.x - a.x) > 24 && Math.abs(b.y - a.y) > 24;
+      const f = grande
+        ? { x: snap(Math.min(a0.x, b0.x)), y: snap(Math.min(a0.y, b0.y)), w: snap(Math.abs(b0.x - a0.x)), h: snap(Math.abs(b0.y - a0.y)) }
+        : { x: snap(a0.x - 320), y: snap(a0.y - 200), w: 640, h: 400 };
+      const nueva = { id: uid(), title: `Sección ${framesRef.current.length + 1}`, color: framesRef.current.length % FRAME_COLORS.length, ...f };
+      setFrames(fs => [...fs, nueva]);
+      setSeleccion(new Set([nueva.id]));
+      setHerramienta('seleccionar');
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+  };
   const alPulsarLienzo = (e) => {
     setMenuZoom(false);
-    if (e.button === 1 || e.button === 2 || (e.button === 0 && espacioRef.current)) { panear(e); return; }
-    if (e.button === 0) iniciarMarco(e);
+    if (e.button === 1 || e.button === 2 || (e.button === 0 && (espacioRef.current || herramienta === 'mano'))) { panear(e); return; }
+    if (e.button !== 0) return;
+    // preventDefault: si no, el navegador mueve el foco al panel justo después y la nota deja de editarse.
+    if (herramienta === 'nota') { e.preventDefault(); const p = puntoDelMundo(e); crearNota(p.x - NOTA_LADO / 2, p.y - NOTA_LADO / 2); return; }
+    if (herramienta === 'texto') { e.preventDefault(); const p = puntoDelMundo(e); crearTexto(p.x, p.y); return; }
+    if (herramienta === 'seccion') { dibujarSeccion(e); return; }
+    iniciarMarco(e);
+  };
+  // Doble clic en el vacío = texto (como tldraw).
+  const alDobleClicLienzo = (e) => {
+    if (e.target !== canvasRef.current || herramienta !== 'seleccionar') return;
+    const p = puntoDelMundo(e);
+    crearTexto(p.x, p.y);
   };
 
   // Mover lo seleccionado arrastrando la cabecera de una tarjeta o el asa de una sección (si lo pulsado no
@@ -423,6 +508,7 @@ export default function DashboardWorkspace({ project, backendUrl, onClose, proye
     const dentro = (c, f) => { const cx = c.x + c.w / 2, cy = c.y + c.h / 2; return cx >= f.x && cx <= f.x + f.w && cy >= f.y && cy <= f.y + f.h; };
     const tarjetas = new Map(chartsRef.current.filter(c => ids.has(c.id) || fs.some(f => dentro(c, f))).map(c => [c.id, { x: c.x, y: c.y }]));
     const secciones = new Map(fs.map(f => [f.id, { x: f.x, y: f.y }]));
+    const notasMov = new Map(notasRef.current.filter(n => ids.has(n.id) || fs.some(f => dentro(n, f))).map(n => [n.id, { x: n.x, y: n.y }]));
     const ini = { x: e.clientX, y: e.clientY };
     let movido = false;
     const onMove = (ev) => {
@@ -434,6 +520,7 @@ export default function DashboardWorkspace({ project, backendUrl, onClose, proye
       const dx = (ev.clientX - ini.x) / v.s, dy = (ev.clientY - ini.y) / v.s;
       if (tarjetas.size) setCharts(cs => cs.map(c => { const o = tarjetas.get(c.id); return o ? { ...c, x: snap(o.x + dx), y: snap(o.y + dy) } : c; }));
       if (secciones.size) setFrames(xs => xs.map(f => { const o = secciones.get(f.id); return o ? { ...f, x: snap(o.x + dx), y: snap(o.y + dy) } : f; }));
+      if (notasMov.size) setNotas(xs => xs.map(n => { const o = notasMov.get(n.id); return o ? { ...n, x: snap(o.x + dx), y: snap(o.y + dy) } : n; }));
     };
     const onUp = () => {
       window.removeEventListener('pointermove', onMove);
@@ -464,14 +551,6 @@ export default function DashboardWorkspace({ project, backendUrl, onClose, proye
   };
 
   // ── Secciones estilo Miro ─────────────────────────────────────────────────
-  const addFrame = () => {
-    const size = { w: ANCHO_SECCION, h: 656 };
-    const pos = insertPoint(size.w, size.h);
-    setFrames(fs => [...fs, {
-      id: uid(), title: `Sección ${fs.length + 1}`, color: fs.length % FRAME_COLORS.length,
-      x: snap(pos.x), y: snap(pos.y), ...size,
-    }]);
-  };
   const removeFrame = (id) => setFrames(fs => fs.filter(f => f.id !== id)); // no borra los nodos
   const renameFrame = (id, title) => setFrames(fs => fs.map(f => (f.id === id ? { ...f, title } : f)));
 
@@ -503,12 +582,12 @@ export default function DashboardWorkspace({ project, backendUrl, onClose, proye
     animarCamara({ s, tx: (rect.width - (maxX - minX) * s) / 2 - minX * s, ty: (rect.height - (maxY - minY) * s) / 2 - minY * s });
   }, [animarCamara]);
   const fitView = useCallback(() => {
-    const list = [...chartsRef.current, ...framesRef.current];
+    const list = [...chartsRef.current, ...framesRef.current, ...notasRef.current];
     if (list.length) encuadrar(list); else animarCamara({ tx: 30, ty: 30, s: 0.85 });
   }, [encuadrar, animarCamara]);
   const zoomASeleccion = () => {
     const ids = selRef.current;
-    encuadrar([...chartsRef.current, ...framesRef.current].filter(x => ids.has(x.id)), 2);
+    encuadrar(todosLosNodos().filter(x => ids.has(x.id)), 2);
   };
   const zoomA = (s) => {
     const el = canvasRef.current;
@@ -520,17 +599,6 @@ export default function DashboardWorkspace({ project, backendUrl, onClose, proye
     const s = viewRef.current.s;
     const sig = dir > 0 ? PASOS_ZOOM.find(p => p > s * 1.001) : [...PASOS_ZOOM].reverse().find(p => p < s * 0.999);
     zoomA(sig ?? (dir > 0 ? ZOOM_MAX : ZOOM_MIN));
-  };
-
-  // Punto de inserción de una SECCIÓN: centro visible del lienzo (coords de mundo).
-  const insertPoint = (w, h) => {
-    const el = canvasRef.current;
-    const rect = el ? el.getBoundingClientRect() : { width: 700, height: 600 };
-    const v = viewRef.current;
-    return {
-      x: Math.round((rect.width / 2 - v.tx) / v.s - w / 2),
-      y: Math.round((rect.height / 2 - v.ty) / v.s - h / 2),
-    };
   };
 
   // Una tarjeta nueva entra en el PRIMER HUECO LIBRE, alineada a las columnas: dentro
@@ -732,6 +800,7 @@ export default function DashboardWorkspace({ project, backendUrl, onClose, proye
     if (!ids.size) return;
     setCharts(cs => cs.filter(c => !ids.has(c.id)));
     setFrames(fs => fs.filter(f => !ids.has(f.id)));
+    setNotas(ns => ns.filter(n => !ids.has(n.id)));
     setVistas(vs => vs.map(v => (v.cards.some(id => ids.has(id)) ? { ...v, cards: v.cards.filter(id => !ids.has(id)) } : v)));
     setSeleccion(new Set());
   };
@@ -741,20 +810,23 @@ export default function DashboardWorkspace({ project, backendUrl, onClose, proye
     portapapeles.current = {
       charts: chartsRef.current.filter(c => ids.has(c.id)),
       frames: framesRef.current.filter(f => ids.has(f.id)),
+      notas: notasRef.current.filter(n => ids.has(n.id)),
       veces: 0,
     };
     return true;
   };
   const pegar = () => {
     const p = portapapeles.current;
-    if (!p || (!p.charts.length && !p.frames.length)) return;
+    if (!p || (!p.charts.length && !p.frames.length && !p.notas.length)) return;
     p.veces += 1;
     const d = SNAP * 2 * p.veces;
     const nuevasC = p.charts.map(c => ({ ...c, id: uid(), x: c.x + d, y: c.y + d }));
     const nuevasF = p.frames.map(f => ({ ...f, id: uid(), x: f.x + d, y: f.y + d }));
+    const nuevasN = p.notas.map(n => ({ ...n, id: uid(), x: n.x + d, y: n.y + d }));
     if (nuevasC.length) setCharts(cs => [...cs, ...nuevasC]);
     if (nuevasF.length) setFrames(fs => [...fs, ...nuevasF]);
-    setSeleccion(new Set([...nuevasC, ...nuevasF].map(x => x.id)));
+    if (nuevasN.length) setNotas(ns => [...ns, ...nuevasN]);
+    setSeleccion(new Set([...nuevasC, ...nuevasF, ...nuevasN].map(x => x.id)));
   };
   const duplicar = () => {
     const anterior = portapapeles.current;
@@ -762,7 +834,7 @@ export default function DashboardWorkspace({ project, backendUrl, onClose, proye
     pegar();
     portapapeles.current = anterior;   // duplicar no pisa lo copiado con Ctrl+C
   };
-  const seleccionarTodo = () => setSeleccion(new Set([...chartsRef.current, ...framesRef.current].map(x => x.id)));
+  const seleccionarTodo = () => setSeleccion(new Set(todosLosNodos().map(x => x.id)));
   const empujar = (tecla, grande) => {
     const ids = selRef.current;
     if (!ids.size || lockedRef.current) return;
@@ -771,22 +843,23 @@ export default function DashboardWorkspace({ project, backendUrl, onClose, proye
     const dy = tecla === 'arrowup' ? -p : tecla === 'arrowdown' ? p : 0;
     setCharts(cs => cs.map(c => (ids.has(c.id) ? { ...c, x: c.x + dx, y: c.y + dy } : c)));
     setFrames(fs => fs.map(f => (ids.has(f.id) ? { ...f, x: f.x + dx, y: f.y + dy } : f)));
+    setNotas(ns => ns.map(n => (ids.has(n.id) ? { ...n, x: n.x + dx, y: n.y + dy } : n)));
   };
 
   // Teclado del lienzo (atajos de tldraw). Solo con el foco en el tablero, sin escribir en un campo, sin
   // el editor abierto y fuera de una vista. `data-escape-propio`: el visor corta Escape en la ventana.
   const enfocarPanel = (e) => {
-    if (e.target.closest?.('input, textarea, select, [contenteditable="true"]')) return;
+    if (e.target.closest?.('input, textarea, select, [contenteditable]')) return;
     panelRef.current?.focus({ preventScroll: true });
   };
   const alTeclear = (e) => {
-    if (e.target.closest?.('input, textarea, select, [contenteditable="true"], [role="dialog"]')) return;
+    if (e.target.closest?.('input, textarea, select, [contenteditable], [role="dialog"]')) return;
     if (editing || vistaActiva || eligiendo) return;
     const ctrl = e.ctrlKey || e.metaKey, k = e.key.toLowerCase();
     let hecho = true;
     if (k === ' ') { espacioRef.current = true; if (canvasRef.current) canvasRef.current.style.cursor = 'grab'; }
     else if (k === 'delete' || k === 'backspace') borrarSeleccion();
-    else if (k === 'escape') { if (selRef.current.size) setSeleccion(new Set()); else hecho = false; }
+    else if (k === 'escape') { if (herramienta !== 'seleccionar') setHerramienta('seleccionar'); else if (selRef.current.size) setSeleccion(new Set()); else hecho = false; }
     else if (ctrl && k === 'z' && !e.shiftKey) deshacer();
     else if (ctrl && (k === 'y' || (k === 'z' && e.shiftKey))) rehacer();
     else if (ctrl && k === 'd') duplicar();
@@ -799,6 +872,8 @@ export default function DashboardWorkspace({ project, backendUrl, onClose, proye
     else if (e.shiftKey && e.code === 'Digit1') fitView();
     else if (e.shiftKey && e.code === 'Digit2') zoomASeleccion();
     else if (k.startsWith('arrow') && !ctrl) empujar(k, e.shiftKey);
+    else if (!ctrl && !e.altKey && { v: 1, h: 1, n: 1, t: 1, f: 1 }[k]) setHerramienta({ v: 'seleccionar', h: 'mano', n: 'nota', t: 'texto', f: 'seccion' }[k]);
+    else if (k === 'enter' && selRef.current.size === 1 && notasRef.current.some(n => selRef.current.has(n.id))) setEditandoNota([...selRef.current][0]);
     else hecho = false;
     if (hecho) { e.preventDefault(); e.stopPropagation(); }
   };
@@ -813,13 +888,6 @@ export default function DashboardWorkspace({ project, backendUrl, onClose, proye
 
   const loading = rows === null;
 
-  const ctrlBtn = (title, onClick, label) => (
-    <button onClick={onClick} title={title} style={{
-      width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center',
-      background: C.blanco, border: `1px solid ${C.lightGray}`, borderRadius: 6, cursor: 'pointer',
-      color: C.gris700, fontSize: 15, fontWeight: 600,
-    }}>{label}</button>
-  );
 
 
   return (
@@ -832,7 +900,7 @@ export default function DashboardWorkspace({ project, backendUrl, onClose, proye
       display: 'flex', flexDirection: 'column',
       color: C.dark, fontFamily: FONT_UI,
     }}>
-      <style>{CSS_HERRAMIENTAS}</style>
+      <style>{CSS_HERRAMIENTAS + CSS_LIENZO}</style>
 
       {/* Cabecera: nombre del tablero a la izquierda, acciones a la derecha */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 10px 7px 14px', borderBottom: `1px solid ${C.lightGray}`, background: C.blanco, flexShrink: 0 }}>
@@ -846,15 +914,11 @@ export default function DashboardWorkspace({ project, backendUrl, onClose, proye
         <span className="tablero-guardado" style={{ fontSize: 11, color: C.gris600, minWidth: 62 }}>
           {saveState === 'saving' ? 'Guardando…' : saveState === 'saved' ? 'Guardado' : ''}
         </span>
-        {/* Herramientas: añadir (sección, parámetros) · organizar (ordenar, limpiar 3D) · crear */}
+        {/* Organizar (las herramientas de añadir están en las barras flotantes del lienzo, como en Forma Board) */}
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 2, alignItems: 'center', minWidth: 0 }}>
-          <Herramienta icono="seccion" texto="Sección" ayuda="Añadir una sección con título para agrupar tarjetas" onClick={addFrame} />
-          <Herramienta icono="parametros" texto="Parámetros" ayuda="Añadir la lista de parámetros del modelo con su completitud" onClick={addParamsNode} apagada={loading} />
-          <Separador />
           <Herramienta icono="ordenar" texto="Ordenar" ayuda="Acomodar las tarjetas de cada sección en filas, con el mismo hueco entre todas" onClick={ordenar} />
           <Herramienta icono="limpiar" texto="Limpiar 3D" ayuda="Restaurar el 3D (quitar colores y aislamientos)" onClick={handleClear3D} />
           <Separador />
-          <Herramienta icono="nuevo" texto="Nuevo gráfico" onClick={() => setEditing('new')} apagada={loading} principal />
           <button onClick={onClose} title="Cerrar tablero" aria-label="Cerrar tablero"
             style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 28, height: 28, marginLeft: 4, background: 'none', border: 'none', borderRadius: 6, color: C.gris600, cursor: 'pointer' }}
             onMouseEnter={e => { e.currentTarget.style.background = C.light50; }} onMouseLeave={e => { e.currentTarget.style.background = 'none'; }}>
@@ -892,10 +956,11 @@ export default function DashboardWorkspace({ project, backendUrl, onClose, proye
       <div
         ref={canvasRef}
         onPointerDown={alPulsarLienzo}
+        onDoubleClick={alDobleClicLienzo}
         onContextMenu={e => e.preventDefault()}
-        title="Arrastrar el fondo: seleccionar · Espacio o clic derecho + arrastrar: mover · Rueda: zoom"
         style={{
           flex: 1, position: 'relative', overflow: 'hidden', touchAction: 'none',
+          cursor: herramienta === 'mano' ? 'grab' : herramienta === 'seleccionar' ? 'default' : 'crosshair',
           backgroundColor: C.light,
           backgroundImage: rejilla.imagen,
           backgroundSize: rejilla.tamano,
@@ -904,9 +969,9 @@ export default function DashboardWorkspace({ project, backendUrl, onClose, proye
       >
         {/* Marco de selección (en coordenadas de pantalla; se dibuja en el DOM al arrastrar) */}
         <div ref={marcoSelRef} style={{ display: 'none', position: 'absolute', zIndex: 3, pointerEvents: 'none',
-          background: 'rgba(106, 155, 204, 0.10)', border: `1px solid ${C.blue}` }} />
+          background: 'rgba(13, 102, 180, 0.06)', border: `1px solid ${AZUL_SEL}` }} />
         <div ref={contenidoRef} style={{
-          position: 'absolute', top: 0, left: 0,
+          position: 'absolute', top: 0, left: 0, '--s': view.s,
           transform: `translate(${view.tx}px, ${view.ty}px) scale(${view.s})`,
           transformOrigin: '0 0',
         }}>
@@ -918,7 +983,7 @@ export default function DashboardWorkspace({ project, backendUrl, onClose, proye
             return (
               <div key={f.id} style={{ position: 'absolute', left: f.x, top: f.y, width: f.w, height: f.h, pointerEvents: 'none' }}>
                 <div style={{ position: 'absolute', inset: 0, background: 'rgba(241, 240, 232, 0.72)', borderRadius: RADIO,
-                  border: sel.has(f.id) ? `2px solid ${C.blue}` : `1px solid ${C.lightGray}` }} />
+                  border: `1px solid ${C.lightGray}`, outline: sel.has(f.id) ? `${linea(1.5)} solid ${AZUL_SEL}` : 'none' }} />
                 {/* Barra de título: asa (arrastra sección + contenido) · nombre editable · quitar */}
                 <div style={{ position: 'absolute', top: -32, left: 0, display: 'flex', alignItems: 'center', gap: 6, pointerEvents: 'auto' }}>
                   <div onPointerDown={arrastrar(f.id)} title="Arrastrar la sección (mueve también sus tarjetas)"
@@ -942,17 +1007,13 @@ export default function DashboardWorkspace({ project, backendUrl, onClose, proye
                       style={{ background: 'none', border: 'none', color: C.gris600, fontSize: 15, cursor: 'pointer', lineHeight: 1, padding: 2 }}>×</button>
                   )}
                 </div>
-                {!locked && (
-                  <div onPointerDown={startResizeFrame(f.id)} title="Cambiar el tamaño de la sección"
-                    style={{ position: 'absolute', right: -3, bottom: -3, width: 18, height: 18, cursor: 'nwse-resize', pointerEvents: 'auto', borderRight: `2px solid ${C.gris300}`, borderBottom: `2px solid ${C.gris300}`, borderRadius: '0 0 6px 0' }} />
-                )}
               </div>
             );
           })}
 
           {(charts || []).map(cfg => (
-            <div key={cfg.id} style={{ position: 'absolute', left: cfg.x, top: cfg.y, width: cfg.w, height: cfg.h,
-              borderRadius: RADIO, outline: sel.has(cfg.id) ? `2px solid ${C.blue}` : 'none', outlineOffset: 2 }}
+            <div key={cfg.id} className="tablero-nodo" style={{ position: 'absolute', left: cfg.x, top: cfg.y, width: cfg.w, height: cfg.h,
+              borderRadius: RADIO, outline: sel.has(cfg.id) ? `${linea(1.5)} solid ${AZUL_SEL}` : undefined, outlineOffset: 0 }}
               onPointerDown={e => {
                 // Clic derecho, central o con espacio: lo maneja el lienzo (mover). Clic: seleccionar.
                 if (e.button !== 0 || espacioRef.current) return;
@@ -986,13 +1047,59 @@ export default function DashboardWorkspace({ project, backendUrl, onClose, proye
                   </span>
                 </div>
               )}
-              {/* Esquina de redimensionado (oculta con el candado activo) */}
-              {!locked && (
-                <div onPointerDown={startResize(cfg.id)} title="Cambiar el tamaño (el ancho salta a S, M o L)"
-                  style={{ position: 'absolute', right: -3, bottom: -3, width: 16, height: 16, cursor: 'nwse-resize', borderRight: `2px solid ${C.gris300}`, borderBottom: `2px solid ${C.gris300}`, borderRadius: '0 0 6px 0' }} />
-              )}
             </div>
           ))}
+
+          {notas.map(n => {
+            const Pieza = n.tipo === 'texto' ? TextoLibre : Nota;
+            return (
+              <Pieza key={n.id} nota={n} editando={editandoNota === n.id}
+                onPointerDown={arrastrar(n.id)}
+                onDoubleClick={(e) => { e.stopPropagation(); setEditandoNota(n.id); }}
+                onCambiar={(t) => cambiarTextoNota(n.id, t)}
+                onTerminar={() => terminarNota(n.id)} />
+            );
+          })}
+
+          {(() => {
+            // Recuadro de la selección con sus asas (tamaño constante en pantalla). El asa de abajo a la
+            // derecha cambia el tamaño de UNA tarjeta o sección; las demás marcan las esquinas.
+            const elegidos = [...charts, ...frames, ...notas].filter(x => sel.has(x.id));
+            if (!elegidos.length || editandoNota) return null;
+            const x1 = Math.min(...elegidos.map(x => x.x)), y1 = Math.min(...elegidos.map(x => x.y));
+            const x2 = Math.max(...elegidos.map(x => x.x + x.w)), y2 = Math.max(...elegidos.map(x => x.y + x.h));
+            const uno = elegidos.length === 1 ? elegidos[0] : null;
+            const redimensionar = uno && !locked && (charts.includes(uno) ? startResize(uno.id) : frames.includes(uno) ? startResizeFrame(uno.id) : null);
+            const asa = (left, top, cursor, onDown) => (
+              <div onPointerDown={onDown || undefined} style={{ position: 'absolute', left, top, width: linea(9), height: linea(9),
+                transform: 'translate(-50%, -50%)', background: '#fff', border: `${linea(1.5)} solid ${AZUL_SEL}`, boxSizing: 'border-box',
+                borderRadius: linea(1.5), pointerEvents: onDown ? 'auto' : 'none', cursor }} />
+            );
+            const notaSola = uno && notas.includes(uno) && uno.tipo === 'nota';
+            const punto = (left, top, dir) => (
+              <div onPointerDown={e => { e.stopPropagation(); e.preventDefault(); notaAlLado(uno, dir); }} title="Nota al lado"
+                style={{ position: 'absolute', left, top, width: linea(14), height: linea(14), transform: 'translate(-50%, -50%)',
+                  borderRadius: '50%', background: 'rgba(13, 102, 180, 0.16)', border: `${linea(1.5)} solid ${AZUL_SEL}`, boxSizing: 'border-box',
+                  pointerEvents: 'auto', cursor: 'pointer' }} />
+            );
+            return (
+              <div style={{ position: 'absolute', left: x1, top: y1, width: x2 - x1, height: y2 - y1, pointerEvents: 'none' }}>
+                {elegidos.length > 1 && <div style={{ position: 'absolute', inset: 0, outline: `${linea(1)} solid ${AZUL_SEL}` }} />}
+                {asa('0%', '0%', 'default')}
+                {asa('100%', '0%', 'default')}
+                {asa('0%', '100%', 'default')}
+                {asa('100%', '100%', redimensionar ? 'nwse-resize' : 'default', redimensionar)}
+                {notaSola && (
+                  <>
+                    {punto('50%', `calc(0% - 22px / var(--s, 1))`, 'arriba')}
+                    {punto(`calc(100% + 22px / var(--s, 1))`, '50%', 'derecha')}
+                    {punto('50%', `calc(100% + 22px / var(--s, 1))`, 'abajo')}
+                    {punto(`calc(0% - 22px / var(--s, 1))`, '50%', 'izquierda')}
+                  </>
+                )}
+              </div>
+            );
+          })()}
         </div>
 
         {/* Estados vacíos (fuera del transform) */}
@@ -1009,33 +1116,20 @@ export default function DashboardWorkspace({ project, backendUrl, onClose, proye
             </svg>
             <div style={{ fontSize: 14, fontWeight: 600, color: C.dark, marginBottom: 6 }}>Empieza tu tablero</div>
             <div style={{ fontSize: 12.5, lineHeight: 1.6, maxWidth: 320, textAlign: 'center', marginBottom: 16 }}>
-              Añade la lista de parámetros y haz clic en uno para graficarlo, o crea un gráfico con «Nuevo gráfico».
-            </div>
-            <div style={{ display: 'flex', gap: 8, pointerEvents: 'auto' }}>
-              <Herramienta icono="parametros" texto="Parámetros" onClick={addParamsNode} />
-              <Herramienta icono="nuevo" texto="Nuevo gráfico" onClick={() => setEditing('new')} principal />
+              Crea una gráfica con «Gráfico» o añade la lista de «Parámetros» (a la izquierda). Abajo están las notas, el texto y las secciones.
             </div>
           </div>
         )}
 
-        {/* Controles de zoom (abajo-derecha, patrón Miro/Vyssuals) */}
-        <div style={{ position: 'absolute', right: 12, bottom: 12, display: 'flex', flexDirection: 'column', gap: 6, zIndex: 2 }}>
-          {ctrlBtn('Acercar (Ctrl +)', () => zoomPaso(1), '+')}
-          {ctrlBtn('Alejar (Ctrl −)', () => zoomPaso(-1), '−')}
-          {ctrlBtn('Ajustar a todo (⇧ 1)', fitView,
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3" /></svg>)}
-          {ctrlBtn(locked ? 'Desbloquear nodos (permitir mover)' : 'Bloquear nodos (evitar moverlos sin querer)', () => setLocked(l => !l),
-            locked
-              ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={C.orange30D} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></svg>
-              : <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" /><path d="M7 11V7a5 5 0 0 1 9.9-1" /></svg>)}
-          <button ref={zoomTextoRef} onPointerDown={e => e.stopPropagation()} onClick={() => setMenuZoom(m => !m)} title="Opciones de zoom"
-            style={{ background: 'none', border: 'none', padding: '2px 0', cursor: 'pointer', textAlign: 'center', fontSize: 10.5, color: C.gris600, fontFamily: FUENTE, fontVariantNumeric: 'tabular-nums' }}>
-            {Math.round(view.s * 100)} %
-          </button>
-        </div>
+        {/* Barras flotantes, como Forma Board: datos a la izquierda, herramientas abajo, zoom abajo a la derecha */}
+        <PaletaIzquierda onGrafico={() => setEditing('new')} onParametros={addParamsNode} parametrosApagado={loading}
+          onDeshacer={deshacer} onRehacer={rehacer} />
+        <BarraInferior herramienta={herramienta} onHerramienta={setHerramienta} colorNota={colorNota} onColorNota={setColorNota} />
+        <PildoraZoom textoRef={zoomTextoRef} porcentaje={`${Math.round(view.s * 100)} %`}
+          onMenos={() => zoomPaso(-1)} onMas={() => zoomPaso(1)} onMenu={() => setMenuZoom(m => !m)} />
         {menuZoom && (
           <div onPointerDown={e => e.stopPropagation()} role="menu"
-            style={{ position: 'absolute', right: 52, bottom: 12, zIndex: 3, minWidth: 230, padding: '6px 0', background: C.blanco,
+            style={{ position: 'absolute', right: 14, bottom: 62, zIndex: 5, minWidth: 240, padding: '6px 0', background: C.blanco,
               border: `1px solid ${C.lightGray}`, borderRadius: 8, boxShadow: '0 6px 20px rgba(20,20,19,0.12)', fontFamily: FUENTE }}>
             {[
               ['Acercar', 'Ctrl +', () => zoomPaso(1)],
@@ -1043,6 +1137,7 @@ export default function DashboardWorkspace({ project, backendUrl, onClose, proye
               ['Zoom a 100 %', '⇧ 0', () => zoomA(1)],
               ['Ajustar a todo', '⇧ 1', fitView],
               ['Zoom a la selección', '⇧ 2', zoomASeleccion, !sel.size],
+              [locked ? 'Desbloquear tarjetas' : 'Bloquear tarjetas', '', () => setLocked(l => !l)],
             ].map(([texto, atajo, accion, apagado]) => (
               <button key={texto} role="menuitem" disabled={apagado} onClick={() => { setMenuZoom(false); accion(); }}
                 style={{ display: 'flex', justifyContent: 'space-between', gap: 16, width: '100%', padding: '7px 14px', background: 'none', border: 'none',
@@ -1052,7 +1147,7 @@ export default function DashboardWorkspace({ project, backendUrl, onClose, proye
               </button>
             ))}
             <div style={{ borderTop: `1px solid ${C.light50}`, margin: '4px 0 0', padding: '8px 14px 4px', fontSize: 11, lineHeight: 1.6, color: C.gris600 }}>
-              Arrastrar el fondo: seleccionar<br />Espacio o clic derecho + arrastrar: mover<br />Rueda: zoom · Supr: borrar · Ctrl+Z: deshacer
+              Arrastrar el fondo: seleccionar · Doble clic: texto<br />Espacio o clic derecho + arrastrar: mover<br />Rueda: zoom · Supr: borrar · Ctrl+Z: deshacer<br />V seleccionar · H mano · N nota · T texto · F sección
             </div>
           </div>
         )}
