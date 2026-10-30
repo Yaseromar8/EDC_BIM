@@ -47,85 +47,34 @@ export const FONT_TITLE = FUENTE;
 const FRAME_COLORS = [C.orange, C.blue, C.green, C.gris700];
 const ANCHO_SECCION = ANCHOS.l + HUECO * 2;
 
-// Fondo del 3D para los bordes que quedan al descubierto mientras el visor redibuja: se lee del propio
-// lienzo (preserveDrawingBuffer), arriba, al medio y abajo de su columna izquierda y derecha, porque el
-// fondo del visor no es un color plano (sombra ambiental, iluminación).
-const fondoDel3d = (lienzo3d) => {
-  try {
-    const c = document.createElement('canvas'); c.width = 1; c.height = 1;
-    const g = c.getContext('2d', { willReadFrequently: true });
-    const W = lienzo3d.width, H = lienzo3d.height;
-    const px = (x, y) => { g.drawImage(lienzo3d, x, y, 1, 1, 0, 0, 1, 1); const d = g.getImageData(0, 0, 1, 1).data; return `rgb(${d[0]},${d[1]},${d[2]})`; };
-    const columna = (x) => `linear-gradient(${px(x, 2)}, ${px(x, H >> 1)}, ${px(x, H - 3)})`;
-    return `${columna(1)} left / 50% 100% no-repeat, ${columna(W - 2)} right / 50% 100% no-repeat`;
-  } catch { return ''; }
-};
-// Doble búfer: el visor redibuja el modelo por partes (unos 500 ms en esta obra, medido) y dibujarlo de
-// golpe congela la página. Así que encima de su lienzo se pone el ÚLTIMO CUADRO COMPLETO (lo que ya se
-// veía, corrido a donde el visor dejará el modelo y con el fondo del 3D en los bordes nuevos) y se retira
-// cuando el visor termina el cuadro nuevo (su cola de dibujo, modelQueue().isDone()).
-const dobleBufer = (visor, lienzo3d, corrimiento, fondo) => {
-  const marco = lienzo3d?.parentElement;
-  if (!visor || !marco) { visor?.resize(); return; }
-  let tapa = null;
-  try {
-    const ancho = marco.clientWidth, alto = marco.clientHeight, k = lienzo3d.width / lienzo3d.clientWidth;
-    tapa = document.createElement('canvas');
-    tapa.width = Math.round(ancho * k); tapa.height = Math.round(alto * k);
-    tapa.getContext('2d').drawImage(lienzo3d, Math.round(corrimiento * k), 0);
-    Object.assign(tapa.style, { position: 'absolute', left: '0px', top: '0px', width: `${ancho}px`, height: `${alto}px`, background: fondo, pointerEvents: 'none', zIndex: 1 });
-    marco.appendChild(tapa);
-  } catch { tapa = null; }
-  lienzo3d.style.transform = '';
-  lienzo3d.style.willChange = '';
-  visor.resize();
-  if (!tapa) return;
-  let hecho = false, cuadros = 0;
-  const quitar = () => {
-    if (hecho) return;
-    hecho = true;
-    tapa.remove();
-    window.removeEventListener('pointerdown', quitar, true);
-    window.removeEventListener('wheel', quitar, true);
-  };
-  // Si el usuario toca el 3D antes de que termine, se le devuelve el lienzo vivo al momento.
-  window.addEventListener('pointerdown', quitar, true);
-  window.addEventListener('wheel', quitar, true);
-  const vigilar = () => {
-    if (hecho) return;
-    cuadros += 1;
-    const cola = visor.impl?.modelQueue?.();
-    const listo = cuadros > 2 && !visor.impl?._needsResize && (!cola?.isDone || cola.isDone());
-    if (listo || cuadros > 240) requestAnimationFrame(quitar);
-    else requestAnimationFrame(vigilar);
-  };
-  requestAnimationFrame(vigilar);
-};
+// Pantalla completa (docs/visor/54): el tablero ocupa toda la ventana a la derecha de la barra lateral
+// del visor (64 px), ENCIMA del 3D, que no cambia de tamaño (redibujarlo cuesta ≈ 220 ms, §7 del 52).
+// El panel acoplado a la derecha (55 % / 70 %, con doble búfer) está en 53f2a2b4, para cuando se ponga
+// el botón de acoplar.
+const ANCHO_RIEL = 64;
 
-// El 3D cambia de hueco UNA vez y sin animación (App.jsx anima el margen 0,22 s, y eso redimensionaba
-// el visor una docena de veces: el temblor), con el doble búfer para que no se vea a medias.
-const ajustar3d = (antes, ahora) => {
-  const split = document.querySelector('.split-view-container');
-  if (!split || antes === ahora) return;
-  const transicion = split.style.transition;
-  split.style.transition = 'none';
-  split.style.marginRight = `${ahora}px`;
-  setTimeout(() => { split.style.transition = transicion; }, 400);
-  const visor = window.NOP_VIEWER, lienzo3d = visor?.canvas;
-  if (visor && lienzo3d) dobleBufer(visor, lienzo3d, (antes - ahora) / 2, fondoDel3d(lienzo3d) || `rgb(${(window.__vqBg || [241, 240, 232]).join(',')})`);
+// ── Cámara del lienzo, como tldraw/Forma Board (docs/visor/54 §1) ─────────────────────────────────
+const ZOOM_MIN = 0.1;
+const ZOOM_MAX = 4;
+const PASOS_ZOOM = [0.1, 0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 4];   // Ctrl+ / Ctrl− y los botones
+const FRICCION = 0.09;          // inercia al soltar el lienzo (cameraSlideFriction de tldraw)
+const ARRASTRE_MIN = 4;         // px antes de que un clic se convierta en arrastre
+// Cuadrícula estilo Miro: líneas con celda menor y mayor (cada 4); la menor desaparece al alejarse.
+const rejillaDe = (v) => {
+  const minor = 32 * v.s, major = minor * 4;
+  const mn = 'rgba(20,20,19,0.045)', mj = 'rgba(20,20,19,0.080)';
+  const imgs = [], tam = [];
+  if (minor >= 11) {
+    imgs.push(`linear-gradient(${mn} 1px, transparent 1px)`, `linear-gradient(90deg, ${mn} 1px, transparent 1px)`);
+    tam.push(`${minor}px ${minor}px`, `${minor}px ${minor}px`);
+  }
+  imgs.push(`linear-gradient(${mj} 1px, transparent 1px)`, `linear-gradient(90deg, ${mj} 1px, transparent 1px)`);
+  tam.push(`${major}px ${major}px`, `${major}px ${major}px`);
+  return { imagen: imgs.join(','), tamano: tam.join(',') };
 };
+const mismoConjunto = (a, b) => a.size === b.size && [...a].every(x => b.has(x));
+const suave = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
 
-// Dos anchos fijos (docs/visor/52 §8): arrastrar el borde no puede ir fluido porque el 3D de esta obra
-// tarda ≈ 220 ms en redibujarse (§7). Normal = 55 % de la ventana (nunca menos de dos columnas de
-// tarjetas: 2 × 320 + 16 y márgenes); Amplio = 70 % (ahí las vistas usan tres columnas; en Normal, dos). En
-// porcentaje, para que acompañen al zoom del navegador. Al 3D siempre le quedan 300 px como mínimo.
-const ANCHO_NORMAL = 720;
-const MODO_GUARDADO = 'tablero-modo';
-const anchoDeModo = (modo) => {
-  const tope = window.innerWidth - 300;
-  const normal = Math.min(Math.max(ANCHO_NORMAL, Math.round(window.innerWidth * 0.55)), tope);
-  return modo === 'amplio' ? Math.min(Math.max(normal, Math.round(window.innerWidth * 0.7)), tope) : normal;
-};
 const horaCorta = () => new Date().toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' });
 
 // Posición por defecto en cascada para tableros guardados sin layout (migración
@@ -150,7 +99,7 @@ export default function DashboardWorkspace({ project, backendUrl, onClose, proye
   const [editing, setEditing] = useState(null);     // config en edición | 'new'
   const [active, setActive] = useState(null);       // { chartId, key } aislado
   const [saveState, setSaveState] = useState('');
-  const [modo, setModo] = useState(() => { try { return localStorage.getItem(MODO_GUARDADO) === 'amplio' ? 'amplio' : 'normal'; } catch { return 'normal'; } });
+  const [anchoVentana, setAnchoVentana] = useState(() => window.innerWidth);
   const [view, setView] = useState({ tx: 30, ty: 30, s: 0.85 }); // encuadre del lienzo
   const itemizado = useSyncExternalStore(itemizadoDeObra.suscribir, itemizadoDeObra.estado);
   // Vistas (docs/visor/52): grupos de tarjetas elegidas por el usuario, con su botón; se ven encajadas.
@@ -167,31 +116,92 @@ export default function DashboardWorkspace({ project, backendUrl, onClose, proye
   const [locked, setLocked] = useState(false); // candado: bloquea mover/redimensionar nodos
   const lockedRef = useRef(false);
   useEffect(() => { lockedRef.current = locked; }, [locked]);
-  const viewRef = useRef(view);
+  const viewRef = useRef(view);              // la cámara VIVA (la que se ve); `view` es la confirmada
+  const confirmadaRef = useRef(view);
+  const confirmarTimer = useRef(0);
+  const inerciaRef = useRef(0);
+  const animRef = useRef(0);
+  const espacioRef = useRef(false);
+  const contenidoRef = useRef(null);
+  const marcoSelRef = useRef(null);
+  const zoomTextoRef = useRef(null);
+  const panelRef = useRef(null);
+  const [sel, setSel] = useState(() => new Set());   // tarjetas y secciones seleccionadas
+  const selRef = useRef(sel);
+  const portapapeles = useRef(null);
+  const [menuZoom, setMenuZoom] = useState(false);
   const chartsRef = useRef(charts);
+  const vistasRef = useRef([]);
   const canvasRef = useRef(null);
   const saveTimer = useRef(null);
   const loadedRef = useRef(false);
 
-  useEffect(() => { viewRef.current = view; }, [view]);
+  // Una cámara confirmada desde fuera (cargar el tablero, encajar…) pasa a ser la viva; la que confirma el
+  // propio lienzo ya lo era.
+  useEffect(() => {
+    if (view === confirmadaRef.current) return;
+    confirmadaRef.current = view;
+    viewRef.current = view;
+    pintarCamara();
+  }, [view]);   // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { selRef.current = sel; }, [sel]);
   useEffect(() => { chartsRef.current = charts; }, [charts]);
   useEffect(() => { framesRef.current = frames; }, [frames]);
+  useEffect(() => { vistasRef.current = vistas; }, [vistas]);
 
-  // ── Split REAL con el visor: anunciar nuestro ancho para que el contenedor
-  // del 3D se encoja (su ResizeObserver llama a viewer.resize()). Al cerrar,
-  // se anuncia 0 y el visor recupera todo el lienzo. Nada queda tapado.
-  // El ancho lo decide solo el usuario (botón junto a la ✕), también en las vistas: la vista se acomoda.
-  const modoActual = modo;
-  const width = anchoDeModo(modoActual);
-  const anchoAnunciado = useRef(0);
+  // ── Historial (Ctrl+Z / Ctrl+Y): fotos de {tarjetas, secciones, vistas}. Un arrastre es UN paso (se
+  // confirma al soltar); escribir un título se agrupa (350 ms sin cambios).
+  const hist = useRef({ pasado: [], futuro: [], actual: null, aplicando: false, gesto: false, t: 0 });
+  const confirmarHistorial = useCallback(() => {
+    const h = hist.current;
+    if (!loadedRef.current) return;
+    const ahora = { charts: chartsRef.current, frames: framesRef.current, vistas: vistasRef.current };
+    if (!h.actual) { h.actual = ahora; return; }
+    if (ahora.charts === h.actual.charts && ahora.frames === h.actual.frames && ahora.vistas === h.actual.vistas) return;
+    h.pasado.push(h.actual);
+    if (h.pasado.length > 100) h.pasado.shift();
+    h.futuro = [];
+    h.actual = ahora;
+  }, []);
   useEffect(() => {
-    ajustar3d(anchoAnunciado.current, width);
-    anchoAnunciado.current = width;
-    window.dispatchEvent(new CustomEvent('tablero-width', { detail: { width } }));
-  }, [width]);
-  useEffect(() => () => {
-    ajustar3d(anchoAnunciado.current, 0);
+    const h = hist.current;
+    if (!loadedRef.current) { h.actual = null; h.pasado = []; h.futuro = []; return; }
+    if (h.aplicando) { h.aplicando = false; h.actual = { charts, frames, vistas }; return; }
+    if (h.gesto) return;
+    clearTimeout(h.t);
+    h.t = setTimeout(confirmarHistorial, 350);
+  }, [charts, frames, vistas, confirmarHistorial]);
+  const aplicarFoto = (foto) => {
+    hist.current.aplicando = true;
+    hist.current.actual = foto;
+    setCharts(foto.charts); setFrames(foto.frames); setVistas(foto.vistas);
+    setSeleccion(new Set());
+  };
+  const deshacer = () => {
+    const h = hist.current;
+    clearTimeout(h.t); confirmarHistorial();
+    const prev = h.pasado.pop();
+    if (!prev) return;
+    h.futuro.push(h.actual);
+    aplicarFoto(prev);
+  };
+  const rehacer = () => {
+    const h = hist.current;
+    const sig = h.futuro.pop();
+    if (!sig) return;
+    h.pasado.push(h.actual);
+    aplicarFoto(sig);
+  };
+  const iniciarGesto = () => { clearTimeout(hist.current.t); confirmarHistorial(); hist.current.gesto = true; };
+  const terminarGesto = () => { hist.current.gesto = false; confirmarHistorial(); };
+
+  // Pantalla completa: el 3D no reserva hueco (se anuncia 0 a App.jsx) y no se redimensiona.
+  const width = anchoVentana - ANCHO_RIEL;
+  useEffect(() => {
+    const alCambiar = () => setAnchoVentana(window.innerWidth);
+    window.addEventListener('resize', alCambiar);
     window.dispatchEvent(new CustomEvent('tablero-width', { detail: { width: 0 } }));
+    return () => window.removeEventListener('resize', alCambiar);
   }, []);
 
   // ── Dataset: Inventory de la nube (precargado por App.jsx) ────────────────
@@ -266,47 +276,170 @@ export default function DashboardWorkspace({ project, backendUrl, onClose, proye
     return () => clearTimeout(saveTimer.current);
   }, [charts, frames, vistas, dashId, backendUrl]);
 
-  // ── Lienzo: zoom con la rueda HACIA el cursor (listener nativo, no pasivo) ─
+  // ── Cámara (docs/visor/54): como tldraw, se mueve en el DOM (transformación del contenido y fondo de
+  // la cuadrícula) sin pasar por React, que redibujaba TODAS las tarjetas en cada movimiento. React se
+  // entera cuando la cámara se queda quieta 180 ms (y entonces las gráficas se re-rasterizan nítidas).
+  const pintarCamara = useCallback(() => {
+    const v = viewRef.current, el = canvasRef.current, cont = contenidoRef.current;
+    if (cont) cont.style.transform = `translate(${v.tx}px, ${v.ty}px) scale(${v.s})`;
+    if (el) {
+      const g = rejillaDe(v);
+      el.style.backgroundImage = g.imagen;
+      el.style.backgroundSize = g.tamano;
+      el.style.backgroundPosition = `${v.tx}px ${v.ty}px`;
+    }
+    if (zoomTextoRef.current) zoomTextoRef.current.textContent = `${Math.round(v.s * 100)} %`;
+  }, []);
+  const moverCamara = useCallback((v) => {
+    viewRef.current = v;
+    pintarCamara();
+    clearTimeout(confirmarTimer.current);
+    confirmarTimer.current = setTimeout(() => { confirmadaRef.current = viewRef.current; setView(viewRef.current); }, 180);
+  }, [pintarCamara]);
+  const pararCamara = () => { cancelAnimationFrame(inerciaRef.current); cancelAnimationFrame(animRef.current); };
+  // Ir a una cámara con la animación de tldraw (320 ms, suave al empezar y al acabar).
+  const animarCamara = useCallback((destino, ms = 320) => {
+    cancelAnimationFrame(inerciaRef.current); cancelAnimationFrame(animRef.current);
+    const desde = { ...viewRef.current }, t0 = performance.now();
+    const paso = (ahora) => {
+      const k = suave(Math.min(1, (ahora - t0) / ms));
+      moverCamara({ s: desde.s + (destino.s - desde.s) * k, tx: desde.tx + (destino.tx - desde.tx) * k, ty: desde.ty + (destino.ty - desde.ty) * k });
+      if (k < 1) animRef.current = requestAnimationFrame(paso);
+    };
+    animRef.current = requestAnimationFrame(paso);
+  }, [moverCamara]);
+  const zoomEn = (v, s, px, py) => {   // la cámara con zoom s conservando el punto (px, py) de pantalla
+    const wx = (px - v.tx) / v.s, wy = (py - v.ty) / v.s;
+    return { s, tx: px - wx * s, ty: py - wy * s };
+  };
+
+  // Rueda = zoom hacia el cursor, ×1,10 por muesca e instantáneo (lo medido en Forma Board). Pellizco del
+  // panel táctil (Ctrl + rueda) = zoom continuo.
   useEffect(() => {
     const el = canvasRef.current;
     if (!el) return undefined;
     const onWheel = (e) => {
       e.preventDefault();
+      pararCamara();
+      let d = e.deltaY;
+      if (e.deltaMode === 1) d *= 33; else if (e.deltaMode === 2) d *= 600;
+      const factor = e.ctrlKey ? Math.exp(-d * 0.01) : Math.pow(1.1, -d / 100);
       const rect = el.getBoundingClientRect();
-      const px = e.clientX - rect.left, py = e.clientY - rect.top;
       const v = viewRef.current;
-      const s = clamp(v.s * Math.exp(-e.deltaY * 0.0013), 0.2, 2.2);
-      // conservar el punto del mundo que está bajo el cursor
-      const wx = (px - v.tx) / v.s, wy = (py - v.ty) / v.s;
-      setView({ s, tx: px - wx * s, ty: py - wy * s });
+      moverCamara(zoomEn(v, clamp(v.s * factor, ZOOM_MIN, ZOOM_MAX), e.clientX - rect.left, e.clientY - rect.top));
     };
     el.addEventListener('wheel', onWheel, { passive: false });
     return () => el.removeEventListener('wheel', onWheel);
-  }, [rows === null]);
+  }, [rows === null, moverCamara]);   // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Pan: arrastrar el fondo del lienzo (no un nodo).
-  const onPanStart = (e) => {
-    if (e.button !== 0) return;
-    const start = { x: e.clientX, y: e.clientY, tx: viewRef.current.tx, ty: viewRef.current.ty };
-    const onMove = (ev) => setView(v => ({ ...v, tx: start.tx + ev.clientX - start.x, ty: start.ty + ev.clientY - start.y }));
-    const onUp = () => { window.removeEventListener('pointermove', onMove); window.removeEventListener('pointerup', onUp); };
+  // Mover el lienzo: barra espaciadora + arrastrar, clic derecho o botón central (como tldraw). Al soltar
+  // con velocidad sigue deslizando y frena (inercia).
+  const panear = (e) => {
+    e.preventDefault();
+    pararCamara();
+    const el = canvasRef.current;
+    const ini = { x: e.clientX, y: e.clientY, tx: viewRef.current.tx, ty: viewRef.current.ty };
+    let ult = { x: e.clientX, y: e.clientY, t: performance.now() }, vel = { x: 0, y: 0 };
+    if (el) el.style.cursor = 'grabbing';
+    const onMove = (ev) => {
+      moverCamara({ ...viewRef.current, tx: ini.tx + ev.clientX - ini.x, ty: ini.ty + ev.clientY - ini.y });
+      const t = performance.now(), dt = Math.max(1, t - ult.t);
+      vel = { x: 0.2 * vel.x + 0.8 * (ev.clientX - ult.x) / dt, y: 0.2 * vel.y + 0.8 * (ev.clientY - ult.y) / dt };
+      ult = { x: ev.clientX, y: ev.clientY, t };
+    };
+    const onUp = () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      if (el) el.style.cursor = espacioRef.current ? 'grab' : '';
+      if (performance.now() - ult.t > 60 || Math.hypot(vel.x, vel.y) < 0.15) return;
+      let t = performance.now();
+      const paso = (ahora) => {
+        const dt = ahora - t; t = ahora;
+        const k = Math.pow(1 - FRICCION, dt / 16.7);
+        vel = { x: vel.x * k, y: vel.y * k };
+        if (Math.hypot(vel.x, vel.y) < 0.02) return;
+        const v = viewRef.current;
+        moverCamara({ ...v, tx: v.tx + vel.x * dt, ty: v.ty + vel.y * dt });
+        inerciaRef.current = requestAnimationFrame(paso);
+      };
+      inerciaRef.current = requestAnimationFrame(paso);
+    };
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp);
   };
 
-  // Mover un nodo (asa = cabecera de la tarjeta). Con encaje a rejilla.
-  const startMove = (id) => (e) => {
-    if (e.button !== 0 || lockedRef.current) return;
-    e.preventDefault(); e.stopPropagation();
-    const v = viewRef.current;
-    const node = chartsRef.current.find(c => c.id === id);
-    if (!node) return;
-    const start = { x: e.clientX, y: e.clientY, nx: node.x, ny: node.y };
+  // ── Selección: clic, Mayús+clic, y marco arrastrando el fondo (tarjetas que toca; secciones enteras) ──
+  const setSeleccion = (n) => { if (!mismoConjunto(n, selRef.current)) { selRef.current = n; setSel(n); } };
+  const seleccionarAlPulsar = (id, e) => {
+    const actual = selRef.current;
+    if (e.shiftKey) { const n = new Set(actual); if (n.has(id)) n.delete(id); else n.add(id); setSeleccion(n); return false; }
+    if (!actual.has(id)) setSeleccion(new Set([id]));
+    return true;
+  };
+  const iniciarMarco = (e) => {
+    const el = canvasRef.current, marco = marcoSelRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    const a = { x: e.clientX - r.left, y: e.clientY - r.top };
+    const base = e.shiftKey ? new Set(selRef.current) : new Set();
+    let activo = false;
     const onMove = (ev) => {
-      const dx = (ev.clientX - start.x) / v.s, dy = (ev.clientY - start.y) / v.s;
-      setCharts(cs => cs.map(c => (c.id === id ? { ...c, x: snap(start.nx + dx), y: snap(start.ny + dy) } : c)));
+      const b = { x: ev.clientX - r.left, y: ev.clientY - r.top };
+      if (!activo && Math.hypot(b.x - a.x, b.y - a.y) < ARRASTRE_MIN) return;
+      activo = true;
+      const x1 = Math.min(a.x, b.x), y1 = Math.min(a.y, b.y), x2 = Math.max(a.x, b.x), y2 = Math.max(a.y, b.y);
+      if (marco) Object.assign(marco.style, { display: 'block', left: `${x1}px`, top: `${y1}px`, width: `${x2 - x1}px`, height: `${y2 - y1}px` });
+      const v = viewRef.current;
+      const W = { x1: (x1 - v.tx) / v.s, y1: (y1 - v.ty) / v.s, x2: (x2 - v.tx) / v.s, y2: (y2 - v.ty) / v.s };
+      const n = new Set(base);
+      for (const c of chartsRef.current) if (c.x < W.x2 && c.x + c.w > W.x1 && c.y < W.y2 && c.y + c.h > W.y1) n.add(c.id);
+      for (const f of framesRef.current) if (f.x >= W.x1 && f.x + f.w <= W.x2 && f.y >= W.y1 && f.y + f.h <= W.y2) n.add(f.id);
+      setSeleccion(n);
     };
-    const onUp = () => { window.removeEventListener('pointermove', onMove); window.removeEventListener('pointerup', onUp); };
+    const onUp = () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      if (marco) marco.style.display = 'none';
+      if (!activo && !e.shiftKey) setSeleccion(new Set());
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+  };
+  const alPulsarLienzo = (e) => {
+    setMenuZoom(false);
+    if (e.button === 1 || e.button === 2 || (e.button === 0 && espacioRef.current)) { panear(e); return; }
+    if (e.button === 0) iniciarMarco(e);
+  };
+
+  // Mover lo seleccionado arrastrando la cabecera de una tarjeta o el asa de una sección (si lo pulsado no
+  // estaba seleccionado, solo eso). Las secciones arrastran las tarjetas que contienen. Encaje a rejilla.
+  const arrastrar = (pulsado) => (e) => {
+    if (e.button !== 0 || espacioRef.current) return;
+    e.preventDefault(); e.stopPropagation();
+    if (!seleccionarAlPulsar(pulsado, e) || lockedRef.current) return;
+    const ids = selRef.current.has(pulsado) ? selRef.current : new Set([pulsado]);
+    const v = viewRef.current;
+    const fs = framesRef.current.filter(f => ids.has(f.id));
+    const dentro = (c, f) => { const cx = c.x + c.w / 2, cy = c.y + c.h / 2; return cx >= f.x && cx <= f.x + f.w && cy >= f.y && cy <= f.y + f.h; };
+    const tarjetas = new Map(chartsRef.current.filter(c => ids.has(c.id) || fs.some(f => dentro(c, f))).map(c => [c.id, { x: c.x, y: c.y }]));
+    const secciones = new Map(fs.map(f => [f.id, { x: f.x, y: f.y }]));
+    const ini = { x: e.clientX, y: e.clientY };
+    let movido = false;
+    const onMove = (ev) => {
+      if (!movido) {
+        if (Math.hypot(ev.clientX - ini.x, ev.clientY - ini.y) < ARRASTRE_MIN) return;
+        movido = true;
+        iniciarGesto();
+      }
+      const dx = (ev.clientX - ini.x) / v.s, dy = (ev.clientY - ini.y) / v.s;
+      if (tarjetas.size) setCharts(cs => cs.map(c => { const o = tarjetas.get(c.id); return o ? { ...c, x: snap(o.x + dx), y: snap(o.y + dy) } : c; }));
+      if (secciones.size) setFrames(xs => xs.map(f => { const o = secciones.get(f.id); return o ? { ...f, x: snap(o.x + dx), y: snap(o.y + dy) } : f; }));
+    };
+    const onUp = () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      if (movido) terminarGesto();
+    };
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp);
   };
@@ -319,12 +452,13 @@ export default function DashboardWorkspace({ project, backendUrl, onClose, proye
     const node = chartsRef.current.find(c => c.id === id);
     if (!node) return;
     const start = { x: e.clientX, y: e.clientY, w: node.w, h: node.h };
+    iniciarGesto();
     const onMove = (ev) => {
       const dw = (ev.clientX - start.x) / v.s, dh = (ev.clientY - start.y) / v.s;
       // El ancho salta a S, M o L (todo encaja); el alto sigue la cuadrícula.
       setCharts(cs => cs.map(c => (c.id === id ? { ...c, w: anchoCercano(clamp(start.w + dw, ANCHOS.s, ANCHOS.l)), h: snap(clamp(start.h + dh, 144, 912)) } : c)));
     };
-    const onUp = () => { window.removeEventListener('pointermove', onMove); window.removeEventListener('pointerup', onUp); };
+    const onUp = () => { window.removeEventListener('pointermove', onMove); window.removeEventListener('pointerup', onUp); terminarGesto(); };
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp);
   };
@@ -341,36 +475,6 @@ export default function DashboardWorkspace({ project, backendUrl, onClose, proye
   const removeFrame = (id) => setFrames(fs => fs.filter(f => f.id !== id)); // no borra los nodos
   const renameFrame = (id, title) => setFrames(fs => fs.map(f => (f.id === id ? { ...f, title } : f)));
 
-  // Mover una sección ARRASTRA también los nodos contenidos (comportamiento Miro).
-  const startMoveFrame = (id) => (e) => {
-    if (e.button !== 0 || lockedRef.current) return;
-    e.preventDefault(); e.stopPropagation();
-    const v = viewRef.current;
-    const f = framesRef.current.find(x => x.id === id);
-    if (!f) return;
-    const start = { x: e.clientX, y: e.clientY, fx: f.x, fy: f.y };
-    // qué nodos viven dentro (por su centro) AL INICIO del arrastre
-    const contained = new Map(chartsRef.current
-      .filter(c => {
-        const cx = c.x + c.w / 2, cy = c.y + c.h / 2;
-        return cx >= f.x && cx <= f.x + f.w && cy >= f.y && cy <= f.y + f.h;
-      })
-      .map(c => [c.id, { x: c.x, y: c.y }]));
-    const onMove = (ev) => {
-      const dx = (ev.clientX - start.x) / v.s, dy = (ev.clientY - start.y) / v.s;
-      setFrames(fs => fs.map(x => (x.id === id ? { ...x, x: snap(start.fx + dx), y: snap(start.fy + dy) } : x)));
-      if (contained.size) {
-        setCharts(cs => cs.map(c => {
-          const o = contained.get(c.id);
-          return o ? { ...c, x: snap(o.x + dx), y: snap(o.y + dy) } : c;
-        }));
-      }
-    };
-    const onUp = () => { window.removeEventListener('pointermove', onMove); window.removeEventListener('pointerup', onUp); };
-    window.addEventListener('pointermove', onMove);
-    window.addEventListener('pointerup', onUp);
-  };
-
   const startResizeFrame = (id) => (e) => {
     if (e.button !== 0 || lockedRef.current) return;
     e.preventDefault(); e.stopPropagation();
@@ -378,41 +482,44 @@ export default function DashboardWorkspace({ project, backendUrl, onClose, proye
     const f = framesRef.current.find(x => x.id === id);
     if (!f) return;
     const start = { x: e.clientX, y: e.clientY, w: f.w, h: f.h };
+    iniciarGesto();
     const onMove = (ev) => {
       const dw = (ev.clientX - start.x) / v.s, dh = (ev.clientY - start.y) / v.s;
       setFrames(fs => fs.map(x => (x.id === id ? { ...x, w: snap(Math.max(start.w + dw, 240)), h: snap(Math.max(start.h + dh, 160)) } : x)));
     };
-    const onUp = () => { window.removeEventListener('pointermove', onMove); window.removeEventListener('pointerup', onUp); };
+    const onUp = () => { window.removeEventListener('pointermove', onMove); window.removeEventListener('pointerup', onUp); terminarGesto(); };
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp);
   };
 
-  // Encajar todo (nodos + secciones) en la vista.
+  // Encuadrar una lista de tarjetas/secciones (con margen), animado.
+  const encuadrar = useCallback((list, maxZoom = 1) => {
+    const el = canvasRef.current;
+    if (!el || !list.length) return;
+    const minX = Math.min(...list.map(c => c.x)) - 40, minY = Math.min(...list.map(c => c.y)) - 40;
+    const maxX = Math.max(...list.map(c => c.x + c.w)) + 40, maxY = Math.max(...list.map(c => c.y + c.h)) + 40;
+    const rect = el.getBoundingClientRect();
+    const s = clamp(Math.min(rect.width / (maxX - minX), rect.height / (maxY - minY)), ZOOM_MIN, maxZoom);
+    animarCamara({ s, tx: (rect.width - (maxX - minX) * s) / 2 - minX * s, ty: (rect.height - (maxY - minY) * s) / 2 - minY * s });
+  }, [animarCamara]);
   const fitView = useCallback(() => {
     const list = [...chartsRef.current, ...framesRef.current];
-    const el = canvasRef.current;
-    if (!el || !list.length) { setView({ tx: 30, ty: 30, s: 0.85 }); return; }
-    const minX = Math.min(...list.map(c => c.x)) - 40;
-    const minY = Math.min(...list.map(c => c.y)) - 40;
-    const maxX = Math.max(...list.map(c => c.x + c.w)) + 40;
-    const maxY = Math.max(...list.map(c => c.y + c.h)) + 40;
-    const rect = el.getBoundingClientRect();
-    const s = clamp(Math.min(rect.width / (maxX - minX), rect.height / (maxY - minY)), 0.2, 1.15);
-    setView({
-      s,
-      tx: (rect.width - (maxX - minX) * s) / 2 - minX * s,
-      ty: (rect.height - (maxY - minY) * s) / 2 - minY * s,
-    });
-  }, []);
-
-  const zoomBy = (factor) => {
+    if (list.length) encuadrar(list); else animarCamara({ tx: 30, ty: 30, s: 0.85 });
+  }, [encuadrar, animarCamara]);
+  const zoomASeleccion = () => {
+    const ids = selRef.current;
+    encuadrar([...chartsRef.current, ...framesRef.current].filter(x => ids.has(x.id)), 2);
+  };
+  const zoomA = (s) => {
     const el = canvasRef.current;
     const rect = el ? el.getBoundingClientRect() : { width: 600, height: 600 };
-    const px = rect.width / 2, py = rect.height / 2;
-    const v = viewRef.current;
-    const s = clamp(v.s * factor, 0.2, 2.2);
-    const wx = (px - v.tx) / v.s, wy = (py - v.ty) / v.s;
-    setView({ s, tx: px - wx * s, ty: py - wy * s });
+    animarCamara(zoomEn(viewRef.current, clamp(s, ZOOM_MIN, ZOOM_MAX), rect.width / 2, rect.height / 2));
+  };
+  // Ctrl+ / Ctrl− y los botones + / −: al siguiente escalón (10 %, 25 %, 50 %, 75 %, 100 %, 125 %…).
+  const zoomPaso = (dir) => {
+    const s = viewRef.current.s;
+    const sig = dir > 0 ? PASOS_ZOOM.find(p => p > s * 1.001) : [...PASOS_ZOOM].reverse().find(p => p < s * 0.999);
+    zoomA(sig ?? (dir > 0 ? ZOOM_MAX : ZOOM_MIN));
   };
 
   // Punto de inserción de una SECCIÓN: centro visible del lienzo (coords de mundo).
@@ -606,9 +713,6 @@ export default function DashboardWorkspace({ project, backendUrl, onClose, proye
     setVistas(vs => vs.filter(v => v.id !== vistaVisible.id));
     setVistaActiva(null);
   };
-  const alternarModo = () => {
-    setModo(m => { const n = m === 'amplio' ? 'normal' : 'amplio'; try { localStorage.setItem(MODO_GUARDADO, n); } catch { /* sin almacenamiento */ } return n; });
-  };
   // Enlace de una vista para la gente de la obra: abre el visor en el frente y el Tablero en la vista.
   const enlaceDe = (v) => {
     const frente = proyecto?.frontId;
@@ -620,6 +724,86 @@ export default function DashboardWorkspace({ project, backendUrl, onClose, proye
     if (proyecto?.frontName) u.searchParams.set('fn', proyecto.frontName);
     u.searchParams.set('tablero', `${dashId}.${v.id}`);
     return u.toString();
+  };
+
+  // ── Acciones sobre la selección (teclado y, más adelante, menú contextual) ───────────────────────
+  const borrarSeleccion = () => {
+    const ids = selRef.current;
+    if (!ids.size) return;
+    setCharts(cs => cs.filter(c => !ids.has(c.id)));
+    setFrames(fs => fs.filter(f => !ids.has(f.id)));
+    setVistas(vs => vs.map(v => (v.cards.some(id => ids.has(id)) ? { ...v, cards: v.cards.filter(id => !ids.has(id)) } : v)));
+    setSeleccion(new Set());
+  };
+  const copiar = () => {
+    const ids = selRef.current;
+    if (!ids.size) return false;
+    portapapeles.current = {
+      charts: chartsRef.current.filter(c => ids.has(c.id)),
+      frames: framesRef.current.filter(f => ids.has(f.id)),
+      veces: 0,
+    };
+    return true;
+  };
+  const pegar = () => {
+    const p = portapapeles.current;
+    if (!p || (!p.charts.length && !p.frames.length)) return;
+    p.veces += 1;
+    const d = SNAP * 2 * p.veces;
+    const nuevasC = p.charts.map(c => ({ ...c, id: uid(), x: c.x + d, y: c.y + d }));
+    const nuevasF = p.frames.map(f => ({ ...f, id: uid(), x: f.x + d, y: f.y + d }));
+    if (nuevasC.length) setCharts(cs => [...cs, ...nuevasC]);
+    if (nuevasF.length) setFrames(fs => [...fs, ...nuevasF]);
+    setSeleccion(new Set([...nuevasC, ...nuevasF].map(x => x.id)));
+  };
+  const duplicar = () => {
+    const anterior = portapapeles.current;
+    if (!copiar()) return;
+    pegar();
+    portapapeles.current = anterior;   // duplicar no pisa lo copiado con Ctrl+C
+  };
+  const seleccionarTodo = () => setSeleccion(new Set([...chartsRef.current, ...framesRef.current].map(x => x.id)));
+  const empujar = (tecla, grande) => {
+    const ids = selRef.current;
+    if (!ids.size || lockedRef.current) return;
+    const p = grande ? SNAP * 4 : SNAP;
+    const dx = tecla === 'arrowleft' ? -p : tecla === 'arrowright' ? p : 0;
+    const dy = tecla === 'arrowup' ? -p : tecla === 'arrowdown' ? p : 0;
+    setCharts(cs => cs.map(c => (ids.has(c.id) ? { ...c, x: c.x + dx, y: c.y + dy } : c)));
+    setFrames(fs => fs.map(f => (ids.has(f.id) ? { ...f, x: f.x + dx, y: f.y + dy } : f)));
+  };
+
+  // Teclado del lienzo (atajos de tldraw). Solo con el foco en el tablero, sin escribir en un campo, sin
+  // el editor abierto y fuera de una vista. `data-escape-propio`: el visor corta Escape en la ventana.
+  const enfocarPanel = (e) => {
+    if (e.target.closest?.('input, textarea, select, [contenteditable="true"]')) return;
+    panelRef.current?.focus({ preventScroll: true });
+  };
+  const alTeclear = (e) => {
+    if (e.target.closest?.('input, textarea, select, [contenteditable="true"], [role="dialog"]')) return;
+    if (editing || vistaActiva || eligiendo) return;
+    const ctrl = e.ctrlKey || e.metaKey, k = e.key.toLowerCase();
+    let hecho = true;
+    if (k === ' ') { espacioRef.current = true; if (canvasRef.current) canvasRef.current.style.cursor = 'grab'; }
+    else if (k === 'delete' || k === 'backspace') borrarSeleccion();
+    else if (k === 'escape') { if (selRef.current.size) setSeleccion(new Set()); else hecho = false; }
+    else if (ctrl && k === 'z' && !e.shiftKey) deshacer();
+    else if (ctrl && (k === 'y' || (k === 'z' && e.shiftKey))) rehacer();
+    else if (ctrl && k === 'd') duplicar();
+    else if (ctrl && k === 'c') copiar();
+    else if (ctrl && k === 'v') pegar();
+    else if (ctrl && k === 'a') seleccionarTodo();
+    else if (ctrl && (k === '=' || k === '+')) zoomPaso(1);
+    else if (ctrl && k === '-') zoomPaso(-1);
+    else if (e.shiftKey && e.code === 'Digit0') zoomA(1);
+    else if (e.shiftKey && e.code === 'Digit1') fitView();
+    else if (e.shiftKey && e.code === 'Digit2') zoomASeleccion();
+    else if (k.startsWith('arrow') && !ctrl) empujar(k, e.shiftKey);
+    else hecho = false;
+    if (hecho) { e.preventDefault(); e.stopPropagation(); }
+  };
+  const alSoltarTecla = (e) => {
+    if (e.key === ' ') { espacioRef.current = false; if (canvasRef.current) canvasRef.current.style.cursor = ''; }
   };
 
   // Flujo Vyssuals: clic en un parámetro de la fuente → gráfico pre-armado.
@@ -639,9 +823,10 @@ export default function DashboardWorkspace({ project, backendUrl, onClose, proye
 
 
   return (
-    <div data-compacta={compactaDe(width)} style={{
-      // top:48 → bajo el TopBar del visor (48px, z-index 2000)
-      position: 'fixed', top: 48, right: 0, bottom: 0, width, zIndex: 1400,
+    <div ref={panelRef} tabIndex={-1} data-escape-propio data-compacta={compactaDe(width)}
+      onKeyDown={alTeclear} onKeyUp={alSoltarTecla} onPointerDownCapture={enfocarPanel} style={{
+      // top:48 → bajo el TopBar del visor (48px, z-index 2000); a la izquierda, la barra lateral del visor
+      position: 'fixed', top: 48, left: ANCHO_RIEL, right: 0, bottom: 0, zIndex: 1400, outline: 'none',
       // Tema claro de la paleta oficial: página Light, tarjetas blancas, borde Light Gray
       background: C.light, borderLeft: `1px solid ${C.lightGray}`,
       display: 'flex', flexDirection: 'column',
@@ -670,12 +855,6 @@ export default function DashboardWorkspace({ project, backendUrl, onClose, proye
           <Herramienta icono="limpiar" texto="Limpiar 3D" ayuda="Restaurar el 3D (quitar colores y aislamientos)" onClick={handleClear3D} />
           <Separador />
           <Herramienta icono="nuevo" texto="Nuevo gráfico" onClick={() => setEditing('new')} apagada={loading} principal />
-          <button onClick={alternarModo} aria-label={modoActual === 'amplio' ? 'Reducir el tablero' : 'Ampliar el tablero'}
-            title={modoActual === 'amplio' ? 'Reducir el tablero (55 % de la pantalla)' : 'Ampliar el tablero (70 % de la pantalla)'}
-            style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 28, height: 28, marginLeft: 4, background: 'none', border: 'none', borderRadius: 6, color: C.gris600, cursor: 'pointer' }}
-            onMouseEnter={e => { e.currentTarget.style.background = C.light50; }} onMouseLeave={e => { e.currentTarget.style.background = 'none'; }}>
-            <Icono nombre={modoActual === 'amplio' ? 'reducir' : 'ampliar'} tam={16} />
-          </button>
           <button onClick={onClose} title="Cerrar tablero" aria-label="Cerrar tablero"
             style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 28, height: 28, marginLeft: 4, background: 'none', border: 'none', borderRadius: 6, color: C.gris600, cursor: 'pointer' }}
             onMouseEnter={e => { e.currentTarget.style.background = C.light50; }} onMouseLeave={e => { e.currentTarget.style.background = 'none'; }}>
@@ -708,35 +887,25 @@ export default function DashboardWorkspace({ project, backendUrl, onClose, proye
       <div style={{ flex: 1, minHeight: 0, position: 'relative', display: 'flex', flexDirection: 'column' }}>
       {/* ── LIENZO INFINITO ── */}
       {(() => {
-        // Cuadrícula estilo Miro: LÍNEAS cuadradas, con celda menor y mayor
-        // (cada 4). Adaptativa: la menor desaparece al alejarse para no
-        // ensuciar; ambas acompañan el pan/zoom.
-        const minor = 32 * view.s;
-        const showMinor = minor >= 11;
-        const major = minor * 4;
-        const mnC = 'rgba(20,20,19,0.045)';   // Dark al 4,5 % y al 8 %: cuadrícula cálida
-        const mjC = 'rgba(20,20,19,0.080)';
-        const imgs = [];
-        const sizes = [];
-        if (showMinor) {
-          imgs.push(`linear-gradient(${mnC} 1px, transparent 1px)`, `linear-gradient(90deg, ${mnC} 1px, transparent 1px)`);
-          sizes.push(`${minor}px ${minor}px`, `${minor}px ${minor}px`);
-        }
-        imgs.push(`linear-gradient(${mjC} 1px, transparent 1px)`, `linear-gradient(90deg, ${mjC} 1px, transparent 1px)`);
-        sizes.push(`${major}px ${major}px`, `${major}px ${major}px`);
+        const rejilla = rejillaDe(view);
         return (
       <div
         ref={canvasRef}
-        onPointerDown={onPanStart}
+        onPointerDown={alPulsarLienzo}
+        onContextMenu={e => e.preventDefault()}
+        title="Arrastrar el fondo: seleccionar · Espacio o clic derecho + arrastrar: mover · Rueda: zoom"
         style={{
-          flex: 1, position: 'relative', overflow: 'hidden', cursor: 'grab',
+          flex: 1, position: 'relative', overflow: 'hidden', touchAction: 'none',
           backgroundColor: C.light,
-          backgroundImage: imgs.join(','),
-          backgroundSize: sizes.join(','),
+          backgroundImage: rejilla.imagen,
+          backgroundSize: rejilla.tamano,
           backgroundPosition: `${view.tx}px ${view.ty}px`,
         }}
       >
-        <div style={{
+        {/* Marco de selección (en coordenadas de pantalla; se dibuja en el DOM al arrastrar) */}
+        <div ref={marcoSelRef} style={{ display: 'none', position: 'absolute', zIndex: 3, pointerEvents: 'none',
+          background: 'rgba(106, 155, 204, 0.10)', border: `1px solid ${C.blue}` }} />
+        <div ref={contenidoRef} style={{
           position: 'absolute', top: 0, left: 0,
           transform: `translate(${view.tx}px, ${view.ty}px) scale(${view.s})`,
           transformOrigin: '0 0',
@@ -748,10 +917,11 @@ export default function DashboardWorkspace({ project, backendUrl, onClose, proye
             const color = FRAME_COLORS[(f.color || 0) % FRAME_COLORS.length];
             return (
               <div key={f.id} style={{ position: 'absolute', left: f.x, top: f.y, width: f.w, height: f.h, pointerEvents: 'none' }}>
-                <div style={{ position: 'absolute', inset: 0, background: 'rgba(241, 240, 232, 0.72)', border: `1px solid ${C.lightGray}`, borderRadius: RADIO }} />
+                <div style={{ position: 'absolute', inset: 0, background: 'rgba(241, 240, 232, 0.72)', borderRadius: RADIO,
+                  border: sel.has(f.id) ? `2px solid ${C.blue}` : `1px solid ${C.lightGray}` }} />
                 {/* Barra de título: asa (arrastra sección + contenido) · nombre editable · quitar */}
                 <div style={{ position: 'absolute', top: -32, left: 0, display: 'flex', alignItems: 'center', gap: 6, pointerEvents: 'auto' }}>
-                  <div onPointerDown={startMoveFrame(f.id)} title="Arrastrar la sección (mueve también sus tarjetas)"
+                  <div onPointerDown={arrastrar(f.id)} title="Arrastrar la sección (mueve también sus tarjetas)"
                     style={{ cursor: 'grab', color: C.gris600, display: 'flex', alignItems: 'center', touchAction: 'none', padding: 2 }}>
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="7" cy="6" r="1.6" /><circle cx="7" cy="12" r="1.6" /><circle cx="7" cy="18" r="1.6" /><circle cx="14" cy="6" r="1.6" /><circle cx="14" cy="12" r="1.6" /><circle cx="14" cy="18" r="1.6" /></svg>
                   </div>
@@ -781,8 +951,14 @@ export default function DashboardWorkspace({ project, backendUrl, onClose, proye
           })}
 
           {(charts || []).map(cfg => (
-            <div key={cfg.id} style={{ position: 'absolute', left: cfg.x, top: cfg.y, width: cfg.w, height: cfg.h }}
-              onPointerDown={e => e.stopPropagation()}>
+            <div key={cfg.id} style={{ position: 'absolute', left: cfg.x, top: cfg.y, width: cfg.w, height: cfg.h,
+              borderRadius: RADIO, outline: sel.has(cfg.id) ? `2px solid ${C.blue}` : 'none', outlineOffset: 2 }}
+              onPointerDown={e => {
+                // Clic derecho, central o con espacio: lo maneja el lienzo (mover). Clic: seleccionar.
+                if (e.button !== 0 || espacioRef.current) return;
+                e.stopPropagation();
+                if (!eligiendo) seleccionarAlPulsar(cfg.id, e);
+              }}>
               <ChartCard
                 config={cfg}
                 rows={rows || []}
@@ -796,7 +972,7 @@ export default function DashboardWorkspace({ project, backendUrl, onClose, proye
                 onPaint={handlePaint}
                 onCreateFromField={createFromField}
                 activeKey={active?.chartId === cfg.id ? active.key : null}
-                dragHandlers={{ onPointerDown: startMove(cfg.id) }}
+                dragHandlers={{ onPointerDown: arrastrar(cfg.id) }}
                 zoom={view.s}
               />
               {eligiendo && (
@@ -844,16 +1020,42 @@ export default function DashboardWorkspace({ project, backendUrl, onClose, proye
 
         {/* Controles de zoom (abajo-derecha, patrón Miro/Vyssuals) */}
         <div style={{ position: 'absolute', right: 12, bottom: 12, display: 'flex', flexDirection: 'column', gap: 6, zIndex: 2 }}>
-          {ctrlBtn('Acercar', () => zoomBy(1.25), '+')}
-          {ctrlBtn('Alejar', () => zoomBy(0.8), '−')}
-          {ctrlBtn('Encajar todo', fitView,
+          {ctrlBtn('Acercar (Ctrl +)', () => zoomPaso(1), '+')}
+          {ctrlBtn('Alejar (Ctrl −)', () => zoomPaso(-1), '−')}
+          {ctrlBtn('Ajustar a todo (⇧ 1)', fitView,
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3" /></svg>)}
           {ctrlBtn(locked ? 'Desbloquear nodos (permitir mover)' : 'Bloquear nodos (evitar moverlos sin querer)', () => setLocked(l => !l),
             locked
               ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={C.orange30D} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></svg>
               : <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" /><path d="M7 11V7a5 5 0 0 1 9.9-1" /></svg>)}
-          <div style={{ textAlign: 'center', fontSize: 10.5, color: C.gris600, fontVariantNumeric: 'tabular-nums' }}>{Math.round(view.s * 100)} %</div>
+          <button ref={zoomTextoRef} onPointerDown={e => e.stopPropagation()} onClick={() => setMenuZoom(m => !m)} title="Opciones de zoom"
+            style={{ background: 'none', border: 'none', padding: '2px 0', cursor: 'pointer', textAlign: 'center', fontSize: 10.5, color: C.gris600, fontFamily: FUENTE, fontVariantNumeric: 'tabular-nums' }}>
+            {Math.round(view.s * 100)} %
+          </button>
         </div>
+        {menuZoom && (
+          <div onPointerDown={e => e.stopPropagation()} role="menu"
+            style={{ position: 'absolute', right: 52, bottom: 12, zIndex: 3, minWidth: 230, padding: '6px 0', background: C.blanco,
+              border: `1px solid ${C.lightGray}`, borderRadius: 8, boxShadow: '0 6px 20px rgba(20,20,19,0.12)', fontFamily: FUENTE }}>
+            {[
+              ['Acercar', 'Ctrl +', () => zoomPaso(1)],
+              ['Alejar', 'Ctrl −', () => zoomPaso(-1)],
+              ['Zoom a 100 %', '⇧ 0', () => zoomA(1)],
+              ['Ajustar a todo', '⇧ 1', fitView],
+              ['Zoom a la selección', '⇧ 2', zoomASeleccion, !sel.size],
+            ].map(([texto, atajo, accion, apagado]) => (
+              <button key={texto} role="menuitem" disabled={apagado} onClick={() => { setMenuZoom(false); accion(); }}
+                style={{ display: 'flex', justifyContent: 'space-between', gap: 16, width: '100%', padding: '7px 14px', background: 'none', border: 'none',
+                  cursor: apagado ? 'default' : 'pointer', fontSize: 12.5, fontFamily: FUENTE, color: apagado ? C.midGray : C.dark }}
+                onMouseEnter={e => { if (!apagado) e.currentTarget.style.background = C.light50; }} onMouseLeave={e => { e.currentTarget.style.background = 'none'; }}>
+                <span>{texto}</span><span style={{ color: C.gris600, fontSize: 11.5 }}>{atajo}</span>
+              </button>
+            ))}
+            <div style={{ borderTop: `1px solid ${C.light50}`, margin: '4px 0 0', padding: '8px 14px 4px', fontSize: 11, lineHeight: 1.6, color: C.gris600 }}>
+              Arrastrar el fondo: seleccionar<br />Espacio o clic derecho + arrastrar: mover<br />Rueda: zoom · Supr: borrar · Ctrl+Z: deshacer
+            </div>
+          </div>
+        )}
       </div>
         );
       })()}
