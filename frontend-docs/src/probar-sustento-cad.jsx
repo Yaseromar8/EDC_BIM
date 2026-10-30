@@ -10,12 +10,15 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { CapaDeSustentoEnCad, PanelDeSustento } from './components/SustentoDelPlano';
+import CadReviewOverlay from './components/CadReviewOverlay';
 import { numeroDe } from './utils/sustento';
 import { AvisosHost } from './utils/avisos';
 import { ConfirmHost } from './utils/confirm';
 
 const PLANO = new URLSearchParams(window.location.search).get('plano') || 'plano-A.pdf';
 const VISTA = { guid: 'banco-presentacion-1', nombre: 'P08-0004' };
+// `?revision` monta también la revisión de CAD de producción (29-oct-2026: la rueda acerca con una herramienta puesta).
+const CON_REVISION = new URLSearchParams(window.location.search).has('revision');
 
 // El banco no exporta nada: es una página suelta, no un módulo con recarga en caliente.
 // eslint-disable-next-line react-refresh/only-export-components
@@ -62,6 +65,9 @@ function Banco() {
           discreta={!abierto && !dibujando} borrador={borrador?.zona || null} elegido={elegido}
           onZona={(zona) => { setBorrador({ zona }); setDibujando(false); setAbierto(true); }}
           onElegir={(id) => { setElegido(id); setAbierto(true); }} />
+      )}
+      {viewer && CON_REVISION && (
+        <CadReviewOverlay viewer={viewer} nodeId="banco-dwg" versionId={null} viewGuid={VISTA.guid} projectPrefix="banco" />
       )}
       <button type="button" onClick={() => setAbierto(a => !a)}
         style={{ position: 'absolute', top: 12, right: 12, zIndex: 40, height: 30, padding: '0 10px', border: '1px solid #cfcabb', background: abierto ? '#141413' : '#fff', color: abierto ? '#fff' : '#141413' }}>

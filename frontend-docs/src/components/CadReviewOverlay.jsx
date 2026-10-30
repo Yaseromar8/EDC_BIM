@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { API } from '../utils/helpers';
 import { apiFetch, apiJson } from '../utils/apiFetch';
 import { enlaceDeArchivos } from '../utils/enlacesDeArchivos';
+import { pasarRuedaAlVisor } from '../utils/capaSobreElVisor';
 import './CadReviewOverlay.css';
 
 const BASE = `${API}/api/docs/cad/reviews`;
@@ -332,7 +333,7 @@ export default function CadReviewOverlay({ viewer, nodeId, versionId, viewGuid, 
   };
   const openReference = (mark, ref) => setPreview({ markId: mark.id, reference: ref });
   return <div className="cad-review-root" ref={layerRef}>
-    <svg className="cad-review-svg" onPointerDown={onPointerDown} onPointerMove={e => { if (drag) setDrag(d => ({ ...d, end: local(e) })); }} onPointerUp={onPointerUp} style={{ pointerEvents: tool && availability === 'ready' ? 'auto' : 'none', cursor: tool ? 'crosshair' : 'default' }}>
+    <svg className="cad-review-svg" onWheel={e => pasarRuedaAlVisor(viewer, e)} onPointerDown={onPointerDown} onPointerMove={e => { if (drag) setDrag(d => ({ ...d, end: local(e) })); }} onPointerUp={onPointerUp} style={{ pointerEvents: tool && availability === 'ready' ? 'auto' : 'none', cursor: tool ? 'crosshair' : 'default' }}>
       {projected.map(({ mark, a, b }) => {
         const mine = mark.mine;
         const color = mark.published ? '#e4483d' : '#cf8b24';

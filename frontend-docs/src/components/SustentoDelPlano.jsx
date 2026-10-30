@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 import { avisoDeVersion, cantidadLegible, numeroDe, zonaDeArrastre } from '../utils/sustento';
+import { pasarRuedaAlVisor } from '../utils/capaSobreElVisor';
 import './SustentoDelPlano.css';
 
 /**
@@ -111,7 +112,8 @@ export function CapaDeSustentoEnCad({ viewer, vista, vinculos = [], dibujando = 
     return { left: Math.min(a.x, b.x), top: Math.min(a.y, b.y), width: Math.abs(b.x - a.x), height: Math.abs(b.y - a.y) };
   };
 
-  // Mientras se dibuja, la capa se queda con el ratón: el arrastre NO mueve el plano.
+  // Mientras se dibuja, la capa se queda con el ratón: el arrastre NO mueve el plano. La rueda sigue siendo del
+  // visor, para acercarse a la zona (capaSobreElVisor).
   const eventos = dibujando ? {
     onPointerDown: (e) => {
       e.stopPropagation(); e.preventDefault();
@@ -141,7 +143,8 @@ export function CapaDeSustentoEnCad({ viewer, vista, vinculos = [], dibujando = 
   const cajaBorrador = borrador ? caja(borrador) : null;
 
   return (
-    <div ref={capa} className={`sustento-capa sustento-capa--cad${dibujando ? ' es-dibujo' : ''}${discreta ? ' es-discreta' : ''}`} {...eventos}>
+    <div ref={capa} className={`sustento-capa sustento-capa--cad${dibujando ? ' es-dibujo' : ''}${discreta ? ' es-discreta' : ''}`}
+      onWheel={(e) => pasarRuedaAlVisor(viewer, e)} {...eventos}>
       {deEstaVista.map(v => {
         const c = caja(v.zona);
         if (!c) return null;
