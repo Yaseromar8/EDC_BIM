@@ -165,18 +165,23 @@ function QueFalta({ cobertura, dif, ambito, activa, onAlternar, onCerrar }) {
 
 const fechaCorta = iso => { try { return new Date(iso).toLocaleDateString('es-PE', { day: 'numeric', month: 'short', year: 'numeric' }); } catch { return ''; } };
 
+// De quién es lo vigente (docs/visor/51): del frente abierto, o el de la obra que el frente usa mientras
+// no tenga el suyo. Un servidor sin la migración 42 sigue con uno por obra.
+const delFrente = e => !!(e?.porFrente && e.frente);
+const deQuien = e => (e?.heredado ? 'de la obra' : delFrente(e) ? `del frente ${e.frente}` : 'de la obra');
+
 // Cargar otra versión o quitar el itemizado de la OBRA. Solo quien la administra; quitar pide confirmación
 // porque cambia lo que ve todo el equipo (la versión no se borra: queda en el historial del servidor).
 function AccionesDelItemizado({ estado, hay, onArchivo, onQuitar }) {
     const deLaObra = estado.modo !== 'navegador';
     const [confirmar, setConfirmar] = useState(false);
-    if (estado.cargando) return <span>Cargando el itemizado de la obra…</span>;
+    if (estado.cargando) return <span>Cargando el itemizado…</span>;
     if (!estado.puedeEditar) return <span style={{ color: '#72706b' }}>Solo un administrador de la obra carga o cambia el itemizado.</span>;
     if (estado.guardando) return <span>Guardando…</span>;
     if (confirmar) {
         return (
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-                {deLaObra ? '¿Quitar el itemizado de toda la obra?' : '¿Quitar el itemizado?'}
+                {!deLaObra ? '¿Quitar el itemizado?' : delFrente(estado) ? `¿Quitar el itemizado del frente ${estado.frente}? El frente vuelve a usar el de la obra, si lo hay.` : '¿Quitar el itemizado de toda la obra?'}
                 <button style={{ ...estiloBoton, color: ROJO, borderColor: ROJO }} onClick={() => { setConfirmar(false); onQuitar(); }}>Sí, quitar</button>
                 <button style={estiloBoton} onClick={() => setConfirmar(false)}>No</button>
             </span>
@@ -184,8 +189,10 @@ function AccionesDelItemizado({ estado, hay, onArchivo, onQuitar }) {
     }
     return (
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-            <BotonCargar onArchivo={onArchivo} texto={hay ? 'Cargar otra versión…' : 'Cargar itemizado…'} />
-            {hay && <button onClick={() => setConfirmar(true)} title={deLaObra ? 'Deja la obra sin itemizado (la versión queda en el historial)' : 'Deja de usar el itemizado en este navegador'} style={estiloBoton}>✕ Quitar itemizado</button>}
+            <BotonCargar onArchivo={onArchivo} estado={estado}
+                texto={estado.heredado && delFrente(estado) ? `Cargar el del frente ${estado.frente}…` : hay ? 'Cargar otra versión…' : 'Cargar itemizado…'} />
+            {/* Quitar solo lo que es de aquí: el heredado es el de la obra y no se quita desde un frente. */}
+            {hay && !estado.heredado && <button onClick={() => setConfirmar(true)} title={!deLaObra ? 'Deja de usar el itemizado en este navegador' : delFrente(estado) ? `Deja el frente ${estado.frente} sin itemizado propio (la versión queda en el historial)` : 'Deja la obra sin itemizado (la versión queda en el historial)'} style={estiloBoton}>✕ Quitar itemizado</button>}
         </span>
     );
 }
@@ -193,9 +200,11 @@ function AccionesDelItemizado({ estado, hay, onArchivo, onQuitar }) {
 
 const estiloBoton = { display: 'inline-flex', alignItems: 'center', border: '1px solid #cccac0', borderRadius: '3px', background: '#ffffff', color: '#52524d', font: 'inherit', fontSize: '11px', padding: '0 6px', height: '20px', cursor: 'pointer' };
 
-function BotonCargar({ onArchivo, texto = 'Cargar itemizado…', ocupado = false }) {
+function BotonCargar({ onArchivo, texto = 'Cargar itemizado…', ocupado = false, estado = null }) {
     return (
-        <label title="Excel o CSV con ítem, descripción y unidad. Se guarda como itemizado de la OBRA (una versión nueva) y lo usan todos sus frentes."
+        <label title={delFrente(estado)
+            ? `Excel o CSV con ítem, descripción y unidad. Se guarda como itemizado del frente ${estado.frente} (una versión nueva) y solo lo usa este frente.`
+            : 'Excel o CSV con ítem, descripción y unidad. Se guarda como itemizado de la OBRA (una versión nueva) y lo usan todos sus frentes.'}
             style={{ ...estiloBoton, ...(ocupado ? { opacity: 0.5, pointerEvents: 'none' } : {}) }}>
             {texto}
             <input type="file" accept=".xlsx,.xls,.csv" style={{ display: 'none' }} disabled={ocupado}
@@ -416,7 +425,8 @@ function ListaDeCriterios({ juego, uso, estado, onGuardar, onCerrar }) {
     return (
         <div style={panel}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
-                <strong style={{ color: '#141413', fontWeight: 600 }}>Criterios de medida de la obra</strong>
+                <strong style={{ color: '#141413', fontWeight: 600 }}>Criterios de medida {deQuien(estado)}</strong>
+                {estado.heredado && delFrente(estado) && <span title={`El frente ${estado.frente} aún no tiene criterios propios: usa los de la obra. Al cambiar uno, se guardan como del frente.`}>· el frente {estado.frente} aún no tiene los suyos</span>}
                 <span>
                     · dan la cantidad solo donde el elemento no trae medida nativa
                     {juego?.version ? ` · versión ${juego.version}${juego.creadoPor ? `, de ${juego.creadoPor}` : ''}${juego.creadoEn ? ` el ${fechaCorta(juego.creadoEn)}` : ''}` : ''}
@@ -570,10 +580,16 @@ export default function TablaDePartidas({ filas, filasObra, dic, roles, claveDeF
     if (!dic) {
         return (
             <div style={{ padding: '24px', color: '#52524d', fontSize: '13px', display: 'flex', flexDirection: 'column', gap: '10px', alignItems: 'flex-start' }}>
-                {itemizado
+                {itemizado && estadoObra.heredado && delFrente(estadoObra)
+                    ? <span>El frente {estadoObra.frente} aún no tiene itemizado propio: usa el de la obra, «{itemizado.archivo}»{itemizado.version ? ` (versión ${itemizado.version})` : ''},
+                        y ningún parámetro del modelo contiene sus ítems. Carga el del frente.</span>
+                    : itemizado
                     ? <span>Ningún parámetro del modelo contiene los ítems de «{itemizado.archivo}»{itemizado.version ? ` (versión ${itemizado.version})` : ''}.</span>
-                    : <span>Carga el itemizado de la obra (ítem, descripción y unidad) para armar las partidas con tu criterio.
-                        Se guarda para toda la obra, y la Planilla buscará en el modelo los parámetros donde están tus ítems.</span>}
+                    : delFrente(estadoObra)
+                        ? <span>Carga el itemizado del frente {estadoObra.frente} (ítem, descripción y unidad) para armar las partidas con tu criterio.
+                            Se guarda para este frente, y la Planilla buscará en el modelo los parámetros donde están tus ítems.</span>
+                        : <span>Carga el itemizado de la obra (ítem, descripción y unidad) para armar las partidas con tu criterio.
+                            Se guarda para toda la obra, y la Planilla buscará en el modelo los parámetros donde están tus ítems.</span>}
                 <span style={{ display: 'inline-flex', gap: '8px', alignItems: 'center' }}>
                     <AccionesDelItemizado estado={estadoObra} hay={!!itemizado} onArchivo={cargarItemizado} onQuitar={quitarItemizado} />
                     {error && <span style={{ color: ROJO }}>{error}</span>}
@@ -722,11 +738,14 @@ export default function TablaDePartidas({ filas, filasObra, dic, roles, claveDeF
                 <span style={{ width: '1px', height: '12px', background: '#e8e6dc' }} />
                 <span title={itemizado.local
                     ? `${itemizado.porque}. ${estadoObra.aviso || 'Solo en este navegador.'}`
-                    : `${itemizado.porque}. Versión ${itemizado.version}${itemizado.creadoPor ? `, cargada por ${itemizado.creadoPor}` : ''}${itemizado.creadoEn ? ` el ${fechaCorta(itemizado.creadoEn)}` : ''}. Es el itemizado de la obra: lo usan todos sus frentes.`}
+                    : `${itemizado.porque}. Versión ${itemizado.version}${itemizado.creadoPor ? `, cargada por ${itemizado.creadoPor}` : ''}${itemizado.creadoEn ? ` el ${fechaCorta(itemizado.creadoEn)}` : ''}. ${estadoObra.heredado
+                        ? `Es el itemizado de la obra: el frente ${estadoObra.frente} aún no tiene el suyo. Al cargar uno, se usará solo en este frente.`
+                        : delFrente(estadoObra) ? `Es el itemizado del frente ${estadoObra.frente}: solo lo usa este frente.` : 'Es el itemizado de la obra: lo usan todos sus frentes.'}`}
                     style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
                     {itemizado.local
                         ? <>itemizado «{itemizado.archivo}» · {itemizado.items.length.toLocaleString('es-PE')} ítems · <span style={{ color: '#9e5943' }}>solo en este navegador</span></>
-                        : <>itemizado de la obra «{itemizado.archivo}» · v{itemizado.version} · {itemizado.items.length.toLocaleString('es-PE')} ítems</>}
+                        : <>itemizado {deQuien(estadoObra)} «{itemizado.archivo}» · v{itemizado.version} · {itemizado.items.length.toLocaleString('es-PE')} ítems
+                            {estadoObra.heredado && <span style={{ color: '#9e5943' }}>· el frente {estadoObra.frente} aún no tiene el suyo</span>}</>}
                     <AccionesDelItemizado estado={estadoObra} hay onArchivo={cargarItemizado} onQuitar={quitarItemizado} />
                 </span>
                 {error && <span style={{ color: ROJO }}>{error}</span>}

@@ -20,7 +20,10 @@
  * Sin React ni red: `pedir(metodo, ruta, cuerpo)` lo pone quien lo crea.
  */
 
-const VACIO = Object.freeze({ scope: null, cargando: false, guardando: false, vigente: null, versiones: [], puedeEditar: false, error: '', modo: 'obra', aviso: '' });
+// frente: el del servidor ('' = la obra entera); heredado: el frente no tiene el suyo y usa el de la obra;
+// porFrente: el servidor guarda por frente (migración 42). docs/visor/51.
+const VACIO = Object.freeze({ scope: null, cargando: false, guardando: false, vigente: null, versiones: [], puedeEditar: false, error: '', modo: 'obra', aviso: '',
+    frente: '', heredado: false, porFrente: false });
 
 /**
  * @param {object} o
@@ -54,7 +57,8 @@ export function crearAlmacenDeObra({ pedir, ruta, desdeServidor, local, cuerpo =
         const mio = ++pedido;
         if (!scope || scope === 'global') { publicar({ ...VACIO, scope: scope || null }); return estado; }
         const mismaObra = estado.scope === scope;
-        publicar({ scope, cargando: true, error: '', ...(mismaObra ? {} : { vigente: null, versiones: [], puedeEditar: false, modo: 'obra', aviso: '' }) });
+        publicar({ scope, cargando: true, error: '', ...(mismaObra ? {} : { vigente: null, versiones: [], puedeEditar: false, modo: 'obra', aviso: '',
+            frente: '', heredado: false, porFrente: false }) });
         let r;
         try {
             r = await pedir('GET', `${ruta}?project=${encodeURIComponent(scope)}`);
@@ -76,6 +80,7 @@ export function crearAlmacenDeObra({ pedir, ruta, desdeServidor, local, cuerpo =
         publicar({
             cargando: false, error: '', modo: 'obra', aviso: '', vigente: desdeServidor(r.json.vigente),
             versiones: Array.isArray(r.json.versiones) ? r.json.versiones : [], puedeEditar: !!r.json.puede_editar,
+            frente: typeof r.json.frente === 'string' ? r.json.frente : '', heredado: !!r.json.heredado, porFrente: !!r.json.por_frente,
         });
         return estado;
     }

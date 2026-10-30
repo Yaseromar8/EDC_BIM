@@ -132,5 +132,28 @@ titulo('UNA RESPUESTA QUE LLEGA TARDE NO PISA LA OBRA NUEVA');
 }
 
 console.log('');
+titulo('POR FRENTE (migración 42, docs/visor/51): de quién es lo vigente');
+{
+    // El servidor dice de qué frente es y si el frente usa el de la obra.
+    const respuestas = {
+        'PQT8_CANAL': { frente: 'CANAL', heredado: false, por_frente: true },
+        'PQT8_DRENAJE': { frente: 'DRENAJE', heredado: true, por_frente: true },
+        'PQT8_VIEJO': {},                                   // un servidor sin la 42 no manda nada de esto
+    };
+    const pedir = async (metodo, ruta) => {
+        const scope = decodeURIComponent(ruta.split('project=')[1] || '');
+        return { ok: true, status: 200, json: { success: true, puede_editar: true, versiones: [],
+            vigente: { version: 1, archivo: 'P.xlsx', items: ITEMS }, ...respuestas[scope] } };
+    };
+    const a = crearAlmacenDeItemizado({ pedir });
+    await a.cargar('PQT8_CANAL');
+    ok('el del frente: frente CANAL, no heredado', a.estado().frente === 'CANAL' && !a.estado().heredado && a.estado().porFrente);
+    await a.cargar('PQT8_DRENAJE');
+    ok('el de la obra que usa un frente sin el suyo: heredado', a.estado().frente === 'DRENAJE' && a.estado().heredado && a.estado().porFrente);
+    await a.cargar('PQT8_VIEJO');
+    ok('servidor sin la 42: de la obra, como antes', a.estado().frente === '' && !a.estado().heredado && !a.estado().porFrente
+        && a.estado().vigente?.version === 1);
+}
+
 console.log(fallos ? `${fallos} de ${total} FALLAN` : `${total}/${total} en verde`);
 process.exit(fallos ? 1 : 0);

@@ -668,8 +668,9 @@ TABLAS = [
         PRIMARY KEY (workitem_id)
         )
     """),
-    # El itemizado de la obra para la Planilla del visor, con versiones; una sola vigente por obra
-    # (sql/40, docs/visor/27 §6). Tabla e índice van juntos: sin el índice, «una vigente» no se garantiza.
+    # El itemizado de la Planilla del visor, con versiones; una sola vigente por obra y frente
+    # (sql/40 + sql/42, docs/visor/27 §6 y 51). Tabla e índice van juntos: sin el índice, «una
+    # vigente» no se garantiza. frente '' = la obra entera.
     ("planilla_itemizados", """
         CREATE TABLE IF NOT EXISTS "planilla_itemizados" (
         "id" BIGSERIAL,
@@ -686,13 +687,14 @@ TABLAS = [
         "creado_en" timestamp with time zone NOT NULL DEFAULT now(),
         "retirado_por" integer REFERENCES users(id),
         "retirado_en" timestamp with time zone,
+        "frente" text NOT NULL DEFAULT '',
         PRIMARY KEY (id),
         UNIQUE (project_id, version)
         );
-        CREATE UNIQUE INDEX IF NOT EXISTS uq_planilla_itemizado_vigente
-            ON planilla_itemizados (project_id) WHERE vigente
+        CREATE UNIQUE INDEX IF NOT EXISTS uq_planilla_itemizado_vigente_frente
+            ON planilla_itemizados (project_id, frente) WHERE vigente
     """),
-    # Criterios de medida de la obra («Medir con…»), migración 41, docs/visor/32.
+    # Criterios de medida («Medir con…»), migración 41 + 42, docs/visor/32 y 51: por obra y frente.
     ("planilla_criterios_medida", """
         CREATE TABLE IF NOT EXISTS "planilla_criterios_medida" (
         "id" BIGSERIAL,
@@ -706,11 +708,12 @@ TABLAS = [
         "creado_en" timestamp with time zone NOT NULL DEFAULT now(),
         "retirado_por" integer REFERENCES users(id),
         "retirado_en" timestamp with time zone,
+        "frente" text NOT NULL DEFAULT '',
         PRIMARY KEY (id),
         UNIQUE (project_id, version)
         );
-        CREATE UNIQUE INDEX IF NOT EXISTS uq_planilla_criterios_medida_vigente
-            ON planilla_criterios_medida (project_id) WHERE vigente
+        CREATE UNIQUE INDEX IF NOT EXISTS uq_planilla_criterios_medida_vigente_frente
+            ON planilla_criterios_medida (project_id, frente) WHERE vigente
     """),]
 
 

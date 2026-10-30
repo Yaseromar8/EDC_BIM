@@ -105,80 +105,23 @@ def test_la_huella_es_la_del_juego_normalizado():
     assert a == b and len(a) == 64 and pcm.huella(pcm.validar_criterios(CRITERIOS[:1])) != a
 
 
-# ── 2 y 3. Rutas, con una tabla de juguete ──────────────────────────────────────────────────
+# ── 2 y 3. Rutas, con una base de juguete (tests/planilla_base_de_juguete.py) ─────────────────
 
-class Tabla:
-    """planilla_criterios_medida en memoria; entiende las sentencias de routes/planilla.py."""
+from tests.planilla_base_de_juguete import Base, CRITERIOS as TABLA  # noqa: E402
 
-    def __init__(self, existe=True):
-        self.existe, self.filas, self.locks = existe, [], []
-
-    def conexion(self):
-        return contextlib.nullcontext(Conn(self))
-
-
-class Cursor:
-    def __init__(self, t):
-        self.t, self.res = t, []
-
-    def execute(self, sql, params=()):
-        s = ' '.join(sql.split())
-        if 'planilla_criterios_medida' in s and not self.t.existe:
-            raise RuntimeError('relation "planilla_criterios_medida" does not exist')
-        if s.startswith('SELECT pg_advisory_xact_lock'):
-            self.t.locks.append(params[0]); self.res = [(None,)]
-        elif s.startswith('SELECT c.version, c.criterios'):
-            v = [f for f in self.t.filas if f['project_id'] == params[0] and f['vigente']]
-            self.res = [(f['version'], f['criterios'], f['n'], f['huella'], None, 'Ana') for f in v]
-        elif s.startswith('SELECT c.version, c.n_criterios'):
-            v = sorted((f for f in self.t.filas if f['project_id'] == params[0]), key=lambda f: -f['version'])[:params[1]]
-            self.res = [(f['version'], f['n'], None, 'Ana', f['vigente']) for f in v]
-        elif s.startswith('SELECT version, huella FROM planilla_criterios_medida'):
-            self.res = [(f['version'], f['huella']) for f in self.t.filas if f['project_id'] == params[0] and f['vigente']]
-        elif s.startswith('UPDATE planilla_criterios_medida SET vigente = false'):
-            uid, obra = params
-            for f in self.t.filas:
-                if f['project_id'] == obra and f['vigente']:
-                    f.update(vigente=False, retirado_por=uid)
-            self.res = []
-        elif s.startswith('SELECT COALESCE(MAX(version), 0) + 1'):
-            self.res = [(max([f['version'] for f in self.t.filas if f['project_id'] == params[0]], default=0) + 1,)]
-        elif s.startswith('INSERT INTO planilla_criterios_medida'):
-            obra, version, criterios, n, huella, uid = params
-            assert not any(f['project_id'] == obra and f['vigente'] for f in self.t.filas), 'dos vigentes'
-            self.t.filas.append({'project_id': obra, 'version': version, 'criterios': json.loads(criterios), 'n': n,
-                                 'huella': huella, 'creado_por': uid, 'vigente': True})
-            self.res = []
-        else:
-            raise AssertionError(s)
-
-    def fetchone(self):
-        return self.res[0] if self.res else None
-
-    def fetchall(self):
-        return list(self.res)
-
-
-class Conn:
-    def __init__(self, t):
-        self.t = t
-
-    def cursor(self):
-        return Cursor(self.t)
-
-    def commit(self):
-        pass
+# La obra A registra sus dos frentes; B no registra ninguno.
+OBRAS = {'A': 'A', 'A_FRENTE1': 'A', 'A_FRENTE2': 'A', 'B': 'B'}
 
 
 @pytest.fixture
 def entorno(monkeypatch):
-    t = Tabla()
+    t = Base(TABLA, frentes={'A': ['FRENTE1', 'FRENTE2']})
     estado = {'miembro': True, 'admin': True, 'usuario': {'id': 7, 'name': 'Ana'}}
     app = Flask(__name__)
     app.register_blueprint(rp.planilla_bp)
     app.before_request(lambda: setattr(g, 'current_user', estado['usuario']))
     monkeypatch.setattr(rp, 'get_db_connection', t.conexion)
-    monkeypatch.setattr(rp, 'resolve_project_id', lambda v: {'OBRA_A_FRENTE1': 'A', 'OBRA_A_FRENTE2': 'A', 'OBRA_B': 'B'}.get(v))
+    monkeypatch.setattr(rp, 'resolve_project_id', OBRAS.get)
     monkeypatch.setattr(rp, 'guardia_de_obra', lambda valor, accion='':
                         None if estado['miembro'] else (jsonify({'error': 'Sin acceso', 'code': 'PROJECT_FORBIDDEN'}), 403))
     monkeypatch.setattr(rp, '_es_admin', lambda cur, obra: estado['admin'])
@@ -188,24 +131,47 @@ def entorno(monkeypatch):
 RUTA = '/api/planilla/criterios-medida'
 
 
-def _guardar(cli, criterios=CRITERIOS, project='OBRA_A_FRENTE1'):
+def _guardar(cli, criterios=CRITERIOS, project='A_FRENTE1'):
     return cli.post(RUTA, json={'project': project, 'criterios': criterios})
 
 
 def test_sin_criterios_la_obra_responde_vacio(entorno):
     cli, _, _ = entorno
-    r = cli.get(RUTA + '?project=OBRA_A_FRENTE1')
+    r = cli.get(RUTA + '?project=A_FRENTE1')
     assert r.status_code == 200 and r.get_json()['vigente'] is None and r.get_json()['puede_editar'] is True
 
 
-def test_guardar_crea_la_version_1_de_la_obra_y_otro_frente_la_ve(entorno):
+def test_guardar_crea_la_version_1_del_frente_y_el_otro_frente_no_la_ve(entorno):
     cli, t, _ = entorno
     r = _guardar(cli)
     assert r.status_code == 201 and r.get_json()['version'] == 1 and r.get_json()['n_criterios'] == 3
-    assert t.filas[0]['project_id'] == 'A' and t.filas[0]['criterios'][1]['unidad'] == 'm³', 'se guarda normalizado'
-    assert t.locks == ['planilla_criterios_medida:A']
-    v = cli.get(RUTA + '?project=OBRA_A_FRENTE2').get_json()['vigente']
+    assert t.filas[0]['project_id'] == 'A' and t.filas[0]['frente'] == 'FRENTE1'
+    assert t.filas[0]['criterios'][1]['unidad'] == 'm³', 'se guarda normalizado'
+    assert t.locks == ['planilla_criterios_medida:A:FRENTE1']
+    v = cli.get(RUTA + '?project=A_FRENTE1').get_json()['vigente']
     assert v['version'] == 1 and len(v['criterios']) == 3 and v['creado_por'] == 'Ana'
+    assert cli.get(RUTA + '?project=A_FRENTE2').get_json()['vigente'] is None
+
+
+def test_un_frente_sin_criterios_propios_usa_los_de_la_obra(entorno):
+    cli, t, _ = entorno
+    _guardar(cli, project='A')
+    j = cli.get(RUTA + '?project=A_FRENTE2').get_json()
+    assert j['vigente']['version'] == 1 and j['heredado'] is True and j['frente'] == 'FRENTE2'
+    _guardar(cli, project='A_FRENTE2', criterios=CRITERIOS[:1])
+    j = cli.get(RUTA + '?project=A_FRENTE2').get_json()
+    assert j['vigente']['n_criterios'] == 1 and j['heredado'] is False
+    assert cli.get(RUTA + '?project=A').get_json()['vigente']['n_criterios'] == 3
+
+
+def test_sin_la_42_los_criterios_de_un_frente_no_pisan_los_de_la_obra(entorno):
+    cli, t, _ = entorno
+    t.con_frente = False
+    assert _guardar(cli, project='A').status_code == 201
+    assert cli.get(RUTA + '?project=A_FRENTE1').get_json()['por_frente'] is False
+    r = _guardar(cli, project='A_FRENTE1', criterios=CRITERIOS[:1])
+    assert r.status_code == 503 and r.get_json()['code'] == 'MIGRATION_MISSING' and '42' in r.get_json()['error']
+    assert [(f['version'], f['vigente'], f['n']) for f in t.filas] == [(1, True, 3)]
 
 
 def test_el_mismo_juego_no_crea_otra_version_y_quitar_uno_si(entorno):
@@ -216,7 +182,7 @@ def test_el_mismo_juego_no_crea_otra_version_y_quitar_uno_si(entorno):
     r = _guardar(cli, criterios=CRITERIOS[1:])
     assert r.status_code == 201 and r.get_json()['version'] == 2
     assert [f['vigente'] for f in t.filas] == [False, True] and t.filas[0]['retirado_por'] == 7
-    j = cli.get(RUTA + '?project=OBRA_A_FRENTE1').get_json()
+    j = cli.get(RUTA + '?project=A_FRENTE1').get_json()
     assert [v['version'] for v in j['versiones']] == [2, 1]
 
 
@@ -232,10 +198,10 @@ def test_quitarlos_todos_es_otra_version_vacia_y_sin_criterios_no_crea_nada(ento
 def test_seguridad_miembro_admin_y_obra(entorno):
     cli, t, estado = entorno
     estado['miembro'] = False
-    assert cli.get(RUTA + '?project=OBRA_A_FRENTE1').status_code == 403 and _guardar(cli).status_code == 403
+    assert cli.get(RUTA + '?project=A_FRENTE1').status_code == 403 and _guardar(cli).status_code == 403
     estado['miembro'] = True
     estado['admin'] = False
-    assert cli.get(RUTA + '?project=OBRA_A_FRENTE1').get_json()['puede_editar'] is False
+    assert cli.get(RUTA + '?project=A_FRENTE1').get_json()['puede_editar'] is False
     r = _guardar(cli)
     assert r.status_code == 403 and r.get_json()['code'] == 'NOT_PROJECT_ADMIN'
     estado['admin'] = True
@@ -247,9 +213,9 @@ def test_seguridad_miembro_admin_y_obra(entorno):
 def test_las_obras_no_se_mezclan(entorno):
     cli, t, _ = entorno
     _guardar(cli)
-    _guardar(cli, project='OBRA_B', criterios=CRITERIOS[:1])
+    _guardar(cli, project='B', criterios=CRITERIOS[:1])
     assert sorted((f['project_id'], f['version']) for f in t.filas) == [('A', 1), ('B', 1)]
-    assert cli.get(RUTA + '?project=OBRA_B').get_json()['vigente']['n_criterios'] == 1
+    assert cli.get(RUTA + '?project=B').get_json()['vigente']['n_criterios'] == 1
 
 
 def test_lo_invalido_se_rechaza_sin_tocar_la_base(entorno):
@@ -269,24 +235,28 @@ def test_una_sesion_sin_id_numerico_guarda_sin_autor_y_nunca_responde_401(entorn
 
 def test_sin_la_migracion_41_se_dice_cual_falta(entorno):
     cli, t, _ = entorno
-    t.existe = False
-    for r in (cli.get(RUTA + '?project=OBRA_A_FRENTE1'), _guardar(cli)):
+    t.existe[TABLA] = False
+    for r in (cli.get(RUTA + '?project=A_FRENTE1'), _guardar(cli)):
         assert r.status_code == 503 and r.get_json()['code'] == 'MIGRATION_MISSING' and '41' in r.get_json()['error']
 
 
-def test_la_migracion_41_y_esquema_base_crean_la_misma_tabla_con_una_sola_vigente():
+def test_las_migraciones_41_y_42_y_esquema_base_dicen_lo_mismo():
     import io
     import os
     import re
     raiz = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    mig = io.open(os.path.join(raiz, 'sql', '41_planilla_criterios_medida.sql'), encoding='utf-8').read()
-    rollback = io.open(os.path.join(raiz, 'sql', '41_planilla_criterios_medida_rollback.sql'), encoding='utf-8').read()
+    leer = lambda n: io.open(os.path.join(raiz, 'sql', n), encoding='utf-8').read()
+    mig, rollback = leer('41_planilla_criterios_medida.sql'), leer('41_planilla_criterios_medida_rollback.sql')
+    mig42 = leer('42_planilla_por_frente.sql')
     import esquema_base
     base = dict(esquema_base.TABLAS)['planilla_criterios_medida']
     columnas = lambda sql: set(re.findall(r'^\s*"?(\w+)"?\s+(?:BIGSERIAL|TEXT|INTEGER|JSONB|BOOLEAN|TIMESTAMP)', sql, re.M | re.I))
-    assert columnas(mig) == columnas(base) and 'criterios' in columnas(mig)
-    for sql in (mig, base):
-        assert re.search(r'UNIQUE INDEX IF NOT EXISTS uq_planilla_criterios_medida_vigente\s+ON planilla_criterios_medida \(project_id\) WHERE vigente', sql)
+    assert columnas(mig) | {'frente'} == columnas(base) and 'criterios' in columnas(mig)
+    assert "ALTER TABLE planilla_criterios_medida ADD COLUMN IF NOT EXISTS frente TEXT NOT NULL DEFAULT ''" in mig42
+    assert re.search(r'UNIQUE INDEX IF NOT EXISTS uq_planilla_criterios_medida_vigente\s+ON planilla_criterios_medida \(project_id\) WHERE vigente', mig)
+    for sql in (mig42, base):
+        assert re.search(r'UNIQUE INDEX IF NOT EXISTS uq_planilla_criterios_medida_vigente_frente\s+ON planilla_criterios_medida \(project_id, frente\) WHERE vigente', sql)
+    assert mig42.index('uq_planilla_criterios_medida_vigente_frente') < mig42.index('DROP INDEX IF EXISTS uq_planilla_criterios_medida_vigente;')
     assert "current_user <> 'ecd_migrator'" in mig and "current_user <> 'ecd_migrator'" in rollback
     assert 'DROP TABLE IF EXISTS planilla_criterios_medida' in rollback and 'DROP' not in mig
     assert 'GRANT SELECT, INSERT, UPDATE ON planilla_criterios_medida TO ecd_app' in mig and 'DELETE' not in mig.split('GRANT')[1]

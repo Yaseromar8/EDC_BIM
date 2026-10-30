@@ -80,115 +80,55 @@ def test_la_huella_es_la_de_la_lista_normalizada():
     assert pi.huella(pi.validar_items(ITEMS[:2])) != a
 
 
-# ── 2 y 3. Rutas, con una tabla de juguete ──────────────────────────────────────────────────
+# ── 2 y 3. Rutas, con una base de juguete (tests/planilla_base_de_juguete.py) ─────────────────
 
-class Tabla:
-    """planilla_itemizados en memoria; entiende las sentencias de routes/planilla.py."""
-
-    def __init__(self, existe=True):
-        self.existe, self.filas, self.locks = existe, [], []
-
-    def conexion(self):
-        return contextlib.nullcontext(Conn(self))
-
-
-class Cursor:
-    def __init__(self, t):
-        self.t, self.res = t, []
-
-    def execute(self, sql, params=()):
-        s = ' '.join(sql.split())
-        if 'planilla_itemizados' in s and not self.t.existe:
-            raise RuntimeError('relation "planilla_itemizados" does not exist')
-        if s.startswith('SELECT pg_advisory_xact_lock'):
-            self.t.locks.append(params[0]); self.res = [(None,)]
-        elif s.startswith('SELECT i.version, i.archivo, i.hoja'):
-            v = [f for f in self.t.filas if f['project_id'] == params[0] and f['vigente']]
-            self.res = [(f['version'], f['archivo'], f['hoja'], f['columnas'], f['items'], f['n_items'], f['huella'],
-                         None, 'Ana') for f in v]
-        elif s.startswith('SELECT i.version, i.archivo, i.n_items'):
-            v = sorted((f for f in self.t.filas if f['project_id'] == params[0]), key=lambda f: -f['version'])[:params[1]]
-            self.res = [(f['version'], f['archivo'], f['n_items'], None, 'Ana', f['vigente'], f['retirado_en']) for f in v]
-        elif s.startswith('SELECT version, huella FROM planilla_itemizados'):
-            self.res = [(f['version'], f['huella']) for f in self.t.filas if f['project_id'] == params[0] and f['vigente']]
-        elif s.startswith('UPDATE planilla_itemizados SET vigente = false'):
-            uid, obra = params
-            hechas = []
-            for f in self.t.filas:
-                if f['project_id'] == obra and f['vigente']:
-                    f.update(vigente=False, retirado_por=uid, retirado_en='ahora'); hechas.append((f['version'],))
-            self.res = hechas
-        elif s.startswith('SELECT COALESCE(MAX(version), 0) + 1'):
-            self.res = [(max([f['version'] for f in self.t.filas if f['project_id'] == params[0]], default=0) + 1,)]
-        elif s.startswith('INSERT INTO planilla_itemizados'):
-            obra, version, archivo, hoja, columnas, items, n, huella, uid = params
-            assert not any(f['project_id'] == obra and f['vigente'] for f in self.t.filas), 'dos vigentes'
-            self.t.filas.append({'project_id': obra, 'version': version, 'archivo': archivo, 'hoja': hoja,
-                                 'columnas': json.loads(columnas), 'items': json.loads(items), 'n_items': n,
-                                 'huella': huella, 'creado_por': uid, 'vigente': True, 'retirado_en': None})
-            self.res = []
-        else:
-            raise AssertionError(s)
-
-    def fetchone(self):
-        return self.res[0] if self.res else None
-
-    def fetchall(self):
-        return list(self.res)
-
-
-class Conn:
-    def __init__(self, t):
-        self.t, self.commits = t, 0
-
-    def cursor(self):
-        return Cursor(self.t)
-
-    def commit(self):
-        self.commits += 1
-
+from tests.planilla_base_de_juguete import Base, ITEMIZADOS  # noqa: E402
 
 USUARIO = {'id': 7, 'name': 'Ana'}
 
 
+# La obra PQT8 registra dos frentes; OTRA no registra ninguno.
+OBRAS = {'PQT8': 'PQT8', 'PQT8_CANAL': 'PQT8', 'PQT8_DRENAJE': 'PQT8', 'PQT8_OTRO': 'PQT8', 'OTRA_OBRA': 'OTRA'}
+
+
 @pytest.fixture
 def entorno(monkeypatch):
-    t = Tabla()
+    t = Base(ITEMIZADOS, frentes={'PQT8': ['CANAL', 'DRENAJE']})
     estado = {'miembro': True, 'admin': True, 'usuario': dict(USUARIO)}
     app = Flask(__name__)
     app.register_blueprint(rp.planilla_bp)
     app.before_request(lambda: setattr(g, 'current_user', estado['usuario']))
     monkeypatch.setattr(rp, 'get_db_connection', t.conexion)
     # Frente → obra canónica, como resolve_project_id; lo desconocido no resuelve.
-    monkeypatch.setattr(rp, 'resolve_project_id', lambda v: {'PQT8_TALARA_CANAL': 'PQT8', 'PQT8_TALARA_DRENAJE': 'PQT8',
-                                                               'OTRA_OBRA': 'OTRA'}.get(v))
+    monkeypatch.setattr(rp, 'resolve_project_id', OBRAS.get)
     monkeypatch.setattr(rp, 'guardia_de_obra', lambda valor, accion='':
                         None if estado['miembro'] else (jsonify({'error': 'Sin acceso', 'code': 'PROJECT_FORBIDDEN'}), 403))
     monkeypatch.setattr(rp, '_es_admin', lambda cur, obra: estado['admin'])
     return app.test_client(), t, estado
 
 
-def _subir(cli, items=ITEMS, project='PQT8_TALARA_CANAL', **extra):
+def _subir(cli, items=ITEMS, project='PQT8_CANAL', **extra):
     return cli.post('/api/planilla/itemizado', json={'project': project, 'archivo': 'Presupuesto_Rv00.xlsx', 'hoja': 'CAOV',
                                                      'columnas': {'item': 1, 'descripcion': 4, 'unidad': 5}, 'items': items, **extra})
 
 
 def test_sin_itemizado_la_obra_responde_vacio(entorno):
     cli, _, _ = entorno
-    r = cli.get('/api/planilla/itemizado?project=PQT8_TALARA_CANAL')
+    r = cli.get('/api/planilla/itemizado?project=PQT8_CANAL')
     assert r.status_code == 200 and r.get_json()['vigente'] is None and r.get_json()['versiones'] == []
 
 
-def test_guardar_crea_la_version_1_y_es_de_la_obra_no_del_frente(entorno):
+def test_guardar_desde_un_frente_crea_la_version_1_de_ese_frente(entorno):
     cli, t, _ = entorno
     r = _subir(cli)
     assert r.status_code == 201 and r.get_json()['version'] == 1 and r.get_json()['n_items'] == 3
-    assert t.filas[0]['project_id'] == 'PQT8' and t.filas[0]['creado_por'] == 7
+    assert t.filas[0]['project_id'] == 'PQT8' and t.filas[0]['frente'] == 'CANAL' and t.filas[0]['creado_por'] == 7
     assert t.filas[0]['items'][1]['descripcion'] == 'INSTALACION DE TUBERIA HDPE', 'se guarda normalizado'
-    assert t.locks == ['planilla_itemizado:PQT8']
-    # Desde el OTRO frente de la misma obra se lee el mismo itemizado.
-    v = cli.get('/api/planilla/itemizado?project=PQT8_TALARA_DRENAJE').get_json()['vigente']
-    assert v['version'] == 1 and v['archivo'] == 'Presupuesto_Rv00.xlsx' and len(v['items']) == 3 and v['creado_por'] == 'Ana'
+    assert t.locks == ['planilla_itemizado:PQT8:CANAL']
+    j = cli.get('/api/planilla/itemizado?project=PQT8_CANAL').get_json()
+    assert j['vigente']['version'] == 1 and j['frente'] == 'CANAL' and j['heredado'] is False and j['por_frente'] is True
+    # El OTRO frente de la misma obra NO lo ve: cada frente tiene el suyo (docs/visor/51).
+    assert cli.get('/api/planilla/itemizado?project=PQT8_DRENAJE').get_json()['vigente'] is None
 
 
 def test_la_misma_lista_no_crea_otra_version(entorno):
@@ -205,7 +145,7 @@ def test_otra_lista_crea_la_version_2_y_la_1_queda_en_el_historial(entorno):
     r = _subir(cli, items=ITEMS[:2])
     assert r.status_code == 201 and r.get_json()['version'] == 2
     assert [f['vigente'] for f in t.filas] == [False, True] and t.filas[0]['retirado_por'] == 7
-    j = cli.get('/api/planilla/itemizado?project=PQT8_TALARA_CANAL').get_json()
+    j = cli.get('/api/planilla/itemizado?project=PQT8_CANAL').get_json()
     assert j['vigente']['version'] == 2 and [v['version'] for v in j['versiones']] == [2, 1]
     assert [v['vigente'] for v in j['versiones']] == [True, False]
 
@@ -213,19 +153,19 @@ def test_otra_lista_crea_la_version_2_y_la_1_queda_en_el_historial(entorno):
 def test_quitar_deja_la_obra_sin_vigente_pero_no_borra(entorno):
     cli, t, _ = entorno
     _subir(cli)
-    r = cli.delete('/api/planilla/itemizado?project=PQT8_TALARA_CANAL')
+    r = cli.delete('/api/planilla/itemizado?project=PQT8_CANAL')
     assert r.status_code == 200 and r.get_json()['retirada'] == 1
     assert len(t.filas) == 1 and not t.filas[0]['vigente']
-    assert cli.get('/api/planilla/itemizado?project=PQT8_TALARA_CANAL').get_json()['vigente'] is None
-    assert cli.delete('/api/planilla/itemizado?project=PQT8_TALARA_CANAL').get_json()['retirada'] is None
+    assert cli.get('/api/planilla/itemizado?project=PQT8_CANAL').get_json()['vigente'] is None
+    assert cli.delete('/api/planilla/itemizado?project=PQT8_CANAL').get_json()['retirada'] is None
 
 
 def test_quien_no_es_de_la_obra_no_lee_ni_escribe(entorno):
     cli, t, estado = entorno
     estado['miembro'] = False
-    assert cli.get('/api/planilla/itemizado?project=PQT8_TALARA_CANAL').status_code == 403
+    assert cli.get('/api/planilla/itemizado?project=PQT8_CANAL').status_code == 403
     assert _subir(cli).status_code == 403
-    assert cli.delete('/api/planilla/itemizado?project=PQT8_TALARA_CANAL').status_code == 403
+    assert cli.delete('/api/planilla/itemizado?project=PQT8_CANAL').status_code == 403
     assert t.filas == []
 
 
@@ -233,11 +173,11 @@ def test_un_miembro_que_no_administra_lee_pero_no_cambia(entorno):
     cli, t, estado = entorno
     _subir(cli)
     estado['admin'] = False
-    j = cli.get('/api/planilla/itemizado?project=PQT8_TALARA_CANAL').get_json()
+    j = cli.get('/api/planilla/itemizado?project=PQT8_CANAL').get_json()
     assert j['vigente']['version'] == 1 and j['puede_editar'] is False
     r = _subir(cli, items=ITEMS[:1])
     assert r.status_code == 403 and r.get_json()['code'] == 'NOT_PROJECT_ADMIN'
-    assert cli.delete('/api/planilla/itemizado?project=PQT8_TALARA_CANAL').status_code == 403
+    assert cli.delete('/api/planilla/itemizado?project=PQT8_CANAL').status_code == 403
     assert len(t.filas) == 1 and t.filas[0]['vigente']
 
 
@@ -280,31 +220,112 @@ def test_una_sesion_sin_id_numerico_guarda_sin_autor_y_nunca_responde_401(entorn
     estado['usuario'] = {'id': 'demo', 'name': 'Demo User'}
     r = _subir(cli)
     assert r.status_code == 201 and t.filas[0]['creado_por'] is None
-    assert cli.delete('/api/planilla/itemizado?project=PQT8_TALARA_CANAL').status_code == 200
+    assert cli.delete('/api/planilla/itemizado?project=PQT8_CANAL').status_code == 200
 
 
 def test_sin_la_migracion_se_dice_cual_falta(entorno):
     cli, t, _ = entorno
-    t.existe = False
-    for r in (cli.get('/api/planilla/itemizado?project=PQT8_TALARA_CANAL'), _subir(cli),
-              cli.delete('/api/planilla/itemizado?project=PQT8_TALARA_CANAL')):
-        assert r.status_code == 503 and r.get_json()['code'] == 'MIGRATION_MISSING'
+    t.existe[ITEMIZADOS] = False
+    for r in (cli.get('/api/planilla/itemizado?project=PQT8_CANAL'), _subir(cli),
+              cli.delete('/api/planilla/itemizado?project=PQT8_CANAL')):
+        assert r.status_code == 503 and r.get_json()['code'] == 'MIGRATION_MISSING' and '40' in r.get_json()['error']
+
+
+# ── Por frente (migración 42, docs/visor/51) ────────────────────────────────────────────────
+
+def _leer(cli, project):
+    return cli.get('/api/planilla/itemizado?project=' + project).get_json()
+
+
+def test_cada_frente_tiene_el_suyo_y_la_version_es_unica_en_la_obra(entorno):
+    cli, t, _ = entorno
+    assert _subir(cli, project='PQT8_CANAL').get_json()['version'] == 1
+    assert _subir(cli, project='PQT8_DRENAJE', items=ITEMS[:2]).get_json()['version'] == 2
+    assert [(f['frente'], f['version'], f['vigente']) for f in t.filas] == [('CANAL', 1, True), ('DRENAJE', 2, True)]
+    canal, drenaje = _leer(cli, 'PQT8_CANAL'), _leer(cli, 'PQT8_DRENAJE')
+    assert canal['vigente']['n_items'] == 3 and [v['version'] for v in canal['versiones']] == [1]
+    assert drenaje['vigente']['n_items'] == 2 and [v['version'] for v in drenaje['versiones']] == [2]
+    # Cambiar el de un frente no retira el del otro.
+    _subir(cli, project='PQT8_CANAL', items=ITEMS[:1])
+    assert _leer(cli, 'PQT8_DRENAJE')['vigente']['version'] == 2 and _leer(cli, 'PQT8_CANAL')['vigente']['version'] == 3
+
+
+def test_un_frente_sin_el_suyo_usa_el_de_la_obra_hasta_que_suba_el_suyo(entorno):
+    cli, t, _ = entorno
+    r = _subir(cli, project='PQT8')            # el de la obra entera, como antes de la 42
+    assert r.status_code == 201 and t.filas[0]['frente'] == '' and t.locks == ['planilla_itemizado:PQT8']
+    j = _leer(cli, 'PQT8_CANAL')
+    assert j['vigente']['version'] == 1 and j['heredado'] is True and j['frente'] == 'CANAL'
+    assert [v['version'] for v in j['versiones']] == [1], 'el historial es el del itemizado que se usa'
+    _subir(cli, project='PQT8_CANAL', items=ITEMS[:2])
+    j = _leer(cli, 'PQT8_CANAL')
+    assert j['vigente']['version'] == 2 and j['heredado'] is False
+    assert _leer(cli, 'PQT8_DRENAJE')['heredado'] is True and _leer(cli, 'PQT8')['vigente']['version'] == 1
+
+
+def test_quitar_el_de_un_frente_no_toca_el_de_la_obra(entorno):
+    cli, t, _ = entorno
+    _subir(cli, project='PQT8')
+    _subir(cli, project='PQT8_CANAL', items=ITEMS[:2])
+    r = cli.delete('/api/planilla/itemizado?project=PQT8_CANAL')
+    assert r.status_code == 200 and r.get_json()['retirada'] == 2
+    assert [(f['frente'], f['vigente']) for f in t.filas] == [('', True), ('CANAL', False)]
+    j = _leer(cli, 'PQT8_CANAL')
+    assert j['vigente']['version'] == 1 and j['heredado'] is True
+
+
+def test_un_frente_que_no_es_de_la_obra_no_lee_ni_escribe(entorno):
+    cli, t, _ = entorno
+    for r in (cli.get('/api/planilla/itemizado?project=PQT8_OTRO'), _subir(cli, project='PQT8_OTRO'),
+              cli.delete('/api/planilla/itemizado?project=PQT8_OTRO')):
+        assert r.status_code == 404 and r.get_json()['code'] == 'FRONT_UNKNOWN'
+    assert t.filas == []
+
+
+def test_una_obra_sin_registro_de_frentes_acepta_su_frente(entorno):
+    cli, t, _ = entorno
+    t.registro_de_frentes = False             # base sin project_frentes
+    assert _subir(cli, project='PQT8_OTRO').status_code == 201 and t.filas[0]['frente'] == 'OTRO'
+
+
+def test_sin_la_42_se_lee_y_se_guarda_como_antes_y_no_se_pisa_la_obra_desde_un_frente(entorno):
+    cli, t, _ = entorno
+    t.con_frente = False                      # base sin la migración 42
+    assert _subir(cli, project='PQT8').status_code == 201, 'la obra entera se guarda como antes'
+    j = _leer(cli, 'PQT8_CANAL')
+    assert j['vigente']['version'] == 1 and j['por_frente'] is False and j['heredado'] is False and j['frente'] == ''
+    for r in (_subir(cli, project='PQT8_CANAL', items=ITEMS[:1]), cli.delete('/api/planilla/itemizado?project=PQT8_CANAL')):
+        assert r.status_code == 503 and r.get_json()['code'] == 'MIGRATION_MISSING' and '42' in r.get_json()['error']
+    assert [(f['version'], f['vigente']) for f in t.filas] == [(1, True)], 'el de la obra queda intacto'
+    assert cli.delete('/api/planilla/itemizado?project=PQT8').get_json()['retirada'] == 1
 
 
 # ── La migración y el esquema base dicen lo mismo ───────────────────────────────────────────
 
-def test_la_migracion_40_y_esquema_base_crean_la_misma_tabla_con_una_sola_vigente():
+def test_las_migraciones_40_y_42_y_esquema_base_dicen_lo_mismo():
     import io
     import os
     import re
     raiz = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    mig = io.open(os.path.join(raiz, 'sql', '40_planilla_itemizados.sql'), encoding='utf-8').read()
-    rollback = io.open(os.path.join(raiz, 'sql', '40_planilla_itemizados_rollback.sql'), encoding='utf-8').read()
+    leer = lambda n: io.open(os.path.join(raiz, 'sql', n), encoding='utf-8').read()
+    mig, rollback = leer('40_planilla_itemizados.sql'), leer('40_planilla_itemizados_rollback.sql')
+    mig42, rollback42 = leer('42_planilla_por_frente.sql'), leer('42_planilla_por_frente_rollback.sql')
     import esquema_base
     base = dict(esquema_base.TABLAS)['planilla_itemizados']
     columnas = lambda sql: set(re.findall(r'^\s*"?(\w+)"?\s+(?:BIGSERIAL|TEXT|INTEGER|JSONB|BOOLEAN|TIMESTAMP)', sql, re.M | re.I))
-    assert columnas(mig) == columnas(base) and 'items' in columnas(mig)
-    for sql in (mig, base):
-        assert re.search(r'UNIQUE INDEX IF NOT EXISTS uq_planilla_itemizado_vigente\s+ON planilla_itemizados \(project_id\) WHERE vigente', sql)
-    assert "current_user <> 'ecd_migrator'" in mig and "current_user <> 'ecd_migrator'" in rollback
+    # La base nueva = la 40 más la columna que añade la 42.
+    assert columnas(mig) | {'frente'} == columnas(base) and 'items' in columnas(mig)
+    assert "ALTER TABLE planilla_itemizados ADD COLUMN IF NOT EXISTS frente TEXT NOT NULL DEFAULT ''" in mig42
+    # Una vigente por obra en la 40; por obra y frente en la 42 y en la base nueva.
+    assert re.search(r'UNIQUE INDEX IF NOT EXISTS uq_planilla_itemizado_vigente\s+ON planilla_itemizados \(project_id\) WHERE vigente', mig)
+    for sql in (mig42, base):
+        assert re.search(r'UNIQUE INDEX IF NOT EXISTS uq_planilla_itemizado_vigente_frente\s+ON planilla_itemizados \(project_id, frente\) WHERE vigente', sql)
+    assert not re.search(r'uq_planilla_itemizado_vigente\s', base), 'la base nueva no lleva el índice viejo'
+    # La 42 crea el índice nuevo ANTES de quitar el viejo, y no borra datos.
+    assert mig42.index('uq_planilla_itemizado_vigente_frente') < mig42.index('DROP INDEX IF EXISTS uq_planilla_itemizado_vigente;')
+    assert 'DROP TABLE' not in mig42 and 'DROP COLUMN' not in mig42 and 'DELETE' not in mig42
+    for sql in (mig, rollback, mig42, rollback42):
+        assert "current_user <> 'ecd_migrator'" in sql
     assert 'DROP TABLE IF EXISTS planilla_itemizados' in rollback and 'DROP' not in mig
+    # Su vuelta atrás se niega si ya hay itemizados de frente: no los mezcla en uno.
+    assert "WHERE frente <> ''" in rollback42 and 'PLANILLA_POR_FRENTE_CON_DATOS' in rollback42
