@@ -142,3 +142,14 @@ Cómo queda B, sin remiendos:
 - queda el tiempo que tarda el visor en dibujar el modelo al tamaño nuevo, una vez por gesto.
 
 La ventana de pruebas con ventana no sirve para medir si se minimiza: Chrome deja de dibujarla (`visibilityState = hidden`), el visor no avanza y la capa se queda puesta hasta que vuelve a verse.
+
+**Probado y descartado: el 3D en vivo con el dibujo rápido del visor** (lo que hace al girar el modelo), a petición del dueño.
+
+Medido (Chrome sin ventana, con su sesión y su GPU):
+- cada fotograma del visor tarda 130–170 ms (atribuido a `viewer3D.min.js`);
+- en un arrastre de 2,4 s, el 3D cambió solo 7 veces;
+- mientras dibuja, la página entera queda bloqueada, así que el tablero también va a saltos.
+
+Se vuelve a `f9986c0f`.
+
+**Causa de fondo:** el modelo del Canal (`…004120@004145.rvt`) tiene **265.532 fragmentos**, ya consolidados por el visor (`isConsolidated() = true`). Los otros seis modelos suman unos 27.000. El dibujo es caro por el contenido, con toda probabilidad el acero. Aligerarlo (por ejemplo, cargar el acero aparte o bajo demanda) aceleraría todo el visor, no solo el borde. Queda como propuesta, sin hacer.
