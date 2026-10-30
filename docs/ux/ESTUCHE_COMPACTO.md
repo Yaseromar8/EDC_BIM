@@ -69,3 +69,25 @@ nuevo del dueño.
 2. ¿El orden y los desplegables del §3?
 3. ¿«Borrar» pasa a Supr y a la papelera del panel?
 4. ¿Teclas de atajo como las del §3?
+
+## 5 · Editar la marca seleccionada (29-oct-2026, en local)
+
+El dueño eligió el paso 1 de la lista de lo que falta, y recordó que la revisión de CAD (`CadReviewOverlay`, 28-sep) ya
+funciona como ACC. El lector de PDF copia ese modelo:
+
+- Con **Seleccionar**, una marca **tuya en borrador** se arrastra entera; al elegirla salen **tiradores**: las cuatro
+  esquinas de una nube o un rectángulo, los dos extremos de una flecha y los vértices de una medición o un área. El
+  lápiz y las marcas de un punto (conteo, texto, sello, foto) solo se mueven.
+- En su panel, la sección **Figura**: el **color** (las seis muestras de la paleta; el sello no, su color es su
+  estado) y, en un texto, **Editar texto**.
+- **Publicada o con una observación abierta, la figura queda fija**, como en la revisión de CAD: se retira de la obra
+  para cambiarla, y con observación ni eso. El panel lo dice.
+- Servidor: `PATCH /api/pdf/markups/<id>` acepta `geometria` (validada con la forma de su tipo), `color` (#rrggbb) y
+  `texto`; 409 `MARCA_PUBLICADA` u `OBSERVACION_ABIERTA`. Todo en `pdf_markups`, **sin migración**.
+- Pruebas: `test_marcas_con_enlace` 42/42 (9 nuevas); la suite entera 2417 en verde más el histórico
+  `test_reconstruccion_desde_cero`.
+- Banco (Chrome visible, servidor simulado en la pestaña): nube de dos clics → arrastrada (PATCH con la caja nueva) →
+  esquina estirada (la opuesta no se mueve) → azul. Un arrastre rápido se perdía porque los escuchadores se ponían un
+  fotograma tarde: ahora se ponen en el mismo clic.
+- **Orden para publicar:** primero el backend (sin él, el servidor ignora la posición y la marca vuelve a su sitio),
+  luego el portal.

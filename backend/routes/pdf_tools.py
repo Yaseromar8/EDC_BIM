@@ -405,6 +405,76 @@ def _ids(valor, tope, que):
     return ids, None
 
 
+# EDITAR LA FIGURA (29-oct-2026, como la revisión de CAD y como ACC): mover, cambiar de tamaño, recolorear
+# o reescribir una marca es cosa de su autor y SOLO mientras es su borrador. Publicada, es lo que la obra ya
+# vio: se retira de la obra para cambiarla. Con una observación abierta, ni eso: es lo que el responsable
+# tiene que corregir.
+TOPE_PUNTOS = 500
+TOPE_TEXTO = 500
+LIMITE_DE_COORDENADA = 1e6     # puntos de PDF; una hoja A0 mide unos 3.400
+FORMA_DE_LA_GEOMETRIA = {
+    'cloud': 'caja', 'rect': 'caja', 'arrow': 'flecha',
+    'measure': 'linea', 'pen': 'linea', 'area': 'poligono',
+    'count': 'punto', 'text': 'punto', 'sello': 'punto', 'foto': 'punto',
+}
+
+
+def _numero(v):
+    if isinstance(v, bool) or not isinstance(v, (int, float)):
+        return None
+    v = float(v)
+    return round(v, 3) if v == v and abs(v) < LIMITE_DE_COORDENADA else None
+
+
+def _punto(v):
+    if not isinstance(v, (list, tuple)) or len(v) != 2:
+        return None
+    x, y = _numero(v[0]), _numero(v[1])
+    return None if x is None or y is None else [x, y]
+
+
+def _geometria(kind, valor, anterior):
+    """(geometría limpia con la misma forma que la del tipo de marca, error)."""
+    forma = FORMA_DE_LA_GEOMETRIA.get(kind)
+    if not forma:
+        return None, 'Esta marca no se puede mover.'
+    if not isinstance(valor, dict):
+        return None, 'A la posición le falta su contenido.'
+    if forma == 'caja':
+        x, y, w, h = (_numero(valor.get(k)) for k in ('x', 'y', 'w', 'h'))
+        if None in (x, y, w, h) or w <= 0 or h <= 0:
+            return None, 'La caja de la marca no es válida.'
+        return {'x': x, 'y': y, 'w': w, 'h': h}, None
+    if forma == 'flecha':
+        p1, p2 = _punto(valor.get('p1')), _punto(valor.get('p2'))
+        if not p1 or not p2:
+            return None, 'Los extremos de la flecha no son válidos.'
+        return {'p1': p1, 'p2': p2}, None
+    if forma == 'punto':
+        p = _punto(valor.get('p'))
+        if not p:
+            return None, 'La posición de la marca no es válida.'
+        nueva = {'p': p}
+        if kind == 'foto' and 'ang' in (anterior or {}):
+            nueva['ang'] = anterior['ang']          # moverla no la gira
+        return nueva, None
+    puntos = valor.get('points')
+    minimo = 3 if forma == 'poligono' else 2
+    if not isinstance(puntos, list) or not minimo <= len(puntos) <= TOPE_PUNTOS:
+        return None, 'La marca necesita entre %d y %d puntos.' % (minimo, TOPE_PUNTOS)
+    limpios = [_punto(q) for q in puntos]
+    if not all(limpios):
+        return None, 'Uno de los puntos de la marca no es válido.'
+    return {'points': limpios}, None
+
+
+def _color(valor):
+    v = str(valor or '').strip()
+    if len(v) == 7 and v[0] == '#' and all(c in '0123456789abcdefABCDEF' for c in v[1:]):
+        return v.lower(), None
+    return None, 'El color no es válido.'
+
+
 def _documentos(cur, ids):
     """{id: (model_urn, nombre, tipo)} de los documentos vivos entre `ids`."""
     if not ids:
@@ -451,10 +521,12 @@ def _con_enlaces(cur, rows):
 
 @pdf_tools_bp.route('/api/pdf/markups/<int:markup_id>', methods=['PATCH'])
 def editar_markup(markup_id):
-    """Citas, fotos, sello y orientación de una marca. Solo su autor.
+    """Citas, fotos, sello, orientación, posición, color y texto de una marca. Solo su autor.
 
-    Cuerpo: {citas?: [id], fotos?: [id], sello?: {...}, angulo?: grados}. Lo que
-    no viene no cambia. Citar exige poder abrir lo citado (regla 2).
+    Cuerpo: {citas?: [id], fotos?: [id], sello?: {...}, angulo?: grados,
+    geometria?: {...}, color?: '#rrggbb', texto?: str}. Lo que no viene no
+    cambia. Citar exige poder abrir lo citado (regla 2). La figura (geometria,
+    color, texto) solo cambia en un borrador sin observación abierta.
     """
     negativa = guardia_de_recurso('pdf_markups', markup_id)
     if negativa:
@@ -475,6 +547,33 @@ def editar_markup(markup_id):
             if not autor or creador != autor:
                 return jsonify({"success": False, "error": "Solo el autor de la marca puede cambiarla."}), 403
             estilo, geometria = dict(estilo or {}), dict(geometria or {})
+            texto = None
+            if any(k in d for k in ('geometria', 'color', 'texto')):
+                cur.execute("SELECT publicado FROM pdf_markups WHERE id = %s", (markup_id,))
+                if (cur.fetchone() or (False,))[0]:
+                    return jsonify({"success": False, "code": "MARCA_PUBLICADA",
+                                    "error": "La marca está publicada: retírala de la obra para cambiarla."}), 409
+                viva = _observacion_viva(cur, markup_id)
+                if viva:
+                    return jsonify({"success": False, "code": "OBSERVACION_ABIERTA",
+                                    "error": "La marca tiene la observación %s abierta: es lo que el responsable tiene que corregir." % viva}), 409
+                if 'geometria' in d:
+                    geometria, error = _geometria(kind, d['geometria'], geometria)
+                    if error:
+                        return jsonify({"success": False, "error": error}), 400
+                if 'color' in d:
+                    if kind == 'sello':
+                        return jsonify({"success": False, "error": "El color del sello lo da su estado."}), 400
+                    color, error = _color(d['color'])
+                    if error:
+                        return jsonify({"success": False, "error": error}), 400
+                    estilo['color'] = color
+                if 'texto' in d:
+                    texto = str(d['texto'] or '').strip()
+                    if kind != 'text':
+                        return jsonify({"success": False, "error": "Solo una marca de texto lleva texto."}), 400
+                    if not texto or len(texto) > TOPE_TEXTO:
+                        return jsonify({"success": False, "error": "El texto va de 1 a %d caracteres." % TOPE_TEXTO}), 400
             cache = {}
             for clave, tope, que in (('citas', TOPE_CITAS, 'referencias'), ('fotos', TOPE_FOTOS, 'fotos')):
                 if clave not in d:
@@ -512,9 +611,15 @@ def editar_markup(markup_id):
                     geometria['ang'] = round(float(d['angulo']) % 360, 1)
                 except (TypeError, ValueError):
                     return jsonify({"success": False, "error": "Ángulo no válido."}), 400
-            cur.execute("UPDATE pdf_markups SET style = %s, geometry = %s WHERE id = %s",
-                        (json.dumps(estilo), json.dumps(geometria), markup_id))
+            if texto is not None:
+                cur.execute("UPDATE pdf_markups SET style = %s, geometry = %s, text_content = %s WHERE id = %s",
+                            (json.dumps(estilo), json.dumps(geometria), texto, markup_id))
+            else:
+                cur.execute("UPDATE pdf_markups SET style = %s, geometry = %s WHERE id = %s",
+                            (json.dumps(estilo), json.dumps(geometria), markup_id))
             marca = {'id': markup_id, 'kind': kind, 'style': estilo, 'geometry': geometria}
+            if texto is not None:
+                marca['text'] = texto
             _con_enlaces(cur, [marca])
             conn.commit()
         return jsonify({"success": True, "markup": marca})

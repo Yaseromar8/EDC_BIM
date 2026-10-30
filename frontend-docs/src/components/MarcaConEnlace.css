@@ -68,6 +68,13 @@
 .mce-orientacion > span:first-child { margin-right: auto; }
 .mce-orientacion__grados { min-width: 36px; text-align: center; font-family: var(--a-font-mono); font-size: 12px; }
 
+/* La figura: color y texto del borrador (29-oct-2026). Muestras de la paleta oficial, sin selector libre. */
+.mce-colores { display: flex; gap: 6px; margin-bottom: 10px; }
+.mce-colores button { width: 22px; height: 22px; padding: 0; border: 2px solid #fff; border-radius: 50%; box-shadow: 0 0 0 1px #cccac0; cursor: pointer; }
+.mce-colores button[aria-checked="true"] { box-shadow: 0 0 0 2px #141413; }
+.mce-colores button:focus-visible { outline: 2px solid #6a9bcc; outline-offset: 2px; }
+.mce-texto textarea { width: 100%; box-sizing: border-box; padding: 7px 9px; border: 1px solid #cccac0; border-radius: 4px; font: inherit; font-size: 13px; color: #141413; resize: vertical; }
+
 /* Referencias */
 .mce-citas { list-style: none; margin: 0 0 10px; padding: 0; }
 .mce-citas li { display: flex; align-items: center; gap: 8px; padding: 6px 0; color: #52524d; border-top: 1px solid #f1f0e8; }

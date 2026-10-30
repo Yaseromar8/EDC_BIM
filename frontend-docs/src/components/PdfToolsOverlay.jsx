@@ -6,7 +6,7 @@ import toast from 'react-hot-toast';
 import { API } from '../utils/helpers';
 import { apiFetch } from '../utils/apiFetch';
 import { PanelDeMarca, DialogoDeSello } from './MarcaConEnlace';
-import { estadoDeObservacion } from '../utils/marcasConEnlace';
+import { estadoDeObservacion, observacionViva } from '../utils/marcasConEnlace';
 import { estadoDeSello, marcaDeLaDireccion, fechaCorta } from '../utils/marcasConEnlace';
 
 // El sello mide lo mismo EN LA HOJA (puntos PDF), como un sello de goma: al alejar el plano se hace pequeño
@@ -58,6 +58,34 @@ function cloudPath(x, y, w, h) {
   return `M ${x} ${y}` + seg(x, y, x2, y) + seg(x2, y, x2, y2) + seg(x2, y2, x, y2) + seg(x, y2, x, y) + ' Z';
 }
 
+// EDITAR LA FIGURA (29-oct-2026, como la revisión de CAD): la marca entera se arrastra y sus tiradores cambian su
+// tamaño o mueven un vértice. Todo en coordenadas del PDF, que es como se guarda.
+function trasladar(g, dx, dy) {
+  const mv = (p) => [p[0] + dx, p[1] + dy];
+  if (g.w != null) return { ...g, x: g.x + dx, y: g.y + dy };
+  if (g.p1) return { ...g, p1: mv(g.p1), p2: mv(g.p2) };
+  if (g.points) return { ...g, points: g.points.map(mv) };
+  if (g.p) return { ...g, p: mv(g.p) };
+  return g;
+}
+// Las esquinas de una caja, en orden, para que la opuesta de la i sea la (i + 2) % 4.
+const esquinasDe = (g) => [[g.x, g.y], [g.x + g.w, g.y], [g.x + g.w, g.y + g.h], [g.x, g.y + g.h]];
+function tiradoresDe(kind, g) {
+  if (g.w != null) return esquinasDe(g);
+  if (g.p1) return [g.p1, g.p2];
+  if (g.points && kind !== 'pen') return g.points;
+  return [];
+}
+function conTirador(g, i, p) {
+  if (g.w != null) {
+    const o = esquinasDe(g)[(i + 2) % 4];
+    return { ...g, x: Math.min(o[0], p[0]), y: Math.min(o[1], p[1]), w: Math.abs(p[0] - o[0]), h: Math.abs(p[1] - o[1]) };
+  }
+  if (g.p1) return i === 0 ? { ...g, p1: p } : { ...g, p2: p };
+  if (g.points) return { ...g, points: g.points.map((q, j) => (j === i ? p : q)) };
+  return g;
+}
+
 export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, tool, setTool, color, userName,
                                          versionDeLasMarcas = null, versionVigente = null, onIrAVersion = null }) {
   const [markups, setMarkups] = useState([]);          // todos los del documento
@@ -78,6 +106,8 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
   const svgRef = useRef(null);
   const draftRef = useRef(null);
   draftRef.current = draft;
+  // La marca que se está moviendo o redimensionando: { id, indice (tirador, o null = mover), desde, geo0, geo }.
+  const [arrastre, setArrastre] = useState(null);
 
   const vp = vpInfo?.vp;
   const cal = calibrations[String(page)];
@@ -222,6 +252,64 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
     if (id) setElegida(id);
   };
 
+  // ── Editar la figura ──
+  // Solo su autor, y solo mientras es su borrador sin observación abierta: es la regla del servidor (PATCH).
+  const editable = (m) => !!m && !String(m.id).startsWith('tmp_') && !!userName && m.created_by === userName
+    && !m.publicado && !observacionViva(m.observacion);
+  const toPdfRef = useRef(toPdf);
+  toPdfRef.current = toPdf;
+  // Los escuchadores se ponen EN el mismo pointerdown, no en un efecto: un arrastre rápido soltaba el botón antes
+  // del siguiente fotograma y la marca se quedaba sin mover (medido en el banco, 29-oct-2026).
+  const soltarArrastre = useRef(null);
+  useEffect(() => () => soltarArrastre.current?.(), []);
+  const guardarArrastre = (a) => {
+    if (!a.movido) return;
+    if (a.geo.w != null && (a.geo.w < 2 || a.geo.h < 2)) return;   // una caja aplastada no se guarda
+    setMarkups(prev => prev.map(x => (x.id === a.id ? { ...x, geometry: a.geo } : x)));
+    apiFetch(`${API}/api/pdf/markups/${a.id}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ geometria: a.geo }),
+    }).then(r => r.json().then(d => ({ ok: r.ok, d }))).then(({ ok, d }) => {
+      if (!ok || !d.success) throw new Error(d.error || 'No se pudo mover la marca.');
+      setMarkups(prev => prev.map(x => (x.id === a.id ? { ...x, geometry: d.markup.geometry } : x)));
+    }).catch(err => {
+      setMarkups(prev => prev.map(x => (x.id === a.id ? { ...x, geometry: a.geo0 } : x)));
+      toast.error(err.message || 'No se pudo mover la marca.');
+    });
+  };
+  const empezarArrastre = (m, indice = null) => (e) => {
+    if (e.button !== 0) return;
+    e.preventDefault();      // y así tampoco llega el mousedown que arrastraría la hoja
+    e.stopPropagation();
+    setElegida(m.id);
+    soltarArrastre.current?.();
+    let a = { id: m.id, indice, desde: toPdf(e), cx: e.clientX, cy: e.clientY, movido: false, geo0: m.geometry, geo: m.geometry };
+    setArrastre(a);
+    const alMover = (ev) => {
+      const movido = a.movido || Math.hypot(ev.clientX - a.cx, ev.clientY - a.cy) > 3;
+      if (!movido) return;
+      const p = toPdfRef.current(ev);
+      const geo = a.indice == null
+        ? trasladar(a.geo0, p[0] - a.desde[0], p[1] - a.desde[1])
+        : conTirador(a.geo0, a.indice, p);
+      a = { ...a, movido, geo };
+      setArrastre(a);
+    };
+    const quitar = () => {
+      window.removeEventListener('pointermove', alMover);
+      window.removeEventListener('pointerup', alSoltar);
+      soltarArrastre.current = null;
+    };
+    const alSoltar = (ev) => {
+      alMover(ev);
+      quitar();
+      setArrastre(null);
+      guardarArrastre(a);
+    };
+    window.addEventListener('pointermove', alMover);
+    window.addEventListener('pointerup', alSoltar);
+    soltarArrastre.current = () => { quitar(); setArrastre(null); };
+  };
+
   // ── Interacción de dibujo ──
   const onPointerDown = (e) => {
     if (tool === 'pan' || !vp) return;
@@ -320,7 +408,9 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
   };
 
   if (!vp) return null;
-  const pageMarkups = markups.filter(m => m.page === page);
+  // La marca que se arrastra se dibuja donde va, antes de guardarla.
+  const pageMarkups = markups.filter(m => m.page === page)
+    .map(m => (arrastre && arrastre.id === m.id ? { ...m, geometry: arrastre.geo } : m));
   const countTotal = pageMarkups.filter(m => m.kind === 'count').length;
 
   // ── Render de un markup ──
@@ -354,10 +444,13 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
 
   const renderMarkup = (m, i) => {
     const c = m.style?.color || '#e53935';
+    // Con Seleccionar, una marca tuya en borrador se arrastra entera (y se elige); las demás solo se eligen.
+    const arrastrable = tool === 'pan' && editable(m);
     const common = {
       stroke: c, fill: 'none', strokeWidth: 2,
-      style: { cursor: tool === 'erase' ? 'not-allowed' : tool === 'pan' ? 'pointer' : 'default', pointerEvents: tocable ? 'all' : 'none' },
-      onClick: tocable ? alTocar(m) : undefined
+      style: { cursor: tool === 'erase' ? 'not-allowed' : arrastrable ? 'move' : tool === 'pan' ? 'pointer' : 'default', pointerEvents: tocable ? 'all' : 'none' },
+      onClick: tocable ? alTocar(m) : undefined,
+      onPointerDown: arrastrable ? empezarArrastre(m) : undefined,
     };
     const g = m.geometry || {};
     if (m.kind === 'foto' && g.p) {
@@ -370,7 +463,7 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
       const p2 = [s[0] + R * Math.cos(a + h), s[1] + R * Math.sin(a + h)];
       const n = (m.fotos || []).length;
       return (
-        <g key={m.id} style={common.style} onClick={common.onClick}>
+        <g key={m.id} style={common.style} onClick={common.onClick} onPointerDown={common.onPointerDown}>
           <path d={`M ${s[0]} ${s[1]} L ${p1[0]} ${p1[1]} A ${R} ${R} 0 0 1 ${p2[0]} ${p2[1]} Z`} fill={c} fillOpacity="0.14" stroke={c} strokeOpacity="0.5" strokeWidth="1" />
           <circle cx={s[0]} cy={s[1]} r={FOTO_R} fill="#fff" stroke={c} strokeWidth="2" />
           <g transform={`translate(${s[0] - 8} ${s[1] - 8}) scale(0.6667)`} fill="none" stroke={c} strokeWidth="2.2" strokeLinejoin="round">
@@ -397,7 +490,7 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
       const cx = x + w / 2;
       const pie = [m.created_by, fechaCorta(m.created_at)].filter(Boolean).join(' · ');
       return (
-        <g key={m.id} style={common.style} onClick={common.onClick} fontFamily="'IBM Plex Sans', system-ui, sans-serif">
+        <g key={m.id} style={common.style} onClick={common.onClick} onPointerDown={common.onPointerDown} fontFamily="'IBM Plex Sans', system-ui, sans-serif">
           <rect x={x} y={y} width={w} height={hh} rx={2 * k} fill="#fff" fillOpacity="0.9" stroke={est.color} strokeWidth={Math.max(1.2, 2 * k)} />
           <rect x={x + 3 * k} y={y + 3 * k} width={w - 6 * k} height={hh - 6 * k} rx={1.5 * k} fill="none" stroke={est.color} strokeWidth={Math.max(0.6, 0.8 * k)} />
           <text x={cx} y={y + 13 * k} fontSize={6.6 * k} fontWeight="600" letterSpacing={1.2 * k} fill={est.color} textAnchor="middle" style={{ pointerEvents: 'none' }}>SELLO DE REVISIÓN</text>
@@ -429,7 +522,7 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
       const s = toScr(g.p);
       const idx = pageMarkups.filter(x => x.kind === 'count').indexOf(m) + 1;
       return (
-        <g key={m.id} style={common.style} onClick={common.onClick}>
+        <g key={m.id} style={common.style} onClick={common.onClick} onPointerDown={common.onPointerDown}>
           <circle cx={s[0]} cy={s[1]} r="10" fill={c} stroke="#fff" strokeWidth="2" pointerEvents={tocable ? 'all' : 'none'} />
           <text x={s[0]} y={s[1] + 4} fontSize="11" fontWeight="700" fill="#fff" textAnchor="middle" style={{ pointerEvents: 'none' }}>{idx}</text>
         </g>
@@ -443,7 +536,7 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
         <g key={m.id}>
           <line x1={a[0]} y1={a[1]} x2={b[0]} y2={b[1]} {...common} strokeWidth={2.5} />
           <polygon points={`${b[0]},${b[1]} ${b[0] - h * Math.cos(ang - 0.45)},${b[1] - h * Math.sin(ang - 0.45)} ${b[0] - h * Math.cos(ang + 0.45)},${b[1] - h * Math.sin(ang + 0.45)}`}
-            fill={c} style={common.style} onClick={common.onClick} pointerEvents={tocable ? 'all' : 'none'} />
+            fill={c} style={common.style} onClick={common.onClick} onPointerDown={common.onPointerDown} pointerEvents={tocable ? 'all' : 'none'} />
         </g>
       );
     }
@@ -459,12 +552,30 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
       return (
         <text key={m.id} x={s[0]} y={s[1]} fontSize="14" fontWeight="600" fill={c} stroke="#fff" strokeWidth="3" paintOrder="stroke"
           style={common.style} pointerEvents={tocable ? 'all' : 'none'}
-          onClick={common.onClick}>
+          onClick={common.onClick} onPointerDown={common.onPointerDown}>
           {m.text}
         </text>
       );
     }
     return null;
+  };
+
+  // Los tiradores de la marca elegida, si es tuya y se puede cambiar: esquinas de una caja, extremos de una
+  // flecha y vértices de una medición o un área.
+  const renderTiradores = () => {
+    if (tool !== 'pan') return null;
+    const m = pageMarkups.find(x => x.id === elegida);
+    if (!editable(m)) return null;
+    return tiradoresDe(m.kind, m.geometry || {}).map((q, i) => {
+      const s = toScr(q);
+      const caja = m.geometry.w != null;
+      return (
+        <rect key={`tir-${i}`} x={s[0] - 4.5} y={s[1] - 4.5} width="9" height="9" rx="1.5"
+          fill="#fff" stroke="#507294" strokeWidth="1.5"
+          style={{ pointerEvents: 'all', cursor: caja ? (i % 2 === 0 ? 'nesw-resize' : 'nwse-resize') : 'move' }}
+          onPointerDown={empezarArrastre(m, i)} onClick={e => e.stopPropagation()} />
+      );
+    });
   };
 
   // ── Borrador en curso ──
@@ -598,6 +709,7 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
       >
         {pageMarkups.map(renderMarkup)}
         {renderEnlaces()}
+        {renderTiradores()}
         {renderDraft()}
       </svg>
 
@@ -621,6 +733,7 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
       {marcaElegida && (
         <PanelDeMarca key={marcaElegida.id} API={API} obra={projectPrefix} marca={marcaElegida}
           esAutor={!!userName && marcaElegida.created_by === userName}
+          editable={editable(marcaElegida)} colores={COLORS}
           versionVigente={versionVigente?.version_number ?? null}
           onLlevar={vigenteId && marcaElegida.version_id && String(marcaElegida.version_id) !== String(vigenteId)
             ? () => llevarMarca(marcaElegida) : null}

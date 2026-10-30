@@ -415,3 +415,89 @@ def test_con_observacion_abierta_la_marca_no_se_retira_ni_se_borra(app, monkeypa
     assert r.status_code == 409 and not any('DELETE' in q[0] for q in cur.queries)
     cur, _ = _conectar(monkeypatch, [None, (True,)])                  # cerrada o sin observación: como siempre
     assert app.test_client().post('/api/pdf/markups/5/publicar', json={'publicado': False}).status_code == 200
+
+
+# ── Editar la figura: mover, tamaño, color y texto (29-oct-2026) ─────────────
+
+def _figura(kind='cloud', geo=None, autor='Ana'):
+    return (kind, {'color': '#b93535'}, geo or {'x': 10, 'y': 20, 'w': 30, 'h': 40}, autor, 'obra')
+
+
+def _update(cur):
+    return [q for q in cur.queries if q[0].lstrip().startswith('UPDATE pdf_markups')]
+
+
+def test_mover_y_redimensionar_un_borrador_guarda_la_nueva_caja(app, monkeypatch):
+    cur, conn = _conectar(monkeypatch, [_figura(), (False,), None])
+    r = app.test_client().patch('/api/pdf/markups/5', json={'geometria': {'x': 15.5, 'y': 22, 'w': 50, 'h': 10}})
+    assert r.status_code == 200, r.get_json()
+    assert r.get_json()['markup']['geometry'] == {'x': 15.5, 'y': 22.0, 'w': 50.0, 'h': 10.0}
+    assert json.loads(_update(cur)[0][1][1]) == {'x': 15.5, 'y': 22.0, 'w': 50.0, 'h': 10.0} and conn.committed
+
+
+def test_una_marca_publicada_no_se_mueve_ni_se_recolorea(app, monkeypatch):
+    for cuerpo in ({'geometria': {'x': 1, 'y': 2, 'w': 3, 'h': 4}}, {'color': '#507294'}):
+        cur, conn = _conectar(monkeypatch, [_figura(), (True,)])
+        r = app.test_client().patch('/api/pdf/markups/5', json=cuerpo)
+        assert r.status_code == 409 and r.get_json()['code'] == 'MARCA_PUBLICADA'
+        assert not _update(cur) and not conn.committed
+
+
+def test_con_observacion_abierta_la_figura_no_cambia(app, monkeypatch):
+    cur, conn = _conectar(monkeypatch, [_figura(), (False,), ('ISS-012',)])
+    r = app.test_client().patch('/api/pdf/markups/5', json={'geometria': {'x': 1, 'y': 2, 'w': 3, 'h': 4}})
+    assert r.status_code == 409 and r.get_json()['code'] == 'OBSERVACION_ABIERTA' and not _update(cur)
+
+
+def test_solo_el_autor_mueve_su_marca(app, monkeypatch):
+    cur, _ = _conectar(monkeypatch, [_figura(autor='Beto')])
+    r = app.test_client().patch('/api/pdf/markups/5', json={'geometria': {'x': 1, 'y': 2, 'w': 3, 'h': 4}})
+    assert r.status_code == 403 and not _update(cur)
+
+
+@pytest.mark.parametrize('kind, geo', [
+    ('cloud', {'x': 1, 'y': 2, 'w': 0, 'h': 4}),                 # sin ancho
+    ('cloud', {'x': 1, 'y': 2, 'w': True, 'h': 4}),              # un booleano no es un número
+    ('cloud', {'x': 'a', 'y': 2, 'w': 3, 'h': 4}),
+    ('arrow', {'p1': [1, 2]}),                                   # falta la punta
+    ('area', {'points': [[0, 0], [1, 1]]}),                      # un área necesita tres vértices
+    ('measure', {'points': [[0, 0], [1e9, 1]]}),                 # fuera de cualquier hoja
+    ('count', {'p': [1, 2, 3]}),
+])
+def test_la_geometria_debe_tener_la_forma_de_su_tipo(app, monkeypatch, kind, geo):
+    cur, _ = _conectar(monkeypatch, [_figura(kind=kind, geo={}), (False,), None])
+    r = app.test_client().patch('/api/pdf/markups/5', json={'geometria': geo})
+    assert r.status_code == 400, r.get_json()
+    assert not _update(cur)
+
+
+def test_mover_una_foto_no_la_gira(app, monkeypatch):
+    cur, _ = _conectar(monkeypatch, [_figura(kind='foto', geo={'p': [1, 2], 'ang': 90}), (False,), None])
+    r = app.test_client().patch('/api/pdf/markups/5', json={'geometria': {'p': [30, 40], 'ang': 0}})
+    assert r.status_code == 200
+    assert r.get_json()['markup']['geometry'] == {'p': [30.0, 40.0], 'ang': 90}
+
+
+def test_recolorear_un_borrador(app, monkeypatch):
+    cur, _ = _conectar(monkeypatch, [_figura(), (False,), None])
+    r = app.test_client().patch('/api/pdf/markups/5', json={'color': '#507294'})
+    assert r.status_code == 200 and r.get_json()['markup']['style']['color'] == '#507294'
+    assert json.loads(_update(cur)[0][1][0])['color'] == '#507294'
+    for malo in ('rojo', '#12345', '#12345g', 'url(x)'):
+        cur, _ = _conectar(monkeypatch, [_figura(), (False,), None])
+        assert app.test_client().patch('/api/pdf/markups/5', json={'color': malo}).status_code == 400
+        assert not _update(cur)
+    cur, _ = _conectar(monkeypatch, [_figura(kind='sello', geo={'p': [1, 2]}), (False,), None])
+    assert app.test_client().patch('/api/pdf/markups/5', json={'color': '#507294'}).status_code == 400
+
+
+def test_reescribir_el_texto_solo_en_una_marca_de_texto(app, monkeypatch):
+    cur, _ = _conectar(monkeypatch, [_figura(kind='text', geo={'p': [1, 2]}), (False,), None])
+    r = app.test_client().patch('/api/pdf/markups/5', json={'texto': '  Falta la cota de fondo  '})
+    assert r.status_code == 200 and r.get_json()['markup']['text'] == 'Falta la cota de fondo'
+    up = _update(cur)[0]
+    assert 'text_content' in up[0] and up[1][2] == 'Falta la cota de fondo'
+    for kind, texto in (('cloud', 'hola'), ('text', '   '), ('text', 'x' * 501)):
+        cur, _ = _conectar(monkeypatch, [_figura(kind=kind, geo={'p': [1, 2]}), (False,), None])
+        assert app.test_client().patch('/api/pdf/markups/5', json={'texto': texto}).status_code == 400
+        assert not _update(cur)

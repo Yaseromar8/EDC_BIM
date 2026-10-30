@@ -204,11 +204,12 @@ export function DialogoDeSello({ inicial, autor, editar = false, onAceptar, onCe
 
 // ── El panel de una marca elegida ────────────────────────────────────────────
 export function PanelDeMarca({ API, obra, marca, esAutor, versionVigente = null, onLlevar = null,
-                              onCambio, onPublicar, onBorrar, onCerrar }) {
+                              editable = false, colores = [], onCambio, onPublicar, onBorrar, onCerrar }) {
   const [subiendo, setSubiendo] = useState(0);
   const [eligiendo, setEligiendo] = useState(null);      // 'cita' | 'foto'
   const [viendo, setViendo] = useState(null);            // índice de la foto abierta
   const [editandoSello, setEditandoSello] = useState(false);
+  const [textoNuevo, setTextoNuevo] = useState(null);       // el texto mientras se reescribe
   const [miembros, setMiembros] = useState([]);
   const entrada = useRef(null);
   const fotos = marca.fotos || [];
@@ -294,6 +295,41 @@ export function PanelDeMarca({ API, obra, marca, esAutor, versionVigente = null,
             <button type="button" className="mce-btn mce-btn--sec" onClick={onLlevar}>
               Llevar a la vigente{versionVigente ? ` (V${versionVigente})` : ''}</button>
           </section>
+        )}
+
+        {/* LA FIGURA (29-oct-2026): color y texto de tu borrador; se mueve arrastrándola en la hoja. Publicada o
+            con una observación abierta, queda fija, como en la revisión de CAD. */}
+        {esAutor && editable && (
+          <section className="mce-sec">
+            <h3>Figura</h3>
+            {marca.kind !== 'sello' && colores.length > 0 && (
+              <div className="mce-colores" role="radiogroup" aria-label="Color de la marca">
+                {colores.map(c => (
+                  <button key={c} type="button" role="radio" aria-checked={(marca.style?.color || '').toLowerCase() === c}
+                    aria-label={'Color ' + c} title={c} style={{ background: c }}
+                    onClick={() => cambiar({ color: c })} />
+                ))}
+              </div>
+            )}
+            {marca.kind === 'text' && (textoNuevo == null
+              ? <button type="button" className="mce-btn mce-btn--sec" onClick={() => setTextoNuevo(marca.text || '')}>Editar texto</button>
+              : (
+                <div className="mce-texto">
+                  <textarea value={textoNuevo} maxLength={500} rows={3} autoFocus onChange={e => setTextoNuevo(e.target.value)} />
+                  <div className="mce-acciones">
+                    <button type="button" className="mce-btn" disabled={!textoNuevo.trim()}
+                      onClick={async () => { if (await cambiar({ texto: textoNuevo }, 'Texto cambiado')) setTextoNuevo(null); }}>Guardar</button>
+                    <button type="button" className="mce-btn mce-btn--sec" onClick={() => setTextoNuevo(null)}>Cancelar</button>
+                  </div>
+                </div>
+              ))}
+            <p className="mce-nota">Arrastra la marca en la hoja para moverla{['cloud', 'rect', 'arrow', 'measure', 'area'].includes(marca.kind) ? '; los cuadrados cambian su forma' : ''}.</p>
+          </section>
+        )}
+        {esAutor && !editable && (marca.publicado || observacionViva(marca.observacion)) && (
+          <p className="mce-nota">{observacionViva(marca.observacion)
+            ? 'Tiene una observación abierta: la figura queda fija mientras el responsable la corrige.'
+            : 'Publicada: la figura queda fija. Retírala de la obra para moverla o cambiarla.'}</p>
         )}
 
         {/* Lo que hay que corregir: una OBSERVACIÓN con responsable, plazo e historial. */}
