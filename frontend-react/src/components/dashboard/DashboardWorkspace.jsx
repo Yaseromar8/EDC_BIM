@@ -46,6 +46,83 @@ export const FONT_TITLE = FUENTE;
 // paleta oficial marca cada sección; el fondo es siempre el mismo, sobrio.
 const FRAME_COLORS = [C.orange, C.blue, C.green, C.gris700];
 const ANCHO_SECCION = ANCHOS.l + HUECO * 2;
+
+// Fondo del 3D para los bordes que quedan al descubierto mientras el visor redibuja: se lee del propio
+// lienzo (preserveDrawingBuffer), arriba, al medio y abajo de su columna izquierda y derecha, porque el
+// fondo del visor no es un color plano (sombra ambiental, iluminación).
+const fondoDel3d = (lienzo3d) => {
+  try {
+    const c = document.createElement('canvas'); c.width = 1; c.height = 1;
+    const g = c.getContext('2d', { willReadFrequently: true });
+    const W = lienzo3d.width, H = lienzo3d.height;
+    const px = (x, y) => { g.drawImage(lienzo3d, x, y, 1, 1, 0, 0, 1, 1); const d = g.getImageData(0, 0, 1, 1).data; return `rgb(${d[0]},${d[1]},${d[2]})`; };
+    const columna = (x) => `linear-gradient(${px(x, 2)}, ${px(x, H >> 1)}, ${px(x, H - 3)})`;
+    return `${columna(1)} left / 50% 100% no-repeat, ${columna(W - 2)} right / 50% 100% no-repeat`;
+  } catch { return ''; }
+};
+// Doble búfer: el visor redibuja el modelo por partes (unos 500 ms en esta obra, medido) y dibujarlo de
+// golpe congela la página. Así que encima de su lienzo se pone el ÚLTIMO CUADRO COMPLETO (lo que ya se
+// veía, corrido a donde el visor dejará el modelo y con el fondo del 3D en los bordes nuevos) y se retira
+// cuando el visor termina el cuadro nuevo (su cola de dibujo, modelQueue().isDone()).
+const dobleBufer = (visor, lienzo3d, corrimiento, fondo) => {
+  const marco = lienzo3d?.parentElement;
+  if (!visor || !marco) { visor?.resize(); return; }
+  let tapa = null;
+  try {
+    const ancho = marco.clientWidth, alto = marco.clientHeight, k = lienzo3d.width / lienzo3d.clientWidth;
+    tapa = document.createElement('canvas');
+    tapa.width = Math.round(ancho * k); tapa.height = Math.round(alto * k);
+    tapa.getContext('2d').drawImage(lienzo3d, Math.round(corrimiento * k), 0);
+    Object.assign(tapa.style, { position: 'absolute', left: '0px', top: '0px', width: `${ancho}px`, height: `${alto}px`, background: fondo, pointerEvents: 'none', zIndex: 1 });
+    marco.appendChild(tapa);
+  } catch { tapa = null; }
+  lienzo3d.style.transform = '';
+  lienzo3d.style.willChange = '';
+  visor.resize();
+  if (!tapa) return;
+  let hecho = false, cuadros = 0;
+  const quitar = () => {
+    if (hecho) return;
+    hecho = true;
+    tapa.remove();
+    window.removeEventListener('pointerdown', quitar, true);
+    window.removeEventListener('wheel', quitar, true);
+  };
+  // Si el usuario toca el 3D antes de que termine, se le devuelve el lienzo vivo al momento.
+  window.addEventListener('pointerdown', quitar, true);
+  window.addEventListener('wheel', quitar, true);
+  const vigilar = () => {
+    if (hecho) return;
+    cuadros += 1;
+    const cola = visor.impl?.modelQueue?.();
+    const listo = cuadros > 2 && !visor.impl?._needsResize && (!cola?.isDone || cola.isDone());
+    if (listo || cuadros > 240) requestAnimationFrame(quitar);
+    else requestAnimationFrame(vigilar);
+  };
+  requestAnimationFrame(vigilar);
+};
+
+// El 3D cambia de hueco UNA vez y sin animación (App.jsx anima el margen 0,22 s, y eso redimensionaba
+// el visor una docena de veces: el temblor), con el doble búfer para que no se vea a medias.
+const ajustar3d = (antes, ahora) => {
+  const split = document.querySelector('.split-view-container');
+  if (!split || antes === ahora) return;
+  const transicion = split.style.transition;
+  split.style.transition = 'none';
+  split.style.marginRight = `${ahora}px`;
+  setTimeout(() => { split.style.transition = transicion; }, 400);
+  const visor = window.NOP_VIEWER, lienzo3d = visor?.canvas;
+  if (visor && lienzo3d) dobleBufer(visor, lienzo3d, (antes - ahora) / 2, fondoDel3d(lienzo3d) || `rgb(${(window.__vqBg || [241, 240, 232]).join(',')})`);
+};
+
+// Dos anchos fijos (docs/visor/52 §8): arrastrar el borde no puede ir fluido porque el 3D de esta obra
+// tarda ≈ 220 ms en redibujarse (§7). Normal = dos columnas de tarjetas (2 × 320 + 16 y márgenes);
+// Amplio = 60 % de la pantalla, para las vistas (página de tres columnas).
+const ANCHO_NORMAL = 720;
+const MODO_GUARDADO = 'tablero-modo';
+const anchoDeModo = (modo) => (modo === 'amplio'
+  ? Math.max(ANCHO_NORMAL, Math.round(window.innerWidth * 0.6))
+  : Math.min(ANCHO_NORMAL, window.innerWidth - 300));
 const horaCorta = () => new Date().toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' });
 
 // Posición por defecto en cascada para tableros guardados sin layout (migración
@@ -70,7 +147,8 @@ export default function DashboardWorkspace({ project, backendUrl, onClose, proye
   const [editing, setEditing] = useState(null);     // config en edición | 'new'
   const [active, setActive] = useState(null);       // { chartId, key } aislado
   const [saveState, setSaveState] = useState('');
-  const [width, setWidth] = useState(() => Math.min(Math.round(window.innerWidth * 0.5), 820));
+  const [modo, setModo] = useState(() => { try { return localStorage.getItem(MODO_GUARDADO) === 'amplio' ? 'amplio' : 'normal'; } catch { return 'normal'; } });
+  const [modoVista, setModoVista] = useState('amplio');   // una vista se abre en Amplio
   const [view, setView] = useState({ tx: 30, ty: 30, s: 0.85 }); // encuadre del lienzo
   const itemizado = useSyncExternalStore(itemizadoDeObra.suscribir, itemizadoDeObra.estado);
   // Vistas (docs/visor/52): grupos de tarjetas elegidas por el usuario, con su botón; se ven encajadas.
@@ -83,9 +161,6 @@ export default function DashboardWorkspace({ project, backendUrl, onClose, proye
   const [exportando, setExportando] = useState('');
   const [avisoVista, setAvisoVista] = useState('');
   const [listo, setListo] = useState(null);         // archivo hecho que el navegador no dejó bajar solo
-  const panelRef = useRef(null);
-  const capaRef = useRef(null);                     // capa invisible sobre la ventana mientras se arrastra el borde
-  const contenidoRef = useRef(null);                // lo que se mueve con el encuadre del lienzo (tarjetas y secciones)
   const [aviso, setAviso] = useState('');
   const [locked, setLocked] = useState(false); // candado: bloquea mover/redimensionar nodos
   const lockedRef = useRef(false);
@@ -103,10 +178,18 @@ export default function DashboardWorkspace({ project, backendUrl, onClose, proye
   // ── Split REAL con el visor: anunciar nuestro ancho para que el contenedor
   // del 3D se encoja (su ResizeObserver llama a viewer.resize()). Al cerrar,
   // se anuncia 0 y el visor recupera todo el lienzo. Nada queda tapado.
+  // Una vista se abre en Amplio (es una página de tres columnas); al volver al lienzo rige el modo elegido.
+  useEffect(() => { if (vistaActiva) setModoVista('amplio'); }, [vistaActiva]);
+  const modoActual = vistaActiva ? modoVista : modo;
+  const width = anchoDeModo(modoActual);
+  const anchoAnunciado = useRef(0);
   useEffect(() => {
+    ajustar3d(anchoAnunciado.current, width);
+    anchoAnunciado.current = width;
     window.dispatchEvent(new CustomEvent('tablero-width', { detail: { width } }));
   }, [width]);
   useEffect(() => () => {
+    ajustar3d(anchoAnunciado.current, 0);
     window.dispatchEvent(new CustomEvent('tablero-width', { detail: { width: 0 } }));
   }, []);
 
@@ -522,8 +605,11 @@ export default function DashboardWorkspace({ project, backendUrl, onClose, proye
     setVistas(vs => vs.filter(v => v.id !== vistaVisible.id));
     setVistaActiva(null);
   };
-  // Al abrir una vista el panel se ensancha para mostrarla (como una página); el usuario puede achicarlo.
-  useEffect(() => { if (vistaActiva) setWidth(w => Math.max(w, Math.round(window.innerWidth * 0.62))); }, [vistaActiva]);
+  const alternarModo = () => {
+    const otro = (m) => (m === 'amplio' ? 'normal' : 'amplio');
+    if (vistaActiva) { setModoVista(otro); return; }
+    setModo(m => { const n = otro(m); try { localStorage.setItem(MODO_GUARDADO, n); } catch { /* sin almacenamiento */ } return n; });
+  };
   // Enlace de una vista para la gente de la obra: abre el visor en el frente y el Tablero en la vista.
   const enlaceDe = (v) => {
     const frente = proyecto?.frontId;
@@ -578,135 +664,6 @@ export default function DashboardWorkspace({ project, backendUrl, onClose, proye
     setEditing({ title: nombreCampo(f.key), type: 'bar', metric: 'count', groupBy: f.key, topN: 12, size: 'm' });
   };
 
-  // ── Redimensionado del panel (borde izquierdo) ────────────────────────────
-  // Borde como en Miro: el tablero Y el 3D siguen al ratón cuadro a cuadro, sin temblar.
-  // - El tablero: solo cambia el ancho del panel en el DOM (sin React). El encuadre del lienzo se corre lo
-  //   mismo que el borde, así que las tarjetas se quedan quietas en la pantalla.
-  // - El 3D: redibujar el modelo a otro tamaño le cuesta al visor 90–140 ms (medido), así que mientras se
-  //   arrastra NO se redibuja: su hueco (`.split-view-container` de App.jsx) cambia en vivo y la imagen ya
-  //   dibujada se corre la mitad de lo que cambia el hueco, que es justo donde el visor dejará el modelo
-  //   (al redimensionar mantiene la escala y lo recentra). Al soltar se redibuja UNA vez, ya en su sitio:
-  //   sin salto. Antes cada movimiento repintaba la App entera y redimensionaba el WebGL: temblaba.
-  // Para que el borde vaya pegado al cursor: se pinta en el mismo cuadro del movimiento (Chrome ya agrupa
-  // los pointermove por cuadro) y con la posición PREDICHA del puntero (getPredictedEvents, como Figma y
-  // Miro), que compensa los milisegundos entre el ratón y la pantalla.
-  // Mientras se arrastra no se selecciona texto (se pintaba de azul la cabecera).
-  // Fondo del 3D para los bordes que quedan al descubierto mientras se arrastra: se lee del propio lienzo
-  // (preserveDrawingBuffer), arriba, al medio y abajo de su columna izquierda y derecha, porque el fondo
-  // del visor no es un color plano (sombra ambiental, iluminación).
-  const fondoDel3d = (lienzo3d) => {
-    try {
-      const c = document.createElement('canvas'); c.width = 1; c.height = 1;
-      const g = c.getContext('2d', { willReadFrequently: true });
-      const W = lienzo3d.width, H = lienzo3d.height;
-      const px = (x, y) => { g.drawImage(lienzo3d, x, y, 1, 1, 0, 0, 1, 1); const d = g.getImageData(0, 0, 1, 1).data; return `rgb(${d[0]},${d[1]},${d[2]})`; };
-      const columna = (x) => `linear-gradient(${px(x, 2)}, ${px(x, H >> 1)}, ${px(x, H - 3)})`;
-      return `${columna(1)} left / 50% 100% no-repeat, ${columna(W - 2)} right / 50% 100% no-repeat`;
-    } catch { return ''; }
-  };
-  // Doble búfer al soltar: el visor redibuja el modelo por partes (unos 500 ms en esta obra, medido) y
-  // dibujarlo de golpe congela la página. Así que encima de su lienzo se pone el ÚLTIMO CUADRO COMPLETO
-  // (lo que ya se veía, en su sitio y con el fondo del 3D en los bordes nuevos) y se retira cuando el visor
-  // termina el cuadro nuevo (su cola de dibujo, modelQueue().isDone()). Ni trozos, ni congelación.
-  const dobleBufer = (visor, lienzo3d, corrimiento, fondo) => {
-    const marco = lienzo3d?.parentElement;
-    if (!visor || !marco) { visor?.resize(); return; }
-    let tapa = null;
-    try {
-      const ancho = marco.clientWidth, alto = marco.clientHeight, k = lienzo3d.width / lienzo3d.clientWidth;
-      tapa = document.createElement('canvas');
-      tapa.width = Math.round(ancho * k); tapa.height = Math.round(alto * k);
-      tapa.getContext('2d').drawImage(lienzo3d, Math.round(corrimiento * k), 0);
-      Object.assign(tapa.style, { position: 'absolute', left: '0px', top: '0px', width: `${ancho}px`, height: `${alto}px`, background: fondo, pointerEvents: 'none', zIndex: 1 });
-      marco.appendChild(tapa);
-    } catch { tapa = null; }
-    lienzo3d.style.transform = '';
-    lienzo3d.style.willChange = '';
-    visor.resize();
-    if (!tapa) return;
-    let hecho = false, cuadros = 0;
-    const quitar = () => {
-      if (hecho) return;
-      hecho = true;
-      tapa.remove();
-      window.removeEventListener('pointerdown', quitar, true);
-      window.removeEventListener('wheel', quitar, true);
-    };
-    // Si el usuario toca el 3D antes de que termine, se le devuelve el lienzo vivo al momento.
-    window.addEventListener('pointerdown', quitar, true);
-    window.addEventListener('wheel', quitar, true);
-    const vigilar = () => {
-      if (hecho) return;
-      cuadros += 1;
-      const cola = visor.impl?.modelQueue?.();
-      const listo = cuadros > 2 && !visor.impl?._needsResize && (!cola?.isDone || cola.isDone());
-      if (listo || cuadros > 240) requestAnimationFrame(quitar);
-      else requestAnimationFrame(vigilar);
-    };
-    requestAnimationFrame(vigilar);
-  };
-  const onResizeStart = (e) => {
-    e.preventDefault();
-    const startX = e.clientX, startW = width;
-    let w = startW;
-    const panel = panelRef.current;
-    const lienzo = canvasRef.current, contenido = contenidoRef.current, v0 = viewRef.current;
-    const split = document.querySelector('.split-view-container');
-    const visor = window.NOP_VIEWER;
-    const lienzo3d = visor?.canvas || null;
-    const marco3d = lienzo3d?.parentElement || null;
-    const bg = window.__vqBg || [241, 240, 232];
-    const antes = {
-      seleccion: document.body.style.userSelect,
-      transicion: split?.style.transition,
-      fondo: marco3d?.style.background,
-      resize: visor?.resize,
-    };
-    document.body.style.userSelect = 'none';
-    window.getSelection?.()?.removeAllRanges();
-    if (capaRef.current) capaRef.current.style.display = 'block';
-    if (split) split.style.transition = 'none';
-    const fondo3d = (lienzo3d && fondoDel3d(lienzo3d)) || `rgb(${bg.join(',')})`;
-    if (marco3d) marco3d.style.background = fondo3d;
-    if (lienzo3d) lienzo3d.style.willChange = 'transform';      // la tarjeta gráfica la mueve, sin repintar
-    // El ResizeObserver del visor (Viewer.jsx) llamaría a resize() en cada cuadro: se aplaza a soltar.
-    if (visor && antes.resize) visor.resize = () => {};
-    const pintar = () => {
-      if (panel) { panel.style.width = `${w}px`; panel.dataset.compacta = compactaDe(w); }
-      const tx = v0.tx + (w - startW);
-      if (contenido) contenido.style.transform = `translate(${tx}px, ${v0.ty}px) scale(${v0.s})`;
-      if (lienzo) lienzo.style.backgroundPosition = `${tx}px ${v0.ty}px`;
-      if (split) split.style.marginRight = `${w}px`;
-      if (lienzo3d) lienzo3d.style.transform = `translateX(${(startW - w) / 2}px)`;
-    };
-    const onMove = (ev) => {
-      const previsto = ev.getPredictedEvents?.().at(-1) || ev;
-      w = clamp(startW + (startX - previsto.clientX), 400, window.innerWidth - 300);
-      pintar();
-    };
-    const onUp = (ev) => {
-      window.removeEventListener('pointermove', onMove);
-      window.removeEventListener('pointerup', onUp);
-      w = clamp(startW + (startX - ev.clientX), 400, window.innerWidth - 300);   // al soltar, la posición real
-      pintar();
-      if (capaRef.current) capaRef.current.style.display = 'none';
-      document.body.style.userSelect = antes.seleccion;
-      // El 3D se redibuja al tamaño nuevo con doble búfer (el modelo ya estaba donde el visor lo pone).
-      if (visor && antes.resize) visor.resize = antes.resize;
-      if (w !== startW && visor && lienzo3d) dobleBufer(visor, lienzo3d, (startW - w) / 2, fondo3d);
-      else if (lienzo3d) { lienzo3d.style.transform = ''; lienzo3d.style.willChange = ''; }
-      if (marco3d) marco3d.style.background = antes.fondo || '';
-      setTimeout(() => { if (split) split.style.transition = antes.transicion; }, 400);
-      // React (y con él la App) se pone al día después del 3D: los dos en el mismo cuadro daban un tirón.
-      setTimeout(() => {
-        if (w !== startW) setView(v => ({ ...v, tx: v.tx + (w - startW) }));
-        setWidth(w);
-      }, 60);
-    };
-    window.addEventListener('pointermove', onMove);
-    window.addEventListener('pointerup', onUp);
-  };
-
   const loading = rows === null;
 
   const ctrlBtn = (title, onClick, label) => (
@@ -719,7 +676,7 @@ export default function DashboardWorkspace({ project, backendUrl, onClose, proye
 
 
   return (
-    <div ref={panelRef} data-compacta={compactaDe(width)} style={{
+    <div data-compacta={compactaDe(width)} style={{
       // top:48 → bajo el TopBar del visor (48px, z-index 2000)
       position: 'fixed', top: 48, right: 0, bottom: 0, width, zIndex: 1400,
       // Tema claro de la paleta oficial: página Light, tarjetas blancas, borde Light Gray
@@ -727,12 +684,7 @@ export default function DashboardWorkspace({ project, backendUrl, onClose, proye
       display: 'flex', flexDirection: 'column',
       color: C.dark, fontFamily: FONT_UI,
     }}>
-      {/* Asa de redimensionado del panel y, mientras se arrastra, una capa invisible sobre toda la ventana:
-          el 3D no roba el ratón ni se selecciona texto. */}
-      <div onPointerDown={onResizeStart} title="Arrastra para cambiar el ancho"
-        style={{ position: 'absolute', left: -4, top: 0, bottom: 0, width: 8, cursor: 'ew-resize', zIndex: 3 }} />
       <style>{CSS_HERRAMIENTAS}</style>
-      <div ref={capaRef} style={{ display: 'none', position: 'fixed', inset: 0, cursor: 'ew-resize', zIndex: 10, userSelect: 'none' }} />
 
       {/* Cabecera: nombre del tablero a la izquierda, acciones a la derecha */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 10px 7px 14px', borderBottom: `1px solid ${C.lightGray}`, background: C.blanco, flexShrink: 0 }}>
@@ -756,6 +708,12 @@ export default function DashboardWorkspace({ project, backendUrl, onClose, proye
           <Herramienta icono="limpiar" texto="Limpiar 3D" ayuda="Restaurar el 3D (quitar colores y aislamientos)" onClick={handleClear3D} />
           <Separador />
           <Herramienta icono="nuevo" texto="Nuevo gráfico" onClick={() => setEditing('new')} apagada={loading} principal />
+          <button onClick={alternarModo} aria-label={modoActual === 'amplio' ? 'Reducir el tablero' : 'Ampliar el tablero'}
+            title={modoActual === 'amplio' ? 'Reducir el tablero (720 px)' : 'Ampliar el tablero (60 % de la pantalla)'}
+            style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 28, height: 28, marginLeft: 4, background: 'none', border: 'none', borderRadius: 6, color: C.gris600, cursor: 'pointer' }}
+            onMouseEnter={e => { e.currentTarget.style.background = C.light50; }} onMouseLeave={e => { e.currentTarget.style.background = 'none'; }}>
+            <Icono nombre={modoActual === 'amplio' ? 'reducir' : 'ampliar'} tam={16} />
+          </button>
           <button onClick={onClose} title="Cerrar tablero" aria-label="Cerrar tablero"
             style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 28, height: 28, marginLeft: 4, background: 'none', border: 'none', borderRadius: 6, color: C.gris600, cursor: 'pointer' }}
             onMouseEnter={e => { e.currentTarget.style.background = C.light50; }} onMouseLeave={e => { e.currentTarget.style.background = 'none'; }}>
@@ -827,7 +785,7 @@ export default function DashboardWorkspace({ project, backendUrl, onClose, proye
           backgroundPosition: `${view.tx}px ${view.ty}px`,
         }}
       >
-        <div ref={contenidoRef} style={{
+        <div style={{
           position: 'absolute', top: 0, left: 0,
           transform: `translate(${view.tx}px, ${view.ty}px) scale(${view.s})`,
           transformOrigin: '0 0',

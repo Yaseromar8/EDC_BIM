@@ -153,3 +153,27 @@ Medido (Chrome sin ventana, con su sesión y su GPU):
 Se vuelve a `f9986c0f`.
 
 **Causa de fondo:** el modelo del Canal (`…004120@004145.rvt`) tiene **265.532 fragmentos**, ya consolidados por el visor (`isConsolidated() = true`). Los otros seis modelos suman unos 27.000. El dibujo es caro por el contenido, con toda probabilidad el acero. Aligerarlo (por ejemplo, cargar el acero aparte o bajo demanda) aceleraría todo el visor, no solo el borde. Queda como propuesta, sin hacer.
+
+## 8 · Dos anchos fijos en lugar del borde arrastrable (30-oct, noche)
+
+El dueño, a la vista de §7: «ese problema veo que continuará; en todo caso, que tenga un ancho definido donde puedan observarse las gráficas».
+
+| Modo | Ancho | Para qué |
+|---|---|---|
+| **Normal** | 720 px (o el ancho de la ventana menos 300, si es menor) | Dos columnas de tarjetas al 100 % (2 × 320 + 16, más márgenes). Al 3D le quedan ≈ 800 px |
+| **Amplio** | 60 % de la ventana (≈ 910 px en la del dueño) | Vistas (página de tres columnas) y revisión con calma |
+
+Cómo funciona:
+- El borde ya no se arrastra. En la cabecera, junto a la ✕, hay un botón **ampliar / reducir**.
+- Una vista se abre en Amplio y, al volver al lienzo, rige el modo elegido, que se recuerda en el navegador (`tablero-modo`).
+- En cada cambio (abrir, cerrar, cambiar de modo) el 3D cambia de hueco **una vez y sin la transición** de 0,22 s de App.jsx, que lo redimensionaba una docena de veces. Lo hace con el doble búfer de §7 (`ajustar3d`).
+
+Medido con Chrome sin ventana, con la sesión del dueño y su GPU, en el Frente Canal y con los guardados bloqueados:
+
+| Paso | Resultado |
+|---|---|
+| Abrir el tablero | Panel de 720 px; el 3D cambia de tamaño 1 vez (1.518 → 798 px); la capa del doble búfer se retira sola |
+| Ampliar | 911 px; el 3D, 1 vez (798 → 607 px); se recuerda `amplio` |
+| Reducir | 720 px; el 3D, 1 vez; se recuerda `normal` |
+| Abrir «Vista 1» y volver al lienzo | 911 px y luego 720 px |
+| Cerrar | El 3D vuelve a 1.518 px y el margen a 0; no queda ninguna capa |

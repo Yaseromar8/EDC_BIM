@@ -13,6 +13,8 @@ const TRAZOS = {
   limpiar: <><path d="M3 12a9 9 0 1 0 3-6.7L3 8" /><path d="M3 3v5h5" /></>,
   nuevo: <><path d="M12 5v14M5 12h14" /></>,
   cerrar: <><path d="M6 6l12 12M18 6L6 18" /></>,
+  ampliar: <><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" /></>,
+  reducir: <><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7" /></>,
 };
 
 export function Icono({ nombre, tam = 15 }) {
