@@ -13,14 +13,17 @@ export default function GraficoAuditoria({ analisis, res, onIds }) {
   useEffect(() => {
     const el = ref.current;
     if (!el || !def || !res) return undefined;
-    let vivo = true, chart = null, ro = null, P = null;
+    let vivo = true, chart = null, ro = null, P = null, espera = 0;
+    // Al cambiar el tamaño (el panel o la vista se ensanchan), se redibuja una vez, cuando el tamaño se
+    // asienta: Plotly y ECharts redibujando en cada cuadro del arrastre hacían temblar las tarjetas.
+    const asentado = (fn) => () => { clearTimeout(espera); espera = setTimeout(fn, 120); };
     setError('');
     if (def.motor === 'plotly') {
       cargarPlotly().then((Pl) => {
         if (!vivo) return;
         P = Pl;
         def.plotly(P, el, res, onIds);
-        ro = new ResizeObserver(() => { try { P.Plots.resize(el); } catch { /* */ } });
+        ro = new ResizeObserver(asentado(() => { try { P.Plots.resize(el); } catch { /* */ } }));
         ro.observe(el);
       }).catch(e => setError(String(e?.message || e)));
     } else {
@@ -30,12 +33,13 @@ export default function GraficoAuditoria({ analisis, res, onIds }) {
         const { option, click } = def.echarts(res, onIds);
         chart.setOption({ textStyle: { fontFamily: FUENTE, color: C.dark }, animationDuration: 400, ...option });
         if (click) chart.on('click', click);
-        ro = new ResizeObserver(() => chart?.resize());
+        ro = new ResizeObserver(asentado(() => chart?.resize({ animation: { duration: 0 } })));
         ro.observe(el);
       }).catch(e => setError(String(e?.message || e)));
     }
     return () => {
       vivo = false;
+      clearTimeout(espera);
       ro?.disconnect();
       try { chart?.dispose(); } catch { /* */ }
       try { P?.purge(el); } catch { /* */ }

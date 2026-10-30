@@ -2,7 +2,8 @@
 // como una página (sin zoom ni arrastre), para mostrarlas en una reunión. Son las mismas tarjetas
 // del lienzo, vivas: un clic sigue aislando en el 3D, y lo que se cambia en el lienzo se ve aquí.
 // Sus acciones (compartir, renombrar, quitar) viven en la barra de vistas (BarraDeVistas.jsx); de
-// aquí sale solo lo que necesita las tarjetas dibujadas: la imagen y el PDF (docs/visor/52).
+// aquí sale solo lo que necesita las tarjetas dibujadas: la imagen y el PDF (docs/visor/52), como archivo
+// ({ nombre, blob }); bajarlo lo decide el lienzo, que sabe si el navegador aún lo deja.
 import React, { forwardRef, useImperativeHandle, useRef } from 'react';
 import ChartCard from './ChartCard';
 import { C, RADIO } from './tema';
@@ -47,11 +48,8 @@ const VistaDePagina = forwardRef(function VistaDePagina({
       if (!rejilla.current) throw new Error('la vista no tiene gráficas');
       if (tipo === 'png') {
         const lienzo = await capturar();
-        const a = document.createElement('a');
-        a.href = lienzo.toDataURL('image/png');
-        a.download = `${nombreArchivo(vista.titulo)}.png`;
-        document.body.appendChild(a); a.click(); a.remove();
-        return;
+        const blob = await new Promise(r => lienzo.toBlob(r, 'image/png'));
+        return { nombre: `${nombreArchivo(vista.titulo)}.png`, blob };
       }
       const [lienzo, { jsPDF }] = await Promise.all([capturar(), import('jspdf')]);
       const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
@@ -64,7 +62,7 @@ const VistaDePagina = forwardRef(function VistaDePagina({
       const k = Math.min(libre.w / lienzo.width, libre.h / lienzo.height);
       // JPEG y no PNG: el PNG de la captura pesaba 17 MB en el PDF.
       pdf.addImage(lienzo.toDataURL('image/jpeg', 0.9), 'JPEG', 10, 21, lienzo.width * k, lienzo.height * k);
-      pdf.save(`${nombreArchivo(vista.titulo)}.pdf`);
+      return { nombre: `${nombreArchivo(vista.titulo)}.pdf`, blob: pdf.output('blob') };
     },
   }));
 

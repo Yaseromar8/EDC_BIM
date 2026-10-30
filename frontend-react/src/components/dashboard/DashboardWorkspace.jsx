@@ -16,6 +16,7 @@ import ChartCard from './ChartCard';
 import ChartEditor from './ChartEditor';
 import VistaDePagina from './VistaDePagina';
 import BarraDeVistas from './BarraDeVistas';
+import Herramienta, { CSS_HERRAMIENTAS, Icono, Separador } from './Herramienta';
 import { ANALISIS, ORDEN_ANALISIS } from './analisisDeAuditoria';
 // El itemizado vigente del frente abierto: el que se subió a la Planilla (docs/visor/51).
 import { itemizadoDeObra } from '../../utils/itemizadoDeObraVisor';
@@ -36,6 +37,7 @@ const SNAP = REJILLA;
 const snap = (v) => Math.round(v / SNAP) * SNAP;
 // Tipografía: IBM Plex Sans para todo, la letra del sistema (D-26).
 const FONT_UI = FUENTE;
+const ANCHO_COMPACTO = 1000;   // por debajo, la cabecera muestra las herramientas solo con icono
 export const FONT_TITLE = FUENTE;
 // Secciones (frames) estilo Miro: título sobre una región que agrupa nodos — la
 // estructura narrativa del tablero del usuario en Miro. Una línea de color de la
@@ -78,6 +80,11 @@ export default function DashboardWorkspace({ project, backendUrl, onClose, proye
   const vistaRef = useRef(null);                  // la vista de página: exporta imagen y PDF
   const [exportando, setExportando] = useState('');
   const [avisoVista, setAvisoVista] = useState('');
+  const [listo, setListo] = useState(null);         // archivo hecho que el navegador no dejó bajar solo
+  const panelRef = useRef(null);
+  const capaRef = useRef(null);                     // capa invisible sobre la ventana mientras se arrastra el borde
+  const rellenoRef = useRef(null);                  // tapa la franja que deja el panel al estrecharse, con el fondo del 3D
+  const contenidoRef = useRef(null);                // lo que se mueve con el encuadre del lienzo (tarjetas y secciones)
   const [aviso, setAviso] = useState('');
   const [locked, setLocked] = useState(false); // candado: bloquea mover/redimensionar nodos
   const lockedRef = useRef(false);
@@ -488,12 +495,27 @@ export default function DashboardWorkspace({ project, backendUrl, onClose, proye
     try { await navigator.clipboard.writeText(enlace); avisarVista('Enlace copiado'); }
     catch { window.prompt('Copia el enlace de la vista:', enlace); }
   };
+  // Chrome solo deja bajar un archivo sin preguntar si el clic del usuario es reciente (unos 5 s); la
+  // captura puede tardar más, y entonces bloqueaba la descarga en silencio. Si el clic ya caducó, el
+  // archivo queda listo en la barra y «Guardar» lo baja con un clic nuevo.
+  const bajar = ({ nombre, url }) => {
+    const a = document.createElement('a');
+    a.href = url; a.download = nombre;
+    document.body.appendChild(a); a.click(); a.remove();
+  };
   const exportarVista = async (tipo) => {
+    setListo(null);
     setExportando(tipo === 'pdf' ? 'Creando el PDF…' : 'Creando la imagen…');
-    try { await vistaRef.current?.exportar(tipo); }
-    catch (e) { avisarVista(`No se pudo exportar: ${e.message}`); }
+    try {
+      const { nombre, blob } = await vistaRef.current.exportar(tipo);
+      const archivo = { nombre, url: URL.createObjectURL(blob), tipo };
+      if (navigator.userActivation?.isActive) { bajar(archivo); avisarVista('Descargado'); }
+      else setListo(archivo);
+    } catch (e) { avisarVista(`No se pudo exportar: ${e.message}`); }
     setExportando('');
   };
+  const guardarListo = () => { if (listo) { bajar(listo); setListo(null); } };
+  useEffect(() => () => { if (listo) setTimeout(() => URL.revokeObjectURL(listo.url), 60000); }, [listo]);
   const quitarVista = () => {
     if (!vistaVisible || !window.confirm(`¿Quitar la vista «${vistaVisible.titulo}»? Las gráficas siguen en el lienzo.`)) return;
     setVistas(vs => vs.filter(v => v.id !== vistaVisible.id));
@@ -556,11 +578,62 @@ export default function DashboardWorkspace({ project, backendUrl, onClose, proye
   };
 
   // ── Redimensionado del panel (borde izquierdo) ────────────────────────────
+  // Borde como en Miro: el tablero sigue al ratón cuadro a cuadro (solo cambia el ancho del panel en el
+  // DOM, sin React; las tarjetas del lienzo no cambian de tamaño). El 3D NO se toca mientras se arrastra:
+  // al ensanchar, el panel lo tapa; al estrechar, la franja que queda se cubre con el fondo del 3D. Al
+  // soltar, el 3D se ajusta UNA vez y sin la transición de 0,22 s del margen (que redimensionaba el visor
+  // una docena de veces). Antes cada movimiento repintaba la App entera y redimensionaba el WebGL: temblaba.
+  // Como en Miro, el contenido del lienzo se queda quieto en la pantalla: el borde izquierdo se mueve,
+  // así que el encuadre se corre lo mismo (sin eso las tarjetas viajaban con el borde). Y mientras se
+  // arrastra no se selecciona texto (se pintaba de azul la cabecera).
   const onResizeStart = (e) => {
     e.preventDefault();
     const startX = e.clientX, startW = width;
-    const onMove = (ev) => setWidth(clamp(startW + (startX - ev.clientX), 400, window.innerWidth - 300));
-    const onUp = () => { window.removeEventListener('pointermove', onMove); window.removeEventListener('pointerup', onUp); };
+    let w = startW, cuadro = 0;
+    const panel = panelRef.current, relleno = rellenoRef.current;
+    const bg = window.__vqBg || [241, 240, 232];
+    const lienzo = canvasRef.current, contenido = contenidoRef.current, v0 = viewRef.current;
+    const seleccion = document.body.style.userSelect;
+    document.body.style.userSelect = 'none';
+    window.getSelection?.()?.removeAllRanges();
+    if (relleno) relleno.style.background = `rgb(${bg.join(',')})`;
+    if (capaRef.current) capaRef.current.style.display = 'block';
+    const pintar = () => {
+      cuadro = 0;
+      if (panel) { panel.style.width = `${w}px`; panel.dataset.compacta = w < ANCHO_COMPACTO ? '1' : '0'; }
+      if (relleno) relleno.style.width = `${Math.max(0, startW - w)}px`;
+      const tx = v0.tx + (w - startW);
+      if (contenido) contenido.style.transform = `translate(${tx}px, ${v0.ty}px) scale(${v0.s})`;
+      if (lienzo) lienzo.style.backgroundPosition = `${tx}px ${v0.ty}px`;
+    };
+    const onMove = (ev) => {
+      w = clamp(startW + (startX - ev.clientX), 400, window.innerWidth - 300);
+      if (!cuadro) cuadro = requestAnimationFrame(pintar);
+    };
+    const onUp = () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      if (cuadro) cancelAnimationFrame(cuadro);
+      pintar();
+      if (capaRef.current) capaRef.current.style.display = 'none';
+      // El 3D (`.split-view-container` de App.jsx) salta al ancho nuevo de una vez; React lo confirma
+      // después con el mismo valor, y la transición vuelve para abrir y cerrar el panel.
+      const split = document.querySelector('.split-view-container');
+      if (split && w !== startW) {
+        const transicion = split.style.transition;
+        split.style.transition = 'none';
+        split.style.marginRight = `${w}px`;
+        setTimeout(() => { split.style.transition = transicion; }, 400);
+      }
+      if (relleno) requestAnimationFrame(() => { relleno.style.width = '0px'; });
+      document.body.style.userSelect = seleccion;
+      // React (y con él la App) se pone al día en el cuadro siguiente al del 3D: los dos en el mismo
+      // cuadro daban un tirón de ~150 ms al soltar.
+      setTimeout(() => {
+        if (w !== startW) setView(v => ({ ...v, tx: v.tx + (w - startW) }));
+        setWidth(w);
+      }, 60);
+    };
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp);
   };
@@ -575,17 +648,9 @@ export default function DashboardWorkspace({ project, backendUrl, onClose, proye
     }}>{label}</button>
   );
 
-  // Botones de la cabecera: secundarios con borde; uno solo principal, en Dark (paleta D-24).
-  const boton = (principal = false, apagado = false) => ({
-    padding: '5px 11px', borderRadius: 6, fontSize: 12, fontWeight: principal ? 600 : 500, fontFamily: FUENTE,
-    border: `1px solid ${principal ? C.dark : C.gris300}`,
-    background: apagado ? C.light50 : principal ? C.dark : C.blanco,
-    color: apagado ? C.midGray : principal ? C.light : C.dark,
-    cursor: apagado ? 'default' : 'pointer',
-  });
 
   return (
-    <div style={{
+    <div ref={panelRef} data-compacta={width < ANCHO_COMPACTO ? '1' : '0'} style={{
       // top:48 → bajo el TopBar del visor (48px, z-index 2000)
       position: 'fixed', top: 48, right: 0, bottom: 0, width, zIndex: 1400,
       // Tema claro de la paleta oficial: página Light, tarjetas blancas, borde Light Gray
@@ -593,30 +658,41 @@ export default function DashboardWorkspace({ project, backendUrl, onClose, proye
       display: 'flex', flexDirection: 'column',
       color: C.dark, fontFamily: FONT_UI,
     }}>
-      {/* Asa de redimensionado del panel */}
-      <div onPointerDown={onResizeStart} title="Arrastra para redimensionar"
+      {/* Asa de redimensionado del panel y, mientras se arrastra, una capa invisible sobre toda la ventana:
+          el 3D no roba el ratón ni se selecciona texto. */}
+      <div onPointerDown={onResizeStart} title="Arrastra para cambiar el ancho"
         style={{ position: 'absolute', left: -4, top: 0, bottom: 0, width: 8, cursor: 'ew-resize', zIndex: 3 }} />
+      <style>{CSS_HERRAMIENTAS}</style>
+      <div ref={capaRef} style={{ display: 'none', position: 'fixed', inset: 0, cursor: 'ew-resize', zIndex: 10, userSelect: 'none' }} />
+      <div ref={rellenoRef} aria-hidden="true" style={{ position: 'absolute', top: 0, bottom: 0, right: '100%', width: 0, pointerEvents: 'none' }} />
 
       {/* Cabecera: nombre del tablero a la izquierda, acciones a la derecha */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 14px', borderBottom: `1px solid ${C.lightGray}`, background: C.blanco, flexShrink: 0, flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 10px 7px 14px', borderBottom: `1px solid ${C.lightGray}`, background: C.blanco, flexShrink: 0 }}>
         <input
           value={dashName}
           onChange={e => setDashName(e.target.value)}
           onBlur={() => dashId && apiFetch(`${backendUrl}/api/dashboards/${dashId}`, { method: 'PUT', body: JSON.stringify({ name: dashName }) }).catch(() => {})}
           title="Nombre del tablero (clic para cambiarlo)"
-          style={{ background: 'transparent', border: 'none', outline: 'none', color: C.dark, fontSize: 14, fontWeight: 600, width: 150, fontFamily: FUENTE }}
+          style={{ background: 'transparent', border: 'none', outline: 'none', color: C.dark, fontSize: 14, fontWeight: 600, flex: '0 1 150px', minWidth: 60, fontFamily: FUENTE }}
         />
         <span style={{ fontSize: 11, color: C.gris600, minWidth: 62 }}>
           {saveState === 'saving' ? 'Guardando…' : saveState === 'saved' ? 'Guardado' : ''}
         </span>
-        <div style={{ marginLeft: 'auto', display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-          <button onClick={ordenar} title="Acomodar las tarjetas de cada sección en filas, con el mismo hueco entre todas" style={boton()}>Ordenar</button>
-          <button onClick={addFrame} title="Añadir una sección con título para agrupar tarjetas" style={boton()}>Sección</button>
-          <button onClick={addParamsNode} disabled={loading} title="Añadir la lista de parámetros del modelo con su completitud" style={boton(false, loading)}>Parámetros</button>
-          <button onClick={handleClear3D} title="Restaurar el 3D (quitar colores y aislamientos)" style={boton()}>Limpiar 3D</button>
-          <button onClick={addAuditoriaPresupuesto} disabled={loading} title="Añadir una sección con la auditoría de los elementos frente al itemizado del frente (ítem, descripción y unidad)" style={boton(false, loading)}>Auditoría del presupuesto</button>
-          <button onClick={() => setEditing('new')} disabled={loading} style={boton(true, loading)}>Nuevo gráfico</button>
-          <button onClick={onClose} title="Cerrar tablero" style={{ background: 'none', border: 'none', color: C.gris600, fontSize: 20, cursor: 'pointer', lineHeight: 1, padding: '0 2px' }}>×</button>
+        {/* Herramientas: añadir (sección, parámetros, auditoría) · organizar (ordenar, limpiar 3D) · crear */}
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: 2, alignItems: 'center', minWidth: 0 }}>
+          <Herramienta icono="seccion" texto="Sección" ayuda="Añadir una sección con título para agrupar tarjetas" onClick={addFrame} />
+          <Herramienta icono="parametros" texto="Parámetros" ayuda="Añadir la lista de parámetros del modelo con su completitud" onClick={addParamsNode} apagada={loading} />
+          <Herramienta icono="auditoria" texto="Auditoría del presupuesto" ayuda="Añadir una sección con la auditoría de los elementos frente al itemizado del frente (ítem, descripción y unidad)" onClick={addAuditoriaPresupuesto} apagada={loading} />
+          <Separador />
+          <Herramienta icono="ordenar" texto="Ordenar" ayuda="Acomodar las tarjetas de cada sección en filas, con el mismo hueco entre todas" onClick={ordenar} />
+          <Herramienta icono="limpiar" texto="Limpiar 3D" ayuda="Restaurar el 3D (quitar colores y aislamientos)" onClick={handleClear3D} />
+          <Separador />
+          <Herramienta icono="nuevo" texto="Nuevo gráfico" onClick={() => setEditing('new')} apagada={loading} principal />
+          <button onClick={onClose} title="Cerrar tablero" aria-label="Cerrar tablero"
+            style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 28, height: 28, marginLeft: 4, background: 'none', border: 'none', borderRadius: 6, color: C.gris600, cursor: 'pointer' }}
+            onMouseEnter={e => { e.currentTarget.style.background = C.light50; }} onMouseLeave={e => { e.currentTarget.style.background = 'none'; }}>
+            <Icono nombre="cerrar" tam={16} />
+          </button>
         </div>
       </div>
 
@@ -646,7 +722,7 @@ export default function DashboardWorkspace({ project, backendUrl, onClose, proye
         onFijar={fijarVista} onCancelar={cancelarEleccion}
         onNuevaVista={() => { setVistaActiva(null); setEligiendo(true); }} puedeNueva={!loading && charts.length > 0}
         vistaVisible={vistaVisible} nGraficas={vistaVisible ? vistaVisible.cards.filter(id => charts.some(c => c.id === id)).length : 0}
-        ocupado={exportando} aviso={avisoVista}
+        ocupado={exportando} aviso={avisoVista} listo={listo} onGuardar={guardarListo} onDescartar={() => setListo(null)}
         onCopiarEnlace={copiarEnlaceDeVista} onExportar={exportarVista}
         onRenombrar={(id, t) => setVistas(vs => vs.map(v => (v.id === id ? { ...v, titulo: t } : v)))}
         onQuitar={quitarVista}
@@ -683,7 +759,7 @@ export default function DashboardWorkspace({ project, backendUrl, onClose, proye
           backgroundPosition: `${view.tx}px ${view.ty}px`,
         }}
       >
-        <div style={{
+        <div ref={contenidoRef} style={{
           position: 'absolute', top: 0, left: 0,
           transform: `translate(${view.tx}px, ${view.ty}px) scale(${view.s})`,
           transformOrigin: '0 0',
@@ -783,8 +859,8 @@ export default function DashboardWorkspace({ project, backendUrl, onClose, proye
               Añade la lista de parámetros y haz clic en uno para graficarlo, o crea un gráfico con «Nuevo gráfico».
             </div>
             <div style={{ display: 'flex', gap: 8, pointerEvents: 'auto' }}>
-              <button onClick={addParamsNode} style={boton()}>Parámetros</button>
-              <button onClick={() => setEditing('new')} style={boton(true)}>Nuevo gráfico</button>
+              <Herramienta icono="parametros" texto="Parámetros" onClick={addParamsNode} />
+              <Herramienta icono="nuevo" texto="Nuevo gráfico" onClick={() => setEditing('new')} principal />
             </div>
           </div>
         )}

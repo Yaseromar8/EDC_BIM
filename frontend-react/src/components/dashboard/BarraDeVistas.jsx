@@ -64,7 +64,7 @@ function Menu({ onCerrar, grupos }) {
 
 export default function BarraDeVistas({
   vistas, vistaActiva, onIr, eligiendo, nElegidas, nombreVista, onNombre, onFijar, onCancelar, onNuevaVista, puedeNueva,
-  vistaVisible, nGraficas, ocupado, aviso, onCopiarEnlace, onExportar, onRenombrar, onQuitar,
+  vistaVisible, nGraficas, ocupado, aviso, listo, onGuardar, onDescartar, onCopiarEnlace, onExportar, onRenombrar, onQuitar,
 }) {
   const [menu, setMenu] = useState(false);
   const [renombrando, setRenombrando] = useState(null);   // id de la vista cuyo nombre se edita
@@ -104,6 +104,16 @@ export default function BarraDeVistas({
         style={{ ...pestaña(false), color: puedeNueva ? C.blue30D : C.midGray, cursor: puedeNueva ? 'pointer' : 'default' }}>+ Nueva vista</button>
       <span style={{ flex: 1 }} />
       {aviso && <span style={{ fontSize: 11.5, color: C.blue30D, marginRight: 8 }}>{aviso}</span>}
+      {listo && (
+        // El archivo ya está hecho, pero el navegador no lo dejó bajar solo (el clic caducó mientras se
+        // creaba): «Guardar» lo baja con un clic nuevo.
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginRight: 8, fontSize: 11.5, color: C.gris600 }}>
+          {listo.tipo === 'pdf' ? 'PDF listo' : 'Imagen lista'}
+          <button onClick={onGuardar} style={{ ...boton(true), padding: '3px 10px', fontSize: 11.5 }}>Guardar</button>
+          <button onClick={onDescartar} aria-label="Descartar" title="Descartar"
+            style={{ background: 'none', border: 'none', color: C.gris600, cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: '0 2px' }}>×</button>
+        </span>
+      )}
       {vistaVisible && (
         <>
           <span style={{ fontSize: 11.5, color: C.gris600, marginRight: 6 }}>{ocupado || `${nGraficas} ${nGraficas === 1 ? 'gráfica' : 'gráficas'}`}</span>

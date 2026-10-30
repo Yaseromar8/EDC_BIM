@@ -60,3 +60,45 @@ Guardado bloqueado en la pestaña; el itemizado por frente, simulado.
 | Barra con el menú «⋯» (segunda versión) | Una barra: pestañas Lienzo / vista / «+ Nueva vista» y, a la derecha, «5 gráficas» y «⋯». Desde el menú: copiar enlace (`project`, `frente`, `fn`, `tablero`), PNG 580 KB, PDF 388 KB; renombrar con doble clic y desde el menú; Escape cancela el renombrado; Quitar pide confirmación y, aceptada, deja solo el lienzo (el guardado, bloqueado en la pestaña). El menú cierra con clic fuera, con «⋯» y con Escape |
 
 Escape no llegaba a la barra: `Viewer.jsx` lo corta en la ventana (fase de captura) para que LMV no muestre lo oculto. La barra lleva `data-escape-propio`, la misma salida que ya usa la Planilla.
+
+## 6 · Descargas fiables, borde como en Miro y cabecera de herramientas (30-oct, tarde)
+
+El dueño, en el banco:
+- «no se puede descargar imagen o PDF»;
+- «cuando quiero anchear o reducir el tablero, tiembla»;
+- los botones de la cabecera, «que no parezcan botones».
+
+**Descargas.** Hubo dos causas:
+- **El banco se había parado:** la app apagó el servidor de `localhost:5181`, y la imagen y el PDF cargan html2canvas y jsPDF al primer uso.
+- **Chrome bloquea en silencio** una descarga cuyo clic ya no es reciente (unos 5 s), y la captura puede tardar más.
+
+Ahora la vista devuelve el archivo (`{ nombre, blob }`):
+- si `navigator.userActivation.isActive`, se baja solo;
+- si no, la barra muestra «PDF listo · **Guardar**», y ese clic nuevo lo baja.
+
+**Borde.** Cada movimiento:
+- pasaba por React y repintaba la App entera;
+- reiniciaba la transición de 0,22 s del margen del 3D;
+- esa transición redimensionaba el visor una docena de veces.
+
+Ahora, como en Miro (el lienzo no cambia de tamaño y los paneles flotan):
+- mientras se arrastra solo cambia, en el DOM y una vez por fotograma, el ancho del panel;
+- el encuadre del lienzo se corre lo mismo que el borde, así que las tarjetas se quedan quietas en pantalla;
+- el 3D no se toca: al ensanchar, el panel lo tapa; al estrechar, la franja se cubre con el fondo del 3D;
+- al soltar, el 3D se ajusta una vez y sin transición, y React se pone al día en el fotograma siguiente;
+- no se selecciona texto;
+- las gráficas de auditoría (ECharts y Plotly) se redibujan una vez, cuando el tamaño se asienta.
+
+Referencias consultadas: Allotment (la vista dividida de VS Code), react-resizable-panels y el ejemplo forge-rcdb de Autodesk, que solo llama a `viewer.resize()` si el contenedor cambió de tamaño.
+
+**Cabecera.** `Herramienta.jsx`: icono y texto, sin caja, con fondo suave al pasar el ratón, en tres grupos (añadir · organizar · crear). «Nuevo gráfico» es la única en oscuro. Por debajo de 1.000 px, el CSS deja solo el icono (`data-compacta`, que el borde cambia en vivo).
+
+**Medido** con un Chrome aparte controlado por CDP, con la sesión del dueño, en el Frente Canal, el tablero real (19.889 elementos) y los guardados bloqueados en la pestaña:
+
+| Prueba | Resultado |
+|---|---|
+| Ensanchar 450 px, ratón real, 50 pasos en 1,2 s | La tarjeta queda en la misma x en los 469 fotogramas; texto seleccionado 0; cabecera cortada en 0 fotogramas; el 3D se redimensiona 1 vez (al soltar); 8 ms de media por fotograma |
+| Estrechar 450 px | Igual |
+| Tirón al soltar | Queda uno, de 133–138 ms: el 3D redibujando el modelo a su tamaño nuevo. Antes eran unos 13 redimensionados por movimiento |
+| Descargar PDF / imagen desde «⋯» | Bajan: PDF de 149 KB y PNG de 248 KB |
+| Clic caducado (forzado sin gesto) | Sale «PDF listo · Guardar»; al pulsar Guardar, el PDF baja (149 KB) y el aviso se retira |
