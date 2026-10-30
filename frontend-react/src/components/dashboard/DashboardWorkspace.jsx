@@ -15,6 +15,7 @@ import { SOURCES, discoverFields, isolateInViewer, colorizeInViewer, clearViewer
 import ChartCard from './ChartCard';
 import ChartEditor from './ChartEditor';
 import VistaDePagina from './VistaDePagina';
+import BarraDeVistas from './BarraDeVistas';
 import { ANALISIS, ORDEN_ANALISIS } from './analisisDeAuditoria';
 // El itemizado vigente del frente abierto: el que se subió a la Planilla (docs/visor/51).
 import { itemizadoDeObra } from '../../utils/itemizadoDeObraVisor';
@@ -74,6 +75,9 @@ export default function DashboardWorkspace({ project, backendUrl, onClose, proye
   const [eligiendo, setEligiendo] = useState(false);
   const [elegidas, setElegidas] = useState(() => new Set());
   const [nombreVista, setNombreVista] = useState('');
+  const vistaRef = useRef(null);                  // la vista de página: exporta imagen y PDF
+  const [exportando, setExportando] = useState('');
+  const [avisoVista, setAvisoVista] = useState('');
   const [aviso, setAviso] = useState('');
   const [locked, setLocked] = useState(false); // candado: bloquea mover/redimensionar nodos
   const lockedRef = useRef(false);
@@ -478,6 +482,23 @@ export default function DashboardWorkspace({ project, backendUrl, onClose, proye
     setVistaActiva(v.id);
   };
   const vistaVisible = vistas.find(v => v.id === vistaActiva) || null;
+  const avisarVista = (t) => { setAvisoVista(t); setTimeout(() => setAvisoVista(''), 2800); };
+  const copiarEnlaceDeVista = async () => {
+    const enlace = enlaceDe(vistaVisible);
+    try { await navigator.clipboard.writeText(enlace); avisarVista('Enlace copiado'); }
+    catch { window.prompt('Copia el enlace de la vista:', enlace); }
+  };
+  const exportarVista = async (tipo) => {
+    setExportando(tipo === 'pdf' ? 'Creando el PDF…' : 'Creando la imagen…');
+    try { await vistaRef.current?.exportar(tipo); }
+    catch (e) { avisarVista(`No se pudo exportar: ${e.message}`); }
+    setExportando('');
+  };
+  const quitarVista = () => {
+    if (!vistaVisible || !window.confirm(`¿Quitar la vista «${vistaVisible.titulo}»? Las gráficas siguen en el lienzo.`)) return;
+    setVistas(vs => vs.filter(v => v.id !== vistaVisible.id));
+    setVistaActiva(null);
+  };
   // Al abrir una vista el panel se ensancha para mostrarla (como una página); el usuario puede achicarlo.
   useEffect(() => { if (vistaActiva) setWidth(w => Math.max(w, Math.round(window.innerWidth * 0.62))); }, [vistaActiva]);
   // Enlace de una vista para la gente de la obra: abre el visor en el frente y el Tablero en la vista.
@@ -618,32 +639,18 @@ export default function DashboardWorkspace({ project, backendUrl, onClose, proye
         )}
       </div>
 
-      {/* Vistas: el lienzo y un botón por cada vista fijada; y el modo de elegir tarjetas */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 14px', borderBottom: `1px solid ${C.lightGray}`, background: C.blanco, flexShrink: 0, flexWrap: 'wrap', fontSize: 12 }}>
-        {eligiendo ? (
-          <>
-            <span style={{ color: C.dark, fontWeight: 600 }}>Elige las gráficas de la vista</span>
-            <span style={{ color: C.gris600 }}>· {elegidas.size} {elegidas.size === 1 ? 'elegida' : 'elegidas'} (clic en una tarjeta para marcarla)</span>
-            <input value={nombreVista} onChange={e => setNombreVista(e.target.value)} placeholder="Título de la vista (ej. Auditoría Canal – reunión)"
-              onKeyDown={e => { if (e.key === 'Enter') fijarVista(); if (e.key === 'Escape') cancelarEleccion(); }}
-              style={{ flex: '1 1 220px', minWidth: 180, padding: '4px 8px', borderRadius: 6, border: `1px solid ${C.gris300}`, fontFamily: FUENTE, fontSize: 12, outline: 'none' }} />
-            <button onClick={fijarVista} disabled={!elegidas.size} style={boton(true, !elegidas.size)}>Fijar como vista</button>
-            <button onClick={cancelarEleccion} style={boton()}>Cancelar</button>
-          </>
-        ) : (
-          <>
-            <span style={{ color: C.gris600, marginRight: 2 }}>Vistas:</span>
-            <button onClick={() => setVistaActiva(null)} style={{ ...boton(!vistaActiva), padding: '3px 10px' }}>Lienzo</button>
-            {vistas.map(v => (
-              <button key={v.id} onClick={() => setVistaActiva(v.id)} title={`${v.cards.length} gráficas`}
-                style={{ ...boton(vistaActiva === v.id), padding: '3px 10px', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{v.titulo}</button>
-            ))}
-            <button onClick={() => { setVistaActiva(null); setEligiendo(true); }} disabled={loading || !charts.length}
-              title="Elige en el lienzo las gráficas que quieres mostrar juntas y fíjalas con un nombre"
-              style={{ ...boton(false, loading || !charts.length), padding: '3px 10px' }}>+ Nueva vista</button>
-          </>
-        )}
-      </div>
+      {/* Vistas: pestañas (Lienzo y una por vista) y, en una vista, el menú «⋯» (docs/visor/52) */}
+      <BarraDeVistas
+        vistas={vistas} vistaActiva={vistaActiva} onIr={setVistaActiva}
+        eligiendo={eligiendo} nElegidas={elegidas.size} nombreVista={nombreVista} onNombre={setNombreVista}
+        onFijar={fijarVista} onCancelar={cancelarEleccion}
+        onNuevaVista={() => { setVistaActiva(null); setEligiendo(true); }} puedeNueva={!loading && charts.length > 0}
+        vistaVisible={vistaVisible} nGraficas={vistaVisible ? vistaVisible.cards.filter(id => charts.some(c => c.id === id)).length : 0}
+        ocupado={exportando} aviso={avisoVista}
+        onCopiarEnlace={copiarEnlaceDeVista} onExportar={exportarVista}
+        onRenombrar={(id, t) => setVistas(vs => vs.map(v => (v.id === id ? { ...v, titulo: t } : v)))}
+        onQuitar={quitarVista}
+      />
 
       <div style={{ flex: 1, minHeight: 0, position: 'relative', display: 'flex', flexDirection: 'column' }}>
       {/* ── LIENZO INFINITO ── */}
@@ -800,6 +807,7 @@ export default function DashboardWorkspace({ project, backendUrl, onClose, proye
 
       {vistaVisible && (
         <VistaDePagina
+          ref={vistaRef}
           key={vistaVisible.id}
           vista={vistaVisible}
           charts={charts}
@@ -808,16 +816,12 @@ export default function DashboardWorkspace({ project, backendUrl, onClose, proye
           meta={{ fuente: SOURCES.inventory.label, hora }}
           itemizado={itemizado}
           contexto={[proyecto?.displayName || proyecto?.name, dashName].filter(Boolean).join(' · ')}
-          enlace={enlaceDe(vistaVisible)}
           activo={active}
           onIsolate={handleIsolate}
           onPaint={handlePaint}
           onEdit={setEditing}
           onUpdateChart={(next) => setCharts(cs => cs.map(c => (c.id === next.id ? next : c)))}
           onQuitarDeVista={(id) => setVistas(vs => vs.map(v => (v.id === vistaVisible.id ? { ...v, cards: v.cards.filter(x => x !== id) } : v)))}
-          onRenombrar={(t) => setVistas(vs => vs.map(v => (v.id === vistaVisible.id ? { ...v, titulo: t } : v)))}
-          onBorrar={() => { setVistas(vs => vs.filter(v => v.id !== vistaVisible.id)); setVistaActiva(null); }}
-          onVolver={() => setVistaActiva(null)}
         />
       )}
       </div>
