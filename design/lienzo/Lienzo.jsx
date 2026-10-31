@@ -19,7 +19,9 @@
 // barra(el, { actualizar }), alDobleClic(el), texto(el), etiqueta, limpiar(raw) } }`. El lienzo no sabe qué es un
 // documento: los elementos de esos tipos viven en `notas`, se mueven, seleccionan, copian, fusionan y deshacen como
 // cualquier otro, y quien registra el tipo pone cómo se dibuja, sus botones y qué pasa al hacer doble clic.
-// `ref.insertar(elementos)` los coloca en el centro de la vista, elegidos, como un paso de deshacer.
+// La Pieza recibe `{ elemento, elegido, ajustar(patch) }`: `ajustar` corrige lo que descubre de sí misma (su
+// proporción) sin crear un paso de deshacer. `ref.insertar(elementos, { en })` los coloca en el centro de la vista
+// o donde se soltaron (`en`: punto de la pantalla), elegidos, como un paso de deshacer.
 import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { C, FUENTE, RADIO } from './tema';
@@ -201,7 +203,7 @@ const Lienzo = forwardRef(function Lienzo({ inicial = null, onCambio, claveCamar
     },
     ocupado: () => hist.current.gesto || !!editandoRef.current,
     // Coloca elementos nuevos (sin id ni posición) en el centro de la vista, en filas de cuatro, y los deja elegidos.
-    insertar: (lista) => insertarRef.current(lista),
+    insertar: (lista, opciones) => insertarRef.current(lista, opciones),
   }), []);
 
   // La barra contextual va encima de lo elegido, pero nunca fuera de la pantalla: se corre hacia dentro por los
@@ -615,12 +617,32 @@ const Lienzo = forwardRef(function Lienzo({ inicial = null, onCambio, claveCamar
   const editar = (id) => { if (!notasRef.current.find(n => n.id === id)?.bloqueado) setEditandoNota(id); };
   // Cambiar campos de un elemento desde la barra de su tipo (p. ej. «actualizar a la versión nueva»): un paso de deshacer.
   const actualizarElemento = (id, patch) => { marcar(); setNotas(ns => ns.map(n => (n.id === id ? { ...n, ...patch } : n))); };
+  // Lo que la pieza descubre de sí misma (una lámina, su proporción al cargar la imagen) no es un paso de deshacer:
+  // se corrige también en lo ya apuntado, para que deshacer y rehacer no lo devuelvan a la forma provisional.
+  const ajustarElemento = (id, patch) => {
+    const h = hist.current, f = (c) => ({ ...c, notas: c.notas.map(n => (n.id === id ? { ...n, ...patch } : n)) });
+    h.pasado = h.pasado.map(f); h.futuro = h.futuro.map(f);
+    const pasoAbierto = notasRef.current !== h.actual.notas;
+    h.actual = f(h.actual);
+    const nuevas = notasRef.current.map(n => (n.id === id ? { ...n, ...patch } : n));
+    if (!pasoAbierto) {
+      h.aplicando = true;                                        // sin paso nuevo…
+      onCambioRef.current?.({ notas: nuevas, secciones: seccionesRef.current });   // …pero se guarda
+    }
+    setNotas(nuevas);
+  };
   const insertarRef = useRef(null);
-  insertarRef.current = (lista) => {
-    const elementos = (lista || []).filter(x => x && x.w > 0 && x.h > 0);
+  // `en`: el punto de la pantalla donde se soltó (arrastrar desde un panel, como en ACC): el bloque se centra ahí,
+  // tal cual, sin buscar sitio ni mover la cámara. Sin él, centro de la vista y sitio libre.
+  // El tamaño pedido es el de la PANTALLA cuando la vista está alejada: soltar a un 5 % no crea una tarjeta de 18 px.
+  insertarRef.current = (lista, { en } = {}) => {
+    const k = 1 / Math.min(1, viewRef.current.s);
+    const elementos = (lista || []).filter(x => x && x.w > 0 && x.h > 0).map(x => ({ ...x, w: redondo(x.w * k), h: redondo(x.h * k) }));
     if (!elementos.length) return [];
     marcar();
-    const V = visible(), cx = (V.x1 + V.x2) / 2, cy = (V.y1 + V.y2) / 2, hueco = 32, porFila = Math.min(4, elementos.length);
+    const V = visible(), hueco = 32 * k, porFila = Math.min(4, elementos.length);
+    const punto = en ? puntoDelMundo(en) : null;
+    const cx = punto ? punto.x : (V.x1 + V.x2) / 2, cy = punto ? punto.y : (V.y1 + V.y2) / 2;
     const anchoCol = Math.max(...elementos.map(x => x.w)), altoFila = Math.max(...elementos.map(x => x.h));
     const filas = Math.ceil(elementos.length / porFila);
     const anchoBloque = porFila * anchoCol + (porFila - 1) * hueco, altoBloque = filas * altoFila + (filas - 1) * hueco;
@@ -629,7 +651,7 @@ const Lienzo = forwardRef(function Lienzo({ inicial = null, onCambio, claveCamar
     const ocupado = todos();
     const choca = (x, y) => ocupado.some(o => o.x < x + anchoBloque + hueco && o.x + o.w + hueco > x && o.y < y + altoBloque + hueco && o.y + o.h + hueco > y);
     let x0 = cx - anchoBloque / 2, y0 = cy - altoBloque / 2;
-    if (choca(x0, y0)) {
+    if (!punto && choca(x0, y0)) {
       const candidatos = ocupado.flatMap(o => [[o.x + o.w + hueco, y0], [o.x + o.w + hueco, o.y], [x0, o.y + o.h + hueco], [o.x, o.y + o.h + hueco]]);
       const libre = candidatos.filter(([x, y]) => !choca(x, y)).sort((a, b) => Math.hypot(a[0] - x0, a[1] - y0) - Math.hypot(b[0] - x0, b[1] - y0))[0];
       if (libre) [x0, y0] = libre;
@@ -640,7 +662,7 @@ const Lienzo = forwardRef(function Lienzo({ inicial = null, onCambio, claveCamar
     setSeleccion(new Set(nuevos.map(x => x.id)));
     // Si quedaron fuera de la vista, la cámara va a ellos (sin acercar más de lo que estaba).
     const c = cajaDe(nuevos);
-    if (c.x1 < V.x1 || c.y1 < V.y1 || c.x2 > V.x2 || c.y2 > V.y2) encuadrar(nuevos, Math.min(1, viewRef.current.s));
+    if (!punto && (c.x1 < V.x1 || c.y1 < V.y1 || c.x2 > V.x2 || c.y2 > V.y2)) encuadrar(nuevos, Math.min(1, viewRef.current.s));
     return nuevos.map(x => x.id);
   };
   const seleccionarTodo = () => setSeleccion(new Set(todos().map(x => x.id)));
@@ -939,7 +961,7 @@ const Lienzo = forwardRef(function Lienzo({ inicial = null, onCambio, claveCamar
                 <div key={n.id} ref={refNodo(n.id)} className="tablero-nodo" onPointerDown={arrastrar(n.id)}
                   onDoubleClick={(e) => { e.stopPropagation(); tipo.alDobleClic?.(n); }}
                   style={{ position: 'absolute', left: n.x, top: n.y, width: n.w, height: n.h }}>
-                  <PiezaPropia elemento={n} elegido={sel.has(n.id)} />
+                  <PiezaPropia elemento={n} elegido={sel.has(n.id)} ajustar={(patch) => ajustarElemento(n.id, patch)} />
                 </div>
               );
             }

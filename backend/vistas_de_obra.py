@@ -48,7 +48,15 @@ LIMITE = 500
 RECIENTES = 'recientes'
 LIMITE_RECIENTES = 30
 CANDIDATOS_RECIENTES = 200
-ACEPTADAS = CLAVES + (RECIENTES,)
+# «VISUALIZADOS RECIENTEMENTE» (31-oct-2026, docs/visor/59 §6.1), como el panel de ACC: los últimos documentos que
+# ESTA PERSONA abrió en la obra. No se registra nada nuevo: cada apertura ya queda en `activity_log` como
+# `acceso_a_documento` (registro_de_descargas.py), con la misma identidad que se usa aquí. Se descartan los accesos
+# DENEGADOS y, como siempre, lo que hoy ya no puede ver. Por páginas («Cargar más»).
+VISTOS = 'vistos'
+POR_PAGINA_VISTOS = 20
+CANDIDATOS_VISTOS = 200
+DIAS_VISTOS = 180
+ACEPTADAS = CLAVES + (RECIENTES, VISTOS)
 
 # Las carpetas de la obra con su ruta legible desde la raíz («Archivos de proyecto»
 # no forma parte de la ruta). Solo carpetas vivas: lo que cuelga de una carpeta
@@ -290,7 +298,8 @@ def filtrar_visibles(cur, usuario, urn, docs, permiso=None):
 # pero sobre toda la obra. Se aplican en el servidor para no mandar al navegador
 # los miles de documentos de una obra solo para quedarse con veinte.
 TODOS = 'todos'
-FILTROS = ('q', 'estado', 'tipo', 'disciplina', 'entrega')
+# `pagina` no filtra: es la página de «Visualizados recientemente» (`cumple` no la mira).
+FILTROS = ('q', 'estado', 'tipo', 'disciplina', 'entrega', 'pagina')
 
 
 def piezas_del_codigo(nombre):
@@ -376,6 +385,8 @@ def documentos(cur, usuario, urn, clave, hoy=None, limite=LIMITE, filtros=None):
     if clave not in ACEPTADAS and clave != TODOS:
         raise ValueError(clave)
     hoy = hoy or datetime.date.today()
+    if clave == VISTOS:
+        return _vistos(cur, usuario, urn, hoy, pagina=(filtros or {}).get('pagina'))
     if clave == RECIENTES:
         def mas_recientes(ds):
             return sorted(ds, key=lambda d: d.get('updated') or '', reverse=True)[:CANDIDATOS_RECIENTES]
@@ -389,3 +400,44 @@ def documentos(cur, usuario, urn, clave, hoy=None, limite=LIMITE, filtros=None):
     if clave == PLAZO_VENCIDO and tabla:
         extra['vencidos_sin_documento'] = _vencidos_sin_documento(cur, urn, hoy)
     return filas[:limite], len(filas), extra
+
+
+def _quien_abre(usuario):
+    """La identidad con la que registro_de_descargas anota las aperturas (la misma, o no se encuentran)."""
+    from registro_de_descargas import _quien
+    return _quien(usuario)
+
+
+def _vistos(cur, usuario, urn, hoy, pagina=None):
+    quien = _quien_abre(usuario)
+    if not quien:
+        return [], 0, {'pagina': 0, 'hay_mas': False}
+    try:
+        pagina = max(0, int(pagina or 0))
+    except (TypeError, ValueError):
+        pagina = 0
+    cur.execute(
+        "SELECT entity_id, max(created_at) AS visto FROM activity_log "
+        " WHERE model_urn = %s AND action = 'acceso_a_documento' AND entity_type = 'file' "
+        "   AND performed_by = %s AND created_at > now() - make_interval(days => %s) "
+        "   AND coalesce(details->>'via', '') NOT LIKE 'DENEGADO%%' "
+        " GROUP BY entity_id ORDER BY visto DESC LIMIT %s",
+        (urn, quien, DIAS_VISTOS, CANDIDATOS_VISTOS))
+    orden = {}
+    for entidad, visto in cur.fetchall():
+        if entidad and str(entidad) not in orden:
+            orden[str(entidad)] = visto
+    if not orden:
+        return [], 0, {'pagina': 0, 'hay_mas': False}
+    docs, _tabla, obra_con_plan = _documentos(cur, usuario, urn, hoy, elegir=lambda d: True,
+                                              previo=lambda ds: [d for d in ds if d['id'] in orden])
+    docs.sort(key=lambda d: orden[d['id']], reverse=True)
+    filas = []
+    for d in docs:
+        f = _limpia(d)
+        f['visto'] = orden[d['id']].isoformat() if orden[d['id']] else None
+        filas.append(f)
+    ini = pagina * POR_PAGINA_VISTOS
+    trozo = filas[ini:ini + POR_PAGINA_VISTOS]
+    return trozo, len(filas), {'pagina': pagina, 'hay_mas': ini + POR_PAGINA_VISTOS < len(filas),
+                               'hay_plan': obra_con_plan}

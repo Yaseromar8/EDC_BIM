@@ -13,7 +13,7 @@ import { API } from '../utils/helpers';
 import { apiFetch } from '../utils/apiFetch';
 import IconoModulo from './IconoModulo';
 import Lienzo from '../../../design/lienzo/Lienzo';
-import { DocumentosDelTablero, versionesVigentes, extensionDe, TAMANO_TARJETA } from './tableros/documentos';
+import { DocumentosDelTablero, versionesVigentes, extensionDe, tamanoPara } from './tableros/documentos';
 import { tipoDocumento } from './tableros/tipoDocumento';
 import PanelDocumentos from './tableros/PanelDocumentos';
 import { enlaceDeArchivos } from '../utils/enlacesDeArchivos';
@@ -246,15 +246,22 @@ function TableroEditor({ id, onCerrar }) {
     window.open(enlaceDeArchivos(window.location.origin, { obra, carpeta: el.parentId, documento: el.nodeId, version: el.versionId }), '_blank', 'noopener');
   }, [obra]);
   const tipos = useMemo(() => ({ documento: tipoDocumento({ abrir }) }), [abrir]);
-  const anadirDocumentos = async (filas) => {
+  // `en`: el punto donde se soltó al jalarlo desde «Visualizados recientemente» (fuera del tablero no se añade).
+  const zonaRef = useRef(null);
+  const anadirDocumentos = async (filas, en = null) => {
+    if (en) {
+      const r = zonaRef.current?.getBoundingClientRect();
+      if (!r || en.clientX < r.left || en.clientX > r.right || en.clientY < r.top || en.clientY > r.bottom) return;
+    }
     setPanelDocumentos(false);
     const sinVersion = filas.filter(f => !f.version_id).map(f => f.id);
     const vig = sinVersion.length ? await versionesVigentes(obra, sinVersion) : {};
     lienzoRef.current?.insertar(filas.map(f => ({
-      tipo: 'documento', ...TAMANO_TARJETA,
+      tipo: 'documento', ...tamanoPara(f.name),
       nodeId: f.id, versionId: f.version_id || vig[f.id]?.versionId || null, version: f.version_id ? (f.version || null) : (vig[f.id]?.version || f.version || null),
+      fecha: f.version_id ? (f.updated || null) : (vig[f.id]?.fecha || f.updated || null),
       parentId: f.parent_id || null, nombre: f.name, ext: extensionDe(f.name),
-    })));
+    })), en ? { en } : undefined);
   };
 
   useEffect(() => {
@@ -417,7 +424,7 @@ function TableroEditor({ id, onCerrar }) {
           {datos ? (aviso && estado === 'guardado' ? aviso : textoEstado) : ''}
         </span>
       </header>
-      <div style={{ flex: 1, position: 'relative', minHeight: 0 }}>
+      <div ref={zonaRef} style={{ flex: 1, position: 'relative', minHeight: 0 }}>
         {fallo ? (
           <div style={{ padding: 48, textAlign: 'center', color: GRIS, fontSize: 14 }}>{fallo}</div>
         ) : !datos ? (
@@ -426,7 +433,8 @@ function TableroEditor({ id, onCerrar }) {
           <DocumentosDelTablero.Provider value={{ obra, vigentes }}>
             <Lienzo key={id} ref={lienzoRef} inicial={datos.config} onCambio={alCambiar} claveCamara={`alephia-tablero-camara:${id}`} tipos={tipos}
               paletaExtra={estado === 'archivado' ? [] : [['documento', 'Documentos', () => setPanelDocumentos(p => !p)]]} />
-            {panelDocumentos && <PanelDocumentos obra={obra} onAnadir={anadirDocumentos} onCerrar={() => setPanelDocumentos(false)} />}
+            {panelDocumentos && <PanelDocumentos obra={obra} onAnadir={(lista) => anadirDocumentos(lista)} onSoltar={(fila, en) => anadirDocumentos([fila], en)}
+              onCerrar={() => setPanelDocumentos(false)} />}
           </DocumentosDelTablero.Provider>
         )}
       </div>

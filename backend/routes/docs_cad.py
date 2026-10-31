@@ -1385,6 +1385,20 @@ def cad_de_enlace_publico(share_id):
                     'nombre': nombre})
 
 
+def _anotar_apertura(node):
+    """Abrir un plano en el visor CAD también es «se entregó el acceso» (registro_de_descargas.py).
+
+    Los PDF ya lo anotaban al pedir el fichero; el DWG y el RVT, que viajan por Autodesk, no dejaban rastro: ni
+    para la supervisión («quién vio este plano») ni para «Visualizados recientemente» del tablero (docs/visor/59
+    §6.1). El registro tiene su propio freno por persona y documento, así que el sondeo de esta ruta no repite.
+    """
+    try:
+        from registro_de_descargas import registrar
+        registrar(getattr(g, 'current_user', None), None, 'visor CAD', node_id=node['id'])
+    except Exception:
+        pass   # el registro nunca puede impedir que se abra un plano
+
+
 @docs_cad_bp.route('/api/docs/cad/status', methods=['GET'])
 def cad_status():
     """Progreso de la traduccion. El frontend consulta esto mientras espera."""
@@ -1398,6 +1412,7 @@ def cad_status():
     negativa = _guardia_del_plano(node)
     if negativa:
         return negativa
+    _anotar_apertura(node)
     if request.args.get('vistas') == 'autocad' and _admite_vistas_pdf(node):
         return _estado_con_vistas_autocad(node)
 

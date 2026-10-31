@@ -323,3 +323,54 @@ def test_recientes_no_es_una_vista_de_la_barra_de_archivos(monkeypatch):
     _preparar(monkeypatch, {'c1': 'viewer'})
     r = v.recuentos(Cur([fila('a', 'A.pdf', 'WIP')]), {'id': 7}, OBRA, hoy=HOY)
     assert v.RECIENTES not in r['recuentos'] and v.RECIENTES not in v.CLAVES and v.RECIENTES in v.ACEPTADAS
+
+
+# ── «Visualizados recientemente» (31-oct-2026, docs/visor/59 §6.1): lo que ESTA persona abrió ──
+
+class CurVistos(Cur):
+    """Además de los documentos de la obra, responde a la consulta de aperturas de activity_log."""
+
+    def __init__(self, filas, aperturas):
+        super().__init__(filas)
+        self.aperturas, self.params_aperturas = aperturas, None
+
+    def execute(self, sql, params=None):
+        s = ' '.join(sql.split())
+        if 'FROM activity_log' in s:
+            self.sql.append(s)
+            self.params_aperturas = params
+            self.r = list(self.aperturas)
+            return
+        super().execute(sql, params)
+
+
+def test_vistos_son_los_que_abrio_esta_persona_por_orden_y_con_permiso(monkeypatch):
+    _preparar(monkeypatch, {'c1': 'viewer', 'c2': 'none'})
+    base = dt.datetime(2026, 10, 1, 12, 0)
+    filas = [fila(f'd{i}', f'D{i}.pdf', 'WIP') for i in range(30)] + [fila('oculto', 'Reservado.pdf', 'WIP', carpeta='c2')]
+    # Abrió d0…d24 (d24 la última) y el reservado; «borrado» ya no está en la obra.
+    aperturas = [(f'd{i}', base + dt.timedelta(hours=i)) for i in range(25)]
+    aperturas += [('oculto', base + dt.timedelta(days=9)), ('borrado', base + dt.timedelta(days=10))]
+    aperturas.sort(key=lambda a: a[1], reverse=True)
+    cur = CurVistos(filas, aperturas)
+    datos, total, extra = v.documentos(cur, {'id': 7, 'email': 'ana@obra.pe'}, OBRA, v.VISTOS, hoy=HOY)
+    ids = [d['id'] for d in datos]
+    assert ids[:3] == ['d24', 'd23', 'd22'] and len(ids) == v.POR_PAGINA_VISTOS   # lo último que abrió, primero
+    assert 'oculto' not in ids and 'borrado' not in ids                            # la carpeta manda; lo borrado no sale
+    assert total == 25 and extra['hay_mas'] is True and extra['pagina'] == 0
+    assert datos[0]['visto'].startswith('2026-10-02T12:00')
+    sql = next(q for q in cur.sql if 'FROM activity_log' in q)
+    assert "action = 'acceso_a_documento'" in sql and "NOT LIKE 'DENEGADO" in sql and 'model_urn = %s' in sql
+    assert cur.params_aperturas[:2] == (OBRA, 'ana@obra.pe')                         # la identidad del registro
+    resto, _t, extra2 = v.documentos(CurVistos(filas, aperturas), {'id': 7, 'email': 'ana@obra.pe'}, OBRA, v.VISTOS,
+                                     hoy=HOY, filtros={'pagina': '1'})
+    assert [d['id'] for d in resto] == [f'd{i}' for i in range(4, -1, -1)] and extra2['hay_mas'] is False
+
+
+def test_vistos_sin_identidad_o_sin_aperturas_es_vacio(monkeypatch):
+    _preparar(monkeypatch, {'c1': 'viewer'})
+    assert v.documentos(CurVistos([fila('a', 'A.pdf', 'WIP')], [('a', dt.datetime(2026, 10, 1))]), {}, OBRA, v.VISTOS,
+                        hoy=HOY)[0] == []
+    assert v.documentos(CurVistos([fila('a', 'A.pdf', 'WIP')], []), {'id': 7}, OBRA, v.VISTOS, hoy=HOY)[0] == []
+    assert v.VISTOS in v.ACEPTADAS and v.VISTOS not in v.CLAVES
+
