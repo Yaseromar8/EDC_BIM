@@ -912,7 +912,7 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
           <SetsView projectPrefix={projectPrefix} isAdmin={isAdmin} />
         )}
         {fe.sidebarView === 'tableros' && (
-          <TablerosModule projectPrefix={projectPrefix} user={user} isAdmin={isAdmin} />
+          <TablerosModule projectPrefix={projectPrefix} project={project} user={user} isAdmin={isAdmin} />
         )}
 
         {/* RED LINES VIEW */}

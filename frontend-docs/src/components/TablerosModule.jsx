@@ -17,6 +17,12 @@ import { DocumentosDelTablero, versionesVigentes, extensionDe, tamanoPara } from
 import { tipoDocumento } from './tableros/tipoDocumento';
 import PanelDocumentos from './tableros/PanelDocumentos';
 import VisorDelTablero from './tableros/VisorDelTablero';
+import { PanelIssue, ModalLevantar } from './PunchModule';
+import { IncidenciasDelTablero, TAMANO_INCIDENCIA, TAMANO_KANBAN, incidenciasDeLaObra, catalogoDeIncidencias, miembrosDeLaObra, planosDeLaObra } from './tableros/incidencias';
+import { tipoIncidencia, tipoKanban } from './tableros/tipoIncidencia';
+import PanelIncidencias from './tableros/PanelIncidencias';
+import SelectorIncidencias from './tableros/SelectorIncidencias';
+import CapaEncima from './tableros/CapaEncima';
 import { enlaceDeArchivos } from '../utils/enlacesDeArchivos';
 import { fusionar, mismoContenido } from '../../../design/lienzo/fusion';
 import { miniaturaSvg } from '../../../design/lienzo/miniatura';
@@ -47,7 +53,7 @@ async function llamar(url, metodo = 'GET', cuerpo) {
 }
 
 // ── Lista ──────────────────────────────────────────────────────────────────────────────────────────
-export default function TablerosModule({ projectPrefix, user, isAdmin }) {
+export default function TablerosModule({ projectPrefix, project = null, user, isAdmin }) {
   const [archivados, setArchivados] = useState(false);
   const [lista, setLista] = useState(null);
   const [error, setError] = useState('');
@@ -214,7 +220,7 @@ export default function TablerosModule({ projectPrefix, user, isAdmin }) {
           ))}
         </div>, document.body)}
 
-      {abierto && <TableroEditor id={abierto} onCerrar={() => { setAbierto(null); recargar(); }} />}
+      {abierto && <TableroEditor id={abierto} project={project} user={user} isAdmin={isAdmin} onCerrar={() => { setAbierto(null); recargar(); }} />}
     </div>
   );
 }
@@ -222,7 +228,7 @@ export default function TablerosModule({ projectPrefix, user, isAdmin }) {
 // ── Editor: el tablero en pantalla completa ──────────────────────────────────────────────────────────
 const MAX_HOJAS_EXTRAIDAS = 50;
 
-function TableroEditor({ id, onCerrar }) {
+function TableroEditor({ id, project, user, isAdmin, onCerrar }) {
   const [datos, setDatos] = useState(null);       // { nombre, archivado, config, version } al abrir
   const [fallo, setFallo] = useState('');
   const [nombre, setNombre] = useState('');
@@ -260,7 +266,46 @@ function TableroEditor({ id, onCerrar }) {
     const otras = Array.from({ length: Math.min(total, MAX_HOJAS_EXTRAIDAS + 1) }, (_, i) => i + 1).filter(n => n !== hoja).slice(0, MAX_HOJAS_EXTRAIDAS);
     lienzoRef.current?.insertar(otras.map(n => ({ ...resto, pagina: n, ar: null })), { junto: el.id });
   }, []);
-  const tipos = useMemo(() => ({ documento: tipoDocumento({ abrir, extraer: extraerPaginas }) }), [abrir, extraerPaginas]);
+  // INCIDENCIAS (fase 3, docs/visor/61): las de la obra, vivas (al abrir y cada minuto con la pestaña a la vista), con
+  // las mismas piezas que «Issues y punch»: su detalle y su alta, encima del tablero.
+  const [incidencias, setIncidencias] = useState(null);
+  const [catalogo, setCatalogo] = useState(null);
+  const [miembros, setMiembros] = useState([]);
+  const [planos, setPlanos] = useState([]);
+  const [panelIncidencias, setPanelIncidencias] = useState(false);
+  const [selectorIncidencias, setSelectorIncidencias] = useState(false);
+  const [creandoIncidencia, setCreandoIncidencia] = useState(false);
+  const [incidenciaAbierta, setIncidenciaAbierta] = useState(null);
+  const recargarIncidencias = useCallback(async () => {
+    if (!obra) return;
+    const l = await incidenciasDeLaObra(obra);
+    if (l) setIncidencias(l);
+    else setIncidencias(i => i || []);
+  }, [obra]);
+  useEffect(() => {
+    if (!obra) return undefined;
+    recargarIncidencias();
+    catalogoDeIncidencias().then(c => c && setCatalogo(c));
+    miembrosDeLaObra(project?.id).then(setMiembros);
+    const t = setInterval(() => { if (document.visibilityState === 'visible') recargarIncidencias(); }, 60000);
+    return () => clearInterval(t);
+  }, [obra, project?.id, recargarIncidencias]);
+  const porId = useMemo(() => Object.fromEntries((incidencias || []).map(i => [String(i.id), i])), [incidencias]);
+  const nombres = useMemo(() => Object.fromEntries(miembros.map(m => [m.id, m.name || m.email])), [miembros]);
+  const abrirIncidencia = useCallback((issueId) => setIncidenciaAbierta(String(issueId)), []);
+  const anadirIncidencias = (lista, modo = 'tarjetas', en = null) => {
+    if (!lista.length) return;
+    setPanelIncidencias(false); setSelectorIncidencias(false);
+    const elementos = modo === 'kanban'
+      ? [{ tipo: 'kanban', ...TAMANO_KANBAN, issueIds: lista.map(i => String(i.id)), nombre: 'Incidencias' }]
+      : lista.map(i => ({ tipo: 'incidencia', ...TAMANO_INCIDENCIA, issueId: String(i.id), codigo: i.codigo, nombre: i.titulo }));
+    lienzoRef.current?.insertar(elementos, en ? { en } : undefined);
+  };
+  const tipos = useMemo(() => ({
+    documento: tipoDocumento({ abrir, extraer: extraerPaginas }),
+    incidencia: tipoIncidencia({ abrir: abrirIncidencia }),
+    kanban: tipoKanban(),
+  }), [abrir, extraerPaginas, abrirIncidencia]);
   // `en`: el punto donde se soltó al jalarlo desde «Visualizados recientemente» (fuera del tablero no se añade).
   const zonaRef = useRef(null);
   const anadirDocumentos = async (filas, en = null) => {
@@ -446,11 +491,43 @@ function TableroEditor({ id, onCerrar }) {
           <div style={{ textAlign: 'center', padding: 48 }}><div className="adsk-spinner" style={{ margin: '0 auto' }} /></div>
         ) : (
           <DocumentosDelTablero.Provider value={{ obra, vigentes }}>
+          <IncidenciasDelTablero.Provider value={{ porId, nombres, abrir: abrirIncidencia, cargando: incidencias === null }}>
             <Lienzo key={id} ref={lienzoRef} inicial={datos.config} onCambio={alCambiar} claveCamara={`alephia-tablero-camara:${id}`} tipos={tipos}
-              paletaExtra={estado === 'archivado' ? [] : [['documento', 'Documentos', () => setPanelDocumentos(p => !p)]]} />
+              paletaExtra={estado === 'archivado' ? [] : [
+                ['documento', 'Documentos', () => { setPanelIncidencias(false); setPanelDocumentos(p => !p); }],
+                ['incidencia', 'Incidencias', () => { setPanelDocumentos(false); setPanelIncidencias(p => !p); }],
+              ]} />
             {visor && <VisorDelTablero el={visor} obra={obra} onCerrar={() => setVisor(null)} onAbrirEnArchivos={abrirEnArchivos} />}
             {panelDocumentos && <PanelDocumentos obra={obra} onAnadir={(lista) => anadirDocumentos(lista)} onSoltar={(fila, en) => anadirDocumentos([fila], en)}
               onCerrar={() => setPanelDocumentos(false)} />}
+            {panelIncidencias && (
+              <PanelIncidencias incidencias={incidencias} puedeCrear={!!user}
+                onSeleccionar={() => setSelectorIncidencias(true)}
+                onCrear={() => { planosDeLaObra(obra).then(setPlanos); setCreandoIncidencia(true); }}
+                onSoltar={(i, en) => anadirIncidencias([i], 'tarjetas', en)} onCerrar={() => setPanelIncidencias(false)} />
+            )}
+            {selectorIncidencias && (
+              <SelectorIncidencias incidencias={incidencias} catalogo={catalogo} nombres={nombres}
+                onAnadir={(lista, modo) => anadirIncidencias(lista, modo)} onCerrar={() => setSelectorIncidencias(false)} />
+            )}
+            {creandoIncidencia && (
+              <CapaEncima etiqueta="Crear incidencia">
+                <ModalLevantar API={API} urn={obra} catalogo={catalogo || { tipos: [], estados: [] }} miembros={miembros} planos={planos} yo={user?.id}
+                  user={user} project={project} onCerrar={() => setCreandoIncidencia(false)}
+                  onCreado={(creada) => {
+                    setCreandoIncidencia(false);
+                    recargarIncidencias();
+                    if (creada?.id) anadirIncidencias([creada], 'tarjetas');
+                  }} />
+              </CapaEncima>
+            )}
+            {incidenciaAbierta && porId[incidenciaAbierta] && (
+              <CapaEncima etiqueta={`Incidencia ${porId[incidenciaAbierta].codigo}`}>
+                <PanelIssue d={porId[incidenciaAbierta]} API={API} user={user} isAdmin={isAdmin} nombres={nombres}
+                  onCerrar={() => setIncidenciaAbierta(null)} onCambio={recargarIncidencias} />
+              </CapaEncima>
+            )}
+          </IncidenciasDelTablero.Provider>
           </DocumentosDelTablero.Provider>
         )}
       </div>

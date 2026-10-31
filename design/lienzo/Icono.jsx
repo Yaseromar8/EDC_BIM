@@ -35,6 +35,7 @@ const TRAZOS = {
   puntos: <><circle cx="12" cy="5.5" r="0.9" /><circle cx="12" cy="12" r="0.9" /><circle cx="12" cy="18.5" r="0.9" /></>,
   buscar: <><circle cx="10.5" cy="10.5" r="6.5" /><path d="m15.5 15.5 5 5" /></>,
   documento: <><path d="M7 3h7l5 5v13H7z" /><path d="M14 3v5h5" /><path d="M10 13h6M10 17h4" /></>,
+  incidencia: <><circle cx="12" cy="12" r="8.5" /><path d="m8.5 12.2 2.4 2.4 4.6-4.9" /></>,
   derecha: <><path d="M9 6l6 6-6 6" /></>,
 };
 

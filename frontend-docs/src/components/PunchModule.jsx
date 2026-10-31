@@ -72,6 +72,11 @@ function Chip({ mapa, valor, texto }) {
   );
 }
 
+// Los mismos chips, el detalle y el alta, para el tablero de Docs (docs/visor/61): una incidencia se ve y se trabaja
+// con las mismas piezas y las mismas reglas que aquí, no con una segunda versión.
+export function ChipDeEstado({ estado }) { return <Chip mapa={COLOR_ESTADO} valor={estado} />; }
+export function ChipDeTipo({ tipo, etiqueta }) { return <Chip mapa={COLOR_TIPO} valor={tipo} texto={etiqueta} />; }
+
 // ── LAS TRES IDENTIDADES ───────────────────────────────────────────────────
 // Un papel vacío se dice, no se esconde. «Sin designar» es información: es un
 // issue que va a quedarse sin nadie a quien pasarle la pelota al corregirse.
@@ -344,7 +349,7 @@ function FilaIssue({ d, nombres, yo, onAbrir, abierta }) {
 // Cada acto es una llamada distinta con su propia autoridad, igual que en el
 // backend. Aquí NO hay un «cambiar estado»: no existe en el servidor, y ofrecerlo
 // habría sido dibujar una puerta que no está.
-function PanelIssue({ d, API, user, isAdmin, nombres, onCerrar, onCambio }) {
+export function PanelIssue({ d, API, user, isAdmin, nombres, onCerrar, onCambio }) {
   const [ocupado, setOcupado] = useState(false);
   const [texto, setTexto] = useState('');
   const [evidencias, setEvidencias] = useState([]);
@@ -586,7 +591,7 @@ function PanelIssue({ d, API, user, isAdmin, nombres, onCerrar, onCambio }) {
 // Lo que cada tipo EXIGE lo dice el catálogo del servidor (`exige_responsable`,
 // `exige_verificador`, `exige_ubicacion`), no una lista escrita aquí. Si mañana
 // se añade un tipo, esta pantalla ya sabe pedirle lo suyo.
-function ModalLevantar({ API, urn, catalogo, miembros, planos, yo,
+export function ModalLevantar({ API, urn, catalogo, miembros, planos, yo,
                         user, project, onCerrar, onCreado }) {
   const [f, setF] = useState({
     tipo: 'PUNCH', titulo: '', descripcion: '', responsable_id: '',
@@ -662,7 +667,9 @@ function ModalLevantar({ API, urn, catalogo, miembros, planos, yo,
                       + 'cobertura; míralo en «Trabajo de campo».',
                       { duration: 6000 });
       }
-      onCreado();
+      // La incidencia creada, si el servidor ya la tiene (el tablero la pone como tarjeta); guardada solo en este
+      // dispositivo aún no tiene número: null.
+      onCreado(sinCampo ? datos : (modo === 'servidor' ? datos?.canonical_result : null) || null);
     } catch (e) { toast.error(e.message); } finally { setGuardando(false); }
   };
 
