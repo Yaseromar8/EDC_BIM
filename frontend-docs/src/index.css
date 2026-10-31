@@ -1319,12 +1319,20 @@ table { font-variant-numeric: tabular-nums; }
   box-sizing: border-box;
 }
 
+/* El nombre de cada fila en peso normal, como ACC (31-oct-2026): con la escala de 14 px la seminegrita pesaba
+   demasiado en una lista larga. La jerarquía la dan el icono y el color. */
 .td-cell.name-cell {
   gap: 8px;
   color: var(--text-primary);
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 400;
   letter-spacing: 0.004em;
+}
+
+/* La cabecera «Nombre» al tamaño de las demás cabeceras (heredaba los 14 px de la celda). */
+.data-header .td-cell.name-cell {
+  font-size: 13px;
+  font-weight: 600;
 }
 
 .td-cell .icon {
