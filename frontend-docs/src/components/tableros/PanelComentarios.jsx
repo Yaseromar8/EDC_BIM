@@ -1,5 +1,6 @@
-// PanelComentarios — «Comentarios» de la paleta izquierda del tablero (docs/visor/64): los abiertos y los resueltos,
-// el más reciente arriba. Un clic lleva la cámara al alfiler y abre su hilo.
+// PanelComentarios — «Comentarios» de la cabecera del tablero (docs/visor/64 y 65), a la derecha como el de Forma Board:
+// los abiertos y los resueltos, el más reciente arriba. Un clic lleva la cámara al alfiler y abre su hilo en este mismo
+// sitio («‹ Comentarios» vuelve a la lista).
 import React, { useEffect, useMemo, useState } from 'react';
 import { colorDe, iniciales, cuando } from './comentarios';
 
@@ -23,9 +24,15 @@ export default function PanelComentarios({ comentarios, abiertoId, onIr, onCerra
   );
   return (
     <div role="dialog" aria-label="Comentarios" onPointerDown={e => e.stopPropagation()} onWheel={e => e.stopPropagation()}
-      style={{ position: 'absolute', left: 80, top: 12, width: 300, maxHeight: 'calc(100% - 96px)', zIndex: 8, display: 'flex', flexDirection: 'column',
+      style={{ position: 'absolute', right: 12, top: 12, width: 340, maxHeight: 'calc(100% - 96px)', zIndex: 8, display: 'flex', flexDirection: 'column',
         background: '#fff', borderRadius: 8, boxShadow: '0 0 16px rgba(0,0,0,0.12)', fontFamily: 'var(--a-font-sans)', color: TINTA }}>
-      <div style={{ padding: '14px 14px 4px', fontSize: 13, fontWeight: 600 }}>Comentarios</div>
+      <div style={{ display: 'flex', alignItems: 'center', padding: '8px 8px 4px 14px' }}>
+        <span style={{ flex: 1, fontSize: 14, fontWeight: 600 }}>Comentarios</span>
+        <button type="button" aria-label="Cerrar los comentarios" onClick={onCerrar}
+          style={{ width: 30, height: 30, border: 'none', borderRadius: 6, background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: TINTA }}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
+        </button>
+      </div>
       <div role="tablist" style={{ display: 'flex', padding: '0 8px', borderBottom: `1px solid ${BORDE}` }}>
         {tab('abiertos', 'Abiertos', abiertos.length)}
         {tab('resueltos', 'Resueltos', resueltos.length)}

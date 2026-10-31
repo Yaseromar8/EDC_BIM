@@ -1,6 +1,6 @@
 // Banco de las VISTAS PUBLICADAS de un tablero (docs/visor/63): qué enseña una vista, cómo se encuadra, qué pasa
 // de `config.vistas` y cómo se fusionan cuando dos personas las tocan a la vez.
-import { elementosDeVista, cajaDeVista, encuadre, limpiarVistas, nombreArchivo, MAX_VISTAS } from '../../design/lienzo/vista.js';
+import { elementosDeVista, cajaDeVista, encuadre, limpiarVistas, nombreArchivo, ordenDeLectura, MAX_VISTAS } from '../../design/lienzo/vista.js';
 import { fusionar, mismoContenido } from '../../design/lienzo/fusion.js';
 let ok = 0, n = 0;
 const ver = (nombre, cond, info) => { n++; if (cond) ok++; console.log((cond ? 'PASS ' : 'FAIL ') + nombre, cond ? '' : JSON.stringify(info)); };
@@ -45,6 +45,14 @@ ver('fusión: renombro una, el otro quita otra', r.vistas.map(x => `${x.id}:${x.
 ver('mismoContenido mira las vistas', !mismoContenido(base, { ...base, vistas: [v('x', 'X')] }) && mismoContenido(contenido, { ...contenido, vistas: [] }));
 // 8 · Nombre de archivo
 ver('nombre de archivo sin caracteres prohibidos', nombreArchivo('Tablero: A/B - "reunión"?') === 'Tablero A B - reunión', nombreArchivo('Tablero: A/B - "reunión"?'));
+
+// 9 · Presentar: orden de lectura (filas de arriba abajo, cada fila de izquierda a derecha)
+const sec = (id, x, y, w = 400, h = 300) => ({ id, x, y, w, h });
+const ord = (l) => ordenDeLectura(l).map(f => f.id).join();
+ver('orden: fila de arriba de izquierda a derecha, luego la de abajo', ord([sec('c', 0, 500), sec('b', 500, 20), sec('a', 0, 0), sec('d', 500, 480)]) === 'a,b,c,d',
+  ord([sec('c', 0, 500), sec('b', 500, 20), sec('a', 0, 0), sec('d', 500, 480)]));
+ver('orden: una sección poco solapada va a la fila siguiente', ord([sec('a', 0, 0), sec('b', 500, 250)]) === 'a,b' && ord([sec('a', 600, 0), sec('b', 0, 250)]) === 'a,b');
+ver('orden: sin secciones, nada', ordenDeLectura([]).length === 0 && ordenDeLectura(undefined).length === 0);
 
 console.log(`${ok}/${n}`);
 if (ok !== n) process.exit(1);

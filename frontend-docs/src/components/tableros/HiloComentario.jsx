@@ -17,7 +17,8 @@ function Avatar({ id, nombre, tam = 24 }) {
 const boton = { height: 30, padding: '0 8px', border: 'none', borderRadius: 6, background: 'transparent', cursor: 'pointer', fontSize: 13, fontFamily: 'inherit', color: TINTA,
   display: 'inline-flex', alignItems: 'center', gap: 6 };
 
-export default function HiloComentario({ comentario: c, yo, isAdmin, soloLectura, onEnviar, onResolver, onBorrarMensaje, onBorrarHilo, onCerrar }) {
+// `onVolver`: abierto desde la lista de comentarios, «‹» vuelve a ella.
+export default function HiloComentario({ comentario: c, yo, isAdmin, soloLectura, onEnviar, onResolver, onBorrarMensaje, onBorrarHilo, onCerrar, onVolver = null }) {
   const [texto, setTexto] = useState('');
   const [menu, setMenu] = useState(false);
   const campo = useRef(null), lista = useRef(null);
@@ -25,6 +26,14 @@ export default function HiloComentario({ comentario: c, yo, isAdmin, soloLectura
   const nuevo = !mensajes.length;
   useEffect(() => { if (!soloLectura) campo.current?.focus({ preventScroll: true }); }, [c.id, soloLectura]);
   useEffect(() => { if (lista.current) lista.current.scrollTop = lista.current.scrollHeight; }, [mensajes.length]);
+  // Escape también lo cierra con el foco fuera (cayó al body); el de otra ventana encima es de esa ventana.
+  const cerrarRef = useRef(onCerrar);
+  useEffect(() => { cerrarRef.current = onCerrar; });
+  useEffect(() => {
+    const tecla = (e) => { const a = document.activeElement; if (e.key === 'Escape' && (!a || a === document.body)) cerrarRef.current(); };
+    window.addEventListener('keydown', tecla);
+    return () => window.removeEventListener('keydown', tecla);
+  }, []);
 
   const enviar = () => {
     const t = texto.trim();
@@ -41,6 +50,12 @@ export default function HiloComentario({ comentario: c, yo, isAdmin, soloLectura
       style={{ position: 'absolute', right: 12, top: 12, width: 340, maxHeight: 'calc(100% - 96px)', zIndex: 8, display: 'flex', flexDirection: 'column',
         background: '#fff', borderRadius: 8, boxShadow: '0 0 16px rgba(0,0,0,0.12)', fontFamily: 'var(--a-font-sans)', color: TINTA }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '8px 8px 8px 14px', borderBottom: `1px solid ${BORDE}` }}>
+        {onVolver && (
+          <button type="button" aria-label="Volver a los comentarios" title="Todos los comentarios" onClick={onVolver} style={{ ...boton, width: 30, padding: 0, justifyContent: 'center', marginLeft: -8 }}
+            onMouseEnter={e => { e.currentTarget.style.background = SUAVE; }} onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M14.5 6 8.5 12l6 6" /></svg>
+          </button>
+        )}
         <span style={{ fontSize: 14, fontWeight: 600, flex: 1 }}>{nuevo ? 'Nuevo comentario' : 'Comentario'}</span>
         {c.resuelto && <span style={{ fontSize: 12, color: GRIS, marginRight: 4 }}>Resuelto</span>}
         {!nuevo && !soloLectura && (

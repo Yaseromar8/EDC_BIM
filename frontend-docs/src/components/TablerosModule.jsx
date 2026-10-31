@@ -33,6 +33,10 @@ import { ComentariosDelTablero, nuevoComentario, nuevoMensaje, esComentario, sin
 import { tipoComentario } from './tableros/tipoComentario';
 import HiloComentario from './tableros/HiloComentario';
 import PanelComentarios from './tableros/PanelComentarios';
+import PanelPresentacion from './tableros/PanelPresentacion';
+import Presentacion from './tableros/Presentacion';
+import { ordenDeLectura } from '../../../design/lienzo/vista';
+import { enlaceDeVista as enlaceDelTablero } from './tableros/enlaceDeTablero';
 
 const GRIS = '#72706b', LINEA = '#e8e6dc', SUAVE = '#f1f0e8', TINTA = '#141413';
 const ESPERA_GUARDAR_MS = 800;
@@ -275,7 +279,21 @@ function TableroEditor({ id, project, user, isAdmin, vistaInicial = null, onCerr
   const [hilo, setHilo] = useState(null);                 // { id, inicial? } · el hilo abierto
   const hiloRef = useRef(null);
   useEffect(() => { hiloRef.current = hilo; }, [hilo]);
-  const [panelComentarios, setPanelComentarios] = useState(false);
+  // A la derecha, uno a la vez (como Forma Board): 'comentarios' o 'presentacion'. El hilo de un comentario abierto desde
+  // la lista ocupa el sitio de la lista.
+  const [panelDerecho, setPanelDerecho] = useState(null);
+  const panelComentarios = panelDerecho === 'comentarios';
+  // Abrir uno cierra el hilo que hubiera: el panel se ve entero (la lista de comentarios, la presentación).
+  const alternarPanel = (p) => { if (panelDerecho !== p && hiloRef.current) cerrarHiloRef.current?.(); setPanelDerecho(x => (x === p ? null : p)); };
+  const cerrarHiloRef = useRef(null);
+  // PRESENTAR (docs/visor/65): las secciones al día, en orden de lectura.
+  const [secciones, setSecciones] = useState([]);
+  const ponerSecciones = useCallback((l) => setSecciones(prev => {
+    const n = l || [];
+    return n.length === prev.length && n.every((x, i) => x === prev[i]) ? prev : n;
+  }), []);
+  const [presentando, setPresentando] = useState(null);     // { secciones, contenido, inicio }
+  const [compartir, setCompartir] = useState(false);
   const [presentes, setPresentes] = useState([]);
   // DOCUMENTOS (fase 2, docs/visor/59): la versión vigente de cada documento del tablero, para avisar de las nuevas.
   const [vigentes, setVigentes] = useState({});
@@ -354,7 +372,8 @@ function TableroEditor({ id, project, user, isAdmin, vistaInicial = null, onCerr
     hiloRef.current = { id: cid, inicial };
     setHilo({ id: cid, inicial });
   }, [quitarSiVacio]);
-  const cerrarHilo = () => { if (hilo) quitarSiVacio(hilo.id); hiloRef.current = null; setHilo(null); };
+  const cerrarHilo = () => { if (hiloRef.current) quitarSiVacio(hiloRef.current.id); hiloRef.current = null; setHilo(null); };
+  useEffect(() => { cerrarHiloRef.current = cerrarHilo; });
   const cambiarComentario = (cid, fn) => {
     const c = elComentario(cid) || (hilo?.id === cid ? hilo.inicial : null);
     if (!c || !lienzoRef.current) return;
@@ -370,6 +389,18 @@ function TableroEditor({ id, project, user, isAdmin, vistaInicial = null, onCerr
     toast.success('Comentario eliminado');
   };
   const irAComentario = (cid) => { lienzoRef.current?.enfocar(cid); abrirHilo(cid); };
+  const ordenadas = useMemo(() => ordenDeLectura(secciones), [secciones]);
+  const presentar = (inicio) => {
+    const c = lienzoRef.current ? lienzoRef.current.contenido() : datos?.config || {};
+    const lista = ordenDeLectura(c.secciones || []);
+    if (lista.length) setPresentando({ secciones: lista, contenido: sinComentarios(c), inicio });
+  };
+  const enlace = enlaceDelTablero(window.location.origin, { obra: project?.id, tablero: id });
+  const copiarEnlace = async () => {
+    setCompartir(false);
+    try { await navigator.clipboard.writeText(enlace); toast.success('Enlace del tablero copiado'); }
+    catch { window.prompt('Copia el enlace del tablero:', enlace); }
+  };
   const comentarioDelHilo = hilo ? (comentarios.find(c => c.id === hilo.id) || hilo.inicial) : null;
   useEffect(() => { if (hilo && !comentarioDelHilo) setHilo(null); }, [hilo, comentarioDelHilo]);
   const herramientas = useMemo(() => (estado === 'archivado' || !user ? null : [{
@@ -411,12 +442,13 @@ function TableroEditor({ id, project, user, isAdmin, vistaInicial = null, onCerr
       base.current = { config: d.config || {}, version: d.version };
       ponerVistas(limpiarVistas(d.config?.vistas));
       ponerComentarios(d.config?.notas);
+      ponerSecciones(d.config?.secciones);
       setNombre(d.nombre);
       setEstado(d.archivado ? 'archivado' : 'guardado');
       setDatos(d);
     });
     return () => { vivo = false; };
-  }, [id, ponerVistas, ponerComentarios]);
+  }, [id, ponerVistas, ponerComentarios, ponerSecciones]);
 
   const guardar = useCallback(async () => {
     clearTimeout(temporizador.current);
@@ -446,6 +478,7 @@ function TableroEditor({ id, project, user, isAdmin, vistaInicial = null, onCerr
           lienzo.aplicar(fusion);
           ponerVistas(limpiarVistas(fusion.vistas));
           ponerComentarios(fusion.notas);
+          ponerSecciones(fusion.secciones);
           if (vistaAbiertaRef.current) setContenidoVista(lienzo.contenido());
           toast('Otra persona guardó este tablero: se juntaron sus cambios con los tuyos.', { id: 'tablero-fusion' });
           continue;
@@ -468,13 +501,14 @@ function TableroEditor({ id, project, user, isAdmin, vistaInicial = null, onCerr
   const alCambiar = useCallback((contenido) => {
     mirarVigentes(contenido);
     ponerComentarios(contenido?.notas);
+    ponerSecciones(contenido?.secciones);
     if (vistaAbiertaRef.current) setContenidoVista(contenido);
     if (estado === 'archivado') return;
     pendiente.current = true;
     setEstado(e => (e === 'guardando' ? e : 'pendiente'));
     clearTimeout(temporizador.current);
     temporizador.current = setTimeout(() => { guardar(); }, ESPERA_GUARDAR_MS);
-  }, [guardar, estado, mirarVigentes, ponerComentarios]);
+  }, [guardar, estado, mirarVigentes, ponerComentarios, ponerSecciones]);
 
   // Ver lo que guardan los demás sin tener que guardar uno: cada 10 s, con la pestaña a la vista, se pregunta solo
   // la versión. Si hay otra y aquí no hay nada pendiente ni a medio gesto, se trae y se pone; si hay algo
@@ -498,6 +532,7 @@ function TableroEditor({ id, project, user, isAdmin, vistaInicial = null, onCerr
       lienzo.aplicar(d.config || {});
       ponerVistas(limpiarVistas(d.config?.vistas));
       ponerComentarios(d.config?.notas);
+      ponerSecciones(d.config?.secciones);
       if (vistaAbiertaRef.current) setContenidoVista(lienzo.contenido());
       mirarVigentes(d.config);
       if (d.nombre && d.nombre !== nombreRef.current) { setNombre(d.nombre); setDatos(x => ({ ...x, nombre: d.nombre })); }
@@ -605,8 +640,20 @@ function TableroEditor({ id, project, user, isAdmin, vistaInicial = null, onCerr
         <div style={{ flex: 1 }} />
         {presentes.length > 0 && <Presentes lista={presentes} yo={yo} />}
         {datos && (
+          <>
+            <span style={{ width: 1, height: 20, background: LINEA, margin: '0 2px' }} />
+            <BotonCabecera etiqueta="Mostrar comentarios" activo={panelComentarios} onClick={() => alternarPanel('comentarios')}>
+              <path d="M4 5.5A1.5 1.5 0 0 1 5.5 4h13A1.5 1.5 0 0 1 20 5.5v9a1.5 1.5 0 0 1-1.5 1.5H10l-4.5 4v-4H5.5A1.5 1.5 0 0 1 4 14.5z" />
+            </BotonCabecera>
+            <BotonCabecera etiqueta="Presentar" activo={panelDerecho === 'presentacion'} onClick={() => alternarPanel('presentacion')}>
+              <path d="M3.5 4.5h17M5 4.5v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-10M12 15.5V20M8.5 20h7M10.5 8.2v4.6l4-2.3z" />
+            </BotonCabecera>
+            <span style={{ width: 1, height: 20, background: LINEA, margin: '0 2px' }} />
+          </>
+        )}
+        {datos && (
           <div style={{ position: 'relative' }}>
-            <button type="button" aria-haspopup="menu" aria-expanded={menuVistas} onClick={() => setMenuVistas(m => !m)} title="Las vistas publicadas de este tablero"
+            <button type="button" aria-haspopup="menu" aria-expanded={menuVistas} onClick={() => setMenuVistas(m => !m)} onMouseDown={sinFoco} title="Las vistas publicadas de este tablero"
               style={{ display: 'flex', alignItems: 'center', gap: 6, height: 32, padding: '0 10px', border: 'none', borderRadius: 6, background: menuVistas ? SUAVE : 'transparent', cursor: 'pointer', fontSize: 14, fontFamily: 'inherit', color: TINTA }}
               onMouseEnter={e => { e.currentTarget.style.background = SUAVE; }} onMouseLeave={e => { if (!menuVistas) e.currentTarget.style.background = 'transparent'; }}>
               Vistas{vistas.length ? ` (${vistas.length})` : ''}
@@ -642,6 +689,29 @@ function TableroEditor({ id, project, user, isAdmin, vistaInicial = null, onCerr
         <span aria-live="polite" style={{ fontSize: 13, color: estado === 'error' || estado === 'sinConexion' ? '#b93535' : GRIS, minWidth: 130, textAlign: 'right' }}>
           {datos ? (aviso && estado === 'guardado' ? aviso : textoEstado) : ''}
         </span>
+        {datos && (
+          <div style={{ position: 'relative' }}>
+            <button type="button" className="barra-btn barra-btn--primario" aria-haspopup="dialog" aria-expanded={compartir} onClick={() => setCompartir(c => !c)}
+              style={{ height: 32, padding: '0 16px', fontSize: 14 }}>Compartir</button>
+            {compartir && (
+              <>
+                <div onPointerDown={() => setCompartir(false)} style={{ position: 'fixed', inset: 0, zIndex: 1 }} />
+                <div role="dialog" aria-label="Compartir el tablero" onKeyDown={e => { if (e.key === 'Escape') { e.stopPropagation(); setCompartir(false); } }}
+                  style={{ position: 'absolute', right: 0, top: 40, zIndex: 2, width: 360, padding: 16, boxSizing: 'border-box', background: '#fff', borderRadius: 8, boxShadow: '0 0 16px rgba(0,0,0,0.12)' }}>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: TINTA, marginBottom: 6 }}>Compartir el tablero</div>
+                  <div style={{ fontSize: 13, lineHeight: 1.5, color: GRIS, marginBottom: 12 }}>
+                    El enlace abre este tablero. Quien lo abra entra con su usuario: tiene que poder entrar en la obra y en el tablero.
+                  </div>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <input readOnly value={enlace} aria-label="Enlace del tablero" onFocus={e => e.currentTarget.select()}
+                      style={{ flex: 1, minWidth: 0, height: 32, padding: '0 8px', border: `1px solid ${LINEA}`, borderRadius: 6, fontSize: 13, fontFamily: 'inherit', color: GRIS }} />
+                    <button type="button" className="barra-btn barra-btn--primario" onClick={copiarEnlace} style={{ height: 32 }}>Copiar enlace</button>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        )}
       </header>
       <div ref={zonaRef} style={{ flex: 1, position: 'relative', minHeight: 0 }}>
         {fallo ? (
@@ -656,12 +726,17 @@ function TableroEditor({ id, project, user, isAdmin, vistaInicial = null, onCerr
               accionesSeleccion={estado === 'archivado' ? null : [['Publicar vista…', (ids) => ids.length && setPublicando({ ids, titulo: `Vista ${vistasRef.current.length + 1}` })]]}
               herramientasExtra={herramientas}
               paletaExtra={estado === 'archivado' ? [] : [
-                ['documento', 'Documentos', () => { setPanelIncidencias(false); setPanelComentarios(false); setPanelDocumentos(p => !p); }],
-                ['incidencia', 'Incidencias', () => { setPanelDocumentos(false); setPanelComentarios(false); setPanelIncidencias(p => !p); }],
-                ['comentario', 'Comentarios', () => { setPanelDocumentos(false); setPanelIncidencias(false); setPanelComentarios(p => !p); }],
+                ['documento', 'Documentos', () => { setPanelIncidencias(false); setPanelDocumentos(p => !p); }],
+                ['incidencia', 'Incidencias', () => { setPanelDocumentos(false); setPanelIncidencias(p => !p); }],
               ]} />
-            {panelComentarios && (
-              <PanelComentarios comentarios={comentarios} abiertoId={hilo?.id || null} onIr={irAComentario} onCerrar={() => setPanelComentarios(false)} />
+            {panelComentarios && !comentarioDelHilo && (
+              <PanelComentarios comentarios={comentarios} abiertoId={hilo?.id || null} onIr={irAComentario} onCerrar={() => setPanelDerecho(null)} />
+            )}
+            {panelDerecho === 'presentacion' && !comentarioDelHilo && (
+              <PanelPresentacion secciones={ordenadas} onPresentar={presentar} onIr={(sid) => lienzoRef.current?.enfocar(sid)} onCerrar={() => setPanelDerecho(null)} />
+            )}
+            {presentando && (
+              <Presentacion secciones={presentando.secciones} contenido={presentando.contenido} tipos={tipos} inicio={presentando.inicio} onCerrar={() => setPresentando(null)} />
             )}
             {comentarioDelHilo && (
               <HiloComentario key={comentarioDelHilo.id} comentario={comentarioDelHilo} yo={yo} isAdmin={isAdmin} soloLectura={estado === 'archivado'}
@@ -670,7 +745,8 @@ function TableroEditor({ id, project, user, isAdmin, vistaInicial = null, onCerr
                   ? { resuelto: true, resueltoPor: yo.nombre, resueltoEn: new Date().toISOString() }
                   : { resuelto: false, resueltoPor: undefined, resueltoEn: undefined }))}
                 onBorrarMensaje={(mid) => cambiarComentario(comentarioDelHilo.id, (c) => ({ mensajes: (c.mensajes || []).filter(m => m.id !== mid || !mismoAutor(m.autorId, yo.id)) }))}
-                onBorrarHilo={() => borrarHilo(comentarioDelHilo.id)} onCerrar={cerrarHilo} />
+                onBorrarHilo={() => borrarHilo(comentarioDelHilo.id)} onCerrar={() => { cerrarHilo(); if (panelComentarios) setPanelDerecho(null); }}
+                onVolver={panelComentarios ? cerrarHilo : null} />
             )}
             {vistaEnPantalla && contenidoVista && (
               <VistaPublicada vista={vistaEnPantalla} contenido={sinComentarios(contenidoVista)} tipos={tipos} tablero={nombre || datos.nombre} obra={project?.name || project?.nombre || ''}
@@ -769,5 +845,19 @@ function Presentes({ lista, yo }) {
           background: '#e8e6dc', color: TINTA, fontSize: 11, fontWeight: 600, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>+{resto}</span>
       )}
     </div>
+  );
+}
+
+// Un botón de icono de la cabecera del tablero, como los de Forma Board: azul cuando su panel está abierto. Con el
+// ratón no se queda el foco (`sinFoco`): si se lo quedara, los atajos del tablero (F, N, C…) dejarían de llegar.
+const sinFoco = (e) => e.preventDefault();
+function BotonCabecera({ etiqueta, activo, onClick, children }) {
+  return (
+    <button type="button" aria-label={etiqueta} title={etiqueta} aria-pressed={activo} onClick={onClick} onMouseDown={sinFoco}
+      style={{ width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', border: 'none', borderRadius: 6, cursor: 'pointer',
+        background: activo ? '#0D66B4' : 'transparent', color: activo ? '#fff' : TINTA }}
+      onMouseEnter={e => { if (!activo) e.currentTarget.style.background = SUAVE; }} onMouseLeave={e => { if (!activo) e.currentTarget.style.background = 'transparent'; }}>
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{children}</svg>
+    </button>
   );
 }

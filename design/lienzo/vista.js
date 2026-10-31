@@ -46,5 +46,17 @@ export function limpiarVistas(lista) {
   }));
 }
 
+// PRESENTAR (docs/visor/65): las secciones en orden de lectura, como se lee una lámina. Por filas de arriba abajo
+// (dos secciones están en la misma fila si se solapan en vertical la mitad de la más baja) y, en cada fila, de
+// izquierda a derecha.
+export function ordenDeLectura(secciones) {
+  const resto = [...(secciones || [])].sort((a, b) => a.y - b.y || a.x - b.x), filas = [];
+  for (const f of resto) {
+    const fila = filas.find(r => r.some(g => Math.min(g.y + g.h, f.y + f.h) - Math.max(g.y, f.y) >= Math.min(g.h, f.h) / 2));
+    if (fila) fila.push(f); else filas.push([f]);
+  }
+  return filas.flatMap(r => r.sort((a, b) => a.x - b.x));
+}
+
 // Un nombre de archivo para la imagen o el PDF de una vista.
 export const nombreArchivo = (texto) => (String(texto || 'vista').replace(/[\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 100) || 'vista');
