@@ -37,6 +37,9 @@ import PanelPresentacion from './tableros/PanelPresentacion';
 import Presentacion from './tableros/Presentacion';
 import { ordenDeLectura } from '../../../design/lienzo/vista';
 import { enlaceDeVista as enlaceDelTablero } from './tableros/enlaceDeTablero';
+import PanelMiembros, { Invitar } from './tableros/PanelMiembros';
+import { leerMiembros } from './tableros/miembros';
+import VistaLienzo from '../../../design/lienzo/VistaLienzo';
 
 const GRIS = '#72706b', LINEA = '#e8e6dc', SUAVE = '#f1f0e8', TINTA = '#141413';
 const ESPERA_GUARDAR_MS = 800;
@@ -127,7 +130,8 @@ export default function TablerosModule({ projectPrefix, project = null, user, is
     toast.success(valor ? 'Tablero archivado' : 'Tablero recuperado');
     setLista(xs => xs.filter(x => x.id !== t.id));
   };
-  const puedeArchivar = (t) => isAdmin || String(t.creado_por_id) === String(user?.id ?? '');
+  // Archivar: un responsable del tablero o un administrador de la obra (lo dice el servidor; sin migración 44, el autor).
+  const puedeArchivar = (t) => (t.puedo_archivar !== undefined ? t.puedo_archivar : isAdmin || String(t.creado_por_id) === String(user?.id ?? ''));
 
   const filtrados = (lista || []).filter(t => !filtro.trim() || t.nombre.toLowerCase().includes(filtro.trim().toLowerCase()));
   const comparar = {
@@ -209,6 +213,11 @@ export default function TablerosModule({ projectPrefix, project = null, user, is
                   onBlur={e => renombrar(t, e.currentTarget.value)}
                   style={{ flex: 1, height: 28, padding: '0 8px', border: `1px solid ${LINEA}`, borderRadius: 4, fontSize: 14, fontFamily: 'inherit' }} />
               ) : <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.nombre}</span>}
+              {t.acceso === 'invitados' && renombrando !== t.id && (
+                <span title="Solo para sus miembros" aria-label="Solo para sus miembros" style={{ display: 'inline-flex', color: GRIS, flexShrink: 0 }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" aria-hidden="true"><rect x="5" y="11" width="14" height="9.5" rx="1.5" /><path d="M8 11V8a4 4 0 0 1 8 0v3" /></svg>
+                </span>
+              )}
             </div>
             <div style={{ ...celda, color: t.abierto_por_mi ? '#333330' : GRIS }}>{t.abierto_por_mi ? fecha(t.abierto_por_mi) : 'Nunca'}</div>
             <div style={celda}>{t.creado_por || '—'}</div>
@@ -294,6 +303,13 @@ function TableroEditor({ id, project, user, isAdmin, vistaInicial = null, onCerr
   }), []);
   const [presentando, setPresentando] = useState(null);     // { secciones, contenido, inicio }
   const [compartir, setCompartir] = useState(false);
+  // MIEMBROS (docs/visor/66): mi rol en este tablero. Un lector lo ve de consulta (sin el lienzo editable).
+  const [panelMiembros, setPanelMiembros] = useState(false);
+  const [miembrosTablero, setMiembrosTablero] = useState(null);   // para «Invitar» en Compartir
+  const esLector = datos?.mi_rol === 'lector';
+  const esLectorRef = useRef(false);
+  useEffect(() => { esLectorRef.current = esLector; }, [esLector]);
+  const gestiona = !!datos?.gestiona;
   const [presentes, setPresentes] = useState([]);
   // DOCUMENTOS (fase 2, docs/visor/59): la versión vigente de cada documento del tablero, para avisar de las nuevas.
   const [vigentes, setVigentes] = useState({});
@@ -444,7 +460,7 @@ function TableroEditor({ id, project, user, isAdmin, vistaInicial = null, onCerr
       ponerComentarios(d.config?.notas);
       ponerSecciones(d.config?.secciones);
       setNombre(d.nombre);
-      setEstado(d.archivado ? 'archivado' : 'guardado');
+      setEstado(d.archivado ? 'archivado' : d.mi_rol === 'lector' ? 'lector' : 'guardado');
       setDatos(d);
     });
     return () => { vivo = false; };
@@ -484,6 +500,12 @@ function TableroEditor({ id, project, user, isAdmin, vistaInicial = null, onCerr
           continue;
         }
         if (d.estado === 409 && d.code === 'ARCHIVADO') { pendiente.current = false; setEstado('archivado'); return false; }
+        if (d.estado === 403 && (d.code === 'LECTOR' || d.code === 'SOLO_MIEMBROS')) {
+          pendiente.current = false;
+          toast.error(d.code === 'LECTOR' ? 'Ahora eres lector de este tablero: tu último cambio no se guardó.' : 'Ya no eres miembro de este tablero.', { id: 'tablero-rol' });
+          refrescarRolRef.current?.();
+          return false;
+        }
         // Sin conexión: no es un error de nadie; se guarda solo al volver la red.
         if (d.estado === 0) { setEstado('sinConexion'); return false; }
         setEstado('error');
@@ -520,10 +542,25 @@ function TableroEditor({ id, project, user, isAdmin, vistaInicial = null, onCerr
     const mirar = async () => {
       if (!vivo || document.visibilityState !== 'visible' || !navigator.onLine) return;
       const v = await llamar(`${API}/api/docs/tableros/${id}?solo_version=1&latido=1`);
+      if (vivo && v.estado === 403 && v.code === 'SOLO_MIEMBROS') {
+        vivo = false;
+        toast.error('Ya no eres miembro de este tablero.', { id: 'tablero-rol' });
+        onCerrar();
+        return;
+      }
       if (!vivo || !v.ok) return;
       if (Array.isArray(v.presentes)) setPresentes(v.presentes);
       if (enVuelo.current || estado === 'archivado' || !(v.version > base.current.version)) return;
       if (pendiente.current) { guardar(); return; }
+      if (esLectorRef.current) {                           // el lector no tiene lienzo: se le pone lo nuevo
+        const d = await llamar(`${API}/api/docs/tableros/${id}?sin_apertura=1`);
+        if (!vivo || !d.ok) return;
+        base.current = { config: d.config || {}, version: d.version };
+        setDatos(x => ({ ...x, config: d.config || {}, version: d.version, nombre: d.nombre || x.nombre, mi_rol: d.mi_rol, gestiona: d.gestiona, acceso: d.acceso }));
+        ponerVistas(limpiarVistas(d.config?.vistas)); ponerComentarios(d.config?.notas); ponerSecciones(d.config?.secciones);
+        if (d.mi_rol !== 'lector') setEstado('guardado');
+        return;
+      }
       const lienzo = lienzoRef.current;
       if (!lienzo || lienzo.ocupado()) return;           // a mitad de un gesto o escribiendo: en la siguiente vuelta
       const d = await llamar(`${API}/api/docs/tableros/${id}?sin_apertura=1`);
@@ -598,6 +635,24 @@ function TableroEditor({ id, project, user, isAdmin, vistaInicial = null, onCerr
   const vistaEnPantalla = vistaAbierta && vistas.find(v => v.id === vistaAbierta);
   useEffect(() => { if (vistaAbierta && !vistaEnPantalla) cerrarVista(); }, [vistaAbierta, vistaEnPantalla]);   // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Mi rol, de nuevo del servidor: al cambiar los miembros (el mío también), al salir o si un guardado lo rechaza.
+  const refrescarRolRef = useRef(null);
+  const refrescarRol = async () => {
+    const d = await llamar(`${API}/api/docs/tableros/${id}?sin_apertura=1`);
+    if (!d.ok) { if (d.estado === 403) onCerrar(); return; }
+    const antes = datos?.mi_rol;
+    base.current = { config: d.config || {}, version: d.version };
+    setDatos(x => ({ ...x, mi_rol: d.mi_rol, gestiona: d.gestiona, acceso: d.acceso,
+      ...(antes !== d.mi_rol ? { config: d.config || {}, version: d.version } : {}) }));
+    if (antes !== d.mi_rol) { ponerVistas(limpiarVistas(d.config?.vistas)); ponerComentarios(d.config?.notas); ponerSecciones(d.config?.secciones); }
+    setEstado(e => (e === 'archivado' ? e : d.mi_rol === 'lector' ? 'lector' : (e === 'lector' ? 'guardado' : e)));
+  };
+  useEffect(() => { refrescarRolRef.current = refrescarRol; });
+  const abrirCompartir = () => {
+    setCompartir(c => !c);
+    if (gestiona) leerMiembros(id).then(r => setMiembrosTablero(r.ok ? r.miembros || [] : []));
+  };
+
   const cerrar = async () => {
     if (pendiente.current || enVuelo.current) {
       const ok = await guardar();
@@ -620,7 +675,7 @@ function TableroEditor({ id, project, user, isAdmin, vistaInicial = null, onCerr
 
   nombreRef.current = nombre;
   const textoEstado = { guardado: 'Guardado', pendiente: 'Cambios sin guardar', guardando: 'Guardando…', error: 'No se pudo guardar',
-    sinConexion: 'Sin conexión · se guardará al volver', archivado: 'Archivado' }[estado];
+    sinConexion: 'Sin conexión · se guardará al volver', archivado: 'Archivado', lector: 'Solo lectura · eres lector' }[estado];
 
   return createPortal(
     <div role="dialog" aria-label={`Tablero ${nombre}`} style={{ position: 'fixed', inset: 0, zIndex: 9000, display: 'flex', flexDirection: 'column', background: '#faf9f5' }}>
@@ -639,6 +694,17 @@ function TableroEditor({ id, project, user, isAdmin, vistaInicial = null, onCerr
           onFocus={e => { e.currentTarget.style.borderColor = LINEA; }} onBlurCapture={e => { e.currentTarget.style.borderColor = 'transparent'; }} />
         <div style={{ flex: 1 }} />
         {presentes.length > 0 && <Presentes lista={presentes} yo={yo} />}
+        {datos && (
+          <div style={{ position: 'relative' }}>
+            <BotonCabecera etiqueta="Miembros del tablero" activo={panelMiembros} onClick={() => setPanelMiembros(v => !v)}>
+              <circle cx="9" cy="8" r="3" /><path d="M3.5 19a5.5 5.5 0 0 1 11 0" /><circle cx="16.5" cy="9" r="2.4" /><path d="M15.5 14.2A4.6 4.6 0 0 1 20.5 18.5" />
+            </BotonCabecera>
+            {panelMiembros && (
+              <PanelMiembros tablero={id} yo={yo} gente={miembros} nombres={nombres} onCerrar={() => setPanelMiembros(false)} onCambio={refrescarRol}
+                onSalir={(acceso) => { setPanelMiembros(false); if (acceso === 'invitados' && !isAdmin) onCerrar(); else refrescarRol(); }} />
+            )}
+          </div>
+        )}
         {datos && (
           <>
             <span style={{ width: 1, height: 20, background: LINEA, margin: '0 2px' }} />
@@ -691,7 +757,7 @@ function TableroEditor({ id, project, user, isAdmin, vistaInicial = null, onCerr
         </span>
         {datos && (
           <div style={{ position: 'relative' }}>
-            <button type="button" className="barra-btn barra-btn--primario" aria-haspopup="dialog" aria-expanded={compartir} onClick={() => setCompartir(c => !c)}
+            <button type="button" className="barra-btn barra-btn--primario" aria-haspopup="dialog" aria-expanded={compartir} onClick={abrirCompartir}
               style={{ height: 32, padding: '0 16px', fontSize: 14 }}>Compartir</button>
             {compartir && (
               <>
@@ -699,8 +765,17 @@ function TableroEditor({ id, project, user, isAdmin, vistaInicial = null, onCerr
                 <div role="dialog" aria-label="Compartir el tablero" onKeyDown={e => { if (e.key === 'Escape') { e.stopPropagation(); setCompartir(false); } }}
                   style={{ position: 'absolute', right: 0, top: 40, zIndex: 2, width: 360, padding: 16, boxSizing: 'border-box', background: '#fff', borderRadius: 8, boxShadow: '0 0 16px rgba(0,0,0,0.12)' }}>
                   <div style={{ fontSize: 14, fontWeight: 600, color: TINTA, marginBottom: 6 }}>Compartir el tablero</div>
+                  {gestiona && (
+                    <div style={{ marginBottom: 14 }}>
+                      <div style={{ fontSize: 13, color: TINTA, margin: '6px 0 8px' }}>Invitar a personas de la obra</div>
+                      <Invitar tablero={id} gente={miembros} miembros={miembrosTablero || []} alInvitar={(l) => { setMiembrosTablero(l); refrescarRol(); }} />
+                    </div>
+                  )}
+                  <div style={{ fontSize: 13, color: TINTA, marginBottom: 4 }}>Enlace del tablero</div>
                   <div style={{ fontSize: 13, lineHeight: 1.5, color: GRIS, marginBottom: 12 }}>
-                    El enlace abre este tablero. Quien lo abra entra con su usuario: tiene que poder entrar en la obra y en el tablero.
+                    {datos?.acceso === 'invitados'
+                      ? 'Este tablero es solo para sus miembros: el enlace solo les sirve a ellos (y a los administradores de la obra).'
+                      : 'Abre este tablero a cualquiera de la obra que entre con su usuario.'}
                   </div>
                   <div style={{ display: 'flex', gap: 8 }}>
                     <input readOnly value={enlace} aria-label="Enlace del tablero" onFocus={e => e.currentTarget.select()}
@@ -722,6 +797,9 @@ function TableroEditor({ id, project, user, isAdmin, vistaInicial = null, onCerr
           <DocumentosDelTablero.Provider value={{ obra, vigentes }}>
           <IncidenciasDelTablero.Provider value={{ porId, nombres, abrir: abrirIncidencia, cargando: incidencias === null }}>
           <ComentariosDelTablero.Provider value={contextoComentarios}>
+            {esLector ? (
+              <VistaLienzo contenido={datos.config} ids={[...(datos.config?.secciones || []), ...(datos.config?.notas || [])].map(x => x.id)} tipos={tipos} vacio="Este tablero aún está vacío." />
+            ) : (
             <Lienzo key={id} ref={lienzoRef} inicial={datos.config} onCambio={alCambiar} claveCamara={`alephia-tablero-camara:${id}`} tipos={tipos}
               accionesSeleccion={estado === 'archivado' ? null : [['Publicar vista…', (ids) => ids.length && setPublicando({ ids, titulo: `Vista ${vistasRef.current.length + 1}` })]]}
               herramientasExtra={herramientas}
@@ -729,6 +807,7 @@ function TableroEditor({ id, project, user, isAdmin, vistaInicial = null, onCerr
                 ['documento', 'Documentos', () => { setPanelIncidencias(false); setPanelDocumentos(p => !p); }],
                 ['incidencia', 'Incidencias', () => { setPanelDocumentos(false); setPanelIncidencias(p => !p); }],
               ]} />
+            )}
             {panelComentarios && !comentarioDelHilo && (
               <PanelComentarios comentarios={comentarios} abiertoId={hilo?.id || null} onIr={irAComentario} onCerrar={() => setPanelDerecho(null)} />
             )}
@@ -739,7 +818,7 @@ function TableroEditor({ id, project, user, isAdmin, vistaInicial = null, onCerr
               <Presentacion secciones={presentando.secciones} contenido={presentando.contenido} tipos={tipos} inicio={presentando.inicio} onCerrar={() => setPresentando(null)} />
             )}
             {comentarioDelHilo && (
-              <HiloComentario key={comentarioDelHilo.id} comentario={comentarioDelHilo} yo={yo} isAdmin={isAdmin} soloLectura={estado === 'archivado'}
+              <HiloComentario key={comentarioDelHilo.id} comentario={comentarioDelHilo} yo={yo} isAdmin={isAdmin} soloLectura={estado === 'archivado' || esLector}
                 onEnviar={(texto) => cambiarComentario(comentarioDelHilo.id, (c) => ({ mensajes: [...(c.mensajes || []), nuevoMensaje(yo, texto)] }))}
                 onResolver={(v) => cambiarComentario(comentarioDelHilo.id, () => (v
                   ? { resuelto: true, resueltoPor: yo.nombre, resueltoEn: new Date().toISOString() }

@@ -4,8 +4,11 @@ La pizarra de la obra dentro de ALEPHIA Docs, como los «Tableros» (Paneles) de
 (crear, abrir, renombrar, archivar; «abierto por última vez por usted» y «creado por») y cada tablero con su
 contenido en `config` (notas, texto, secciones; documentos e incidencias en fases siguientes).
 
-Un tablero es DE LA OBRA: lo ve y lo edita quien pertenece a ella. Archivarlo o recuperarlo, su autor o un
-administrador de la obra.
+Un tablero es DE LA OBRA. MIEMBROS (docs/visor/66, migración 44), como «Miembros del panel» de ACC: cada tablero
+tiene sus miembros con un rol —responsable (gestiona miembros y acceso, archiva), editor, lector (solo mira)— y dice
+quién puede entrar: toda la obra (`acceso = 'obra'`, quien no es miembro edita como hasta ahora) o solo sus miembros
+(`'invitados'`). Los administradores de la obra entran en todos y los gestionan. Quien lo crea es su responsable, y
+siempre queda al menos uno. Solo se invita a quien pertenece a la obra.
 
 Guardar sin pisar a nadie: cada guardado trae la `version` sobre la que se hizo. Si en el servidor ya hay
 otra (alguien guardó antes), se responde 409 con la versión y el contenido actuales, y el cliente fusiona por
@@ -62,6 +65,14 @@ def ensure_tableros_tables():
             user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
             abierto_en TIMESTAMPTZ NOT NULL DEFAULT now(),
             PRIMARY KEY (tablero_id, user_id))''')
+        cur.execute("ALTER TABLE tableros ADD COLUMN IF NOT EXISTS acceso TEXT NOT NULL DEFAULT 'obra'")
+        cur.execute('''CREATE TABLE IF NOT EXISTS tableros_miembros (
+            tablero_id UUID NOT NULL REFERENCES tableros(id) ON DELETE CASCADE,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            rol TEXT NOT NULL CHECK (rol IN ('responsable', 'editor', 'lector')),
+            agregado_por INTEGER REFERENCES users(id),
+            agregado_en TIMESTAMPTZ NOT NULL DEFAULT now(),
+            PRIMARY KEY (tablero_id, user_id))''')
         conn.commit()
 
 
@@ -97,6 +108,16 @@ def _es_admin(obra):
     import administracion_de_obra as adm
     with get_db_connection() as conn:
         return adm.es_admin_de_obra(conn.cursor(), _user(), obra)
+
+
+ROLES = ('responsable', 'editor', 'lector')
+ACCESOS = ('obra', 'invitados')
+
+
+def _pertenece(user_id, obra):
+    """¿Esa persona (no la sesión) pertenece a la obra? Para invitarla."""
+    from routes.documents import verify_project_access
+    return verify_project_access(user_id, obra)
 
 
 def _nombre(valor):
@@ -145,19 +166,37 @@ def _guardia_del_tablero(tid):
         return None, _error('Autenticación requerida.', 401)
     with get_db_connection() as conn:
         cur = conn.cursor()
-        cur.execute('''SELECT id, model_urn, nombre, archivado, created_by_id, version
-                         FROM tableros WHERE id = %s''', (tablero_id,))
+        cur.execute('''SELECT t.id, t.model_urn, t.nombre, t.archivado, t.created_by_id, t.version, t.acceso, m.rol
+                         FROM tableros t LEFT JOIN tableros_miembros m ON m.tablero_id = t.id AND m.user_id = %s
+                        WHERE t.id = %s''', (_uid(), tablero_id))
         fila = cur.fetchone()
     if not fila:
         return None, _error('Tablero no encontrado.', 404)
     tablero = {'id': str(fila[0]), 'obra': fila[1], 'nombre': fila[2], 'archivado': bool(fila[3]),
-               'autor': fila[4], 'version': fila[5]}
+               'autor': fila[4], 'version': fila[5], 'acceso': fila[6] or 'obra', 'rol': fila[7]}
     denied = guardia_de_recurso('tableros', tablero['id'])
     if denied:
         return None, denied
     if not _hay_acceso(tablero['obra']):
         return None, _error('No tienes acceso a esta obra.', 403)
+    tablero['admin'] = _es_admin(tablero['obra'])
+    if tablero['acceso'] == 'invitados' and not tablero['rol'] and not tablero['admin']:
+        return None, _error('Este tablero es solo para sus miembros.', 403, code='SOLO_MIEMBROS')
     return tablero, None
+
+
+def _gestiona(tab):
+    return tab['admin'] or tab['rol'] == 'responsable'
+
+
+def _puede_editar(tab):
+    return tab['admin'] or tab['rol'] in ('responsable', 'editor') or (tab['rol'] is None and tab['acceso'] == 'obra')
+
+
+def _mi_rol(tab):
+    """El rol con el que lo ve esta sesión: el suyo, o «editor» si entra por ser de la obra; un administrador sin rol,
+    «responsable»."""
+    return tab['rol'] or ('responsable' if tab['admin'] else 'editor')
 
 
 @tableros_bp.route('/api/docs/tableros', methods=['GET', 'POST'])
@@ -170,19 +209,24 @@ def tableros():
         if not obra or not _hay_acceso(obra):
             return _error('No tienes acceso a esta obra.', 403)
         archivados = request.args.get('archivados') in ('1', 'true')
+        admin = _es_admin(obra)
         with get_db_connection() as conn:
             cur = conn.cursor()
+            # Los cerrados a sus invitados solo los ve quien es miembro (o un administrador de la obra).
             cur.execute('''SELECT t.id, t.nombre, t.archivado, t.created_at, t.updated_at, t.created_by_id,
-                                  COALESCE(NULLIF(u.name, ''), u.email), a.abierto_en, t.miniatura
+                                  COALESCE(NULLIF(u.name, ''), u.email), a.abierto_en, t.miniatura, t.acceso, m.rol
                              FROM tableros t
                              LEFT JOIN users u ON u.id = t.created_by_id
                              LEFT JOIN tableros_abiertos a ON a.tablero_id = t.id AND a.user_id = %s
-                            WHERE t.model_urn = %s AND t.archivado = %s
+                             LEFT JOIN tableros_miembros m ON m.tablero_id = t.id AND m.user_id = %s
+                            WHERE t.model_urn = %s AND t.archivado = %s AND (t.acceso = 'obra' OR m.rol IS NOT NULL OR %s)
                             ORDER BY a.abierto_en DESC NULLS LAST, t.updated_at DESC''',
-                        (_uid(), obra, archivados))
+                        (_uid(), _uid(), obra, archivados, admin))
             lista = [{'id': str(r[0]), 'nombre': r[1], 'archivado': bool(r[2]), 'creado_en': _iso(r[3]),
                       'actualizado_en': _iso(r[4]), 'creado_por_id': r[5], 'creado_por': r[6],
-                      'abierto_por_mi': _iso(r[7]), 'miniatura': r[8]} for r in cur.fetchall()]
+                      'abierto_por_mi': _iso(r[7]), 'miniatura': r[8], 'acceso': r[9] or 'obra',
+                      'mi_rol': r[10] or ('responsable' if admin else 'editor'),
+                      'puedo_archivar': admin or r[10] == 'responsable'} for r in cur.fetchall()]
         resp = jsonify({'success': True, 'tableros': lista})
         resp.headers['Cache-Control'] = 'private, no-store'
         return resp
@@ -201,6 +245,8 @@ def tableros():
         tid = str(cur.fetchone()[0])
         cur.execute('''INSERT INTO tableros_abiertos (tablero_id, user_id) VALUES (%s, %s)
                        ON CONFLICT (tablero_id, user_id) DO UPDATE SET abierto_en = now()''', (tid, _uid()))
+        cur.execute('''INSERT INTO tableros_miembros (tablero_id, user_id, rol, agregado_por) VALUES (%s, %s, 'responsable', %s)
+                       ON CONFLICT (tablero_id, user_id) DO NOTHING''', (tid, _uid(), _uid()))
         conn.commit()
     return jsonify({'success': True, 'id': tid, 'nombre': nombre, 'version': 1}), 201
 
@@ -233,7 +279,8 @@ def tablero(tid):
                                ON CONFLICT (tablero_id, user_id) DO UPDATE SET abierto_en = now()''', (tab['id'], _uid()))
                 conn.commit()
         resp = jsonify({'success': True, 'id': tab['id'], 'model_urn': tab['obra'], 'nombre': fila[2],
-                        'archivado': bool(fila[3]), 'config': fila[0] or {}, 'version': fila[1]})
+                        'archivado': bool(fila[3]), 'config': fila[0] or {}, 'version': fila[1],
+                        'acceso': tab['acceso'], 'mi_rol': _mi_rol(tab), 'gestiona': _gestiona(tab)})
         resp.headers['Cache-Control'] = 'private, no-store'
         return resp
 
@@ -256,6 +303,8 @@ def tablero(tid):
             return _error('El tablero es demasiado grande para guardarse.', 413)
         if tab['archivado']:
             return _error('Este tablero está archivado: recupéralo para editarlo.', 409, code='ARCHIVADO')
+        if not _puede_editar(tab):
+            return _error('En este tablero eres lector: puedes mirarlo, no cambiarlo.', 403, code='LECTOR')
         with get_db_connection() as conn:
             cur = conn.cursor()
             # Guardado condicional: solo si nadie guardó desde la versión que trae el cliente.
@@ -276,6 +325,15 @@ def tablero(tid):
 
     # PATCH: renombrar o archivar / recuperar
     cambios, params = [], []
+    if ('nombre' in data or 'acceso' in data) and not _puede_editar(tab):
+        return _error('En este tablero eres lector: puedes mirarlo, no cambiarlo.', 403, code='LECTOR')
+    if 'acceso' in data:
+        if not _gestiona(tab):
+            return _error('Solo un responsable del tablero o un administrador de la obra decide quién puede entrar.', 403)
+        if data.get('acceso') not in ACCESOS:
+            return _error('Acceso no válido.', 400)
+        cambios.append('acceso = %s')
+        params.append(data.get('acceso'))
     if 'nombre' in data:
         nombre = _nombre(data.get('nombre'))
         if not nombre or len(nombre) > NOMBRE_MAX:
@@ -283,8 +341,8 @@ def tablero(tid):
         cambios.append('nombre = %s')
         params.append(nombre)
     if 'archivado' in data:
-        if tab['autor'] != _uid() and not _es_admin(tab['obra']):
-            return _error('Solo quien lo creó o un administrador de la obra puede archivarlo.', 403)
+        if not _gestiona(tab):
+            return _error('Solo un responsable del tablero o un administrador de la obra puede archivarlo.', 403)
         cambios.append('archivado = %s')
         params.append(bool(data.get('archivado')))
     if not cambios:
@@ -295,3 +353,75 @@ def tablero(tid):
                     (*params, _uid(), tab['id']))
         conn.commit()
     return jsonify({'success': True}), 200
+
+
+@tableros_bp.route('/api/docs/tableros/<tid>/miembros', methods=['GET', 'POST', 'DELETE'])
+def miembros_del_tablero(tid):
+    """GET → quién es miembro, con su rol, el acceso y si esta sesión los gestiona. POST {user_id, rol} → invitar o
+    cambiar el rol (gestiona). DELETE ?user_id= → quitar a alguien (gestiona) o salir uno mismo. Siempre queda al
+    menos un responsable; solo se invita a quien pertenece a la obra."""
+    tab, denied = _guardia_del_tablero(tid)
+    if denied:
+        return denied
+
+    def lista(cur):
+        cur.execute('''SELECT m.user_id, COALESCE(NULLIF(u.name, ''), u.email), m.rol
+                         FROM tableros_miembros m JOIN users u ON u.id = m.user_id
+                        WHERE m.tablero_id = %s
+                        ORDER BY CASE m.rol WHEN 'responsable' THEN 0 WHEN 'editor' THEN 1 ELSE 2 END, 2''', (tab['id'],))
+        return [{'id': r[0], 'nombre': r[1] or '', 'rol': r[2]} for r in cur.fetchall()]
+
+    def responsables_sin(cur, user_id):
+        cur.execute("SELECT count(*) FROM tableros_miembros WHERE tablero_id = %s AND rol = 'responsable' AND user_id <> %s",
+                    (tab['id'], user_id))
+        return cur.fetchone()[0]
+
+    if request.method == 'GET':
+        with get_db_connection() as conn:
+            gente = lista(conn.cursor())
+        resp = jsonify({'success': True, 'acceso': tab['acceso'], 'miembros': gente, 'mi_rol': _mi_rol(tab),
+                        'gestiona': _gestiona(tab), 'soy_miembro': bool(tab['rol'])})
+        resp.headers['Cache-Control'] = 'private, no-store'
+        return resp
+
+    if request.method == 'POST':
+        if not _gestiona(tab):
+            return _error('Solo un responsable del tablero o un administrador de la obra puede invitar.', 403)
+        data = request.get_json(silent=True) or {}
+        try:
+            otro = int(data.get('user_id'))
+        except (TypeError, ValueError):
+            return _error('Falta a quién invitar.', 400)
+        rol = data.get('rol')
+        if rol not in ROLES:
+            return _error('Rol no válido.', 400)
+        if not _pertenece(otro, tab['obra']):
+            return _error('Esa persona no pertenece a la obra.', 400)
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            if rol != 'responsable' and not responsables_sin(cur, otro):
+                return _error('El tablero tiene que quedarse con al menos un responsable.', 409, code='ULTIMO_RESPONSABLE')
+            cur.execute('''INSERT INTO tableros_miembros (tablero_id, user_id, rol, agregado_por) VALUES (%s, %s, %s, %s)
+                           ON CONFLICT (tablero_id, user_id) DO UPDATE SET rol = EXCLUDED.rol''', (tab['id'], otro, rol, _uid()))
+            conn.commit()
+            gente = lista(cur)
+        return jsonify({'success': True, 'miembros': gente}), 200
+
+    # DELETE: quitar a alguien, o salir
+    try:
+        otro = int(request.args.get('user_id'))
+    except (TypeError, ValueError):
+        return _error('Falta a quién quitar.', 400)
+    if otro != _uid() and not _gestiona(tab):
+        return _error('Solo un responsable del tablero o un administrador de la obra puede quitar a alguien.', 403)
+    with get_db_connection() as conn:
+        cur = conn.cursor()
+        if not responsables_sin(cur, otro):
+            cur.execute("SELECT rol FROM tableros_miembros WHERE tablero_id = %s AND user_id = %s", (tab['id'], otro))
+            fila = cur.fetchone()
+            if fila and fila[0] == 'responsable':
+                return _error('El tablero tiene que quedarse con al menos un responsable.', 409, code='ULTIMO_RESPONSABLE')
+        cur.execute('DELETE FROM tableros_miembros WHERE tablero_id = %s AND user_id = %s', (tab['id'], otro))
+        conn.commit()
+        gente = lista(cur)
+    return jsonify({'success': True, 'miembros': gente}), 200

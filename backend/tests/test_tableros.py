@@ -68,29 +68,39 @@ def app(monkeypatch):
     return app
 
 
-def _fila(autor=7, archivado=False, version=3, obra='obra'):
-    """La fila que lee la guardia: id, obra, nombre, archivado, autor, versión."""
-    return (TAB, obra, 'Reunión', archivado, autor, version)
+_AUTOR = object()
+
+
+def _fila(autor=7, archivado=False, version=3, obra='obra', acceso='obra', rol=_AUTOR):
+    """La fila que lee la guardia: id, obra, nombre, archivado, autor, versión, acceso y el rol de la sesión (7) en
+    el tablero. Por omisión el autor es su responsable (como deja la migración 44) y los demás no son miembros."""
+    if rol is _AUTOR:
+        rol = 'responsable' if autor == 7 else None
+    return (TAB, obra, 'Reunión', archivado, autor, version, acceso, rol)
 
 
 # ── listar y crear ─────────────────────────────────────────────────────────────────────────
 
 def test_listar_los_tableros_de_la_obra(app, monkeypatch):
-    cur, _ = _conectar(monkeypatch, [[(TAB, 'Reunión', False, AHORA, AHORA, 7, 'Ana', AHORA, '<svg></svg>')]])
+    cur, _ = _conectar(monkeypatch, [[(TAB, 'Reunión', False, AHORA, AHORA, 7, 'Ana', AHORA, '<svg></svg>', 'obra', 'responsable'),
+                                      (TAB, 'Otro', False, AHORA, AHORA, 9, 'Luis', None, None, 'obra', None)]])
     r = app.test_client().get('/api/docs/tableros?model_urn=obra')
     assert r.status_code == 200 and r.headers['Cache-Control'] == 'private, no-store'
-    t = r.get_json()['tableros'][0]
+    t, otro = r.get_json()['tableros']
     assert t == {'id': TAB, 'nombre': 'Reunión', 'archivado': False, 'creado_en': AHORA.isoformat(),
                  'actualizado_en': AHORA.isoformat(), 'creado_por_id': 7, 'creado_por': 'Ana',
-                 'abierto_por_mi': AHORA.isoformat(), 'miniatura': '<svg></svg>'}
+                 'abierto_por_mi': AHORA.isoformat(), 'miniatura': '<svg></svg>', 'acceso': 'obra',
+                 'mi_rol': 'responsable', 'puedo_archivar': True}
+    assert otro['mi_rol'] == 'editor' and otro['puedo_archivar'] is False      # de la obra, sin rol: edita, no archiva
     sql, params = cur.queries[-1]
-    assert 'ORDER BY a.abierto_en DESC NULLS LAST' in sql and params == (7, 'obra', False)
+    assert 'ORDER BY a.abierto_en DESC NULLS LAST' in sql and params == (7, 7, 'obra', False, False)
+    assert "(t.acceso = 'obra' OR m.rol IS NOT NULL OR %s)" in sql             # los de invitados, solo a sus miembros
 
 
 def test_listar_archivados(app, monkeypatch):
     cur, _ = _conectar(monkeypatch, [[]])
     app.test_client().get('/api/docs/tableros?model_urn=obra&archivados=1')
-    assert cur.queries[-1][1] == (7, 'obra', True)
+    assert cur.queries[-1][1] == (7, 7, 'obra', True, False)
 
 
 def test_listar_otra_obra_es_403(app, monkeypatch):
@@ -106,6 +116,7 @@ def test_crear_un_tablero(app, monkeypatch):
     assert r.get_json() == {'success': True, 'id': TAB, 'nombre': 'Reunión lunes', 'version': 1}
     assert 'INSERT INTO tableros' in cur.queries[0][0] and cur.queries[0][1] == ('obra', 'Reunión lunes', 7, 7)
     assert 'tableros_abiertos' in cur.queries[1][0]          # quien lo crea lo tiene «abierto por mí»
+    assert 'tableros_miembros' in cur.queries[2][0] and "'responsable'" in cur.queries[2][0] and cur.queries[2][1] == (TAB, 7, 7)
     assert conn.committed
 
 
@@ -134,6 +145,7 @@ def test_abrir_devuelve_el_contenido_y_anota_quien_lo_abrio(app, monkeypatch):
     assert r.status_code == 200
     d = r.get_json()
     assert d['config'] == cfg and d['version'] == 3 and d['model_urn'] == 'obra'
+    assert d['acceso'] == 'obra' and d['mi_rol'] == 'responsable' and d['gestiona'] is True
     assert 'INSERT INTO tableros_abiertos' in cur.queries[-1][0] and cur.queries[-1][1] == (TAB, 7)
     assert conn.committed
 
@@ -266,7 +278,7 @@ def test_renombrar(app, monkeypatch):
     assert conn.committed
 
 
-def test_archivar_solo_autor_o_administrador(app, monkeypatch):
+def test_archivar_solo_responsable_o_administrador(app, monkeypatch):
     _, conn = _conectar(monkeypatch, [_fila(autor=99)])
     assert app.test_client().patch('/api/docs/tableros/%s' % TAB, json={'archivado': True}).status_code == 403
     assert not conn.committed
@@ -285,11 +297,113 @@ def test_patch_rechaza(app, monkeypatch, cuerpo):
     assert not conn.committed
 
 
+# ── miembros y acceso (doc 66) ────────────────────────────────────────────────────────────
+
+def test_un_lector_mira_pero_no_guarda_ni_renombra(app, monkeypatch):
+    _, conn = _conectar(monkeypatch, [_fila(autor=99, rol='lector')])
+    r = app.test_client().put('/api/docs/tableros/%s' % TAB, json={'config': {}, 'version': 3})
+    assert r.status_code == 403 and r.get_json()['code'] == 'LECTOR' and not conn.committed
+    _, conn = _conectar(monkeypatch, [_fila(autor=99, rol='lector')])
+    assert app.test_client().patch('/api/docs/tableros/%s' % TAB, json={'nombre': 'x'}).status_code == 403
+    cur, _ = _conectar(monkeypatch, [_fila(autor=99, rol='lector'), ({'notas': []}, 3, 'Reunión', False)])
+    d = app.test_client().get('/api/docs/tableros/%s' % TAB).get_json()
+    assert d['mi_rol'] == 'lector' and d['gestiona'] is False
+
+
+def test_un_editor_guarda_pero_no_archiva_ni_decide_el_acceso(app, monkeypatch):
+    cur, conn = _conectar(monkeypatch, [_fila(autor=99, rol='editor'), (4,)])
+    assert app.test_client().put('/api/docs/tableros/%s' % TAB, json={'config': {}, 'version': 3}).status_code == 200
+    _, conn = _conectar(monkeypatch, [_fila(autor=99, rol='editor')])
+    assert app.test_client().patch('/api/docs/tableros/%s' % TAB, json={'archivado': True}).status_code == 403
+    _, conn = _conectar(monkeypatch, [_fila(autor=99, rol='editor')])
+    assert app.test_client().patch('/api/docs/tableros/%s' % TAB, json={'acceso': 'invitados'}).status_code == 403
+    assert not conn.committed
+
+
+def test_solo_invitados_cierra_el_tablero_a_quien_no_es_miembro(app, monkeypatch):
+    _conectar(monkeypatch, [_fila(autor=99, acceso='invitados', rol=None)])
+    r = app.test_client().get('/api/docs/tableros/%s?solo_version=1' % TAB)
+    assert r.status_code == 403 and r.get_json()['code'] == 'SOLO_MIEMBROS'
+    _conectar(monkeypatch, [_fila(autor=99, acceso='invitados', rol='lector')])
+    assert app.test_client().get('/api/docs/tableros/%s?solo_version=1' % TAB).status_code == 200
+    monkeypatch.setattr(tb, '_es_admin', lambda obra: True)                 # el administrador de la obra entra en todos
+    _conectar(monkeypatch, [_fila(autor=99, acceso='invitados', rol=None)])
+    assert app.test_client().get('/api/docs/tableros/%s?solo_version=1' % TAB).status_code == 200
+
+
+def test_el_responsable_decide_quien_puede_entrar(app, monkeypatch):
+    cur, conn = _conectar(monkeypatch, [_fila()])
+    assert app.test_client().patch('/api/docs/tableros/%s' % TAB, json={'acceso': 'invitados'}).status_code == 200
+    assert cur.queries[-1][0].startswith('UPDATE tableros SET acceso = %s') and cur.queries[-1][1] == ('invitados', 7, TAB)
+    _, conn = _conectar(monkeypatch, [_fila()])
+    assert app.test_client().patch('/api/docs/tableros/%s' % TAB, json={'acceso': 'todos'}).status_code == 400
+    assert not conn.committed
+
+
+def test_miembros_se_listan_con_su_rol(app, monkeypatch):
+    cur, _ = _conectar(monkeypatch, [_fila(), [(7, 'Ana', 'responsable'), (8, '', 'lector')]])
+    r = app.test_client().get('/api/docs/tableros/%s/miembros' % TAB)
+    d = r.get_json()
+    assert r.status_code == 200 and d['miembros'] == [{'id': 7, 'nombre': 'Ana', 'rol': 'responsable'}, {'id': 8, 'nombre': '', 'rol': 'lector'}]
+    assert d['acceso'] == 'obra' and d['gestiona'] is True and d['soy_miembro'] is True and d['mi_rol'] == 'responsable'
+
+
+def test_invitar_a_alguien_de_la_obra(app, monkeypatch):
+    monkeypatch.setattr(tb, '_pertenece', lambda uid, obra: uid == 8 and obra == 'obra')
+    cur, conn = _conectar(monkeypatch, [_fila(), (1,), [(7, 'Ana', 'responsable'), (8, 'Luis', 'editor')]])   # 1 responsable además de Luis
+    r = app.test_client().post('/api/docs/tableros/%s/miembros' % TAB, json={'user_id': 8, 'rol': 'editor'})
+    assert r.status_code == 200 and len(r.get_json()['miembros']) == 2
+    sql, params = next(q for q in cur.queries if 'INSERT INTO tableros_miembros' in q[0])
+    assert 'ON CONFLICT (tablero_id, user_id) DO UPDATE SET rol' in sql and params == (TAB, 8, 'editor', 7) and conn.committed
+
+
+@pytest.mark.parametrize('cuerpo, estado', [({'user_id': 9, 'rol': 'editor'}, 400), ({'user_id': 8, 'rol': 'jefe'}, 400), ({'rol': 'editor'}, 400)])
+def test_invitar_rechaza(app, monkeypatch, cuerpo, estado):
+    monkeypatch.setattr(tb, '_pertenece', lambda uid, obra: uid == 8)
+    _, conn = _conectar(monkeypatch, [_fila()])
+    assert app.test_client().post('/api/docs/tableros/%s/miembros' % TAB, json=cuerpo).status_code == estado
+    assert not conn.committed
+
+
+def test_solo_quien_gestiona_invita_o_quita(app, monkeypatch):
+    monkeypatch.setattr(tb, '_pertenece', lambda uid, obra: True)
+    _, conn = _conectar(monkeypatch, [_fila(autor=99, rol='editor')])
+    assert app.test_client().post('/api/docs/tableros/%s/miembros' % TAB, json={'user_id': 8, 'rol': 'lector'}).status_code == 403
+    _, conn = _conectar(monkeypatch, [_fila(autor=99, rol='editor')])
+    assert app.test_client().delete('/api/docs/tableros/%s/miembros?user_id=8' % TAB).status_code == 403
+    assert not conn.committed
+
+
+def test_siempre_queda_un_responsable(app, monkeypatch):
+    monkeypatch.setattr(tb, '_pertenece', lambda uid, obra: True)
+    _, conn = _conectar(monkeypatch, [_fila(), (0,)])                         # bajarme a editor siendo el único
+    r = app.test_client().post('/api/docs/tableros/%s/miembros' % TAB, json={'user_id': 7, 'rol': 'editor'})
+    assert r.status_code == 409 and r.get_json()['code'] == 'ULTIMO_RESPONSABLE' and not conn.committed
+    _, conn = _conectar(monkeypatch, [_fila(), (0,), ('responsable',)])      # salir siendo el único
+    r = app.test_client().delete('/api/docs/tableros/%s/miembros?user_id=7' % TAB)
+    assert r.status_code == 409 and not conn.committed
+
+
+def test_salir_del_tablero(app, monkeypatch):
+    cur, conn = _conectar(monkeypatch, [_fila(autor=99, rol='editor'), (1,), [(99, 'Luis', 'responsable')]])
+    r = app.test_client().delete('/api/docs/tableros/%s/miembros?user_id=7' % TAB)
+    assert r.status_code == 200 and r.get_json()['miembros'] == [{'id': 99, 'nombre': 'Luis', 'rol': 'responsable'}]
+    assert any(q[0].startswith('DELETE FROM tableros_miembros') and q[1] == (TAB, 7) for q in cur.queries) and conn.committed
+
+
+def test_miembros_pasa_por_la_guardia(app, monkeypatch):
+    _, conn = _conectar(monkeypatch, [_fila(obra='otra')])
+    assert app.test_client().get('/api/docs/tableros/%s/miembros' % TAB).status_code == 403
+    _, conn = _conectar(monkeypatch, [_fila(autor=99, acceso='invitados', rol=None)])
+    assert app.test_client().get('/api/docs/tableros/%s/miembros' % TAB).status_code == 403
+
+
 # ── perímetro ──────────────────────────────────────────────────────────────────────────────
 
 def test_el_perimetro_sabe_de_que_obra_es_un_tablero():
     assert po.RECURSOS['tableros'] == ('id', 'model_urn')
     assert po.RUTAS_POR_RECURSO['tablero'] == ('tableros', 'tid')
+    assert po.RUTAS_POR_RECURSO['miembros_del_tablero'] == ('tableros', 'tid')      # y la de sus miembros
 
 
 def test_sin_sesion_es_401(monkeypatch):

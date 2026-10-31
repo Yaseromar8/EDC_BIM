@@ -204,7 +204,10 @@ def test_el_recorte_es_real(rutas_portal):
     # 300 -> 302 (30-oct-2026): DOS rutas, una familia `/api/docs/tableros` (listar/crear, y abrir/guardar/
     # renombrar/archivar un tablero): la pizarra de la obra en Docs, como los Tableros de ACC (docs/visor/57).
     # Producto documental del portal, con guardia de obra y de recurso (perimetro_de_obra: 'tableros').
-    TECHO = 302
+    # 302 -> 303 (31-oct-2026): UNA ruta de la misma familia, `/api/docs/tableros/<tid>/miembros` (listar, invitar o
+    # cambiar el rol, quitar o salir): los miembros de un tablero, como «Miembros del panel» de ACC (docs/visor/66,
+    # migración 44). Pasa por la misma guardia del tablero (obra, recurso y, si es solo de invitados, miembro).
+    TECHO = 303
     sin_puente = [r for r in rutas_portal
                   if r not in puente_acc and r not in revision_cad]
     assert len(sin_puente) < TECHO, (

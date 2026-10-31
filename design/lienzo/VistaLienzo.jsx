@@ -13,7 +13,9 @@ const nada = () => {};
 const SIN_TIPOS = {};
 const CSS_VISTA = '[data-vista-lienzo] .tablero-nodo, [data-vista-lienzo] .tablero-nodo * { cursor: inherit !important; }';
 
-const VistaLienzo = forwardRef(function VistaLienzo({ contenido, ids, tipos = SIN_TIPOS, margen = 48, fondo = C.light }, ref) {
+// `vacio`: lo que dice si no hay nada que enseñar (una vista publicada cuyos elementos se borraron, un tablero vacío).
+const VistaLienzo = forwardRef(function VistaLienzo({ contenido, ids, tipos = SIN_TIPOS, margen = 48, fondo = C.light,
+  vacio = 'Lo que tenía esta vista ya no está en el tablero.' }, ref) {
   const marcoRef = useRef(null);
   const { secciones, notas } = useMemo(() => elementosDeVista(contenido, ids), [contenido, ids]);
   const caja = useMemo(() => cajaDeVista({ secciones, notas }), [secciones, notas]);
@@ -70,7 +72,7 @@ const VistaLienzo = forwardRef(function VistaLienzo({ contenido, ids, tipos = SI
       <style>{CSS_VISTA}</style>
       {!caja ? (
         <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.gris600, fontSize: 14, textAlign: 'center', padding: 24 }}>
-          Lo que tenía esta vista ya no está en el tablero.
+          {vacio}
         </div>
       ) : cam && (
         <div style={{ position: 'absolute', top: 0, left: 0, '--s': cam.s, transform: `translate(${cam.tx}px, ${cam.ty}px) scale(${cam.s})`, transformOrigin: '0 0' }}>
