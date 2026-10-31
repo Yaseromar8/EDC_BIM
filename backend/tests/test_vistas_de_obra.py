@@ -218,6 +218,8 @@ def test_la_ruta_sirve_recuentos_y_vistas_y_rechaza_lo_desconocido(monkeypatch):
     r = c.get(f'/api/docs/search?vista=publicados&model_urn={OBRA}').json
     assert r['total'] == 1 and r['data'][0]['name'] == 'B.pdf' and r['limite'] == v.LIMITE
     assert c.get(f'/api/docs/search?vista=lo_que_sea&model_urn={OBRA}').status_code == 400
+    r = c.get(f'/api/docs/search?vista=recientes&model_urn={OBRA}').json
+    assert r['success'] and r['data'] and r['total'] >= 1
 
 
 def test_la_busqueda_respeta_el_permiso_de_carpeta(monkeypatch):
@@ -295,3 +297,29 @@ def test_una_consulta_de_revisiones_que_falla_no_tumba_las_vistas(monkeypatch):
     r = v.recuentos(cur, {'id': 7}, OBRA, hoy=HOY)
     assert r['recuentos'][v.PUBLICADOS] == 1 and r['recuentos'][v.MI_EMPRESA] == 0
     assert 'ROLLBACK TO SAVEPOINT vistas_aparte' in cur.sql
+
+
+# ── «Actualizados recientemente» (31-oct-2026, panel Documentos de los Tableros) ──
+
+def _fila_fecha(id_, nombre, cuando, carpeta='c1'):
+    f = list(fila(id_, nombre, 'WIP', carpeta=carpeta))
+    f[4] = cuando
+    return tuple(f)
+
+
+def test_recientes_por_fecha_con_permiso_y_limite(monkeypatch):
+    _preparar(monkeypatch, {'c1': 'viewer', 'c2': 'none'})
+    base = dt.datetime(2026, 10, 1, 12, 0)
+    filas = [_fila_fecha(f'd{i}', f'D{i}.pdf', base + dt.timedelta(hours=i)) for i in range(40)]
+    filas.append(_fila_fecha('oculto', 'Reservado.pdf', base + dt.timedelta(days=30), carpeta='c2'))
+    datos, total, extra = v.documentos(Cur(filas), {'id': 7}, OBRA, v.RECIENTES, hoy=HOY)
+    ids = [d['id'] for d in datos]
+    assert len(ids) == v.LIMITE_RECIENTES and ids[0] == 'd39' and ids[1] == 'd38'   # lo último primero
+    assert 'oculto' not in ids                                                       # la carpeta manda
+    assert total == 40 and 'hay_plan' in extra
+
+
+def test_recientes_no_es_una_vista_de_la_barra_de_archivos(monkeypatch):
+    _preparar(monkeypatch, {'c1': 'viewer'})
+    r = v.recuentos(Cur([fila('a', 'A.pdf', 'WIP')]), {'id': 7}, OBRA, hoy=HOY)
+    assert v.RECIENTES not in r['recuentos'] and v.RECIENTES not in v.CLAVES and v.RECIENTES in v.ACEPTADAS

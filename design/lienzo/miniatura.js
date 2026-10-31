@@ -21,7 +21,10 @@ export function miniaturaSvg(contenido) {
     ...secciones.map(f => r(f, 'rx="1.5" fill="#F1F0E8" stroke="#D9D7CD" stroke-width="0.6"')),
     ...notas.map(c => (c.tipo === 'texto'
       ? r({ x: c.x, y: c.y + c.h * 0.3, w: c.w, h: c.h * 0.4 }, 'rx="0.6" fill="#72706B" fill-opacity="0.55"')
-      : r(c, `rx="0.8" fill="${COLORES_NOTA[c.color] || COLORES_NOTA.amarillo}"`))),
+      : c.tipo === 'nota' || !c.tipo
+        ? r(c, `rx="0.8" fill="${COLORES_NOTA[c.color] || COLORES_NOTA.amarillo}"`)
+        // un documento u otro tipo registrado: hoja blanca con borde
+        : r(c, 'rx="0.8" fill="#FFFFFF" stroke="#B0AEA5" stroke-width="0.6"'))),
   ];
   // El servidor admite hasta 24.000 caracteres: con tableros enormes se dibuja lo que cabe (secciones primero).
   let cuerpo = '';

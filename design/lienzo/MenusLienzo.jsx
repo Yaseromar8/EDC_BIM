@@ -105,7 +105,7 @@ export function PanelBuscar({ elementos, onIr, onCerrar }) {
       <div style={{ overflowY: 'auto', padding: consulta ? 5 : 0 }}>
         {consulta && !resultados.length && <div style={{ padding: '14px 12px', fontSize: 14, color: C.gris600 }}>Nada en el tablero dice «{q.trim()}».</div>}
         {resultados.map((r, i) => {
-          const tipo = r.x.titulo !== undefined ? 'Sección' : r.x.tipo === 'texto' ? 'Texto' : 'Nota';
+          const tipo = r.x.titulo !== undefined ? 'Sección' : r.x.etiqueta || (r.x.tipo === 'texto' ? 'Texto' : 'Nota');
           return (
             <button key={r.x.id} onClick={() => ir(r)} onMouseEnter={() => setActivo(i)}
               style={{ ...fila, alignItems: 'flex-start', padding: '7px 8px', cursor: 'pointer', color: C.dark, background: i === activo ? 'rgba(0,110,175,0.08)' : 'transparent' }}>

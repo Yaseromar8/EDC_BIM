@@ -14,6 +14,12 @@
 // llama a `onCambio(contenido)`; el que guarda decide cuándo. `ref.aplicar(contenido)` pone un contenido que llega
 // de fuera (otra persona guardó) sin contarlo como cambio propio; `ref.ocupado()` dice si la persona está a mitad
 // de un gesto o escribiendo (para no cambiarle el tablero bajo el ratón).
+//
+// TIPOS REGISTRABLES (fase 2, docs/visor/59): `tipos = { documento: { Pieza, redimensionable, proporcion, minimo,
+// barra(el, { actualizar }), alDobleClic(el), texto(el), etiqueta, limpiar(raw) } }`. El lienzo no sabe qué es un
+// documento: los elementos de esos tipos viven en `notas`, se mueven, seleccionan, copian, fusionan y deshacen como
+// cualquier otro, y quien registra el tipo pone cómo se dibuja, sus botones y qué pasa al hacer doble clic.
+// `ref.insertar(elementos)` los coloca en el centro de la vista, elegidos, como un paso de deshacer.
 import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { C, FUENTE, RADIO } from './tema';
@@ -62,12 +68,13 @@ const leerCamara = (clave) => { try { const v = JSON.parse(localStorage.getItem(
 
 // ── Portapapeles: lo que se copia viaja como HTML con una marca, más el texto plano para pegar en otra parte ──
 const escaparHtml = (t) => t.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-const textoPlanoDe = (d) => [...d.secciones.map(f => f.titulo), ...d.notas.map(n => n.texto)].filter(Boolean).join('\n\n');
+const textoPlanoDe = (d) => [...d.secciones.map(f => f.titulo), ...d.notas.map(n => n.texto ?? n.nombre)].filter(Boolean).join('\n\n');
 const htmlDe = (d) => `<div ${MARCA}="${encodeURIComponent(JSON.stringify(d))}">${escaparHtml(textoPlanoDe(d)).replace(/\n/g, '<br>')}</div>`;
 const num = (v, def = 0) => (Number.isFinite(v) ? v : def);
 const txt = (v, max = 20000) => (typeof v === 'string' ? v.slice(0, max) : '');
 // Lo que llega del portapapeles se valida campo a campo: solo pasan las formas y los valores que el lienzo conoce.
-function limpiarPegado(d) {
+const SIN_TIPOS = {};
+function limpiarPegado(d, tipos = SIN_TIPOS) {
   if (!d || typeof d !== 'object') return null;
   const estilo = (x) => ({
     ...(COLORES_NOTA[x.color] ? { color: x.color } : {}), ...(FUENTES[x.fuente] ? { fuente: x.fuente } : {}),
@@ -76,22 +83,27 @@ function limpiarPegado(d) {
     ...(['arriba', 'centro', 'abajo'].includes(x.vertical) ? { vertical: x.vertical } : {}),
     ...(x.bloqueado ? { bloqueado: true } : {}),
   });
-  const notas = (Array.isArray(d.notas) ? d.notas : []).slice(0, 2000).filter(n => n && (n.tipo === 'nota' || n.tipo === 'texto')).map(n => ({
-    tipo: n.tipo, x: num(n.x), y: num(n.y), w: clamp(num(n.w, NOTA_LADO), 8, 20000), h: clamp(num(n.h, NOTA_LADO), 8, 20000), texto: txt(n.texto), ...estilo(n),
-  }));
+  const notas = (Array.isArray(d.notas) ? d.notas : []).slice(0, 2000).filter(n => n && (n.tipo === 'nota' || n.tipo === 'texto' || tipos[n.tipo]?.limpiar)).map(n => {
+    const caja = { tipo: n.tipo, x: num(n.x), y: num(n.y), w: clamp(num(n.w, NOTA_LADO), 8, 20000), h: clamp(num(n.h, NOTA_LADO), 8, 20000) };
+    if (n.tipo === 'nota' || n.tipo === 'texto') return { ...caja, texto: txt(n.texto), ...estilo(n) };
+    const propio = tipos[n.tipo].limpiar(n);          // el tipo valida lo suyo; si no lo reconoce, no se pega
+    return propio ? { ...caja, ...propio, ...(n.bloqueado ? { bloqueado: true } : {}) } : null;
+  }).filter(Boolean);
   const secciones = (Array.isArray(d.secciones) ? d.secciones : []).slice(0, 500).filter(Boolean).map(f => ({
     x: num(f.x), y: num(f.y), w: clamp(num(f.w, 640), SECCION_MIN[0], 50000), h: clamp(num(f.h, 400), SECCION_MIN[1], 50000),
     titulo: txt(f.titulo, 200) || 'Sección', color: clamp(Math.round(num(f.color)), 0, COLORES_SECCION.length - 1), ...(f.bloqueado ? { bloqueado: true } : {}),
   }));
   return notas.length || secciones.length ? { notas, secciones } : null;
 }
-function leerHtml(html) {
+function leerHtml(html, tipos) {
   const m = (html || '').match(new RegExp(`${MARCA}="([^"]*)"`));
   if (!m) return null;
-  try { return limpiarPegado(JSON.parse(decodeURIComponent(m[1]))); } catch { return null; }
+  try { return limpiarPegado(JSON.parse(decodeURIComponent(m[1])), tipos); } catch { return null; }
 }
 
-const Lienzo = forwardRef(function Lienzo({ inicial = null, onCambio, claveCamara = '', paletaExtra = null }, ref) {
+const Lienzo = forwardRef(function Lienzo({ inicial = null, onCambio, claveCamara = '', paletaExtra = null, tipos = SIN_TIPOS }, ref) {
+  const tiposRef = useRef(tipos);
+  tiposRef.current = tipos;
   const [notas, setNotas] = useState(() => inicial?.notas || []);
   const [secciones, setSecciones] = useState(() => inicial?.secciones || []);
   const [view, setView] = useState(() => (claveCamara && leerCamara(claveCamara)) || { tx: 80, ty: 80, s: 1 });
@@ -188,6 +200,8 @@ const Lienzo = forwardRef(function Lienzo({ inicial = null, onCambio, claveCamar
       ponerContenido(h.actual, false);
     },
     ocupado: () => hist.current.gesto || !!editandoRef.current,
+    // Coloca elementos nuevos (sin id ni posición) en el centro de la vista, en filas de cuatro, y los deja elegidos.
+    insertar: (lista) => insertarRef.current(lista),
   }), []);
 
   // La barra contextual va encima de lo elegido, pero nunca fuera de la pantalla: se corre hacia dentro por los
@@ -533,20 +547,33 @@ const Lienzo = forwardRef(function Lienzo({ inicial = null, onCambio, claveCamar
     };
     window.addEventListener('pointermove', onMove); window.addEventListener('pointerup', onUp);
   };
-  // Redimensionar una sección por cualquiera de sus cuatro esquinas.
-  const redimensionarSeccion = (id, esquina) => (e) => {
+  // Cambiar el tamaño por cualquiera de las cuatro esquinas: una sección, o un elemento de un tipo registrable que lo
+  // pida (un documento conserva su proporción, como en ACC).
+  const redimensionar = (id, esquina) => (e) => {
     if (e.button !== 0) return;
     e.preventDefault(); e.stopPropagation();
-    const f = seccionesRef.current.find(x => x.id === id);
+    const esSeccion = seccionesRef.current.some(x => x.id === id);
+    const f = (esSeccion ? seccionesRef.current : notasRef.current).find(x => x.id === id);
     if (!f || f.bloqueado) return;
-    const ini = puntoDelMundo(e), [mw, mh] = SECCION_MIN;
+    const tipo = esSeccion ? null : tiposRef.current[f.tipo];
+    const [mw, mh] = esSeccion ? SECCION_MIN : (tipo?.minimo || [120, 90]);
+    const proporcion = tipo?.proporcion ? f.w / f.h : null;
+    const ini = puntoDelMundo(e);
     iniciarGesto();
     const onMove = (ev) => {
       const p = puntoDelMundo(ev), dx = p.x - ini.x, dy = p.y - ini.y;
       let x1 = f.x, y1 = f.y, x2 = f.x + f.w, y2 = f.y + f.h;
-      if (esquina.includes('o')) x1 = Math.min(f.x + dx, x2 - mw); else x2 = Math.max(f.x + f.w + dx, x1 + mw);
-      if (esquina.includes('n')) y1 = Math.min(f.y + dy, y2 - mh); else y2 = Math.max(f.y + f.h + dy, y1 + mh);
-      setSecciones(xs => xs.map(x => (x.id === id ? { ...x, x: redondo(x1), y: redondo(y1), w: redondo(x2 - x1), h: redondo(y2 - y1) } : x)));
+      if (proporcion) {
+        // El ancho manda; el alto lo sigue. La esquina opuesta queda quieta.
+        const w = Math.max(mw, f.w + (esquina.includes('o') ? -dx : dx)), h = Math.max(mh, w / proporcion), wf = h * proporcion;
+        if (esquina.includes('o')) x1 = x2 - wf; else x2 = x1 + wf;
+        if (esquina.includes('n')) y1 = y2 - h; else y2 = y1 + h;
+      } else {
+        if (esquina.includes('o')) x1 = Math.min(f.x + dx, x2 - mw); else x2 = Math.max(f.x + f.w + dx, x1 + mw);
+        if (esquina.includes('n')) y1 = Math.min(f.y + dy, y2 - mh); else y2 = Math.max(f.y + f.h + dy, y1 + mh);
+      }
+      const poner = (xs) => xs.map(x => (x.id === id ? { ...x, x: redondo(x1), y: redondo(y1), w: redondo(x2 - x1), h: redondo(y2 - y1) } : x));
+      if (esSeccion) setSecciones(poner); else setNotas(poner);
     };
     const onUp = () => { window.removeEventListener('pointermove', onMove); window.removeEventListener('pointerup', onUp); terminarGesto(); };
     window.addEventListener('pointermove', onMove); window.addEventListener('pointerup', onUp);
@@ -586,6 +613,36 @@ const Lienzo = forwardRef(function Lienzo({ inicial = null, onCambio, claveCamar
     setEditandoNota(null);
   };
   const editar = (id) => { if (!notasRef.current.find(n => n.id === id)?.bloqueado) setEditandoNota(id); };
+  // Cambiar campos de un elemento desde la barra de su tipo (p. ej. «actualizar a la versión nueva»): un paso de deshacer.
+  const actualizarElemento = (id, patch) => { marcar(); setNotas(ns => ns.map(n => (n.id === id ? { ...n, ...patch } : n))); };
+  const insertarRef = useRef(null);
+  insertarRef.current = (lista) => {
+    const elementos = (lista || []).filter(x => x && x.w > 0 && x.h > 0);
+    if (!elementos.length) return [];
+    marcar();
+    const V = visible(), cx = (V.x1 + V.x2) / 2, cy = (V.y1 + V.y2) / 2, hueco = 32, porFila = Math.min(4, elementos.length);
+    const anchoCol = Math.max(...elementos.map(x => x.w)), altoFila = Math.max(...elementos.map(x => x.h));
+    const filas = Math.ceil(elementos.length / porFila);
+    const anchoBloque = porFila * anchoCol + (porFila - 1) * hueco, altoBloque = filas * altoFila + (filas - 1) * hueco;
+    // Sin pisar nada: en el centro de la vista y, si choca, pegado a lo que estorba (a su derecha o debajo),
+    // eligiendo el sitio libre más cercano al centro.
+    const ocupado = todos();
+    const choca = (x, y) => ocupado.some(o => o.x < x + anchoBloque + hueco && o.x + o.w + hueco > x && o.y < y + altoBloque + hueco && o.y + o.h + hueco > y);
+    let x0 = cx - anchoBloque / 2, y0 = cy - altoBloque / 2;
+    if (choca(x0, y0)) {
+      const candidatos = ocupado.flatMap(o => [[o.x + o.w + hueco, y0], [o.x + o.w + hueco, o.y], [x0, o.y + o.h + hueco], [o.x, o.y + o.h + hueco]]);
+      const libre = candidatos.filter(([x, y]) => !choca(x, y)).sort((a, b) => Math.hypot(a[0] - x0, a[1] - y0) - Math.hypot(b[0] - x0, b[1] - y0))[0];
+      if (libre) [x0, y0] = libre;
+      else { const c = cajaDe(ocupado); x0 = c.x1; y0 = c.y2 + hueco * 2; }
+    }
+    const nuevos = elementos.map((x, i) => ({ ...x, id: uid(), x: redondo(x0 + (i % porFila) * (anchoCol + hueco)), y: redondo(y0 + Math.floor(i / porFila) * (altoFila + hueco)) }));
+    setNotas(ns => [...ns, ...nuevos]);
+    setSeleccion(new Set(nuevos.map(x => x.id)));
+    // Si quedaron fuera de la vista, la cámara va a ellos (sin acercar más de lo que estaba).
+    const c = cajaDe(nuevos);
+    if (c.x1 < V.x1 || c.y1 < V.y1 || c.x2 > V.x2 || c.y2 > V.y2) encuadrar(nuevos, Math.min(1, viewRef.current.s));
+    return nuevos.map(x => x.id);
+  };
   const seleccionarTodo = () => setSeleccion(new Set(todos().map(x => x.id)));
 
   // ── Copiar, cortar, pegar, duplicar ──────────────────────────────────────────────────────────────
@@ -642,7 +699,7 @@ const Lienzo = forwardRef(function Lienzo({ inicial = null, onCambio, claveCamar
     if (cortar) borrarSeleccion();
   };
   const alPegar = (e) => {
-    const html = e.clipboardData.getData('text/html'), datos = leerHtml(html);
+    const html = e.clipboardData.getData('text/html'), datos = leerHtml(html, tiposRef.current);
     if (datos) { e.preventDefault(); pegarDatos(datos, html); return; }
     const texto = e.clipboardData.getData('text/plain');
     if (texto) { e.preventDefault(); pegarTexto(texto); }
@@ -661,13 +718,13 @@ const Lienzo = forwardRef(function Lienzo({ inicial = null, onCambio, claveCamar
     try {
       for (const item of await navigator.clipboard.read()) {
         if (item.types.includes('text/html')) {
-          const html = await (await item.getType('text/html')).text(), datos = leerHtml(html);
+          const html = await (await item.getType('text/html')).text(), datos = leerHtml(html, tiposRef.current);
           if (datos) { pegarDatos(datos, html); return; }
         }
         if (item.types.includes('text/plain')) { pegarTexto(await (await item.getType('text/plain')).text()); return; }
       }
     } catch { /* sin permiso para leer el portapapeles: el interno */ }
-    if (portapapeles.current) pegarDatos(limpiarPegado(portapapeles.current), 'interno');
+    if (portapapeles.current) pegarDatos(limpiarPegado(portapapeles.current, tiposRef.current), 'interno');
   };
 
   // ── Menú contextual ──────────────────────────────────────────────────────────────────────────────
@@ -823,7 +880,8 @@ const Lienzo = forwardRef(function Lienzo({ inicial = null, onCambio, claveCamar
   const elegidos = [...secciones, ...notas].filter(x => sel.has(x.id));
   const caja = elegidos.length && !editandoNota ? cajaDe(elegidos) : null;
   const uno = elegidos.length === 1 ? elegidos[0] : null;
-  const unaSeccion = uno && secciones.includes(uno) && !uno.bloqueado ? uno : null;
+  const unaSeccion = uno && !uno.bloqueado && (secciones.includes(uno) || tipos[uno.tipo]?.redimensionable) ? uno : null;
+  const extraDeLaBarra = uno && tipos[uno.tipo]?.barra ? tipos[uno.tipo].barra(uno, { actualizar: (patch) => actualizarElemento(uno.id, patch) }) : null;
   const conEstilo = elegidos.filter(x => x.tipo === 'nota' || x.tipo === 'texto');
   const primero = conEstilo[0] || {};
   const estiloElegido = Object.fromEntries(ESTILO.map(k => [k, conEstilo.every(x => x[k] === primero[k]) ? primero[k] : undefined]));
@@ -832,7 +890,7 @@ const Lienzo = forwardRef(function Lienzo({ inicial = null, onCambio, claveCamar
   const asa = (left, top, esquina) => {
     const activa = !!unaSeccion;
     return (
-      <div onPointerDown={activa ? redimensionarSeccion(unaSeccion.id, esquina) : undefined}
+      <div onPointerDown={activa ? redimensionar(unaSeccion.id, esquina) : undefined}
         style={{ position: 'absolute', left, top, width: linea(9), height: linea(9), transform: 'translate(-50%, -50%)',
           background: '#fff', border: `${linea(1.5)} solid ${AZUL_SEL}`, boxSizing: 'border-box', borderRadius: linea(1.5),
           pointerEvents: activa ? 'auto' : 'none', cursor: activa ? (esquina === 'no' || esquina === 'se' ? 'nwse-resize' : 'nesw-resize') : 'default' }} />
@@ -874,6 +932,17 @@ const Lienzo = forwardRef(function Lienzo({ inicial = null, onCambio, claveCamar
             </div>
           ))}
           {notas.map(n => {
+            const tipo = tipos[n.tipo];
+            if (tipo) {
+              const PiezaPropia = tipo.Pieza;
+              return (
+                <div key={n.id} ref={refNodo(n.id)} className="tablero-nodo" onPointerDown={arrastrar(n.id)}
+                  onDoubleClick={(e) => { e.stopPropagation(); tipo.alDobleClic?.(n); }}
+                  style={{ position: 'absolute', left: n.x, top: n.y, width: n.w, height: n.h }}>
+                  <PiezaPropia elemento={n} elegido={sel.has(n.id)} />
+                </div>
+              );
+            }
             const Pieza = n.tipo === 'texto' ? TextoLibre : Nota;
             return (
               <Pieza key={n.id} nota={n} editando={editandoNota === n.id} refNodo={refNodo(n.id)} onPointerDown={arrastrar(n.id)}
@@ -893,7 +962,7 @@ const Lienzo = forwardRef(function Lienzo({ inicial = null, onCambio, claveCamar
                 <div ref={barraRef} style={{ position: 'absolute', left: '50%', top: hayEnTitulo ? -36 : 0, pointerEvents: 'auto', zIndex: 7,
                   transform: 'translate(-50%, -100%) scale(calc(1 / var(--s, 1))) translate(var(--bx, 0px), var(--by, -14px))', transformOrigin: '50% 100%' }}>
                   <BarraContextual estilo={estiloElegido} conNotas={conEstilo.some(x => x.tipo === 'nota')} conTextos={conEstilo.some(x => x.tipo === 'texto')}
-                    conEstilo={conEstilo.length > 0} bloqueado={todoBloqueado}
+                    conEstilo={conEstilo.length > 0} bloqueado={todoBloqueado} extra={todoBloqueado ? null : extraDeLaBarra}
                     onEstilo={aplicarEstilo} onBloquear={alternarBloqueo}
                     colores={{ nota: COLORES_NOTA, tinta: COLORES_TINTA }} fuentes={FUENTES} tamanos={TAMANOS}
                     acciones={[['Duplicar', 'Ctrl D', duplicar], null, ['Traer al frente', '⇧ ]', () => reordenar('frente')], ['Enviar al fondo', '⇧ [', () => reordenar('fondo')], null,
@@ -922,7 +991,7 @@ const Lienzo = forwardRef(function Lienzo({ inicial = null, onCambio, claveCamar
 
       <PaletaIzquierda items={[...(paletaExtra || []), ['buscar', 'Buscar', () => setBuscando(b => !b)]]} onDeshacer={deshacer} onRehacer={rehacer} />
       {buscando && (
-        <PanelBuscar elementos={[...secciones, ...notas]} onCerrar={() => { setBuscando(false); panelRef.current?.focus({ preventScroll: true }); }}
+        <PanelBuscar elementos={[...secciones, ...notas.map(n => (tipos[n.tipo] ? { ...n, texto: tipos[n.tipo].texto?.(n) || '', etiqueta: tipos[n.tipo].etiqueta } : n))]} onCerrar={() => { setBuscando(false); panelRef.current?.focus({ preventScroll: true }); }}
           onIr={(x) => { setSeleccion(new Set([x.id])); encuadrar([x], Math.max(viewRef.current.s, 0.5)); }} />
       )}
       <BarraInferior herramienta={herramienta} onHerramienta={setHerramienta} colorNota={colorNota} onColorNota={setColorNota} onSeccionTamano={seccionDeTamano} />

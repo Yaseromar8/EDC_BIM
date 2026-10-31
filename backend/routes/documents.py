@@ -2153,7 +2153,7 @@ def search_documents():
     vista = (request.args.get('vista') or '').strip()
     if vista:
         import vistas_de_obra as _vistas
-        if vista not in ('recuentos', _vistas.TODOS) and vista not in _vistas.CLAVES:
+        if vista not in ('recuentos', _vistas.TODOS) and vista not in _vistas.ACEPTADAS:
             return jsonify({"success": False, "error": "Vista desconocida."}), 400
         filtros = {k: (request.args.get(k) or '').strip() or None for k in _vistas.FILTROS}
         try:

@@ -6,13 +6,17 @@
 // Guardar sin pisar a nadie: cada guardado lleva la versión sobre la que se hizo; si otra persona guardó
 // antes, el servidor responde 409 con lo suyo, se fusiona por elemento (design/lienzo/fusion.js) y se vuelve
 // a guardar. Nada se reemplaza a ciegas.
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import toast from 'react-hot-toast';
 import { API } from '../utils/helpers';
 import { apiFetch } from '../utils/apiFetch';
 import IconoModulo from './IconoModulo';
 import Lienzo from '../../../design/lienzo/Lienzo';
+import { DocumentosDelTablero, versionesVigentes, extensionDe, TAMANO_TARJETA } from './tableros/documentos';
+import { tipoDocumento } from './tableros/tipoDocumento';
+import PanelDocumentos from './tableros/PanelDocumentos';
+import { enlaceDeArchivos } from '../utils/enlacesDeArchivos';
 import { fusionar, mismoContenido } from '../../../design/lienzo/fusion';
 import { miniaturaSvg } from '../../../design/lienzo/miniatura';
 
@@ -224,6 +228,34 @@ function TableroEditor({ id, onCerrar }) {
   const lienzoRef = useRef(null), nombreRef = useRef(''), avisoT = useRef(0);
   const base = useRef({ config: {}, version: 1 });   // lo último que sé que hay en el servidor
   const pendiente = useRef(false), enVuelo = useRef(null), temporizador = useRef(0);
+  // DOCUMENTOS (fase 2, docs/visor/59): la versión vigente de cada documento del tablero, para avisar de las nuevas.
+  const [vigentes, setVigentes] = useState({});
+  const [panelDocumentos, setPanelDocumentos] = useState(false);
+  const vigentesRef = useRef({});
+  const obra = datos?.model_urn || '';
+  const mirarVigentes = useCallback(async (contenido) => {
+    if (!obra) return;
+    const ids = (contenido?.notas || []).filter(n => n.tipo === 'documento' && n.nodeId && !(n.nodeId in vigentesRef.current)).map(n => n.nodeId);
+    if (!ids.length) return;
+    ids.forEach(i => { vigentesRef.current[i] = vigentesRef.current[i] || null; });
+    const nuevas = await versionesVigentes(obra, ids);
+    vigentesRef.current = { ...vigentesRef.current, ...nuevas };
+    setVigentes(v => ({ ...v, ...nuevas }));
+  }, [obra]);
+  const abrir = useCallback((el) => {
+    window.open(enlaceDeArchivos(window.location.origin, { obra, carpeta: el.parentId, documento: el.nodeId, version: el.versionId }), '_blank', 'noopener');
+  }, [obra]);
+  const tipos = useMemo(() => ({ documento: tipoDocumento({ abrir }) }), [abrir]);
+  const anadirDocumentos = async (filas) => {
+    setPanelDocumentos(false);
+    const sinVersion = filas.filter(f => !f.version_id).map(f => f.id);
+    const vig = sinVersion.length ? await versionesVigentes(obra, sinVersion) : {};
+    lienzoRef.current?.insertar(filas.map(f => ({
+      tipo: 'documento', ...TAMANO_TARJETA,
+      nodeId: f.id, versionId: f.version_id || vig[f.id]?.versionId || null, version: f.version_id ? (f.version || null) : (vig[f.id]?.version || f.version || null),
+      parentId: f.parent_id || null, nombre: f.name, ext: extensionDe(f.name),
+    })));
+  };
 
   useEffect(() => {
     let vivo = true;
@@ -281,13 +313,15 @@ function TableroEditor({ id, onCerrar }) {
     try { return await vuelta; } finally { enVuelo.current = null; }
   }, [id]);
 
-  const alCambiar = useCallback(() => {
+  useEffect(() => { if (datos) mirarVigentes(datos.config); }, [datos ? 1 : 0, mirarVigentes]);   // eslint-disable-line react-hooks/exhaustive-deps
+  const alCambiar = useCallback((contenido) => {
+    mirarVigentes(contenido);
     if (estado === 'archivado') return;
     pendiente.current = true;
     setEstado(e => (e === 'guardando' ? e : 'pendiente'));
     clearTimeout(temporizador.current);
     temporizador.current = setTimeout(() => { guardar(); }, ESPERA_GUARDAR_MS);
-  }, [guardar, estado]);
+  }, [guardar, estado, mirarVigentes]);
 
   // Ver lo que guardan los demás sin tener que guardar uno: cada 10 s, con la pestaña a la vista, se pregunta solo
   // la versión. Si hay otra y aquí no hay nada pendiente ni a medio gesto, se trae y se pone; si hay algo
@@ -306,6 +340,7 @@ function TableroEditor({ id, onCerrar }) {
       if (!vivo || !d.ok || pendiente.current || enVuelo.current || lienzo.ocupado() || !(d.version > base.current.version)) return;
       base.current = { config: d.config || {}, version: d.version };
       lienzo.aplicar(d.config || {});
+      mirarVigentes(d.config);
       if (d.nombre && d.nombre !== nombreRef.current) { setNombre(d.nombre); setDatos(x => ({ ...x, nombre: d.nombre })); }
       setAviso('Al día con los cambios de otra persona');
       clearTimeout(avisoT.current);
@@ -388,7 +423,11 @@ function TableroEditor({ id, onCerrar }) {
         ) : !datos ? (
           <div style={{ textAlign: 'center', padding: 48 }}><div className="adsk-spinner" style={{ margin: '0 auto' }} /></div>
         ) : (
-          <Lienzo key={id} ref={lienzoRef} inicial={datos.config} onCambio={alCambiar} claveCamara={`alephia-tablero-camara:${id}`} />
+          <DocumentosDelTablero.Provider value={{ obra, vigentes }}>
+            <Lienzo key={id} ref={lienzoRef} inicial={datos.config} onCambio={alCambiar} claveCamara={`alephia-tablero-camara:${id}`} tipos={tipos}
+              paletaExtra={estado === 'archivado' ? [] : [['documento', 'Documentos', () => setPanelDocumentos(p => !p)]]} />
+            {panelDocumentos && <PanelDocumentos obra={obra} onAnadir={anadirDocumentos} onCerrar={() => setPanelDocumentos(false)} />}
+          </DocumentosDelTablero.Provider>
         )}
       </div>
     </div>,

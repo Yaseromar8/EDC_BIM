@@ -42,6 +42,14 @@ CLAVES = (EN_REVISION, ME_TOCA, MI_EMPRESA, PUBLICADOS, PUBLICADOS_SIN_ENTREGA,
 DIAS_PRONTO = 7
 LIMITE = 500
 
+# «ACTUALIZADOS RECIENTEMENTE» (31-oct-2026, docs/visor/59): los últimos documentos que cambiaron en la obra, para el
+# panel «Documentos» de los Tableros. No es una vista de la barra de Archivos (no entra en CLAVES ni en los recuentos):
+# se pide por su nombre. Solo se resuelve el permiso de los CANDIDATOS más recientes, no de la obra entera.
+RECIENTES = 'recientes'
+LIMITE_RECIENTES = 30
+CANDIDATOS_RECIENTES = 200
+ACEPTADAS = CLAVES + (RECIENTES,)
+
 # Las carpetas de la obra con su ruta legible desde la raíz («Archivos de proyecto»
 # no forma parte de la ruta). Solo carpetas vivas: lo que cuelga de una carpeta
 # suprimida está, a efectos de la persona, en la papelera.
@@ -321,12 +329,14 @@ def cumple(doc, filtros):
     return True
 
 
-def _documentos(cur, usuario, urn, hoy, elegir=None):
+def _documentos(cur, usuario, urn, hoy, elegir=None, previo=None):
     tabla, obra_con_plan = _hay_plan(cur, urn)
     sql = _SQL_DOCUMENTOS.format(plan_cols=_PLAN_COLS if tabla else _SIN_PLAN_COLS,
                                  plan_join=_PLAN_JOIN if tabla else '')
     cur.execute(sql, {'urn': urn})
     docs = [a_fila(r, hoy) for r in cur.fetchall()]
+    if previo:
+        docs = previo(docs)
     me_toca = _aparte(cur, 'me toca revisar', lambda: documentos_que_me_tocan(cur, usuario, urn))
     mi_empresa = _aparte(cur, 'asignados a mi empresa', lambda: documentos_de_mi_empresa(cur, usuario, urn))
     for d in docs:
@@ -363,9 +373,15 @@ def documentos(cur, usuario, urn, clave, hoy=None, limite=LIMITE, filtros=None):
 
     `clave` es una vista de serie, o TODOS con `filtros` (una vista propia).
     """
-    if clave not in CLAVES and clave != TODOS:
+    if clave not in ACEPTADAS and clave != TODOS:
         raise ValueError(clave)
     hoy = hoy or datetime.date.today()
+    if clave == RECIENTES:
+        def mas_recientes(ds):
+            return sorted(ds, key=lambda d: d.get('updated') or '', reverse=True)[:CANDIDATOS_RECIENTES]
+        docs, _tabla, obra_con_plan = _documentos(cur, usuario, urn, hoy, elegir=lambda d: True, previo=mas_recientes)
+        filas = [_limpia(d) for d in sorted(docs, key=lambda d: d.get('updated') or '', reverse=True)]
+        return filas[:LIMITE_RECIENTES], len(filas), {'hay_plan': obra_con_plan}
     elegir = (lambda d: cumple(d, filtros)) if clave == TODOS else (lambda d: clave in d['_vistas'])
     docs, tabla, obra_con_plan = _documentos(cur, usuario, urn, hoy, elegir)
     filas = [_limpia(d) for d in docs]

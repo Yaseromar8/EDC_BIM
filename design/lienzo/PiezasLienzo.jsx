@@ -267,7 +267,7 @@ function Opcion({ elegida, onClick, children, peligro, atajo }) {
   );
 }
 
-export function BarraContextual({ estilo = {}, conNotas, conTextos, conEstilo, bloqueado, onEstilo, onBloquear, acciones, colores, fuentes, tamanos }) {
+export function BarraContextual({ estilo = {}, conNotas, conTextos, conEstilo, bloqueado, onEstilo, onBloquear, acciones, colores, fuentes, tamanos, extra = null }) {
   const [abierto, setAbierto] = useState(null);
   useEffect(() => {
     if (!abierto) return undefined;
@@ -289,6 +289,8 @@ export function BarraContextual({ estilo = {}, conNotas, conTextos, conEstilo, b
       <Boton titulo={bloqueado ? 'Desbloquear' : 'Bloquear'} atajo="Ctrl ⇧ L" activo={bloqueado} onClick={onBloquear}>
         <Icono nombre={bloqueado ? 'candado' : 'candadoAbierto'} tam={20} grosor={1.2} />
       </Boton>
+      {/* Lo propio del tipo elegido (un documento: su versión y «Abrir»), entre el candado y el estilo. */}
+      {extra && <>{separadorBarra}{extra}</>}
       {conEstilo && !bloqueado && (
         <>
           {separadorBarra}
