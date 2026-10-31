@@ -1,4 +1,4 @@
-import { prepararImanes, imantarArrastre } from '../src/components/dashboard/imanes.js';
+import { prepararImanes, imantarArrastre } from '../../design/lienzo/imanes.js';
 const A = [0, 0, 100, 100], B = [300, 0, 400, 100];
 const cache = prepararImanes([A, B]);
 const C = [0, 300, 100, 400];     // tarjeta de 100 x 100 que arrastro

@@ -18,9 +18,9 @@ import ChartEditor from './ChartEditor';
 import VistaDePagina from './VistaDePagina';
 import BarraDeVistas from './BarraDeVistas';
 import Herramienta, { CSS_HERRAMIENTAS, Icono, Separador } from './Herramienta';
-import { Nota, TextoLibre, BarraInferior, PaletaIzquierda, PildoraZoom } from './PiezasLienzo';
-import { NOTA_LADO, NOTA_HUECO, medidaTexto } from './notas';
-import { prepararImanes, imantarArrastre, svgDeLineas } from './imanes';
+import { Nota, TextoLibre, BarraInferior, PaletaIzquierda, PildoraZoom } from '../../../../design/lienzo/PiezasLienzo';
+import { NOTA_LADO, NOTA_HUECO, medidaTexto } from '../../../../design/lienzo/notas';
+import { prepararImanes, imantarArrastre, svgDeLineas } from '../../../../design/lienzo/imanes';
 import { ANALISIS } from './analisisDeAuditoria';
 // El itemizado vigente del frente abierto: el que se subió a la Planilla (docs/visor/51).
 import { itemizadoDeObra } from '../../utils/itemizadoDeObraVisor';

@@ -4,7 +4,7 @@
 // DashboardWorkspace.
 import React, { useEffect, useRef, useState } from 'react';
 import { C, FUENTE } from './tema';
-import { Icono } from './Herramienta';
+import { Icono } from './Icono';
 import { COLORES_NOTA, letraNota } from './notas';
 
 // Texto editable en el sitio (contentEditable de texto plano): Escape o salir del campo termina.
@@ -179,8 +179,10 @@ export function BarraInferior({ herramienta, onHerramienta, colorNota, onColorNo
   );
 }
 
-// Paleta de la izquierda: lo que trae DATOS al tablero (gráfico, parámetros) y, aparte, deshacer/rehacer.
-export function PaletaIzquierda({ onGrafico, onParametros, parametrosApagado, onDeshacer, onRehacer }) {
+// Paleta de la izquierda: lo que trae DATOS al tablero y, aparte, deshacer/rehacer. `items` = [[icono, texto,
+// onClick, apagado], …]; sin `items`, los del Tablero de View (gráfico y parámetros).
+export function PaletaIzquierda({ items, onGrafico, onParametros, parametrosApagado, onDeshacer, onRehacer }) {
+  const lista = items || [['grafico', 'Gráfico', onGrafico], ['parametros', 'Parámetros', onParametros, parametrosApagado]];
   const item = (icono, texto, onClick, apagado) => (
     <button onClick={onClick} disabled={apagado} title={texto}
       style={{ width: 52, padding: '7px 0 6px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, border: 'none', borderRadius: 7,
@@ -192,10 +194,11 @@ export function PaletaIzquierda({ onGrafico, onParametros, parametrosApagado, on
   );
   return (
     <div onPointerDown={e => e.stopPropagation()} style={{ position: 'absolute', left: 12, top: 12, zIndex: 4, display: 'flex', flexDirection: 'column', gap: 8 }}>
-      <div style={{ ...cajaFlotante, padding: 4, display: 'flex', flexDirection: 'column', gap: 2 }}>
-        {item('grafico', 'Gráfico', onGrafico)}
-        {item('parametros', 'Parámetros', onParametros, parametrosApagado)}
-      </div>
+      {lista.length > 0 && (
+        <div style={{ ...cajaFlotante, padding: 4, display: 'flex', flexDirection: 'column', gap: 2 }}>
+          {lista.map(([icono, texto, onClick, apagado]) => <React.Fragment key={texto}>{item(icono, texto, onClick, apagado)}</React.Fragment>)}
+        </div>
+      )}
       <div style={{ ...cajaFlotante, padding: 4, display: 'flex', flexDirection: 'column', gap: 2 }}>
         <Boton titulo="Deshacer" atajo="Ctrl+Z" onClick={onDeshacer}><Icono nombre="deshacer" tam={22} grosor={1} /></Boton>
         <Boton titulo="Rehacer" atajo="Ctrl+Y" onClick={onRehacer}><Icono nombre="rehacer" tam={22} grosor={1} /></Boton>
