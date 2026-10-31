@@ -260,10 +260,13 @@ body,
   background: transparent;
 }
 
+/* Calidad de línea como la paleta de ACC: icono de 22 px y trazo fino. El CSS manda sobre el atributo `strokeWidth`
+   de los SVG, así que afina solo los iconos de trazo (los de relleno ya son finos) y los iguala entre sí. */
 .rail-icon {
   display: block;
-  width: 20px;
-  height: 20px;
+  width: 22px;
+  height: 22px;
+  stroke-width: 1.3;
 }
 
 /* Pie del icono del rail: 11 px, la única excepción a la escala de letra (14 · 13 · 12). El rail mide 64 px y
@@ -271,9 +274,16 @@ body,
    icono de la paleta de Forma). */
 .rail-label {
   font-size: 11px;
-  font-weight: 600;
+  font-weight: 500;
   letter-spacing: -0.01em;
   white-space: nowrap;
+  color: var(--v-texto-2, #52524D);
+}
+
+.rail-button:hover .rail-label,
+.rail-button:focus-visible .rail-label,
+.rail-button.active .rail-label {
+  color: inherit;
 }
 
 .app-sidebar {

@@ -4244,7 +4244,7 @@ function App() {
               title="Filters"
             >
               <FilterIcon />
-              <span className="rail-label" style={{ fontWeight: 700 }}>Filters</span>
+              <span className="rail-label">Filters</span>
             </button>
 
             <button
@@ -4254,7 +4254,7 @@ function App() {
               title="Files"
             >
               <FolderIcon />
-              <span className="rail-label" style={{ fontWeight: 700 }}>Files</span>
+              <span className="rail-label">Files</span>
             </button>
 
 
@@ -4265,7 +4265,7 @@ function App() {
               title="Seguimiento"
             >
               <ProgressIcon />
-              <span className="rail-label" style={{ fontWeight: 700 }}>Seguimiento</span>
+              <span className="rail-label">Seguimiento</span>
             </button>
 
             <button
@@ -4287,7 +4287,7 @@ function App() {
               title={isAdminUser ? '4D LOB' : '4D LOB (requiere permisos)'}
             >
               <FourDIcon />
-              <span className="rail-label" style={{ fontWeight: 700 }}>4D LOB</span>
+              <span className="rail-label">4D LOB</span>
             </button>
 
             <button
@@ -4301,7 +4301,7 @@ function App() {
               title={isAdminUser ? 'Herramientas de civil' : 'Civil (requiere permisos)'}
             >
               <CivilRoadIcon />
-              <span className="rail-label" style={{ fontWeight: 700 }}>Civil</span>
+              <span className="rail-label">Civil</span>
             </button>
 
             <button
@@ -4320,7 +4320,7 @@ function App() {
                 <path d="M5 21 L19 21"></path>
                 <path d="M7 6 L12 3 L17 6"></path>
               </svg>
-              <span className="rail-label" style={{ fontWeight: 700 }}>Topografía</span>
+              <span className="rail-label">Topografía</span>
             </button>
 
             <button
@@ -4335,7 +4335,7 @@ function App() {
                 <line x1="6.5" y1="9" x2="6.5" y2="15"></line>
                 <line x1="17.5" y1="9" x2="17.5" y2="15"></line>
               </svg>
-              <span className="rail-label" style={{ fontWeight: 700 }}>Comparar</span>
+              <span className="rail-label">Comparar</span>
             </button>
 
             <button
@@ -4354,7 +4354,7 @@ function App() {
                 <line x1="12" y1="20" x2="12" y2="4"></line>
                 <line x1="18" y1="20" x2="18" y2="14"></line>
               </svg>
-              <span className="rail-label" style={{ fontWeight: 700 }}>Tablero</span>
+              <span className="rail-label">Tablero</span>
             </button>
 
 
@@ -4377,7 +4377,7 @@ function App() {
                 title={isAdminUser ? 'BIM 5D - Presupuesto' : 'BIM 5D (requiere permisos)'}
               >
                 <BudgetIcon />
-                <span className="rail-label" style={{ fontWeight: 700 }}>BIM 5D</span>
+                <span className="rail-label">BIM 5D</span>
               </button>
 
               <button
@@ -4388,7 +4388,7 @@ function App() {
                 title="Planilla"
               >
                 <InventoryIcon />
-                <span className="rail-label" style={{ fontWeight: 700 }}>Planilla</span>
+                <span className="rail-label">Planilla</span>
               </button>
             </div>
 
@@ -4437,7 +4437,7 @@ function App() {
               title="Filters"
             >
               <FilterIcon />
-              <span className="rail-label" style={{ fontWeight: 700 }}>Filters</span>
+              <span className="rail-label">Filters</span>
             </button>
 
             <button
@@ -4447,7 +4447,7 @@ function App() {
               title="Planilla"
             >
               <InventoryIcon />
-              <span className="rail-label" style={{ fontWeight: 700 }}>Planilla</span>
+              <span className="rail-label">Planilla</span>
             </button>
           </nav>
         )}

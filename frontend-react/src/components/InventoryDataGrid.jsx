@@ -1266,7 +1266,7 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
 
     // ESTILO GENERAL DE LA APP:
     return (
-        <div data-escape-propio onKeyDown={alPulsarEscape} style={{ height: '100%', flex: '1 1 0', minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column', background: '#faf9f5', color: '#333330', fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' }}>
+        <div data-escape-propio onKeyDown={alPulsarEscape} style={{ height: '100%', flex: '1 1 0', minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column', background: '#faf9f5', color: '#333330', fontFamily: 'var(--a-font-sans)' }}>
             
             {/* Header / Tabs - Top Level (Como Tandem) */}
             <div style={{ display: 'flex', background: '#ffffff', height: '30px', flexShrink: 0, alignItems: 'center', padding: '0 12px 0 16px', borderBottom: '1px solid #e8e6dc', gap: '16px' }}>
