@@ -19,3 +19,5 @@ export const C = Object.freeze({
 });
 export const FUENTE = "'IBM Plex Sans', system-ui, -apple-system, sans-serif";
 export const RADIO = 8;
+// Caja flotante de Forma Board: blanca, radio 8, sin borde y una sombra difusa (0 0 16 px al 12 %).
+export const cajaFlotante = { background: '#fff', borderRadius: 8, boxShadow: '0 0 16px rgba(0,0,0,0.12)', fontFamily: FUENTE };

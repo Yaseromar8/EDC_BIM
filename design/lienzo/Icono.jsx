@@ -33,6 +33,8 @@ const TRAZOS = {
   verticalCentro: <><path d="M5 12h14M12 3v5.5M12 21v-5.5" /><path d="M9.5 6 12 8.5 14.5 6M9.5 18 12 15.5l2.5 2.5" /></>,
   verticalAbajo: <><path d="M5 20h14M12 4v11.5" /><path d="M8.5 12 12 15.5l3.5-3.5" /></>,
   puntos: <><circle cx="12" cy="5.5" r="0.9" /><circle cx="12" cy="12" r="0.9" /><circle cx="12" cy="18.5" r="0.9" /></>,
+  buscar: <><circle cx="10.5" cy="10.5" r="6.5" /><path d="m15.5 15.5 5 5" /></>,
+  derecha: <><path d="M9 6l6 6-6 6" /></>,
 };
 
 export function Icono({ nombre, tam = 15, grosor = 1.5 }) {

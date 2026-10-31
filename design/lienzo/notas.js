@@ -24,7 +24,9 @@ export const TAMANOS = Object.freeze([
 const LETRA_NOTA = { s: 14, m: 18, l: 24, xl: 32 };
 const LETRA_TEXTO = { auto: 20, s: 14, m: 20, l: 28, xl: 40 };
 export const fuenteDe = (n) => (FUENTES[n?.fuente] || FUENTES.sans);
-export const letraDeNota = (n) => LETRA_NOTA[n.tamano] || letraNota(n.texto, n.w, n.h);
+// La automática se calcula sobre el ancho (la nota es cuadrada al nacer): así, cuando la nota crece hacia abajo
+// porque el texto no cabe, la letra no crece con ella.
+export const letraDeNota = (n) => LETRA_NOTA[n.tamano] || letraNota(n.texto, n.w, n.w);
 export const letraDeTexto = (n) => LETRA_TEXTO[n?.tamano] || LETRA_TEXTO.auto;
 export const ALINEAR = Object.freeze({ izquierda: 'flex-start', centro: 'center', derecha: 'flex-end' });
 export const VERTICAL = Object.freeze({ arriba: 'flex-start', centro: 'center', abajo: 'flex-end' });

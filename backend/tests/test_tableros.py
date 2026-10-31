@@ -76,13 +76,13 @@ def _fila(autor=7, archivado=False, version=3, obra='obra'):
 # ── listar y crear ─────────────────────────────────────────────────────────────────────────
 
 def test_listar_los_tableros_de_la_obra(app, monkeypatch):
-    cur, _ = _conectar(monkeypatch, [[(TAB, 'Reunión', False, AHORA, AHORA, 7, 'Ana', AHORA)]])
+    cur, _ = _conectar(monkeypatch, [[(TAB, 'Reunión', False, AHORA, AHORA, 7, 'Ana', AHORA, '<svg></svg>')]])
     r = app.test_client().get('/api/docs/tableros?model_urn=obra')
     assert r.status_code == 200 and r.headers['Cache-Control'] == 'private, no-store'
     t = r.get_json()['tableros'][0]
     assert t == {'id': TAB, 'nombre': 'Reunión', 'archivado': False, 'creado_en': AHORA.isoformat(),
                  'actualizado_en': AHORA.isoformat(), 'creado_por_id': 7, 'creado_por': 'Ana',
-                 'abierto_por_mi': AHORA.isoformat()}
+                 'abierto_por_mi': AHORA.isoformat(), 'miniatura': '<svg></svg>'}
     sql, params = cur.queries[-1]
     assert 'ORDER BY a.abierto_en DESC NULLS LAST' in sql and params == (7, 'obra', False)
 
@@ -162,7 +162,8 @@ def test_guardar_sobre_la_version_vigente(app, monkeypatch):
     r = app.test_client().put('/api/docs/tableros/%s' % TAB, json={'config': {'notas': []}, 'version': 3})
     assert r.status_code == 200 and r.get_json() == {'success': True, 'version': 4}
     sql, params = cur.queries[-1]
-    assert 'WHERE id = %s AND version = %s' in sql and params[2:] == (TAB, 3)     # guardado condicional
+    assert 'WHERE id = %s AND version = %s' in sql and params[-2:] == (TAB, 3)    # guardado condicional
+    assert params[1] is False                                                       # sin miniatura: no se toca
     assert conn.committed
 
 
@@ -194,6 +195,47 @@ def test_no_se_guarda_un_tablero_enorme(app, monkeypatch):
     _, conn = _conectar(monkeypatch, [_fila()])
     r = app.test_client().put('/api/docs/tableros/%s' % TAB, json={'config': {'texto': 'x' * 100}, 'version': 3})
     assert r.status_code == 413 and not conn.committed
+
+
+def test_abrir_solo_la_version_no_lee_ni_anota(app, monkeypatch):
+    cur, conn = _conectar(monkeypatch, [_fila(version=9)])
+    r = app.test_client().get('/api/docs/tableros/%s?solo_version=1' % TAB)
+    assert r.status_code == 200 and r.get_json()['version'] == 9 and 'config' not in r.get_json()
+    assert len(cur.queries) == 1 and not conn.committed            # solo la guardia; nada de tableros_abiertos
+
+
+def test_abrir_sin_apertura_no_anota(app, monkeypatch):
+    cur, conn = _conectar(monkeypatch, [_fila(), ({'notas': []}, 3, 'Reunión', False)])
+    r = app.test_client().get('/api/docs/tableros/%s?sin_apertura=1' % TAB)
+    assert r.status_code == 200 and r.get_json()['version'] == 3
+    assert not any('tableros_abiertos' in q[0] for q in cur.queries) and not conn.committed
+
+
+def test_guardar_con_miniatura(app, monkeypatch):
+    svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><rect x="1" y="1" width="4" height="4" fill="#FBE8A6"/></svg>'
+    cur, conn = _conectar(monkeypatch, [_fila(), (4,)])
+    r = app.test_client().put('/api/docs/tableros/%s' % TAB, json={'config': {}, 'version': 3, 'miniatura': svg})
+    assert r.status_code == 200
+    params = cur.queries[-1][1]
+    assert params[1] is True and params[2] == svg and conn.committed
+
+
+def test_miniatura_vacia_la_borra(app, monkeypatch):
+    cur, _ = _conectar(monkeypatch, [_fila(), (4,)])
+    app.test_client().put('/api/docs/tableros/%s' % TAB, json={'config': {}, 'version': 3, 'miniatura': ''})
+    params = cur.queries[-1][1]
+    assert params[1] is True and params[2] is None
+
+
+@pytest.mark.parametrize('svg', [
+    '<svg onload="alert(1)"></svg>', '<svg><script>alert(1)</script></svg>', '<svg><a href="https://x"><rect/></a></svg>',
+    '<svg><foreignObject><div/></foreignObject></svg>', '<svg><image href="https://x"/></svg>', '<svg style="fill:url(https://x)"></svg>',
+    '<svg><animate attributeName="x"/></svg>', '<p>no es svg</p>', '<svg>' + 'x' * 30000 + '</svg>', 42,
+])
+def test_miniatura_peligrosa_o_rara_se_rechaza(app, monkeypatch, svg):
+    _, conn = _conectar(monkeypatch, [_fila()])
+    r = app.test_client().put('/api/docs/tableros/%s' % TAB, json={'config': {}, 'version': 3, 'miniatura': svg})
+    assert r.status_code == 400 and not conn.committed
 
 
 # ── renombrar y archivar ───────────────────────────────────────────────────────────────────

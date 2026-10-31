@@ -2,6 +2,7 @@
 -- «Tableros» (Paneles) de ACC: notas, texto, secciones y, en fases siguientes, documentos, incidencias y vistas.
 -- Un tablero es DE LA OBRA (lo ven quienes pertenecen a ella). `config` guarda su contenido; `version` sube en
 -- cada guardado y el servidor rechaza un guardado sobre una versión vieja (409): así dos personas no se pisan.
+-- `miniatura` es un SVG pequeño que el navegador genera al guardar (la vista de la lista, como en ACC).
 -- `tableros_abiertos` dice cuándo abrió cada persona cada tablero («Abierto por última vez por usted»).
 -- Aplicar manualmente como ecd_migrator ANTES de desplegar las rutas /api/docs/tableros. Aditiva: no toca el
 -- tablero de análisis del visor (dashboards).
@@ -12,6 +13,7 @@ CREATE TABLE IF NOT EXISTS tableros (
     nombre TEXT NOT NULL DEFAULT 'Sin título',
     config JSONB NOT NULL DEFAULT '{}'::jsonb,
     version INTEGER NOT NULL DEFAULT 1,
+    miniatura TEXT,
     archivado BOOLEAN NOT NULL DEFAULT false,
     created_by_id INTEGER NOT NULL REFERENCES users(id),
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),

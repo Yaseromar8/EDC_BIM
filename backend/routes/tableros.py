@@ -17,6 +17,7 @@ Seguridad, igual que el resto del portal:
 - `guardia_de_recurso` + pertenencia a la obra en cada ruta que recibe el id.
 """
 import json
+import re
 import uuid
 
 from flask import Blueprint, g, jsonify, request
@@ -30,6 +31,11 @@ tableros_bp = Blueprint('tableros_bp', __name__)
 
 NOMBRE_MAX = 120
 CONFIG_MAX = 4 * 1024 * 1024     # 4 MB de JSON: un tablero grande de notas y tarjetas cabe de sobra
+MINIATURA_MAX = 24000            # la miniatura es un SVG de rectángulos: unos pocos KB
+# La miniatura se dibuja en la lista como <img> (un SVG en una imagen no ejecuta nada), pero además solo se guarda
+# un SVG sin guiones, manejadores ni enlaces externos.
+_MINIATURA_PROHIBIDO = re.compile(
+    r'<\s*(script|foreignObject|iframe|object|embed|image|use|a|animate|set)\b|\bon\w+\s*=|javascript:|href\s*=|url\s*\(', re.I)
 
 
 @solo_con_ddl
@@ -43,6 +49,7 @@ def ensure_tableros_tables():
             nombre TEXT NOT NULL DEFAULT 'Sin título',
             config JSONB NOT NULL DEFAULT '{}'::jsonb,
             version INTEGER NOT NULL DEFAULT 1,
+            miniatura TEXT,
             archivado BOOLEAN NOT NULL DEFAULT false,
             created_by_id INTEGER NOT NULL REFERENCES users(id),
             created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -100,6 +107,15 @@ def _iso(valor):
     return valor.isoformat() if hasattr(valor, 'isoformat') else valor
 
 
+def _miniatura(valor):
+    """(ok, valor): '' o None la borran; un SVG válido se guarda; cualquier otra cosa es un error."""
+    if valor in (None, ''):
+        return True, None
+    if not isinstance(valor, str) or len(valor) > MINIATURA_MAX or not valor.startswith('<svg')             or not valor.rstrip().endswith('</svg>') or _MINIATURA_PROHIBIDO.search(valor):
+        return False, None
+    return True, valor
+
+
 def _guardia_del_tablero(tid):
     """(tablero, negativa). La obra sale de la fila; el usuario tiene que pertenecer a ella."""
     tablero_id = _uuid(tid)
@@ -137,7 +153,7 @@ def tableros():
         with get_db_connection() as conn:
             cur = conn.cursor()
             cur.execute('''SELECT t.id, t.nombre, t.archivado, t.created_at, t.updated_at, t.created_by_id,
-                                  COALESCE(NULLIF(u.name, ''), u.email), a.abierto_en
+                                  COALESCE(NULLIF(u.name, ''), u.email), a.abierto_en, t.miniatura
                              FROM tableros t
                              LEFT JOIN users u ON u.id = t.created_by_id
                              LEFT JOIN tableros_abiertos a ON a.tablero_id = t.id AND a.user_id = %s
@@ -146,7 +162,7 @@ def tableros():
                         (_uid(), obra, archivados))
             lista = [{'id': str(r[0]), 'nombre': r[1], 'archivado': bool(r[2]), 'creado_en': _iso(r[3]),
                       'actualizado_en': _iso(r[4]), 'creado_por_id': r[5], 'creado_por': r[6],
-                      'abierto_por_mi': _iso(r[7])} for r in cur.fetchall()]
+                      'abierto_por_mi': _iso(r[7]), 'miniatura': r[8]} for r in cur.fetchall()]
         resp = jsonify({'success': True, 'tableros': lista})
         resp.headers['Cache-Control'] = 'private, no-store'
         return resp
@@ -171,20 +187,28 @@ def tableros():
 
 @tableros_bp.route('/api/docs/tableros/<tid>', methods=['GET', 'PUT', 'PATCH'])
 def tablero(tid):
-    """GET → el tablero con su contenido (y se anota que lo abrí). PUT {config, version} → guardar sin pisar
-    (409 si la versión no es la del servidor). PATCH {nombre} | {archivado} → renombrar o archivar."""
+    """GET → el tablero con su contenido (y se anota que lo abrí); ?solo_version=1 → solo su versión (para ver
+    si otra persona guardó, sin traer el contenido ni anotar nada); ?sin_apertura=1 → el contenido sin anotar
+    la apertura. PUT {config, version, miniatura?} → guardar sin pisar (409 si la versión no es la del servidor).
+    PATCH {nombre} | {archivado} → renombrar o archivar."""
     tab, denied = _guardia_del_tablero(tid)
     if denied:
         return denied
 
     if request.method == 'GET':
+        if request.args.get('solo_version') in ('1', 'true'):
+            resp = jsonify({'success': True, 'version': tab['version'], 'archivado': tab['archivado'], 'nombre': tab['nombre']})
+            resp.headers['Cache-Control'] = 'private, no-store'
+            return resp
+        anotar = request.args.get('sin_apertura') not in ('1', 'true')
         with get_db_connection() as conn:
             cur = conn.cursor()
             cur.execute('SELECT config, version, nombre, archivado FROM tableros WHERE id = %s', (tab['id'],))
             fila = cur.fetchone()
-            cur.execute('''INSERT INTO tableros_abiertos (tablero_id, user_id) VALUES (%s, %s)
-                           ON CONFLICT (tablero_id, user_id) DO UPDATE SET abierto_en = now()''', (tab['id'], _uid()))
-            conn.commit()
+            if anotar:
+                cur.execute('''INSERT INTO tableros_abiertos (tablero_id, user_id) VALUES (%s, %s)
+                               ON CONFLICT (tablero_id, user_id) DO UPDATE SET abierto_en = now()''', (tab['id'], _uid()))
+                conn.commit()
         resp = jsonify({'success': True, 'id': tab['id'], 'model_urn': tab['obra'], 'nombre': fila[2],
                         'archivado': bool(fila[3]), 'config': fila[0] or {}, 'version': fila[1]})
         resp.headers['Cache-Control'] = 'private, no-store'
@@ -200,6 +224,10 @@ def tablero(tid):
             version = int(data.get('version'))
         except (TypeError, ValueError):
             return _error('Falta la versión sobre la que se guarda.', 400)
+        cambia_miniatura = 'miniatura' in data
+        valida, miniatura = _miniatura(data.get('miniatura'))
+        if not valida:
+            return _error('La miniatura no es válida.', 400)
         texto = json.dumps(config, ensure_ascii=False)
         if len(texto.encode('utf-8')) > CONFIG_MAX:
             return _error('El tablero es demasiado grande para guardarse.', 413)
@@ -209,9 +237,10 @@ def tablero(tid):
             cur = conn.cursor()
             # Guardado condicional: solo si nadie guardó desde la versión que trae el cliente.
             cur.execute('''UPDATE tableros SET config = %s::jsonb, version = version + 1,
+                                  miniatura = CASE WHEN %s THEN %s ELSE miniatura END,
                                   updated_by_id = %s, updated_at = now()
                             WHERE id = %s AND version = %s RETURNING version''',
-                        (texto, _uid(), tab['id'], version))
+                        (texto, cambia_miniatura, miniatura, _uid(), tab['id'], version))
             fila = cur.fetchone()
             if not fila:
                 cur.execute('SELECT config, version FROM tableros WHERE id = %s', (tab['id'],))

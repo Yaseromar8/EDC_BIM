@@ -14,9 +14,12 @@ import { apiFetch } from '../utils/apiFetch';
 import IconoModulo from './IconoModulo';
 import Lienzo from '../../../design/lienzo/Lienzo';
 import { fusionar, mismoContenido } from '../../../design/lienzo/fusion';
+import { miniaturaSvg } from '../../../design/lienzo/miniatura';
 
 const GRIS = '#72706b', LINEA = '#e8e6dc', SUAVE = '#f1f0e8', TINTA = '#141413';
 const ESPERA_GUARDAR_MS = 800;
+const VIGILAR_MS = 10000;            // cada cuánto se mira si otra persona guardó (solo la versión)
+const imagenDe = (svg) => `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 
 function fecha(iso) {
   if (!iso) return '—';
@@ -49,6 +52,7 @@ export default function TablerosModule({ projectPrefix, user, isAdmin }) {
   const [renombrando, setRenombrando] = useState(null); // id
   const [creando, setCreando] = useState(false);
   const [vuelta, setVuelta] = useState(0);
+  const [orden, setOrden] = useState(null);           // { campo, asc } · sin orden: los abiertos por mí primero
   const recargar = () => setVuelta(n => n + 1);
 
   useEffect(() => {
@@ -94,11 +98,25 @@ export default function TablerosModule({ projectPrefix, user, isAdmin }) {
   };
   const puedeArchivar = (t) => isAdmin || String(t.creado_por_id) === String(user?.id ?? '');
 
-  const visibles = (lista || []).filter(t => !filtro.trim() || t.nombre.toLowerCase().includes(filtro.trim().toLowerCase()));
+  const filtrados = (lista || []).filter(t => !filtro.trim() || t.nombre.toLowerCase().includes(filtro.trim().toLowerCase()));
+  const comparar = {
+    nombre: (a, b) => a.nombre.localeCompare(b.nombre, 'es', { sensitivity: 'base', numeric: true }),
+    abierto: (a, b) => (a.abierto_por_mi ? Date.parse(a.abierto_por_mi) : -Infinity) - (b.abierto_por_mi ? Date.parse(b.abierto_por_mi) : -Infinity),
+    creado: (a, b) => (a.creado_por || '').localeCompare(b.creado_por || '', 'es', { sensitivity: 'base' }),
+  };
+  const visibles = orden ? [...filtrados].sort((a, b) => (orden.asc ? 1 : -1) * comparar[orden.campo](a, b)) : filtrados;
+  const ordenarPor = (campo) => setOrden(o => (o?.campo === campo ? (o.asc === (campo !== 'abierto') ? { campo, asc: !o.asc } : null) : { campo, asc: campo !== 'abierto' }));
+  const Cabecera = ({ campo, children }) => (
+    <button type="button" onClick={() => ordenarPor(campo)} aria-sort={orden?.campo === campo ? (orden.asc ? 'ascending' : 'descending') : 'none'}
+      title="Ordenar" style={{ ...cabecera, display: 'flex', alignItems: 'center', gap: 4, height: '100%', border: 'none', background: 'none', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left' }}>
+      {children}
+      <span aria-hidden="true" style={{ fontSize: 10, color: orden?.campo === campo ? TINTA : 'transparent' }}>{orden?.campo === campo && !orden.asc ? '▼' : '▲'}</span>
+    </button>
+  );
   const tMenu = menu && (lista || []).find(t => t.id === menu.id);
   const celda = { padding: '0 12px', fontSize: 13, color: '#333330', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' };
   const cabecera = { ...celda, fontSize: 12, fontWeight: 600, color: GRIS };
-  const COLUMNAS = 'minmax(260px, 1fr) 220px 200px 44px';
+  const COLUMNAS = 'minmax(280px, 1fr) 240px 200px 44px';
 
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: 'var(--bg-primary)' }}>
@@ -129,9 +147,9 @@ export default function TablerosModule({ projectPrefix, user, isAdmin }) {
 
       <div style={{ flex: 1, overflow: 'auto' }}>
         <div style={{ display: 'grid', gridTemplateColumns: COLUMNAS, alignItems: 'center', height: 36, borderBottom: `1px solid ${LINEA}`, padding: '0 8px', position: 'sticky', top: 0, background: 'var(--bg-primary)', zIndex: 1 }}>
-          <div style={cabecera}>Nombre</div>
-          <div style={cabecera}>Abierto por última vez por usted</div>
-          <div style={cabecera}>Creado por</div>
+          <Cabecera campo="nombre">Nombre</Cabecera>
+          <Cabecera campo="abierto">Abierto por última vez por usted</Cabecera>
+          <Cabecera campo="creado">Creado por</Cabecera>
           <div />
         </div>
         {lista === null ? (
@@ -147,11 +165,11 @@ export default function TablerosModule({ projectPrefix, user, isAdmin }) {
         ) : visibles.map(t => (
           <div key={t.id} role="button" tabIndex={0} onClick={() => setAbierto(t.id)}
             onKeyDown={e => { if (e.key === 'Enter' && renombrando !== t.id) setAbierto(t.id); }}
-            style={{ display: 'grid', gridTemplateColumns: COLUMNAS, alignItems: 'center', height: 52, padding: '0 8px', borderBottom: `1px solid ${SUAVE}`, cursor: 'pointer', outline: 'none' }}
+            style={{ display: 'grid', gridTemplateColumns: COLUMNAS, alignItems: 'center', height: 60, padding: '0 8px', borderBottom: `1px solid ${SUAVE}`, cursor: 'pointer', outline: 'none' }}
             onMouseEnter={e => { e.currentTarget.style.background = '#faf9f5'; }} onMouseLeave={e => { e.currentTarget.style.background = ''; }}>
             <div style={{ ...celda, display: 'flex', alignItems: 'center', gap: 12 }}>
-              <span style={{ width: 48, height: 32, flexShrink: 0, borderRadius: 4, border: `1px solid ${LINEA}`, background: '#faf9f5', color: GRIS, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <IconoModulo nombre="tableros" tamano={18} />
+              <span style={{ width: 64, height: 40, flexShrink: 0, borderRadius: 4, border: `1px solid ${LINEA}`, background: '#faf9f5', color: GRIS, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+                {t.miniatura ? <img src={imagenDe(t.miniatura)} alt="" width={64} height={40} style={{ display: 'block' }} /> : <IconoModulo nombre="tableros" tamano={18} />}
               </span>
               {renombrando === t.id ? (
                 <input autoFocus defaultValue={t.nombre} maxLength={120} aria-label="Nombre del tablero"
@@ -201,8 +219,9 @@ function TableroEditor({ id, onCerrar }) {
   const [datos, setDatos] = useState(null);       // { nombre, archivado, config, version } al abrir
   const [fallo, setFallo] = useState('');
   const [nombre, setNombre] = useState('');
-  const [estado, setEstado] = useState('guardado'); // guardado | pendiente | guardando | error | archivado
-  const lienzoRef = useRef(null);
+  const [estado, setEstado] = useState('guardado'); // guardado | pendiente | guardando | error | sinConexion | archivado
+  const [aviso, setAviso] = useState('');           // aviso breve en la cabecera («Al día con los cambios de …»)
+  const lienzoRef = useRef(null), nombreRef = useRef(''), avisoT = useRef(0);
   const base = useRef({ config: {}, version: 1 });   // lo último que sé que hay en el servidor
   const pendiente = useRef(false), enVuelo = useRef(null), temporizador = useRef(0);
 
@@ -230,7 +249,7 @@ function TableroEditor({ id, onCerrar }) {
         if (mismoContenido(mio, base.current.config)) { pendiente.current = false; setEstado('guardado'); return true; }
         const config = { ...base.current.config, ...mio };
         setEstado('guardando');
-        const d = await llamar(`${API}/api/docs/tableros/${id}`, 'PUT', { config, version: base.current.version });
+        const d = await llamar(`${API}/api/docs/tableros/${id}`, 'PUT', { config, version: base.current.version, miniatura: miniaturaSvg(config) });
         if (d.ok) {
           base.current = { config, version: d.version };
           // Si se siguió dibujando mientras guardaba, queda pendiente para la próxima vuelta.
@@ -249,6 +268,8 @@ function TableroEditor({ id, onCerrar }) {
           continue;
         }
         if (d.estado === 409 && d.code === 'ARCHIVADO') { pendiente.current = false; setEstado('archivado'); return false; }
+        // Sin conexión: no es un error de nadie; se guarda solo al volver la red.
+        if (d.estado === 0) { setEstado('sinConexion'); return false; }
         setEstado('error');
         toast.error(d.error || 'No se pudo guardar el tablero.', { id: 'tablero-error' });
         return false;
@@ -267,6 +288,40 @@ function TableroEditor({ id, onCerrar }) {
     clearTimeout(temporizador.current);
     temporizador.current = setTimeout(() => { guardar(); }, ESPERA_GUARDAR_MS);
   }, [guardar, estado]);
+
+  // Ver lo que guardan los demás sin tener que guardar uno: cada 10 s, con la pestaña a la vista, se pregunta solo
+  // la versión. Si hay otra y aquí no hay nada pendiente ni a medio gesto, se trae y se pone; si hay algo
+  // pendiente, se guarda ya (el 409 trae lo suyo y se fusiona).
+  useEffect(() => {
+    if (!datos) return undefined;
+    let vivo = true;
+    const mirar = async () => {
+      if (!vivo || document.visibilityState !== 'visible' || enVuelo.current || estado === 'archivado' || !navigator.onLine) return;
+      const v = await llamar(`${API}/api/docs/tableros/${id}?solo_version=1`);
+      if (!vivo || !v.ok || !(v.version > base.current.version)) return;
+      if (pendiente.current) { guardar(); return; }
+      const lienzo = lienzoRef.current;
+      if (!lienzo || lienzo.ocupado()) return;           // a mitad de un gesto o escribiendo: en la siguiente vuelta
+      const d = await llamar(`${API}/api/docs/tableros/${id}?sin_apertura=1`);
+      if (!vivo || !d.ok || pendiente.current || enVuelo.current || lienzo.ocupado() || !(d.version > base.current.version)) return;
+      base.current = { config: d.config || {}, version: d.version };
+      lienzo.aplicar(d.config || {});
+      if (d.nombre && d.nombre !== nombreRef.current) { setNombre(d.nombre); setDatos(x => ({ ...x, nombre: d.nombre })); }
+      setAviso('Al día con los cambios de otra persona');
+      clearTimeout(avisoT.current);
+      avisoT.current = setTimeout(() => setAviso(''), 4000);
+    };
+    const t = setInterval(mirar, VIGILAR_MS);
+    return () => { vivo = false; clearInterval(t); };
+  }, [datos ? 1 : 0, id, estado, guardar]);   // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Sin conexión: se avisa y, al volver la red, se guarda lo pendiente.
+  useEffect(() => {
+    const sinRed = () => { if (pendiente.current) setEstado('sinConexion'); };
+    const conRed = () => { if (pendiente.current) guardar(); else setEstado(e => (e === 'sinConexion' ? 'guardado' : e)); };
+    window.addEventListener('offline', sinRed); window.addEventListener('online', conRed);
+    return () => { window.removeEventListener('offline', sinRed); window.removeEventListener('online', conRed); };
+  }, [guardar]);
 
   // Salir sin perder nada: guardar antes de cerrar, al ocultar la pestaña, y avisar si se cierra la ventana.
   useEffect(() => {
@@ -297,7 +352,9 @@ function TableroEditor({ id, onCerrar }) {
     setEstado('guardado'); toast.success('Tablero recuperado');
   };
 
-  const textoEstado = { guardado: 'Guardado', pendiente: 'Cambios sin guardar', guardando: 'Guardando…', error: 'No se pudo guardar', archivado: 'Archivado' }[estado];
+  nombreRef.current = nombre;
+  const textoEstado = { guardado: 'Guardado', pendiente: 'Cambios sin guardar', guardando: 'Guardando…', error: 'No se pudo guardar',
+    sinConexion: 'Sin conexión · se guardará al volver', archivado: 'Archivado' }[estado];
 
   return createPortal(
     <div role="dialog" aria-label={`Tablero ${nombre}`} style={{ position: 'fixed', inset: 0, zIndex: 9000, display: 'flex', flexDirection: 'column', background: '#faf9f5' }}>
@@ -321,7 +378,9 @@ function TableroEditor({ id, onCerrar }) {
         {estado === 'error' && (
           <button type="button" className="barra-btn" onClick={() => { pendiente.current = true; guardar(); }}>Reintentar</button>
         )}
-        <span aria-live="polite" style={{ fontSize: 12, color: estado === 'error' ? '#b93535' : GRIS, minWidth: 130, textAlign: 'right' }}>{datos ? textoEstado : ''}</span>
+        <span aria-live="polite" style={{ fontSize: 12, color: estado === 'error' || estado === 'sinConexion' ? '#b93535' : GRIS, minWidth: 130, textAlign: 'right' }}>
+          {datos ? (aviso && estado === 'guardado' ? aviso : textoEstado) : ''}
+        </span>
       </header>
       <div style={{ flex: 1, position: 'relative', minHeight: 0 }}>
         {fallo ? (

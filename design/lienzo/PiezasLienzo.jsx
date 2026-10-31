@@ -3,7 +3,7 @@
 // izquierda (fuentes de datos y deshacer) y la píldora de zoom. Solo presentación: el estado vive en
 // DashboardWorkspace.
 import React, { useEffect, useRef, useState } from 'react';
-import { C, FUENTE } from './tema';
+import { C, FUENTE, cajaFlotante } from './tema';
 import { Icono } from './Icono';
 import { COLORES_NOTA, COLORES_TINTA, ALINEAR, VERTICAL, fuenteDe, letraDeNota, letraDeTexto } from './notas';
 
@@ -97,8 +97,7 @@ function Boton({ activo, titulo, atajo, onClick, children, apagado }) {
     </Ayuda>
   );
 }
-// Caja flotante de Forma Board: blanca, radio 8, sin borde y una sombra difusa (0 0 16 px al 12 %).
-const cajaFlotante = { background: '#fff', borderRadius: 8, boxShadow: '0 0 16px rgba(0,0,0,0.12)', fontFamily: FUENTE };
+// La caja flotante (cajaFlotante) vive en tema.js: la usan también los menús.
 
 // El taco de notas: una ilustración que sobresale de la barra y se levanta al pasar el ratón (o con la
 // herramienta elegida), del color de la próxima nota.
