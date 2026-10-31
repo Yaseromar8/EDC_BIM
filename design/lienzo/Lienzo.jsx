@@ -25,10 +25,11 @@
 import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { C, FUENTE, RADIO } from './tema';
-import { Nota, TextoLibre, BarraInferior, PaletaIzquierda, PildoraZoom, BarraContextual } from './PiezasLienzo';
+import { Nota, TextoLibre, Forma, BarraInferior, PaletaIzquierda, PildoraZoom, BarraContextual } from './PiezasLienzo';
 import { MenuContextual, PanelBuscar, VentanaAtajos } from './MenusLienzo';
 import { NOTA_LADO, NOTA_HUECO, medidaTexto, COLORES_NOTA, COLORES_TINTA, FUENTES, TAMANOS } from './notas';
 import { prepararImanes, imantarArrastre, svgDeLineas } from './imanes';
+import { FORMA_LADO, FORMA_MIN, ESTILO_FORMA, COLORES_FORMA, limpiarForma } from './formas';
 
 const ZOOM_MIN = 0.01, ZOOM_MAX = 4;
 const PASOS_ZOOM = [0.01, 0.1, 0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 4];
@@ -36,6 +37,7 @@ const FRICCION = 0.09;
 const ARRASTRE_MIN = 4;
 const BORDE = 32, VELOCIDAD_BORDE = 16;        // desplazamiento automático: franja de 32 px, hasta 16 px por fotograma
 const SECCION_MIN = [160, 120];
+const NOTA_MIN = 80;                            // una nota se reduce hasta 80 × 80 (ACC: notas que se escalan)
 const AZUL_SEL = '#0D66B4';
 const COLORES_SECCION = [C.orange, C.blue, C.green, C.gris700];
 const MARCA = 'data-alephia-lienzo';            // marca del portapapeles: contenido de un lienzo de ALEPHIA
@@ -53,7 +55,8 @@ const mismoConjunto = (a, b) => a.size === b.size && [...a].every(x => b.has(x))
 const suave = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
 const cajaDe = (l) => (l.length ? { x1: Math.min(...l.map(c => c.x)), y1: Math.min(...l.map(c => c.y)), x2: Math.max(...l.map(c => c.x + c.w)), y2: Math.max(...l.map(c => c.y + c.h)) } : null);
 const dentro = (c, f) => { const cx = c.x + c.w / 2, cy = c.y + c.h / 2; return cx >= f.x && cx <= f.x + f.w && cy >= f.y && cy <= f.y + f.h; };
-const editable = (t) => !!t?.closest?.('input, textarea, select, [contenteditable]');
+// Donde se ESCRIBE (las teclas son suyas). Un deslizador o una casilla no: Ctrl+Z y Supr siguen siendo del lienzo.
+const editable = (t) => !!t?.closest?.('input:not([type=range]):not([type=checkbox]):not([type=radio]), textarea, select, [contenteditable]');
 const rejillaDe = (v) => {
   let paso = 32;
   while (paso * v.s < 12) paso *= 4;
@@ -85,9 +88,13 @@ function limpiarPegado(d, tipos = SIN_TIPOS) {
     ...(['arriba', 'centro', 'abajo'].includes(x.vertical) ? { vertical: x.vertical } : {}),
     ...(x.bloqueado ? { bloqueado: true } : {}),
   });
-  const notas = (Array.isArray(d.notas) ? d.notas : []).slice(0, 2000).filter(n => n && (n.tipo === 'nota' || n.tipo === 'texto' || tipos[n.tipo]?.limpiar)).map(n => {
+  const notas = (Array.isArray(d.notas) ? d.notas : []).slice(0, 2000).filter(n => n && (n.tipo === 'nota' || n.tipo === 'texto' || n.tipo === 'forma' || tipos[n.tipo]?.limpiar)).map(n => {
     const caja = { tipo: n.tipo, x: num(n.x), y: num(n.y), w: clamp(num(n.w, NOTA_LADO), 8, 20000), h: clamp(num(n.h, NOTA_LADO), 8, 20000) };
     if (n.tipo === 'nota' || n.tipo === 'texto') return { ...caja, texto: txt(n.texto), ...estilo(n) };
+    if (n.tipo === 'forma') {
+      const { color: _c, ...deTexto } = estilo(n);          // el color de una forma es de su paleta, no de la de las notas
+      return { ...caja, ...(n.texto ? { texto: txt(n.texto) } : {}), ...deTexto, ...limpiarForma(n) };
+    }
     const propio = tipos[n.tipo].limpiar(n);          // el tipo valida lo suyo; si no lo reconoce, no se pega
     return propio ? { ...caja, ...propio, ...(n.bloqueado ? { bloqueado: true } : {}) } : null;
   }).filter(Boolean);
@@ -112,6 +119,7 @@ const Lienzo = forwardRef(function Lienzo({ inicial = null, onCambio, claveCamar
   const [sel, setSel] = useState(() => new Set());
   const [herramienta, setHerramienta] = useState('seleccionar');
   const [colorNota, setColorNota] = useState('amarillo');
+  const [formaActual, setFormaActual] = useState('nube');   // la última forma elegida, como la barra de ACC
   const [editandoNota, setEditandoNota] = useState(null);
   const [menuZoom, setMenuZoom] = useState(false);
   const [menu, setMenu] = useState(null);              // menú contextual: { x, y, sobre: 'seleccion' | 'vacio' }
@@ -372,11 +380,11 @@ const Lienzo = forwardRef(function Lienzo({ inicial = null, onCambio, claveCamar
     };
     const borde = bordeAutomatico(pintar);
     const onMove = (ev) => { borde.puntero(ev); pintar(ev); };
-    const onUp = () => {
+    const onUp = (ev) => {
       window.removeEventListener('pointermove', onMove); window.removeEventListener('pointerup', onUp);
       borde.parar();
       marco.style.display = 'none';
-      alSoltar(activo, caja());
+      alSoltar(activo, caja(), ev);
     };
     if (el) window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp);
@@ -422,6 +430,22 @@ const Lienzo = forwardRef(function Lienzo({ inicial = null, onCambio, claveCamar
       else nuevaSeccion({ x: redondo(p.x - 320), y: redondo(p.y - 200), w: 640, h: 400 });
     });
   };
+  // Una forma se dibuja arrastrando su caja (con Mayús, proporcionada) o, con un clic, nace de 200 × 200 centrada.
+  const nuevaForma = (f) => {
+    marcar();
+    const n = { id: uid(), tipo: 'forma', forma: formaActual, ...ESTILO_FORMA, ...f };
+    setNotas(ns => [...ns, n]); setSeleccion(new Set([n.id])); setHerramienta('seleccionar');
+  };
+  const dibujarForma = (e) => {
+    const p = puntoDelMundo(e);
+    rectangulo(e, null, (grande, W, ev) => {
+      let w = W.x2 - W.x1, h = W.y2 - W.y1;
+      if (grande && w > FORMA_MIN && h > FORMA_MIN) {
+        if (ev?.shiftKey) { const l = Math.max(w, h); w = l; h = l; }
+        nuevaForma({ x: redondo(W.x1), y: redondo(W.y1), w: redondo(w), h: redondo(h) });
+      } else nuevaForma({ x: redondo(p.x - FORMA_LADO / 2), y: redondo(p.y - FORMA_LADO / 2), w: FORMA_LADO, h: FORMA_LADO });
+    });
+  };
   const seccionDeTamano = (nombre, [w, h]) => {
     const r = canvasRef.current.getBoundingClientRect(), v = viewRef.current;
     const cx = (r.width / 2 - v.tx) / v.s, cy = (r.height / 2 - v.ty) / v.s;
@@ -440,7 +464,7 @@ const Lienzo = forwardRef(function Lienzo({ inicial = null, onCambio, claveCamar
       if (!el) continue;
       const alto = el.style.height;
       el.style.height = 'auto';
-      const necesita = Math.max(NOTA_LADO, Math.ceil(el.offsetHeight));
+      const necesita = Math.max(n.w, Math.ceil(el.offsetHeight));
       el.style.height = alto;
       if (Math.abs(necesita - n.h) > 1) cambios.set(n.id, necesita);
     }
@@ -558,13 +582,15 @@ const Lienzo = forwardRef(function Lienzo({ inicial = null, onCambio, claveCamar
     const f = (esSeccion ? seccionesRef.current : notasRef.current).find(x => x.id === id);
     if (!f || f.bloqueado) return;
     const tipo = esSeccion ? null : tiposRef.current[f.tipo];
-    const [mw, mh] = esSeccion ? SECCION_MIN : (tipo?.minimo || [120, 90]);
-    const proporcion = tipo?.proporcion ? f.w / f.h : null;
+    const [mw, mh] = esSeccion ? SECCION_MIN : f.tipo === 'nota' ? [NOTA_MIN, NOTA_MIN] : f.tipo === 'forma' ? [FORMA_MIN, FORMA_MIN] : (tipo?.minimo || [120, 90]);
+    // Una nota se escala entera (sigue cuadrada; su letra va con ella); una forma, libre, y con Mayús proporcionada.
+    const proporcionFija = f.tipo === 'nota' ? 1 : tipo?.proporcion ? f.w / f.h : null;
     const ini = puntoDelMundo(e);
     iniciarGesto();
     const onMove = (ev) => {
       const p = puntoDelMundo(ev), dx = p.x - ini.x, dy = p.y - ini.y;
       let x1 = f.x, y1 = f.y, x2 = f.x + f.w, y2 = f.y + f.h;
+      const proporcion = proporcionFija || (f.tipo === 'forma' && ev.shiftKey ? f.w / f.h : null);
       if (proporcion) {
         // El ancho manda; el alto lo sigue. La esquina opuesta queda quieta.
         const w = Math.max(mw, f.w + (esquina.includes('o') ? -dx : dx)), h = Math.max(mh, w / proporcion), wf = h * proporcion;
@@ -574,7 +600,8 @@ const Lienzo = forwardRef(function Lienzo({ inicial = null, onCambio, claveCamar
         if (esquina.includes('o')) x1 = Math.min(f.x + dx, x2 - mw); else x2 = Math.max(f.x + f.w + dx, x1 + mw);
         if (esquina.includes('n')) y1 = Math.min(f.y + dy, y2 - mh); else y2 = Math.max(f.y + f.h + dy, y1 + mh);
       }
-      const poner = (xs) => xs.map(x => (x.id === id ? { ...x, x: redondo(x1), y: redondo(y1), w: redondo(x2 - x1), h: redondo(y2 - y1) } : x));
+      // La nota que había crecido por su texto vuelve a cuadrada al escalarla; vuelve a crecer si el texto no cabe.
+      const poner = (xs) => xs.map(x => (x.id === id ? { ...x, x: redondo(x1), y: redondo(y1), w: redondo(x2 - x1), h: redondo(f.tipo === 'nota' ? x2 - x1 : y2 - y1) } : x));
       if (esSeccion) setSecciones(poner); else setNotas(poner);
     };
     const onUp = () => { window.removeEventListener('pointermove', onMove); window.removeEventListener('pointerup', onUp); terminarGesto(); };
@@ -829,6 +856,7 @@ const Lienzo = forwardRef(function Lienzo({ inicial = null, onCambio, claveCamar
     if (herramienta === 'nota') { e.preventDefault(); const p = puntoDelMundo(e); crearNota(p.x - NOTA_LADO / 2, p.y - NOTA_LADO / 2); return; }
     if (herramienta === 'texto') { e.preventDefault(); const p = puntoDelMundo(e); crearTexto(p.x, p.y); return; }
     if (herramienta === 'seccion') { dibujarSeccion(e); return; }
+    if (herramienta === 'forma') { dibujarForma(e); return; }
     iniciarMarco(e);
   };
   const alDobleClic = (e) => { if (e.target === canvasRef.current && herramienta === 'seleccionar') { const p = puntoDelMundo(e); crearTexto(p.x, p.y); } };
@@ -873,7 +901,7 @@ const Lienzo = forwardRef(function Lienzo({ inicial = null, onCambio, claveCamar
     else if (e.shiftKey && e.code === 'Digit1') ajustarATodo();
     else if (e.shiftKey && e.code === 'Digit2') zoomASeleccion();
     else if (k.startsWith('arrow') && !ctrl) empujar(k, e.shiftKey);
-    else if (!ctrl && !e.altKey && !e.shiftKey && { v: 1, h: 1, n: 1, t: 1, f: 1 }[k]) setHerramienta({ v: 'seleccionar', h: 'mano', n: 'nota', t: 'texto', f: 'seccion' }[k]);
+    else if (!ctrl && !e.altKey && !e.shiftKey && { v: 1, h: 1, n: 1, t: 1, f: 1, r: 1 }[k]) setHerramienta({ v: 'seleccionar', h: 'mano', n: 'nota', t: 'texto', f: 'seccion', r: 'forma' }[k]);
     else if (k === 'enter' && selRef.current.size === 1 && notasRef.current.some(n => selRef.current.has(n.id))) editar([...selRef.current][0]);
     else hecho = false;
     if (hecho) { e.preventDefault(); e.stopPropagation(); }
@@ -902,9 +930,15 @@ const Lienzo = forwardRef(function Lienzo({ inicial = null, onCambio, claveCamar
   const elegidos = [...secciones, ...notas].filter(x => sel.has(x.id));
   const caja = elegidos.length && !editandoNota ? cajaDe(elegidos) : null;
   const uno = elegidos.length === 1 ? elegidos[0] : null;
-  const unaSeccion = uno && !uno.bloqueado && (secciones.includes(uno) || tipos[uno.tipo]?.redimensionable) ? uno : null;
+  const unaSeccion = uno && !uno.bloqueado && (secciones.includes(uno) || uno.tipo === 'nota' || uno.tipo === 'forma' || tipos[uno.tipo]?.redimensionable) ? uno : null;
   const extraDeLaBarra = uno && tipos[uno.tipo]?.barra ? tipos[uno.tipo].barra(uno, { actualizar: (patch) => actualizarElemento(uno.id, patch) }) : null;
   const conEstilo = elegidos.filter(x => x.tipo === 'nota' || x.tipo === 'texto');
+  // Las formas tienen su propia barra (línea, color, relleno y su texto); con otras cosas elegidas, solo lo común.
+  const soloFormas = elegidos.length > 0 && elegidos.every(x => x.tipo === 'forma') ? elegidos : null;
+  const estiloFormas = soloFormas && Object.fromEntries([...ESTILO, ...Object.keys(ESTILO_FORMA)].map(k => {
+    const v0 = soloFormas[0][k] ?? ESTILO_FORMA[k];
+    return [k, soloFormas.every(x => (x[k] ?? ESTILO_FORMA[k]) === v0) ? v0 : undefined];
+  }));
   const primero = conEstilo[0] || {};
   const estiloElegido = Object.fromEntries(ESTILO.map(k => [k, conEstilo.every(x => x[k] === primero[k]) ? primero[k] : undefined]));
   const hayEnTitulo = elegidos.some(x => secciones.includes(x));
@@ -965,7 +999,7 @@ const Lienzo = forwardRef(function Lienzo({ inicial = null, onCambio, claveCamar
                 </div>
               );
             }
-            const Pieza = n.tipo === 'texto' ? TextoLibre : Nota;
+            const Pieza = n.tipo === 'texto' ? TextoLibre : n.tipo === 'forma' ? Forma : Nota;
             return (
               <Pieza key={n.id} nota={n} editando={editandoNota === n.id} refNodo={refNodo(n.id)} onPointerDown={arrastrar(n.id)}
                 onDoubleClick={(e) => { e.stopPropagation(); editar(n.id); }}
@@ -983,8 +1017,10 @@ const Lienzo = forwardRef(function Lienzo({ inicial = null, onCambio, claveCamar
               {!menu && (
                 <div ref={barraRef} style={{ position: 'absolute', left: '50%', top: hayEnTitulo ? -36 : 0, pointerEvents: 'auto', zIndex: 7,
                   transform: 'translate(-50%, -100%) scale(calc(1 / var(--s, 1))) translate(var(--bx, 0px), var(--by, -14px))', transformOrigin: '50% 100%' }}>
-                  <BarraContextual estilo={estiloElegido} conNotas={conEstilo.some(x => x.tipo === 'nota')} conTextos={conEstilo.some(x => x.tipo === 'texto')}
-                    conEstilo={conEstilo.length > 0} bloqueado={todoBloqueado} extra={todoBloqueado ? null : extraDeLaBarra}
+                  <BarraContextual estilo={estiloFormas || estiloElegido} conNotas={conEstilo.some(x => x.tipo === 'nota')} conTextos={conEstilo.some(x => x.tipo === 'texto')}
+                    conEstilo={conEstilo.length > 0 && conEstilo.length === elegidos.length} bloqueado={todoBloqueado} extra={todoBloqueado ? null : extraDeLaBarra}
+                    formas={estiloFormas} coloresForma={COLORES_FORMA} formasConTexto={!!soloFormas?.some(x => x.texto)}
+                    onTextoForma={() => soloFormas && editar(soloFormas[0].id)}
                     onEstilo={aplicarEstilo} onBloquear={alternarBloqueo}
                     colores={{ nota: COLORES_NOTA, tinta: COLORES_TINTA }} fuentes={FUENTES} tamanos={TAMANOS}
                     acciones={[['Duplicar', 'Ctrl D', duplicar], null, ['Traer al frente', '⇧ ]', () => reordenar('frente')], ['Enviar al fondo', '⇧ [', () => reordenar('fondo')], null,
@@ -1006,7 +1042,7 @@ const Lienzo = forwardRef(function Lienzo({ inicial = null, onCambio, claveCamar
         {!notas.length && !secciones.length && (
           <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: C.gris600, pointerEvents: 'none', textAlign: 'center' }}>
             <div style={{ fontSize: 15, fontWeight: 600, color: C.dark, marginBottom: 6 }}>Tablero vacío</div>
-            <div style={{ fontSize: 14, lineHeight: 1.6, maxWidth: 420 }}>Abajo tienes las notas (N), el texto (T) y las secciones (F). Doble clic en el vacío para escribir; clic derecho para el menú; ? para los atajos.</div>
+            <div style={{ fontSize: 14, lineHeight: 1.6, maxWidth: 420 }}>Abajo tienes las notas (N), el texto (T), las formas (R) y las secciones (F). Doble clic en el vacío para escribir; clic derecho para el menú; ? para los atajos.</div>
           </div>
         )}
       </div>
@@ -1016,7 +1052,8 @@ const Lienzo = forwardRef(function Lienzo({ inicial = null, onCambio, claveCamar
         <PanelBuscar elementos={[...secciones, ...notas.map(n => (tipos[n.tipo] ? { ...n, texto: tipos[n.tipo].texto?.(n) || '', etiqueta: tipos[n.tipo].etiqueta } : n))]} onCerrar={() => { setBuscando(false); panelRef.current?.focus({ preventScroll: true }); }}
           onIr={(x) => { setSeleccion(new Set([x.id])); encuadrar([x], Math.max(viewRef.current.s, 0.5)); }} />
       )}
-      <BarraInferior herramienta={herramienta} onHerramienta={setHerramienta} colorNota={colorNota} onColorNota={setColorNota} onSeccionTamano={seccionDeTamano} />
+      <BarraInferior herramienta={herramienta} onHerramienta={setHerramienta} colorNota={colorNota} onColorNota={setColorNota} onSeccionTamano={seccionDeTamano}
+        forma={formaActual} onForma={(f) => { setFormaActual(f); setHerramienta('forma'); }} />
       <PildoraZoom textoRef={zoomTextoRef} porcentaje={`${Math.round(view.s * 100)} %`} onMenos={() => zoomPaso(-1)} onMas={() => zoomPaso(1)} onMenu={() => setMenuZoom(m => !m)} />
       {menuZoom && (
         <div onPointerDown={e => e.stopPropagation()} role="menu"

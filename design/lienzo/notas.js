@@ -11,7 +11,10 @@ export const NOTA_LADO = 200;            // como tldraw: las notas miden 200 × 
 export const NOTA_HUECO = 10;            // y la de al lado nace a 10 px
 const clamp = (v, a, b) => Math.min(Math.max(v, a), b);
 // Letra de la nota: tan grande como quepa (las notas cortas se leen de lejos).
-export const letraNota = (texto, w, h) => Math.round(clamp(Math.sqrt((w * h * 0.42) / Math.max(1, (texto || '').length)), 13, 40));
+export const letraNota = (texto, w, h) => {
+  const k = w / NOTA_LADO;                // los topes escalan con la nota (una nota el doble de grande, letra el doble)
+  return Math.round(clamp(Math.sqrt((w * h * 0.42) / Math.max(1, (texto || '').length)), 13 * k, 40 * k));
+};
 
 // Estilo de notas y textos (barra contextual, como la de ACC): letra, tamaño y alineación.
 export const FUENTES = Object.freeze({
@@ -25,8 +28,9 @@ const LETRA_NOTA = { s: 14, m: 18, l: 24, xl: 32 };
 const LETRA_TEXTO = { auto: 20, s: 14, m: 20, l: 28, xl: 40 };
 export const fuenteDe = (n) => (FUENTES[n?.fuente] || FUENTES.sans);
 // La automática se calcula sobre el ancho (la nota es cuadrada al nacer): así, cuando la nota crece hacia abajo
-// porque el texto no cabe, la letra no crece con ella.
-export const letraDeNota = (n) => LETRA_NOTA[n.tamano] || letraNota(n.texto, n.w, n.w);
+// porque el texto no cabe, la letra no crece con ella. Una nota agrandada o reducida por sus esquinas se ESCALA
+// entera, como en ACC: también los tamaños fijos van en proporción a su ancho.
+export const letraDeNota = (n) => (LETRA_NOTA[n.tamano] ? Math.round(LETRA_NOTA[n.tamano] * (n.w / NOTA_LADO)) : letraNota(n.texto, n.w, n.w));
 export const letraDeTexto = (n) => LETRA_TEXTO[n?.tamano] || LETRA_TEXTO.auto;
 export const ALINEAR = Object.freeze({ izquierda: 'flex-start', centro: 'center', derecha: 'flex-end' });
 export const VERTICAL = Object.freeze({ arriba: 'flex-start', centro: 'center', abajo: 'flex-end' });

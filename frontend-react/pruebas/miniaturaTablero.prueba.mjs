@@ -14,4 +14,8 @@ ver('y la sección va primero', muchas.indexOf('#F1F0E8') < muchas.indexOf('#CFE
 ver('sin nada que el servidor rechace', !PROHIBIDO.test(muchas) && !PROHIBIDO.test(una), null);
 const texto = miniaturaSvg({ notas: [{ id: 't', tipo: 'texto', x: 0, y: 0, w: 100, h: 26, texto: 'Hola' }], secciones: [] });
 ver('un texto: una línea gris', texto.includes('#72706B'), texto);
+const formas = miniaturaSvg({ notas: [{ id: 'f', tipo: 'forma', forma: 'nube', x: 0, y: 0, w: 300, h: 200, color: 'azul', relleno: 'suave', grosor: 'm' },
+  { id: 'g', tipo: 'forma', forma: 'rectanguloX', x: 400, y: 0, w: 100, h: 100 }], secciones: [] });
+ver('formas: su trazado, con su color y su relleno suave', (formas.match(/<path d="M/g) || []).length === 2 && formas.includes('stroke="#2F6FB3"') && formas.includes('fill-opacity="0.16"'), formas.slice(0, 300));
+ver('y sin nada que el servidor rechace', !PROHIBIDO.test(formas) && formas.length < 24000, null);
 console.log(`${ok}/${n}`);

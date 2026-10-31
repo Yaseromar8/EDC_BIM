@@ -31,6 +31,15 @@ const ICONOS = {
   hoja: <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M7 3h7l5 5v13H7z" /><path d="M14 3v5h5" /></svg>,
 };
 
+// Barra de espera sin porcentaje (la imagen viaja desde el almacén y no dice cuánto falta).
+const CSS_ESPERA = '@keyframes tarjeta-espera { 0% { transform: translateX(-100%); } 100% { transform: translateX(260%); } }';
+const esperando = (
+  <div style={{ width: '56%', height: 3, borderRadius: 2, background: '#E2E0D8', overflow: 'hidden' }}>
+    <style>{CSS_ESPERA}</style>
+    <div style={{ width: '38%', height: '100%', background: 'var(--accent, #0D66B4)', animation: 'tarjeta-espera 1.1s ease-in-out infinite' }} />
+  </div>
+);
+
 const aviso = (texto, sub, hijo = null) => (
   <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8,
     color: GRIS, fontSize: 13, textAlign: 'center', padding: 16, background: '#F4F3EE' }}>
@@ -102,7 +111,7 @@ export function TarjetaDocumento({ elemento: el, elegido, ajustar }) {
   } else if (imagen.estado === 'lista') {
     cuerpo = (
       <>
-        {!cargada && <div style={{ position: 'absolute', inset: 0, background: '#F4F3EE' }} />}
+        {!cargada && aviso('Cargando archivo…', null, esperando)}
         <img src={imagen.url} alt="" draggable={false} onLoad={alCargar} onError={() => setImagen({ estado: 'error' })}
           style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', opacity: cargada ? 1 : 0, transition: 'opacity 160ms ease', pointerEvents: 'none' }} />
       </>
@@ -115,7 +124,7 @@ export function TarjetaDocumento({ elemento: el, elegido, ajustar }) {
         <div style={{ width: `${Math.max(6, Math.round(avance * 100))}%`, height: '100%', background: 'var(--accent, #0D66B4)', transition: 'width 200ms ease' }} />
       </div>
     ));
-  } else cuerpo = <div style={{ position: 'absolute', inset: 0, background: '#F4F3EE' }} />;
+  } else cuerpo = aviso('Cargando archivo…', null, esperando);   // como ACC, en vez de un rectángulo gris vacío
 
   return (
     <div style={{ position: 'absolute', inset: 0, fontFamily: 'var(--a-font-sans)' }}>
