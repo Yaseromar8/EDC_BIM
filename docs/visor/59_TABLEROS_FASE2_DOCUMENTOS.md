@@ -215,3 +215,27 @@ apagado, «Extraer páginas», hoja 1 del servidor, ▶ dibujada en el navegador
 proporción vertical, dos tarjetas extraídas a la derecha y alineadas, elegidas, guardadas como el MISMO documento
 con hojas 1, 2 y 3, y un PDF de una hoja sin nada de esto. Regresión: documentos, formas y fase 1 otra vez.
 
+## 12 · Planos de AutoCAD por presentaciones (2B) hecho (31-oct-2026, noche)
+
+**De dónde sale la imagen** (medido con un DWG real de Civil del dueño, `TP-000844@000846`, por el puente local):
+
+- El visor CAD carga el plano de la vista ya preparada en ACC si está vinculado (`/api/docs/cad/acc-link`) y, si no,
+  de nuestra traducción con las vistas de AutoCAD (`/api/docs/cad/status?vistas=autocad`). En ambas, cada
+  presentación —y el espacio modelo— es un **PDF dibujado por AutoCAD** (`pdf-page` en el índice).
+- El navegador baja ese PDF **directamente de Autodesk** con el permiso de visor que ya usa el visor CAD
+  (`/api/token`): 731 KB en 0,48 s. Se dibuja con pdf.js a 2.000 px, como una lámina. **El servidor no dibuja nada**
+  (la regla del 14-oct se respeta) y **no hay rutas nuevas**.
+- La tarjeta pregunta en el mismo orden que el visor (ACC → traducción propia) y **no lanza traducciones**: si aún
+  no hay nada preparado, queda como ficha y lo vuelve a intentar la próxima vez; la traducción la pone en marcha el
+  visor al abrir el plano.
+
+**Lo que hace:** la tarjeta de un DWG enseña su primera presentación; **◀ 1/3 ▶** recorre las presentaciones (al
+pasar el ratón por el contador, su nombre) y **«Extraer páginas»** pone una tarjeta por presentación. El **espacio
+modelo** no entra si hay presentaciones: en un plano de Civil abarca kilómetros y, a 2.000 px, sus líneas quedan por
+debajo del píxel (la tarjeta salía en blanco); se sigue viendo entero en el visor.
+
+**Comprobado con el plano real:** presentación nítida en la tarjeta, 2/3 con su nombre, tres tarjetas extraídas.
+**Banco** (sin Autodesk): un DWG «aún sin preparar» queda como ficha, no como «sin acceso».
+
+**Pendiente:** el RVT (sus láminas son F2D, no PDF: se verá con su paso, junto al 3D).
+

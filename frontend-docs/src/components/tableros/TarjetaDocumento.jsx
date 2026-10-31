@@ -15,8 +15,8 @@
 import React, { useContext, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { renderFileIconSop } from '../../utils/fileIcons';
-import { DocumentosDelTablero, EXTENSIONES_CON_IMAGEN, hayVersionNueva, metaDe, fechaHora, versionesDe } from './documentos';
-import { imagenDe, hojaDe, hojasDe } from './imagenDocumento';
+import { DocumentosDelTablero, conLamina, hayVersionNueva, metaDe, fechaHora, versionesDe } from './documentos';
+import { imagenDe, hojaDe, hojasDe, planoDe } from './imagenDocumento';
 
 const GRIS = '#72706B', TINTA = '#141413', BORDE = '#D9D7CD';
 const SOMBRA = '0 1px 2px rgba(20,20,19,0.08), 0 6px 18px rgba(20,20,19,0.10)';
@@ -289,9 +289,11 @@ function PantallaCompleta({ el, onCerrar }) {
 // deshacer; extraer pone una tarjeta por cada otra hoja, a la derecha: el MISMO documento, otra hoja (nada se copia).
 function Hojas({ el, actualizar, extraer }) {
   const [total, setTotal] = useState(null);
+  const [nombres, setNombres] = useState([]);           // un DWG: el nombre de cada presentación
   useEffect(() => {
     let vivo = true;
     hojasDe(el).then(n => { if (vivo) setTotal(n); });
+    if (el.ext === 'dwg') planoDe(el).then(p => { if (vivo && p.estado === 'listo') setNombres(p.hojas.map(h => h.nombre)); });
     return () => { vivo = false; };
   }, [el.nodeId, el.versionId, el.ext]);   // eslint-disable-line react-hooks/exhaustive-deps
   if (!total || total < 2) return null;
@@ -302,7 +304,7 @@ function Hojas({ el, actualizar, extraer }) {
       <span role="group" aria-label="Hojas" style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>
         <button type="button" aria-label="Hoja anterior" title="Hoja anterior" disabled={hoja <= 1} onClick={() => ir(hoja - 1)}
           style={{ ...ICONO, opacity: hoja <= 1 ? 0.35 : 1, cursor: hoja <= 1 ? 'default' : 'pointer' }}>{ICONOS.antes}</button>
-        <span style={{ minWidth: 34, textAlign: 'center', fontSize: 13, color: '#3C3C3C', fontVariantNumeric: 'tabular-nums' }}>{hoja}/{total}</span>
+        <span title={nombres[hoja - 1] || ''} style={{ minWidth: 34, textAlign: 'center', fontSize: 13, color: '#3C3C3C', fontVariantNumeric: 'tabular-nums' }}>{hoja}/{total}</span>
         <button type="button" aria-label="Hoja siguiente" title="Hoja siguiente" disabled={hoja >= total} onClick={() => ir(hoja + 1)}
           style={{ ...ICONO, opacity: hoja >= total ? 0.35 : 1, cursor: hoja >= total ? 'default' : 'pointer' }}>{ICONOS.despues}</button>
       </span>
@@ -320,7 +322,7 @@ export function BarraDocumento({ el, actualizar, abrir, extraer }) {
   const hayNueva = hayVersionNueva(el, vigente);
   const [completa, setCompleta] = useState(false);
   if (vigente?.sinAcceso) return null;
-  const conImagen = EXTENSIONES_CON_IMAGEN.includes(el.ext);
+  const conImagen = conLamina(el.ext);
   return (
     <>
       <MenuVersiones el={el} vigente={vigente} hayNueva={hayNueva} actualizar={actualizar} />

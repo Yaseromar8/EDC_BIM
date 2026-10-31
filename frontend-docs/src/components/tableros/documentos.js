@@ -10,12 +10,15 @@ import { apiFetch } from '../../utils/apiFetch';
 export const DocumentosDelTablero = createContext({ obra: '', vigentes: {} });
 
 export const EXTENSIONES_CON_IMAGEN = ['pdf', 'png', 'jpg', 'jpeg', 'webp', 'gif'];
+// Planos de AutoCAD (y de Civil 3D): sus presentaciones, dibujadas por AutoCAD en la traducción (doc 59 §12).
+export const EXTENSIONES_CAD = ['dwg'];
+export const conLamina = (ext) => EXTENSIONES_CON_IMAGEN.includes(ext) || EXTENSIONES_CAD.includes(ext);
 export const extensionDe = (nombre) => (String(nombre || '').split('.').pop() || '').toLowerCase();
 // Una lámina entra como hoja ISO apaisada (√2, lo más habitual en planos) y, al cargar su imagen, toma su
 // proporción real. Lo que no tiene imagen (Excel, Word, un comprimido…) es una ficha más pequeña.
 export const TAMANO_TARJETA = { w: 400, h: 283 };
 export const TAMANO_FICHA = { w: 300, h: 168 };
-export const tamanoPara = (nombre) => (EXTENSIONES_CON_IMAGEN.includes(extensionDe(nombre)) ? TAMANO_TARJETA : TAMANO_FICHA);
+export const tamanoPara = (nombre) => (conLamina(extensionDe(nombre)) ? TAMANO_TARJETA : TAMANO_FICHA);
 
 // «31 oct 2026, 09:48», como ACC.
 const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
