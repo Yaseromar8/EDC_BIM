@@ -10,6 +10,7 @@
 // Persistencia por frente en Postgres (/api/dashboards) con autoguardado —
 // incluye posición/tamaño de cada nodo y el encuadre del lienzo.
 import React, { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { flushSync } from 'react-dom';
 import { apiFetch } from '../../utils/apiFetch';
 import { SOURCES, discoverFields, isolateInViewer, colorizeInViewer, clearViewerViz, resetEngineCaches } from './engine';
 import ChartCard from './ChartCard';
@@ -19,6 +20,7 @@ import BarraDeVistas from './BarraDeVistas';
 import Herramienta, { CSS_HERRAMIENTAS, Icono, Separador } from './Herramienta';
 import { Nota, TextoLibre, BarraInferior, PaletaIzquierda, PildoraZoom } from './PiezasLienzo';
 import { NOTA_LADO, NOTA_HUECO, medidaTexto } from './notas';
+import { prepararImanes, imantarArrastre, svgDeLineas } from './imanes';
 import { ANALISIS } from './analisisDeAuditoria';
 // El itemizado vigente del frente abierto: el que se subió a la Planilla (docs/visor/51).
 import { itemizadoDeObra } from '../../utils/itemizadoDeObraVisor';
@@ -140,6 +142,14 @@ export default function DashboardWorkspace({ project, backendUrl, onClose, proye
   const marcoSelRef = useRef(null);
   const zoomTextoRef = useRef(null);
   const panelRef = useRef(null);
+  const guiasRef = useRef(null);                     // líneas guía de los imanes (SVG en el mundo)
+  const selCajaRef = useRef(null);                   // recuadro de la selección (se mueve con lo arrastrado)
+  const nodosRef = useRef(new Map());                // id → elemento del DOM de cada tarjeta, sección o nota
+  const refsDeNodo = useRef(new Map());
+  const refNodo = (id) => {   // una función estable por id (React no la vuelve a llamar en cada render)
+    if (!refsDeNodo.current.has(id)) refsDeNodo.current.set(id, (el) => { if (el) nodosRef.current.set(id, el); else nodosRef.current.delete(id); });
+    return refsDeNodo.current.get(id);
+  };
   const [sel, setSel] = useState(() => new Set());   // tarjetas y secciones seleccionadas
   const selRef = useRef(sel);
   const portapapeles = useRef(null);
@@ -159,6 +169,8 @@ export default function DashboardWorkspace({ project, backendUrl, onClose, proye
     pintarCamara();
   }, [view]);   // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { selRef.current = sel; }, [sel]);
+  // Al abrir, el tablero toma el foco: los atajos funcionan sin tener que hacer clic dentro primero.
+  useEffect(() => { panelRef.current?.focus({ preventScroll: true }); }, []);
   useEffect(() => { chartsRef.current = charts; }, [charts]);
   useEffect(() => { framesRef.current = frames; }, [frames]);
   useEffect(() => { vistasRef.current = vistas; }, [vistas]);
@@ -496,8 +508,12 @@ export default function DashboardWorkspace({ project, backendUrl, onClose, proye
     crearTexto(p.x, p.y);
   };
 
-  // Mover lo seleccionado arrastrando la cabecera de una tarjeta o el asa de una sección (si lo pulsado no
-  // estaba seleccionado, solo eso). Las secciones arrastran las tarjetas que contienen. Encaje a rejilla.
+  // Mover lo seleccionado arrastrando la cabecera de una tarjeta, el asa de una sección o una nota (si lo
+  // pulsado no estaba seleccionado, solo eso; las secciones llevan sus tarjetas y notas). Como en ACC:
+  // - se mueve EN EL DOM (transform) sin pasar por React, que redibujaba todas las tarjetas en cada
+  //   movimiento; al soltar se confirma una vez (flushSync) y se quita el transform en el mismo cuadro;
+  // - sin rejilla: al píxel, y con IMANES (docs/visor/55, de Excalidraw) a 8 px de pantalla contra los
+  //   elementos visibles: bordes, centros y huecos, con sus líneas guía. Ctrl al arrastrar los apaga.
   const arrastrar = (pulsado) => (e) => {
     if (e.button !== 0 || espacioRef.current) return;
     e.preventDefault(); e.stopPropagation();
@@ -506,26 +522,49 @@ export default function DashboardWorkspace({ project, backendUrl, onClose, proye
     const v = viewRef.current;
     const fs = framesRef.current.filter(f => ids.has(f.id));
     const dentro = (c, f) => { const cx = c.x + c.w / 2, cy = c.y + c.h / 2; return cx >= f.x && cx <= f.x + f.w && cy >= f.y && cy <= f.y + f.h; };
-    const tarjetas = new Map(chartsRef.current.filter(c => ids.has(c.id) || fs.some(f => dentro(c, f))).map(c => [c.id, { x: c.x, y: c.y }]));
-    const secciones = new Map(fs.map(f => [f.id, { x: f.x, y: f.y }]));
-    const notasMov = new Map(notasRef.current.filter(n => ids.has(n.id) || fs.some(f => dentro(n, f))).map(n => [n.id, { x: n.x, y: n.y }]));
+    const esSeccion = new Set(framesRef.current.map(f => f.id));
+    const moviles = todosLosNodos().filter(n => ids.has(n.id) || (!esSeccion.has(n.id) && fs.some(f => dentro(n, f))));
+    if (!moviles.length) return;
+    const idsMov = new Set(moviles.map(n => n.id));
+    const caja = [Math.min(...moviles.map(n => n.x)), Math.min(...moviles.map(n => n.y)),
+      Math.max(...moviles.map(n => n.x + n.w)), Math.max(...moviles.map(n => n.y + n.h))];
+    // Referencias para los imanes: lo visible que no se mueve (calculado una vez, como el SnapCache).
+    const r = canvasRef.current.getBoundingClientRect();
+    const vis = [-v.tx / v.s, -v.ty / v.s, (r.width - v.tx) / v.s, (r.height - v.ty) / v.s];
+    const cache = prepararImanes(todosLosNodos()
+      .filter(n => !idsMov.has(n.id) && n.x < vis[2] && n.x + n.w > vis[0] && n.y < vis[3] && n.y + n.h > vis[1])
+      .map(n => [n.x, n.y, n.x + n.w, n.y + n.h]));
     const ini = { x: e.clientX, y: e.clientY };
-    let movido = false;
+    let movido = false, off = { x: 0, y: 0 }, elementos = [];
+    const pintar = (dx, dy, lineas) => {
+      const t = `translate(${dx}px, ${dy}px)`;
+      for (const el of elementos) el.style.transform = t;
+      if (selCajaRef.current) selCajaRef.current.style.transform = t;
+      if (guiasRef.current) guiasRef.current.innerHTML = lineas.length ? svgDeLineas(lineas, v.s) : '';
+    };
     const onMove = (ev) => {
       if (!movido) {
         if (Math.hypot(ev.clientX - ini.x, ev.clientY - ini.y) < ARRASTRE_MIN) return;
         movido = true;
         iniciarGesto();
+        elementos = [...idsMov].map(id => nodosRef.current.get(id)).filter(Boolean);
+        for (const el of elementos) el.style.willChange = 'transform';
       }
-      const dx = (ev.clientX - ini.x) / v.s, dy = (ev.clientY - ini.y) / v.s;
-      if (tarjetas.size) setCharts(cs => cs.map(c => { const o = tarjetas.get(c.id); return o ? { ...c, x: snap(o.x + dx), y: snap(o.y + dy) } : c; }));
-      if (secciones.size) setFrames(xs => xs.map(f => { const o = secciones.get(f.id); return o ? { ...f, x: snap(o.x + dx), y: snap(o.y + dy) } : f; }));
-      if (notasMov.size) setNotas(xs => xs.map(n => { const o = notasMov.get(n.id); return o ? { ...n, x: snap(o.x + dx), y: snap(o.y + dy) } : n; }));
+      let dx = (ev.clientX - ini.x) / v.s, dy = (ev.clientY - ini.y) / v.s, lineas = [];
+      if (!ev.ctrlKey && !ev.metaKey) ({ dx, dy, lineas } = imantarArrastre(cache, caja, dx, dy, v.s));
+      off = { x: Math.round(dx), y: Math.round(dy) };
+      pintar(dx, dy, lineas);
     };
     const onUp = () => {
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
-      if (movido) terminarGesto();
+      if (!movido) return;
+      const mover = (n) => (idsMov.has(n.id) ? { ...n, x: n.x + off.x, y: n.y + off.y } : n);
+      flushSync(() => { setCharts(cs => cs.map(mover)); setFrames(xs => xs.map(mover)); setNotas(xs => xs.map(mover)); });
+      for (const el of elementos) { el.style.transform = ''; el.style.willChange = ''; }
+      if (selCajaRef.current) selCajaRef.current.style.transform = '';
+      if (guiasRef.current) guiasRef.current.innerHTML = '';
+      terminarGesto();
     };
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp);
@@ -838,7 +877,7 @@ export default function DashboardWorkspace({ project, backendUrl, onClose, proye
   const empujar = (tecla, grande) => {
     const ids = selRef.current;
     if (!ids.size || lockedRef.current) return;
-    const p = grande ? SNAP * 4 : SNAP;
+    const p = grande ? 10 : 1;
     const dx = tecla === 'arrowleft' ? -p : tecla === 'arrowright' ? p : 0;
     const dy = tecla === 'arrowup' ? -p : tecla === 'arrowdown' ? p : 0;
     setCharts(cs => cs.map(c => (ids.has(c.id) ? { ...c, x: c.x + dx, y: c.y + dy } : c)));
@@ -871,7 +910,7 @@ export default function DashboardWorkspace({ project, backendUrl, onClose, proye
     else if (e.shiftKey && e.code === 'Digit0') zoomA(1);
     else if (e.shiftKey && e.code === 'Digit1') fitView();
     else if (e.shiftKey && e.code === 'Digit2') zoomASeleccion();
-    else if (k.startsWith('arrow') && !ctrl) empujar(k, e.shiftKey);
+    else if (k.startsWith('arrow') && !ctrl) empujar(k, e.shiftKey);   // 1 px, 10 con Mayús
     else if (!ctrl && !e.altKey && { v: 1, h: 1, n: 1, t: 1, f: 1 }[k]) setHerramienta({ v: 'seleccionar', h: 'mano', n: 'nota', t: 'texto', f: 'seccion' }[k]);
     else if (k === 'enter' && selRef.current.size === 1 && notasRef.current.some(n => selRef.current.has(n.id))) setEditandoNota([...selRef.current][0]);
     else hecho = false;
@@ -981,7 +1020,7 @@ export default function DashboardWorkspace({ project, backendUrl, onClose, proye
           {frames.map(f => {
             const color = FRAME_COLORS[(f.color || 0) % FRAME_COLORS.length];
             return (
-              <div key={f.id} style={{ position: 'absolute', left: f.x, top: f.y, width: f.w, height: f.h, pointerEvents: 'none' }}>
+              <div key={f.id} ref={refNodo(f.id)} style={{ position: 'absolute', left: f.x, top: f.y, width: f.w, height: f.h, pointerEvents: 'none' }}>
                 <div style={{ position: 'absolute', inset: 0, background: 'rgba(241, 240, 232, 0.72)', borderRadius: RADIO,
                   border: `1px solid ${C.lightGray}`, outline: sel.has(f.id) ? `${linea(1.5)} solid ${AZUL_SEL}` : 'none' }} />
                 {/* Barra de título: asa (arrastra sección + contenido) · nombre editable · quitar */}
@@ -1012,7 +1051,7 @@ export default function DashboardWorkspace({ project, backendUrl, onClose, proye
           })}
 
           {(charts || []).map(cfg => (
-            <div key={cfg.id} className="tablero-nodo" style={{ position: 'absolute', left: cfg.x, top: cfg.y, width: cfg.w, height: cfg.h,
+            <div key={cfg.id} ref={refNodo(cfg.id)} className="tablero-nodo" style={{ position: 'absolute', left: cfg.x, top: cfg.y, width: cfg.w, height: cfg.h,
               borderRadius: RADIO, outline: sel.has(cfg.id) ? `${linea(1.5)} solid ${AZUL_SEL}` : undefined, outlineOffset: 0 }}
               onPointerDown={e => {
                 // Clic derecho, central o con espacio: lo maneja el lienzo (mover). Clic: seleccionar.
@@ -1053,7 +1092,7 @@ export default function DashboardWorkspace({ project, backendUrl, onClose, proye
           {notas.map(n => {
             const Pieza = n.tipo === 'texto' ? TextoLibre : Nota;
             return (
-              <Pieza key={n.id} nota={n} editando={editandoNota === n.id}
+              <Pieza key={n.id} nota={n} editando={editandoNota === n.id} refNodo={refNodo(n.id)}
                 onPointerDown={arrastrar(n.id)}
                 onDoubleClick={(e) => { e.stopPropagation(); setEditandoNota(n.id); }}
                 onCambiar={(t) => cambiarTextoNota(n.id, t)}
@@ -1083,7 +1122,7 @@ export default function DashboardWorkspace({ project, backendUrl, onClose, proye
                   pointerEvents: 'auto', cursor: 'pointer' }} />
             );
             return (
-              <div style={{ position: 'absolute', left: x1, top: y1, width: x2 - x1, height: y2 - y1, pointerEvents: 'none' }}>
+              <div ref={selCajaRef} style={{ position: 'absolute', left: x1, top: y1, width: x2 - x1, height: y2 - y1, pointerEvents: 'none' }}>
                 {elegidos.length > 1 && <div style={{ position: 'absolute', inset: 0, outline: `${linea(1)} solid ${AZUL_SEL}` }} />}
                 {asa('0%', '0%', 'default')}
                 {asa('100%', '0%', 'default')}
@@ -1100,6 +1139,9 @@ export default function DashboardWorkspace({ project, backendUrl, onClose, proye
               </div>
             );
           })()}
+
+          {/* Líneas guía de los imanes (las dibuja el arrastre directamente en el DOM) */}
+          <svg ref={guiasRef} style={{ position: 'absolute', left: 0, top: 0, width: 1, height: 1, overflow: 'visible', pointerEvents: 'none', zIndex: 6 }} />
         </div>
 
         {/* Estados vacíos (fuera del transform) */}

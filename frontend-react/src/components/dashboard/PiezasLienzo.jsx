@@ -28,10 +28,10 @@ function Editable({ texto, onCambiar, onTerminar, estilo }) {
   );
 }
 
-export function Nota({ nota, editando, onPointerDown, onDoubleClick, onCambiar, onTerminar }) {
+export function Nota({ nota, editando, refNodo, onPointerDown, onDoubleClick, onCambiar, onTerminar }) {
   const tam = letraNota(nota.texto, nota.w, nota.h);
   return (
-    <div className="tablero-nodo" onPointerDown={onPointerDown} onDoubleClick={onDoubleClick}
+    <div ref={refNodo} className="tablero-nodo" onPointerDown={onPointerDown} onDoubleClick={onDoubleClick}
       style={{
         position: 'absolute', left: nota.x, top: nota.y, width: nota.w, height: nota.h, boxSizing: 'border-box',
         background: COLORES_NOTA[nota.color] || COLORES_NOTA.amarillo, borderRadius: 2, padding: 16,
@@ -46,9 +46,9 @@ export function Nota({ nota, editando, onPointerDown, onDoubleClick, onCambiar, 
   );
 }
 
-export function TextoLibre({ nota, editando, onPointerDown, onDoubleClick, onCambiar, onTerminar }) {
+export function TextoLibre({ nota, editando, refNodo, onPointerDown, onDoubleClick, onCambiar, onTerminar }) {
   return (
-    <div className="tablero-nodo" onPointerDown={onPointerDown} onDoubleClick={onDoubleClick}
+    <div ref={refNodo} className="tablero-nodo" onPointerDown={onPointerDown} onDoubleClick={onDoubleClick}
       style={{ position: 'absolute', left: nota.x, top: nota.y, minWidth: 40, fontFamily: FUENTE, fontSize: 20, lineHeight: '26px',
         color: C.dark, whiteSpace: 'pre', padding: '3px 4px' }}>
       {editando ? <Editable texto={nota.texto} onCambiar={onCambiar} onTerminar={onTerminar} /> : (nota.texto || ' ')}
