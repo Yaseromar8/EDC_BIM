@@ -21,7 +21,7 @@ const ESTILO = {
   borderRadius: 'var(--a-radius-md)',
   boxShadow: 'var(--a-shadow-lg)',
   padding: '10px 14px',
-  fontSize: 13,
+  fontSize: 14,
   lineHeight: 1.45,
   maxWidth: 420,
 };

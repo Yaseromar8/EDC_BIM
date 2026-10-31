@@ -245,7 +245,7 @@ function PanelContenido({ vistas, vistaActiva, onElegir }) {
 
   const pestanita = (id, n) => (
     <button key={id} onClick={() => setPestana(id)} disabled={!n}
-      style={{ flex: 1, padding: '6px 0', fontSize: 12, fontWeight: 600, cursor: n ? 'pointer' : 'default',
+      style={{ flex: 1, padding: '6px 0', fontSize: 13, fontWeight: 600, cursor: n ? 'pointer' : 'default',
                background: 'none', border: 'none', color: !n ? '#cccac0' : pestana === id ? 'var(--accent)' : '#72706b',
                borderBottom: `2px solid ${pestana === id && n ? 'var(--accent)' : 'transparent'}` }}>
       {id}{n ? ` (${n})` : ''}
@@ -256,8 +256,8 @@ function PanelContenido({ vistas, vistaActiva, onElegir }) {
     <div style={{ position: 'absolute', top: 12, left: 12, zIndex: 20, width: 236,
                   background: '#fff', border: '1px solid #e8e6dc', borderRadius: 6,
                   boxShadow: '0 4px 16px rgba(20,20,19,0.12)', overflow: 'hidden',
-                  fontSize: 13, color: '#333330' }}>
-      <div style={{ padding: '8px 12px', fontWeight: 600, fontSize: 12.5, borderBottom: '1px solid #f1f0e8' }}>
+                  fontSize: 14, color: '#333330' }}>
+      <div style={{ padding: '8px 12px', fontWeight: 600, fontSize: 13, borderBottom: '1px solid #f1f0e8' }}>
         Contenido
       </div>
       <div style={{ display: 'flex', borderBottom: '1px solid #f1f0e8' }}>
@@ -269,13 +269,13 @@ function PanelContenido({ vistas, vistaActiva, onElegir }) {
           value={filtro}
           onChange={(e) => setFiltro(e.target.value)}
           placeholder="Buscar por nombre…"
-          style={{ width: '100%', boxSizing: 'border-box', padding: '5px 8px', fontSize: 12.5,
+          style={{ width: '100%', boxSizing: 'border-box', padding: '5px 8px', fontSize: 13,
                    border: '1px solid #e8e6dc', borderRadius: 4, outline: 'none' }}
         />
       </div>
       <div style={{ maxHeight: 260, overflowY: 'auto', padding: '0 6px 8px' }}>
         {lista.length === 0 ? (
-          <div style={{ padding: '10px 6px', fontSize: 12, color: '#72706b' }}>
+          <div style={{ padding: '10px 6px', fontSize: 13, color: '#72706b' }}>
             {termino ? 'Ninguna vista con ese nombre.' : 'Sin vistas en esta pestaña.'}
           </div>
         ) : lista.map(v => {
@@ -286,13 +286,13 @@ function PanelContenido({ vistas, vistaActiva, onElegir }) {
                        marginBottom: 2, border: 'none', borderRadius: 4, cursor: 'pointer',
                        background: activa ? '#ecf0f1' : 'transparent',
                        color: activa ? 'var(--accent)' : '#333330',
-                       fontWeight: activa ? 600 : 400, fontSize: 12.5 }}>
+                       fontWeight: activa ? 600 : 400, fontSize: 13 }}>
               <span style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {v.nombre}
               </span>
               {/* Sólo se rotula lo que el documento sostiene. */}
               {v.etiqueta && (
-                <span style={{ display: 'block', fontSize: 11, color: '#72706b', fontWeight: 400 }}>{v.etiqueta}</span>
+                <span style={{ display: 'block', fontSize: 12, color: '#72706b', fontWeight: 400 }}>{v.etiqueta}</span>
               )}
             </button>
           );
@@ -642,12 +642,12 @@ export default function CadViewer({ file, projectPrefix = '', urnDirecto = null,
           position: 'absolute', top: 10, left: '50%', transform: 'translateX(-50%)',
           maxWidth: '80%', background: 'rgba(20,20,19,0.92)', color: '#e8e6dc',
           border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8,
-          padding: '8px 14px', fontSize: 12.5, lineHeight: 1.45, zIndex: 5,
+          padding: '8px 14px', fontSize: 13, lineHeight: 1.45, zIndex: 5,
         }}>
           {aviso}
           <button onClick={() => setAviso('')} style={{
             marginLeft: 12, background: 'none', border: 'none', color: '#b0aea5',
-            cursor: 'pointer', fontSize: 13,
+            cursor: 'pointer', fontSize: 14,
           }}>✕</button>
         </div>
       )}
@@ -706,14 +706,14 @@ export default function CadViewer({ file, projectPrefix = '', urnDirecto = null,
               </svg>
               <div style={{ fontSize: 14, maxWidth: 460, lineHeight: 1.5 }}>{error}</div>
               {detalle && (
-                <div style={{ fontSize: 12, color: '#72706b', maxWidth: 460, fontFamily: 'monospace' }}>
+                <div style={{ fontSize: 13, color: '#72706b', maxWidth: 460, fontFamily: 'monospace' }}>
                   {detalle}
                 </div>
               )}
               {puedeReintentar && (
                 <button
                   onClick={() => { setPuedeReintentar(false); setDetalle(''); setError(''); setTranscurrido(0); setCarga(null); setPhase('abriendo'); setIntento(n => n + 1); }}
-                  style={{ marginTop: 6, padding: '7px 18px', fontSize: 13, cursor: 'pointer',
+                  style={{ marginTop: 6, padding: '7px 18px', fontSize: 14, cursor: 'pointer',
                            background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 5 }}>
                   Volver a intentarlo
                 </button>
@@ -738,7 +738,7 @@ export default function CadViewer({ file, projectPrefix = '', urnDirecto = null,
                     toast.error(e.message || 'No se pudo descargar el archivo original.');
                   }
                 }}
-                style={{ fontSize: 13, color: 'var(--accent)', marginTop: 4, background: 'none',
+                style={{ fontSize: 14, color: 'var(--accent)', marginTop: 4, background: 'none',
                          border: 'none', textDecoration: 'underline', cursor: 'pointer' }}>
                 Descargar el archivo original
               </button>
@@ -750,7 +750,7 @@ export default function CadViewer({ file, projectPrefix = '', urnDirecto = null,
                   va, y algo que se mueve siempre -- la barra real cuando hay
                   porcentaje, una que avanza cuando todavia no lo hay, y el reloj. */}
               <div style={{ fontSize: 15, fontWeight: 600 }}>Preparando el plano</div>
-              <div style={{ fontSize: 13, color: '#52524d' }}>
+              <div style={{ fontSize: 14, color: '#52524d' }}>
                 {phase === 'preparando' ? 'Enviando el archivo · paso 1 de 2' : 'Convirtiendo el dibujo · paso 2 de 2'}
                 {pct !== null ? ` · ${pct} %` : ''}
               </div>
@@ -759,11 +759,11 @@ export default function CadViewer({ file, projectPrefix = '', urnDirecto = null,
                   ? <div className="cad-preparando-barra-indeterminada" />
                   : <div style={{ width: `${pct}%`, height: '100%', background: 'var(--accent)', transition: 'width .4s' }} />}
               </div>
-              <div style={{ fontSize: 12, color: '#72706b' }}>
+              <div style={{ fontSize: 13, color: '#72706b' }}>
                 {formatoReloj(transcurrido)}
                 {file?.size ? ` · ${(file.size / 1048576).toFixed(0)} MB` : ''}
               </div>
-              <div style={{ fontSize: 12, color: '#72706b', maxWidth: 430, lineHeight: 1.5 }}>
+              <div style={{ fontSize: 13, color: '#72706b', maxWidth: 430, lineHeight: 1.5 }}>
                 Es la primera vez que se abre esta versión: tarda unos minutos según el tamaño.
                 Después se abrirá al instante.
               </div>

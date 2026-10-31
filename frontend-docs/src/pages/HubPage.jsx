@@ -61,7 +61,7 @@ function ProductCard({ icon, producto, onClick, locked = false, lockNote }) {
         )}
       </div>
       {locked && (
-        <div style={{ marginTop: 8, fontSize: 12, color: 'var(--eg-texto-3)' }}>{lockNote || 'Sin acceso'}</div>
+        <div style={{ marginTop: 8, fontSize: 13, color: 'var(--eg-texto-3)' }}>{lockNote || 'Sin acceso'}</div>
       )}
     </div>
   );

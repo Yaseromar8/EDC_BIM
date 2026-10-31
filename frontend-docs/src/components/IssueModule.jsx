@@ -746,7 +746,7 @@ const IssueModule = ({ project, API, user, isAdmin, cfg }) => {
           {dashFilter && (
             <span
               onClick={() => setDashFilter(null)}
-              style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: '#f1f0e8', color: '#507294', fontSize: 12, fontWeight: 600, padding: '4px 12px', borderRadius: 6, cursor: 'pointer', transition: 'background 0.15s' }}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: '#f1f0e8', color: '#507294', fontSize: 13, fontWeight: 600, padding: '4px 12px', borderRadius: 6, cursor: 'pointer', transition: 'background 0.15s' }}
               onMouseOver={e => e.currentTarget.style.background = '#c8d8e7'}
               onMouseOut={e => e.currentTarget.style.background = '#f1f0e8'}
             >
@@ -763,11 +763,11 @@ const IssueModule = ({ project, API, user, isAdmin, cfg }) => {
               placeholder={`Buscar ${cfg.singular}...`}
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              style={{ padding: '8px 12px 8px 32px', border: '1px solid #e8e6dc', borderRadius: 4, width: 200, fontSize: 13 }}
+              style={{ padding: '8px 12px 8px 32px', border: '1px solid #e8e6dc', borderRadius: 4, width: 200, fontSize: 14 }}
             />
           </div>
           {isAdmin && (
-            <button onClick={createRfi} style={{ background: '#b93535', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: 4, cursor: 'pointer', fontWeight: 500, fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <button onClick={createRfi} style={{ background: '#b93535', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: 4, cursor: 'pointer', fontWeight: 500, fontSize: 14, display: 'flex', alignItems: 'center', gap: 6 }}>
               <span>+</span> {`Nuevo ${cfg.singular}`}
             </button>
           )}
@@ -787,7 +787,7 @@ const IssueModule = ({ project, API, user, isAdmin, cfg }) => {
               <div style={{ position: 'absolute', right: 0, top: 40, background: '#fff', border: '1px solid #e8e6dc', borderRadius: 8, boxShadow: '0 4px 16px rgba(0,0,0,0.12)', zIndex: 100, minWidth: 180, overflow: 'hidden' }}>
                 <button
                   onClick={exportToExcel}
-                  style={{ width: '100%', padding: '10px 16px', border: 'none', background: 'none', cursor: 'pointer', fontSize: 13, display: 'flex', alignItems: 'center', gap: 10, color: '#333330', textAlign: 'left' }}
+                  style={{ width: '100%', padding: '10px 16px', border: 'none', background: 'none', cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', gap: 10, color: '#333330', textAlign: 'left' }}
                   onMouseOver={e => e.currentTarget.style.background = '#faf9f5'}
                   onMouseOut={e => e.currentTarget.style.background = 'none'}
                 >
@@ -797,7 +797,7 @@ const IssueModule = ({ project, API, user, isAdmin, cfg }) => {
                 <div style={{ height: 1, background: '#f1f0e8' }} />
                 <button
                   onClick={exportToPDF}
-                  style={{ width: '100%', padding: '10px 16px', border: 'none', background: 'none', cursor: 'pointer', fontSize: 13, display: 'flex', alignItems: 'center', gap: 10, color: '#333330', textAlign: 'left' }}
+                  style={{ width: '100%', padding: '10px 16px', border: 'none', background: 'none', cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', gap: 10, color: '#333330', textAlign: 'left' }}
                   onMouseOver={e => e.currentTarget.style.background = '#faf9f5'}
                   onMouseOut={e => e.currentTarget.style.background = 'none'}
                 >
@@ -812,11 +812,11 @@ const IssueModule = ({ project, API, user, isAdmin, cfg }) => {
 
       {/* DATA GRID */}
       <div style={{ border: '1px solid #e8e6dc', borderRadius: 8, background: '#fff', overflowX: 'auto', overflowY: 'auto', flex: 1, minHeight: 0 }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: 11, tableLayout: 'fixed' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: 12, tableLayout: 'fixed' }}>
           <thead style={{ background: '#faf9f5', color: '#52524d', borderBottom: '2px solid #e8e6dc', position: 'sticky', top: 0, zIndex: 2 }}>
             <tr>
               {COL_DEFS.map((col, idx) => (
-                <th key={col.key} style={{ padding: '5px 10px', fontWeight: 600, width: colWidths[idx], position: 'relative', textAlign: col.key === 'accion' ? 'center' : 'left', background: '#faf9f5', fontSize: 11 }}>
+                <th key={col.key} style={{ padding: '5px 10px', fontWeight: 600, width: colWidths[idx], position: 'relative', textAlign: col.key === 'accion' ? 'center' : 'left', background: '#faf9f5', fontSize: 12 }}>
                   {col.label}
                   <div
                     onMouseDown={(e) => onResizeStart(e, idx)}
@@ -851,7 +851,7 @@ const IssueModule = ({ project, API, user, isAdmin, cfg }) => {
                   <tr style={{ borderBottom: '1px solid #f1f0e8', background: isEditing ? '#f1f0e8' : '#fff', transition: 'background 0.2s' }}>
 
                     {/* CODIGO */}
-                    <td style={{ padding: '3px 10px', fontWeight: 600, color: '#b93535', fontFamily: 'monospace', fontSize: 11 }}>
+                    <td style={{ padding: '3px 10px', fontWeight: 600, color: '#b93535', fontFamily: 'monospace', fontSize: 12 }}>
                       {rfi.codigo}
                     </td>
 
@@ -863,7 +863,7 @@ const IssueModule = ({ project, API, user, isAdmin, cfg }) => {
                           value={editFormData.titulo}
                           onChange={e => handleFieldChange('titulo', e.target.value)}
                           placeholder={`Escribir título del ${cfg.singular}...`}
-                          style={{ width: '100%', padding: '4px 10px', border: '1.5px solid #b93535', borderRadius: 4, outline: 'none', fontSize: 13 }}
+                          style={{ width: '100%', padding: '4px 10px', border: '1.5px solid #b93535', borderRadius: 4, outline: 'none', fontSize: 14 }}
                           autoFocus
                         />
                       ) : (
@@ -881,7 +881,7 @@ const IssueModule = ({ project, API, user, isAdmin, cfg }) => {
                             value={editFormData.estado}
                             onChange={e => handleFieldChange('estado', e.target.value)}
                             style={{
-                              padding: '5px 10px', borderRadius: 6, outline: 'none', cursor: 'pointer', fontWeight: 500, fontSize: 12,
+                              padding: '5px 10px', borderRadius: 6, outline: 'none', cursor: 'pointer', fontWeight: 500, fontSize: 13,
                               border: '1.5px solid #b93535',
                               background: getStateStyle(editFormData.estado).bg,
                               color: getStateStyle(editFormData.estado).text,
@@ -891,7 +891,7 @@ const IssueModule = ({ project, API, user, isAdmin, cfg }) => {
                           >
                             {STATES.map(s => <option key={s.value} value={s.value}>{s.icon} {s.value}</option>)}
                           </select>
-                          <span style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', fontSize: 10, color: '#72706b' }}>▼</span>
+                          <span style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', fontSize: 12, color: '#72706b' }}>▼</span>
                         </div>
                       ) : (
                         <div
@@ -899,11 +899,11 @@ const IssueModule = ({ project, API, user, isAdmin, cfg }) => {
                           style={{
                             display: 'inline-flex', alignItems: 'center', gap: 6,
                             background: stateStyle.bg, color: stateStyle.text,
-                            padding: '4px 12px', borderRadius: 6, fontWeight: 500, fontSize: 12,
+                            padding: '4px 12px', borderRadius: 6, fontWeight: 500, fontSize: 13,
                             cursor: isAdmin ? 'pointer' : 'default', transition: 'all 0.15s'
                           }}
                         >
-                          <span style={{ fontSize: 10 }}>{stateStyle.icon}</span>
+                          <span style={{ fontSize: 12 }}>{stateStyle.icon}</span>
                           {currentEstado}
                         </div>
                       )}
@@ -918,7 +918,7 @@ const IssueModule = ({ project, API, user, isAdmin, cfg }) => {
                             value={(editFormData.vence_en || '').slice(0, 10)}
                             onChange={e => handleFieldChange('vence_en', e.target.value || null)}
                             title="Fecha límite (día calendario). No hay calendario de días hábiles: un plazo vence en la fecha indicada aunque caiga en fin de semana."
-                            style={{ padding: '4px 6px', border: '1px solid #e8e6dc', borderRadius: 4, fontSize: 12, width: '100%' }}
+                            style={{ padding: '4px 6px', border: '1px solid #e8e6dc', borderRadius: 4, fontSize: 13, width: '100%' }}
                           />
                         ) : (
                           // VENCIDO EN ROJO (como en Procore): solo si sigue sin responder. Se
@@ -928,7 +928,7 @@ const IssueModule = ({ project, API, user, isAdmin, cfg }) => {
                             const dia = (d) => new Date(d).toLocaleDateString('en-CA', { timeZone: 'America/Lima' });
                             const vencido = Boolean(rfi.vence_en) && !resuelto && dia(rfi.vence_en) < dia(Date.now());
                             return (
-                              <span style={{ fontSize: 12, color: !rfi.vence_en ? '#cccac0' : vencido ? '#b93535' : '#52524d', fontWeight: vencido ? 600 : 400 }}
+                              <span style={{ fontSize: 13, color: !rfi.vence_en ? '#cccac0' : vencido ? '#b93535' : '#52524d', fontWeight: vencido ? 600 : 400 }}
                                 title={vencido ? 'Plazo vencido y sin responder' : undefined}>
                                 {rfi.vence_en ? new Date(rfi.vence_en).toLocaleDateString() : '—'}
                               </span>
@@ -945,7 +945,7 @@ const IssueModule = ({ project, API, user, isAdmin, cfg }) => {
                           value={editFormData.respuesta || ''}
                           onChange={e => handleFieldChange('respuesta', e.target.value)}
                           style={{
-                            padding: '5px 10px', borderRadius: 4, outline: 'none', cursor: 'pointer', fontSize: 12,
+                            padding: '5px 10px', borderRadius: 4, outline: 'none', cursor: 'pointer', fontSize: 13,
                             border: '1px solid #e8e6dc', width: '100%',
                             background: editFormData.respuesta === 'Aceptado' ? '#e0e3d7' : editFormData.respuesta === 'Rechazado' ? '#fbebeb' : '#fff'
                           }}
@@ -958,7 +958,7 @@ const IssueModule = ({ project, API, user, isAdmin, cfg }) => {
                         <span onClick={() => isAdmin && startEditing(rfi)} style={{ 
                           cursor: isAdmin ? 'pointer' : 'default', display: 'inline-block', minHeight: 20, 
                           padding: rfi.respuesta ? '4px 10px' : '0', 
-                          borderRadius: 12, fontSize: 12, fontWeight: rfi.respuesta ? 500 : 400,
+                          borderRadius: 12, fontSize: 13, fontWeight: rfi.respuesta ? 500 : 400,
                           background: rfi.respuesta === 'Aceptado' ? '#e0e3d7' : rfi.respuesta === 'Rechazado' ? '#fbebeb' : 'transparent',
                           color: rfi.respuesta === 'Aceptado' ? '#64744e' : rfi.respuesta === 'Rechazado' ? '#b93535' : '#cccac0',
                         }}>
@@ -975,14 +975,14 @@ const IssueModule = ({ project, API, user, isAdmin, cfg }) => {
                             onClick={() => setShowResponsableDropdown(!showResponsableDropdown)}
                             style={{
                               padding: '5px 10px', border: '1.5px solid #b93535', borderRadius: 4,
-                              cursor: 'pointer', fontSize: 13, display: 'flex', alignItems: 'center',
+                              cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center',
                               justifyContent: 'space-between', minHeight: 30, background: '#fff'
                             }}
                           >
                             <span style={{ color: editFormData.responsable ? '#333330' : '#cccac0' }}>
                               {editFormData.responsable || 'Seleccionar...'}
                             </span>
-                            <span style={{ fontSize: 10, color: '#72706b' }}>▼</span>
+                            <span style={{ fontSize: 12, color: '#72706b' }}>▼</span>
                           </div>
                           {showResponsableDropdown && (
                             <div style={{
@@ -1001,7 +1001,7 @@ const IssueModule = ({ project, API, user, isAdmin, cfg }) => {
                                     setShowResponsableDropdown(false);
                                   }}
                                   style={{
-                                    padding: '8px 12px', fontSize: 13, cursor: 'pointer',
+                                    padding: '8px 12px', fontSize: 14, cursor: 'pointer',
                                     background: String(editFormData.responsable_id) === String(m.id) ? '#f1f0e8' : '#fff',
                                     borderBottom: '1px solid #f1f0e8'
                                   }}
@@ -1010,14 +1010,14 @@ const IssueModule = ({ project, API, user, isAdmin, cfg }) => {
                                 >
                                   {m.name || m.email}
                                   {(m.funcion || m.empresa) && (
-                                    <span style={{ color: '#72706b', fontSize: 11 }}>
+                                    <span style={{ color: '#72706b', fontSize: 12 }}>
                                       {' · '}{m.funcion || m.empresa}
                                     </span>
                                   )}
                                 </div>
                               ))}
                               {cfg.usaDirectorio && !miembros.length && (
-                                <div style={{ padding: '10px 12px', fontSize: 12, color: '#72706b' }}>
+                                <div style={{ padding: '10px 12px', fontSize: 13, color: '#72706b' }}>
                                   Esta obra todavía no tiene miembros a los que dirigirlo.
                                 </div>
                               )}
@@ -1026,7 +1026,7 @@ const IssueModule = ({ project, API, user, isAdmin, cfg }) => {
                                   key={i}
                                   onClick={() => { handleFieldChange('responsable', name); setShowResponsableDropdown(false); }}
                                   style={{
-                                    padding: '8px 12px', fontSize: 13, cursor: 'pointer',
+                                    padding: '8px 12px', fontSize: 14, cursor: 'pointer',
                                     background: editFormData.responsable === name ? '#f1f0e8' : '#fff',
                                     borderBottom: '1px solid #f1f0e8'
                                   }}
@@ -1048,11 +1048,11 @@ const IssueModule = ({ project, API, user, isAdmin, cfg }) => {
                                   onKeyDown={e => { if (e.key === 'Enter') addResponsable(); }}
                                   placeholder="Nuevo nombre..."
                                   onClick={e => e.stopPropagation()}
-                                  style={{ flex: 1, padding: '4px 8px', border: '1px solid #e8e6dc', borderRadius: 4, fontSize: 12, outline: 'none' }}
+                                  style={{ flex: 1, padding: '4px 8px', border: '1px solid #e8e6dc', borderRadius: 4, fontSize: 13, outline: 'none' }}
                                 />
                                 <button
                                   onClick={(e) => { e.stopPropagation(); addResponsable(); }}
-                                  style={{ background: '#b93535', color: '#fff', border: 'none', borderRadius: 4, padding: '4px 10px', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}
+                                  style={{ background: '#b93535', color: '#fff', border: 'none', borderRadius: 4, padding: '4px 10px', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}
                                 >
                                   +
                                 </button>
@@ -1069,7 +1069,7 @@ const IssueModule = ({ project, API, user, isAdmin, cfg }) => {
                     </td>
 
                     {/* FECHA (MINIMALISTA) */}
-                    <td style={{ padding: '3px 10px', color: '#333330', fontSize: 11 }}>
+                    <td style={{ padding: '3px 10px', color: '#333330', fontSize: 12 }}>
                       {isEditing ? (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                           <input 
@@ -1077,7 +1077,7 @@ const IssueModule = ({ project, API, user, isAdmin, cfg }) => {
                             title="Fecha de presentación"
                             value={editFormData.fecha || ''} 
                             onChange={e => handleFieldChange('fecha', e.target.value)}
-                            style={{ padding: '4px 8px', border: '1px solid #e8e6dc', borderRadius: 4, fontSize: 12, outline: 'none' }}
+                            style={{ padding: '4px 8px', border: '1px solid #e8e6dc', borderRadius: 4, fontSize: 13, outline: 'none' }}
                           />
                           {(editFormData.estado === 'Respondido' || editFormData.estado === 'Cerrado') && (
                             <input 
@@ -1085,7 +1085,7 @@ const IssueModule = ({ project, API, user, isAdmin, cfg }) => {
                               title="Fecha de respuesta"
                               value={editFormData.fecha_respuesta || ''} 
                               onChange={e => handleFieldChange('fecha_respuesta', e.target.value)}
-                              style={{ padding: '4px 8px', border: '1px solid #e8e6dc', borderRadius: 4, fontSize: 12, outline: 'none', background: '#f1f0e8' }}
+                              style={{ padding: '4px 8px', border: '1px solid #e8e6dc', borderRadius: 4, fontSize: 13, outline: 'none', background: '#f1f0e8' }}
                             />
                           )}
                         </div>
@@ -1095,7 +1095,7 @@ const IssueModule = ({ project, API, user, isAdmin, cfg }) => {
                             {rfi.fecha ? parseLocalDate(rfi.fecha).toLocaleDateString('es-PE', { day: '2-digit', month: 'short', year: 'numeric' }) : '--'}
                           </div>
                           {rfi.fecha && (
-                            <div style={{ fontSize: 11, color: getSlaInfo(rfi.fecha, rfi.fecha_respuesta, rfi.estado)?.color, marginTop: 2 }}>
+                            <div style={{ fontSize: 12, color: getSlaInfo(rfi.fecha, rfi.fecha_respuesta, rfi.estado)?.color, marginTop: 2 }}>
                               {getSlaInfo(rfi.fecha, rfi.fecha_respuesta, rfi.estado)?.text}
                             </div>
                           )}
@@ -1138,7 +1138,7 @@ const IssueModule = ({ project, API, user, isAdmin, cfg }) => {
                               )}
                             </span>
                             {isEditing && (
-                              <button onClick={() => removeAdjunto(idx)} style={{ position: 'absolute', top: -6, right: -6, background: '#b93535', color: '#fff', borderRadius: '50%', width: 14, height: 14, border: 'none', fontSize: 10, display: 'flex', justifyContent: 'center', alignItems: 'center', cursor: 'pointer' }}>×</button>
+                              <button onClick={() => removeAdjunto(idx)} style={{ position: 'absolute', top: -6, right: -6, background: '#b93535', color: '#fff', borderRadius: '50%', width: 14, height: 14, border: 'none', fontSize: 12, display: 'flex', justifyContent: 'center', alignItems: 'center', cursor: 'pointer' }}>×</button>
                             )}
                           </div>
                           );
@@ -1161,10 +1161,10 @@ const IssueModule = ({ project, API, user, isAdmin, cfg }) => {
                     <td style={{ padding: '3px 10px', textAlign: 'center' }}>
                       {isEditing ? (
                         <div style={{ display: 'flex', gap: 6, justifyContent: 'center' }}>
-                          <button onClick={() => saveRfi(rfi.id)} disabled={saving} style={{ background: '#b93535', color: '#fff', border: 'none', padding: '5px 12px', borderRadius: 4, cursor: 'pointer', fontSize: 12, fontWeight: 500 }}>
+                          <button onClick={() => saveRfi(rfi.id)} disabled={saving} style={{ background: '#b93535', color: '#fff', border: 'none', padding: '5px 12px', borderRadius: 4, cursor: 'pointer', fontSize: 13, fontWeight: 500 }}>
                             {saving ? '...' : 'Guardar'}
                           </button>
-                          <button onClick={cancelEditing} style={{ background: 'none', border: '1px solid #e8e6dc', color: '#72706b', padding: '5px 8px', borderRadius: 4, cursor: 'pointer', fontSize: 12 }}>
+                          <button onClick={cancelEditing} style={{ background: 'none', border: '1px solid #e8e6dc', color: '#72706b', padding: '5px 8px', borderRadius: 4, cursor: 'pointer', fontSize: 13 }}>
                             ✕
                           </button>
                         </div>
@@ -1192,7 +1192,7 @@ const IssueModule = ({ project, API, user, isAdmin, cfg }) => {
                           background: rfi.flujo === 'BLOQUEADO' ? '#fbebeb' : '#faf9f5',
                           border: `1px solid ${rfi.flujo === 'BLOQUEADO' ? '#fbebeb' : '#f9eeda'}`,
                           color: rfi.flujo === 'BLOQUEADO' ? '#993458' : '#9e5943',
-                          borderRadius: 6, padding: '8px 11px', fontSize: 12
+                          borderRadius: 6, padding: '8px 11px', fontSize: 13
                         }}>
                           {necesitaAdopcion(rfi) ? (
                             <>
@@ -1221,11 +1221,11 @@ const IssueModule = ({ project, API, user, isAdmin, cfg }) => {
                     <tr>
                       <td colSpan={COL_DEFS.length + 2} style={{ padding: '0 10px 10px' }}>
                         <div style={{ background: '#faf9f5', border: '1px solid #f1f0e8', borderRadius: 6, padding: '8px 11px' }}>
-                          <div style={{ fontSize: 10, fontWeight: 700, color: '#52524d', letterSpacing: '.3px', textTransform: 'uppercase', marginBottom: 6 }}>
+                          <div style={{ fontSize: 12, fontWeight: 700, color: '#52524d', letterSpacing: '.3px', textTransform: 'uppercase', marginBottom: 6 }}>
                             Historial
                           </div>
                           {(rfi.historial || []).map((h, i) => (
-                            <div key={i} style={{ fontSize: 12, color: '#52524d', padding: '2px 0' }}>
+                            <div key={i} style={{ fontSize: 13, color: '#52524d', padding: '2px 0' }}>
                               <span style={{ color: '#72706b' }}>
                                 {h.at ? new Date(h.at).toLocaleString() : ''}
                               </span>
@@ -1349,7 +1349,7 @@ const IssueModule = ({ project, API, user, isAdmin, cfg }) => {
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 4 }}>
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#52524d" strokeWidth="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
-                <span style={{ fontSize: 10, fontWeight: 600, color: '#52524d', letterSpacing: '0.3px', textTransform: 'uppercase' }}>Respuestas</span>
+                <span style={{ fontSize: 12, fontWeight: 600, color: '#52524d', letterSpacing: '0.3px', textTransform: 'uppercase' }}>Respuestas</span>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 4 }}>
                 {kpiCards.map(card => {
@@ -1371,8 +1371,8 @@ const IssueModule = ({ project, API, user, isAdmin, cfg }) => {
                     >
                       <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 2, opacity: 0.85 }}>{card.icon}</div>
                       <div style={{ fontSize: 18, fontWeight: 800, color: card.color, lineHeight: 1 }}>{card.count}</div>
-                      <div style={{ fontSize: 9, color: card.color, fontWeight: 600, marginTop: 2, letterSpacing: '0.3px' }}>{card.label}</div>
-                      <div style={{ fontSize: 9, color: '#72706b', marginTop: 0, fontWeight: 500 }}>{total > 0 ? Math.round(card.count/total*100) : 0}%</div>
+                      <div style={{ fontSize: 12, color: card.color, fontWeight: 600, marginTop: 2, letterSpacing: '0.3px' }}>{card.label}</div>
+                      <div style={{ fontSize: 12, color: '#72706b', marginTop: 0, fontWeight: 500 }}>{total > 0 ? Math.round(card.count/total*100) : 0}%</div>
                     </div>
                   );
                 })}
@@ -1380,7 +1380,7 @@ const IssueModule = ({ project, API, user, isAdmin, cfg }) => {
 
               <div style={{ marginTop: 4, background: '#fff', borderRadius: 6, padding: '4px 10px', border: '1px solid #e8e6dc' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 }}>
-                  <span style={{ fontSize: 9, color: '#72706b', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.5px' }}>{`Total ${cfg.singular}`}</span>
+                  <span style={{ fontSize: 12, color: '#72706b', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.5px' }}>{`Total ${cfg.singular}`}</span>
                   <span style={{ fontSize: 14, fontWeight: 800, color: '#141413' }}>{total}</span>
                 </div>
                 <div style={{ display: 'flex', borderRadius: 4, overflow: 'hidden', height: 6, background: '#f1f0e8' }}>
@@ -1397,11 +1397,11 @@ const IssueModule = ({ project, API, user, isAdmin, cfg }) => {
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#52524d" strokeWidth="2">
                   <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
                 </svg>
-                <span style={{ fontSize: 10, fontWeight: 600, color: '#52524d', letterSpacing: '0.3px', textTransform: 'uppercase' }}>Tendencia de Resolución</span>
+                <span style={{ fontSize: 12, fontWeight: 600, color: '#52524d', letterSpacing: '0.3px', textTransform: 'uppercase' }}>Tendencia de Resolución</span>
               </div>
               <div style={{ background: '#fff', borderRadius: 6, padding: '4px 6px', border: '1px solid #e8e6dc' }}>
                 {trendData.filter(d => !d.projected).length < 2 ? (
-                  <div style={{ height: 60, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#72706b', fontSize: 10, fontStyle: 'italic' }}>
+                  <div style={{ height: 60, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#72706b', fontSize: 12, fontStyle: 'italic' }}>
                     Se necesitan al menos 2 meses con datos.
                   </div>
                 ) : (
@@ -1587,7 +1587,7 @@ const IssueModule = ({ project, API, user, isAdmin, cfg }) => {
             </div>
 
             {/* Breadcrumbs */}
-            <div style={{ padding: '10px 24px', background: '#faf9f5', borderBottom: '1px solid #f1f0e8', display: 'flex', gap: 6, alignItems: 'center', fontSize: 13, flexWrap: 'wrap' }}>
+            <div style={{ padding: '10px 24px', background: '#faf9f5', borderBottom: '1px solid #f1f0e8', display: 'flex', gap: 6, alignItems: 'center', fontSize: 14, flexWrap: 'wrap' }}>
               {selectorPath.map((crumb, idx) => (
                 <React.Fragment key={idx}>
                   <span
@@ -1622,9 +1622,9 @@ const IssueModule = ({ project, API, user, isAdmin, cfg }) => {
                       ) : (
                         getMimeIconComponent(node.name)
                       )}
-                      <span style={{ fontSize: 13, color: '#333330', flex: 1 }}>{node.name}</span>
+                      <span style={{ fontSize: 14, color: '#333330', flex: 1 }}>{node.name}</span>
                       {!node._isFolder && (
-                        <span style={{ fontSize: 11, color: '#b93535', fontWeight: 500 }}>Seleccionar</span>
+                        <span style={{ fontSize: 12, color: '#b93535', fontWeight: 500 }}>Seleccionar</span>
                       )}
                     </li>
                   ))}

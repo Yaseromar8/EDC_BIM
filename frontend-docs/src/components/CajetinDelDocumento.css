@@ -36,7 +36,7 @@
 .cajetin__cas--vig { flex: 0 1 210px; border-right: 0; }
 
 .cajetin__rot {
-  font-size: 9.5px;
+  font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.09em;
   text-transform: uppercase;
@@ -45,18 +45,18 @@
 }
 
 .cajetin__val {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.cajetin__val--codigo { font-family: ui-monospace, Consolas, monospace; font-size: 12.5px; letter-spacing: 0.01em; }
-.cajetin__flecha { font-size: 9px; color: #6d6b67; }
+.cajetin__val--codigo { font-family: ui-monospace, Consolas, monospace; font-size: 13px; letter-spacing: 0.01em; }
+.cajetin__flecha { font-size: 12px; color: #6d6b67; }
 
 .cajetin__det {
-  font-size: 11px;
+  font-size: 12px;
   color: #6d6b67;
   white-space: nowrap;
   overflow: hidden;
@@ -74,7 +74,7 @@
   padding: 0 4px;
   border: 1.5px solid #141413;
   border-radius: 2px;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
 }
 
@@ -98,7 +98,7 @@
   background: #141413;
   color: #fff;
   font: inherit;
-  font-size: 11.5px;
+  font-size: 12px;
   font-weight: 600;
   cursor: pointer;
 }
@@ -134,7 +134,7 @@
   user-select: none;
 }
 
-.sello-sustituida small { display: block; font-size: 10.5px; font-weight: 600; letter-spacing: 0.04em; }
+.sello-sustituida small { display: block; font-size: 12px; font-weight: 600; letter-spacing: 0.04em; }
 /* Sobre la hoja: proporcional a ella (2 % de su ancho), entre 7 y 22 px. */
 .sello-sustituida__hoja { position: absolute; inset: 0; z-index: 3; pointer-events: none; container-type: size; }
 .sello-sustituida__hoja .sello-sustituida { font-size: clamp(7px, 2cqw, 22px); padding: 0.3em 0.7em 0.35em; border-width: clamp(1px, 0.22cqw, 2.5px); }
@@ -177,7 +177,7 @@
   background: #fff;
   color: #52524d;
   font: inherit;
-  font-size: 11.5px;
+  font-size: 12px;
   cursor: pointer;
 }
 .cajetin__alternar button + button { border-left: 1px solid #cfcabb; }
@@ -187,7 +187,7 @@
 .cajetin__cas.es-aviso .cajetin__alternar { border-color: #d9c7a3; }
 /* Excel | Planilla, junto a las acciones de la barra (no dentro de una casilla). */
 .cajetin__vista { align-self: center; margin: 0 8px 0 0; }
-.cajetin__vista button { height: 26px; padding: 0 11px; font-size: 12.5px; }
+.cajetin__vista button { height: 26px; padding: 0 11px; font-size: 13px; }
 
 /* Las acciones del cajetín fuera del PDF (dentro del PDF usan el estilo de iconos del lector). */
 .cajetin__accion {
@@ -203,7 +203,7 @@
 }
 .cajetin__accion:hover { background: #efebe0; color: #141413; }
 /* «Metrados (n)» en la barra de un DWG (en el PDF vive en el estuche). */
-.cajetin__metrados { display: inline-flex; align-items: center; gap: 6px; align-self: center; height: 30px; margin-right: 6px; padding: 0 10px; border: 1px solid #cfcabb; border-radius: 3px; background: #fff; color: #141413; font: inherit; font-size: 12.5px; cursor: pointer; }
+.cajetin__metrados { display: inline-flex; align-items: center; gap: 6px; align-self: center; height: 30px; margin-right: 6px; padding: 0 10px; border: 1px solid #cfcabb; border-radius: 3px; background: #fff; color: #141413; font: inherit; font-size: 13px; cursor: pointer; }
 .cajetin__metrados:hover { border-color: #141413; }
 .cajetin__metrados[aria-pressed="true"] { border-color: #141413; background: #141413; color: #fff; }
 .cajetin__metrados:focus-visible { outline: 2px solid #6a9bcc; outline-offset: 2px; }

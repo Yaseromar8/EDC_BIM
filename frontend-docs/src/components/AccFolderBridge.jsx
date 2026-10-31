@@ -93,7 +93,7 @@ export default function AccFolderBridge({ API, folder, modelUrn, onClose, onSave
           <strong>Puente temporal con ACC</strong>
           <button type="button" onClick={onClose} aria-label="Cerrar">✕</button>
         </div>
-        <div style={{ padding: '12px 20px', fontSize: 13, lineHeight: 1.5 }}>
+        <div style={{ padding: '12px 20px', fontSize: 14, lineHeight: 1.5 }}>
           Carpeta ALEPHIA: <strong>{folder.name}</strong>. Sólo DWG, DXF, DWF/DWFX, RVT/RFA
           y NWD/NWC nuevos subidos directamente aquí se copiarán a la carpeta ACC elegida.
           El vínculo permanece hasta que lo cambies o desactives. La traducción habitual de
@@ -106,7 +106,7 @@ export default function AccFolderBridge({ API, folder, modelUrn, onClose, onSave
             El cortacircuito del servidor está apagado. Guardar la pareja de carpetas no enviará ningún archivo a ACC.
           </p>}
         </div>
-        <div style={{ padding: '8px 20px', borderTop: '1px solid #e8e6dc', borderBottom: '1px solid #e8e6dc', fontSize: 13 }}>
+        <div style={{ padding: '8px 20px', borderTop: '1px solid #e8e6dc', borderBottom: '1px solid #e8e6dc', fontSize: 14 }}>
           {(hub || project || ancestors.length > 0) && <button type="button" onClick={back}>← Volver</button>}
           <span style={{ marginLeft: 8 }}>{[hub, project, ...ancestors].filter(Boolean).map(nameOf).join(' / ') || 'Centros de Autodesk'}</span>
         </div>

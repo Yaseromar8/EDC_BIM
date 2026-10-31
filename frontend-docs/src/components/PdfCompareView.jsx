@@ -141,23 +141,23 @@ export default function PdfCompareView({ fileName, versionA, versionB, projectPr
         {/* Toolbar */}
         <div style={{ height: 48, padding: '0 16px', display: 'flex', alignItems: 'center', gap: 12, borderBottom: '1px solid #e5e5e5', flexShrink: 0, background: '#222', color: '#fff' }}>
           <span style={{ fontSize: 14, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Comparar: {fileName}</span>
-          <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
             <span style={{ color: '#ff6b6b', fontWeight: 700 }}>● {vNum(versionA)}</span>
             <span style={{ color: '#888' }}>vs</span>
             <span style={{ color: '#5b9dff', fontWeight: 700 }}>● {vNum(versionB)}</span>
           </span>
 
           <div style={{ display: 'flex', gap: 2, marginLeft: 16, background: '#333', borderRadius: 6, padding: 2 }}>
-            <button onClick={() => setMode('overlay')} style={{ padding: '5px 12px', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 12, fontWeight: 600, background: mode === 'overlay' ? 'var(--accent)' : 'transparent', color: '#fff' }}>Superpuesto</button>
-            <button onClick={() => setMode('side')} style={{ padding: '5px 12px', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 12, fontWeight: 600, background: mode === 'side' ? 'var(--accent)' : 'transparent', color: '#fff' }}>Lado a lado</button>
+            <button onClick={() => setMode('overlay')} style={{ padding: '5px 12px', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 13, fontWeight: 600, background: mode === 'overlay' ? 'var(--accent)' : 'transparent', color: '#fff' }}>Superpuesto</button>
+            <button onClick={() => setMode('side')} style={{ padding: '5px 12px', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 13, fontWeight: 600, background: mode === 'side' ? 'var(--accent)' : 'transparent', color: '#fff' }}>Lado a lado</button>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 16, fontSize: 13 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 16, fontSize: 14 }}>
             <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page <= 1} style={navBtn}>‹</button>
             <span>Pág {page} / {maxPages}</span>
             <button onClick={() => setPage(p => Math.min(maxPages, p + 1))} disabled={page >= maxPages} style={navBtn}>›</button>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 14 }}>
             <button onClick={() => setScale(s => Math.max(0.4, s / 1.2))} style={navBtn}>−</button>
             <span>{Math.round(scale * 100)}%</span>
             <button onClick={() => setScale(s => Math.min(4, s * 1.2))} style={navBtn}>+</button>
@@ -176,11 +176,11 @@ export default function PdfCompareView({ fileName, versionA, versionB, projectPr
           {!loading && !error && mode === 'side' && (
             <div style={{ display: 'flex', gap: 16 }}>
               <div style={{ textAlign: 'center' }}>
-                <div style={{ color: '#ff8a8a', fontSize: 12, fontWeight: 700, marginBottom: 6 }}>{vNum(versionA)} (anterior)</div>
+                <div style={{ color: '#ff8a8a', fontSize: 13, fontWeight: 700, marginBottom: 6 }}>{vNum(versionA)} (anterior)</div>
                 <canvas ref={sideARef} style={{ background: '#fff', boxShadow: '0 4px 16px rgba(0,0,0,0.4)' }} />
               </div>
               <div style={{ textAlign: 'center' }}>
-                <div style={{ color: '#9cc2ff', fontSize: 12, fontWeight: 700, marginBottom: 6 }}>{vNum(versionB)} (nueva)</div>
+                <div style={{ color: '#9cc2ff', fontSize: 13, fontWeight: 700, marginBottom: 6 }}>{vNum(versionB)} (nueva)</div>
                 <canvas ref={sideBRef} style={{ background: '#fff', boxShadow: '0 4px 16px rgba(0,0,0,0.4)' }} />
               </div>
             </div>
@@ -189,7 +189,7 @@ export default function PdfCompareView({ fileName, versionA, versionB, projectPr
 
         {/* Leyenda */}
         {mode === 'overlay' && !loading && !error && (
-          <div style={{ padding: '8px 16px', borderTop: '1px solid #eee', display: 'flex', gap: 18, fontSize: 12, color: '#555', flexShrink: 0 }}>
+          <div style={{ padding: '8px 16px', borderTop: '1px solid #eee', display: 'flex', gap: 18, fontSize: 13, color: '#555', flexShrink: 0 }}>
             <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><span style={{ width: 12, height: 12, background: '#e53935', borderRadius: 2 }} /> Solo en {vNum(versionA)} (eliminado)</span>
             <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><span style={{ width: 12, height: 12, background: '#1e88e5', borderRadius: 2 }} /> Solo en {vNum(versionB)} (agregado)</span>
             <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><span style={{ width: 12, height: 12, background: '#222', borderRadius: 2 }} /> Sin cambios</span>

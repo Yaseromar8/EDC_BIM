@@ -136,20 +136,20 @@ function UsersTab() {
                         style={{ cursor: 'pointer', color: 'var(--link)' }}>{u.name}</span>
                 </td>
                 <td style={{ whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden', maxWidth: 200 }} title={u.email}>{u.email}</td>
-                <td style={{ fontSize: 13, color: '#52524d', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden', maxWidth: 100 }}>{u.company_name}</td>
-                <td style={{ fontSize: 13, color: '#52524d', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden', maxWidth: 100 }}>{u.job_title_name}</td>
+                <td style={{ fontSize: 14, color: '#52524d', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden', maxWidth: 100 }}>{u.company_name}</td>
+                <td style={{ fontSize: 14, color: '#52524d', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden', maxWidth: 100 }}>{u.job_title_name}</td>
                 <td>
-                  <span style={{ padding: '2px 8px', borderRadius: 12, fontSize: 11, background: u.role === 'admin' ? 'var(--bg-active)' : 'var(--bg-secondary)', color: u.role === 'admin' ? 'var(--accent)' : 'var(--text-secondary)' }}>
+                  <span style={{ padding: '2px 8px', borderRadius: 12, fontSize: 12, background: u.role === 'admin' ? 'var(--bg-active)' : 'var(--bg-secondary)', color: u.role === 'admin' ? 'var(--accent)' : 'var(--text-secondary)' }}>
                     {u.role.toUpperCase()}
                   </span>
                   {/* El estado de la CUENTA, que la base siempre distinguió y la
                       pantalla no: sin esto, una invitación sin reclamar y un
                       acceso retirado parecían «un usuario más». */}
                   {u.activo === false && (
-                    <span style={{ marginLeft: 6, padding: '2px 8px', borderRadius: 12, fontSize: 11, background: '#f1f0e8', color: '#72706b' }}>DESACTIVADO</span>
+                    <span style={{ marginLeft: 6, padding: '2px 8px', borderRadius: 12, fontSize: 12, background: '#f1f0e8', color: '#72706b' }}>DESACTIVADO</span>
                   )}
                   {u.activo !== false && u.pendiente && (
-                    <span style={{ marginLeft: 6, padding: '2px 8px', borderRadius: 12, fontSize: 11, background: '#faf9f5', color: '#9e5943' }}>PENDIENTE</span>
+                    <span style={{ marginLeft: 6, padding: '2px 8px', borderRadius: 12, fontSize: 12, background: '#faf9f5', color: '#9e5943' }}>PENDIENTE</span>
                   )}
                 </td>
                 <td>{formatDate(u.created_at)}</td>
@@ -163,17 +163,17 @@ function UsersTab() {
                       la deja pendiente otra vez). El backend además lo exige:
                       reactivar responde 409 INVITACION_REVOCADA. */}
                   {u.role !== 'admin' && u.activo === false && !u.pendiente && (
-                    <button className="btn btn-secondary" style={{ padding: '3px 10px', fontSize: 11 }} onClick={(e) => { e.stopPropagation(); handleReactivar(u.id); }} title="Devolver el acceso; el rastro se conservó">
+                    <button className="btn btn-secondary" style={{ padding: '3px 10px', fontSize: 12 }} onClick={(e) => { e.stopPropagation(); handleReactivar(u.id); }} title="Devolver el acceso; el rastro se conservó">
                       Reactivar
                     </button>
                   )}
                   {u.role !== 'admin' && u.activo === false && u.pendiente && (
-                    <button className="btn btn-secondary" style={{ padding: '3px 10px', fontSize: 11 }} onClick={(e) => { e.stopPropagation(); handleReinvitar(u); }} title="Emitir un enlace nuevo: la invitación vuelve a quedar pendiente">
+                    <button className="btn btn-secondary" style={{ padding: '3px 10px', fontSize: 12 }} onClick={(e) => { e.stopPropagation(); handleReinvitar(u); }} title="Emitir un enlace nuevo: la invitación vuelve a quedar pendiente">
                       Reinvitar
                     </button>
                   )}
                   {u.role !== 'admin' && u.activo !== false && u.pendiente && (
-                    <button className="btn btn-secondary" style={{ padding: '3px 10px', fontSize: 11, marginRight: 6 }} onClick={(e) => { e.stopPropagation(); handleReinvitar(u); }} title="Emitir un enlace nuevo; los anteriores dejan de valer">
+                    <button className="btn btn-secondary" style={{ padding: '3px 10px', fontSize: 12, marginRight: 6 }} onClick={(e) => { e.stopPropagation(); handleReinvitar(u); }} title="Emitir un enlace nuevo; los anteriores dejan de valer">
                       Reinvitar
                     </button>
                   )}
@@ -198,7 +198,7 @@ function UsersTab() {
         <div className="modal-overlay" onClick={cerrarInvitacion}>
           <div className="modal-box" onClick={e => e.stopPropagation()}>
             <h3>Invitación creada</h3>
-            <p style={{ fontSize: 13, color: '#52524d', marginBottom: 12, lineHeight: 1.4 }}>
+            <p style={{ fontSize: 14, color: '#52524d', marginBottom: 12, lineHeight: 1.4 }}>
               {invitacion.avisado
                 ? <><b>El correo ya salió</b> hacia <b>{invitacion.email}</b>. Este es el mismo
                   enlace, por si prefieres hacérselo llegar también por otro medio. </>
@@ -216,7 +216,7 @@ function UsersTab() {
             <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start',
                           background: '#faf9f5', border: '1px solid #f9eeda',
                           borderRadius: 5, padding: '9px 11px', marginBottom: 12,
-                          fontSize: 12.5, color: '#734500', lineHeight: 1.45 }}>
+                          fontSize: 13, color: '#734500', lineHeight: 1.45 }}>
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                    strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
                    style={{ flexShrink: 0, marginTop: 1 }}>
@@ -228,7 +228,7 @@ function UsersTab() {
                 a pulsar «Reinvitar», <b>este</b> también dejará de servir.</span>
             </div>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 12 }}>
-              <input readOnly value={invitacion.url} onFocus={e => e.target.select()} style={{ flex: 1, fontSize: 12, fontFamily: 'monospace' }} />
+              <input readOnly value={invitacion.url} onFocus={e => e.target.select()} style={{ flex: 1, fontSize: 13, fontFamily: 'monospace' }} />
               <button
                 className="btn btn-secondary"
                 onClick={async () => {
@@ -247,14 +247,14 @@ function UsersTab() {
         <div className="modal-overlay" onClick={() => setShowCreate(false)}>
           <div className="modal-box" onClick={e => e.stopPropagation()}>
             <h3>Invitar usuario</h3>
-            <p style={{ fontSize: 13, color: '#52524d', marginBottom: 12, lineHeight: 1.4 }}>
+            <p style={{ fontSize: 14, color: '#52524d', marginBottom: 12, lineHeight: 1.4 }}>
               Indica el correo y su nivel de acceso. La persona completará su nombre, empresa y cargo al crear su cuenta con ese mismo correo. Después asígnale proyectos desde <b>Accesos</b>.
             </p>
-            <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', background: '#faf9f5', border: '1px solid #f9eeda', borderRadius: 5, padding: '9px 11px', marginBottom: 12, fontSize: 12.5, color: '#734500', lineHeight: 1.45 }}>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', background: '#faf9f5', border: '1px solid #f9eeda', borderRadius: 5, padding: '9px 11px', marginBottom: 12, fontSize: 13, color: '#734500', lineHeight: 1.45 }}>
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, marginTop: 1 }}><circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" /></svg>
               <span>Al invitar se intenta enviar el correo y además se genera el <b>enlace de invitación</b> copiable. Si el correo no está configurado o no llega, el enlace es el camino: hazlo llegar tú (WhatsApp, correo). Sin ese enlace la cuenta no se puede reclamar.</span>
             </div>
-            {error && <div style={{ color: 'var(--danger)', fontSize: 13, marginBottom: 12 }}>{error}</div>}
+            {error && <div style={{ color: 'var(--danger)', fontSize: 14, marginBottom: 12 }}>{error}</div>}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               <input type="email" autoFocus placeholder="Correo electrónico del usuario" value={email} onChange={e => setEmail(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleCreate()} />
               <select value={role} onChange={e => setRole(e.target.value)}>
@@ -318,7 +318,7 @@ function ActividadTab() {
           value={filtro} onChange={e => setFiltro(e.target.value)}
           style={{ flex: 1, maxWidth: 420 }}
         />
-        <span style={{ fontSize: 12, color: '#72706b' }}>{visibles.length} de {eventos.length}</span>
+        <span style={{ fontSize: 13, color: '#72706b' }}>{visibles.length} de {eventos.length}</span>
       </div>
       {cargando ? <div className="loading"><div className="spinner" /><span>Cargando…</span></div> : (
         <table className="data-table" style={{ background: '#fff', borderRadius: 6, overflow: 'hidden' }}>
@@ -336,13 +336,13 @@ function ActividadTab() {
               const [color, etiqueta] = ESTADO[e.evento] || ['#b0aea5', e.evento];
               return (
                 <tr key={i}>
-                  <td style={{ fontSize: 12, whiteSpace: 'nowrap' }}>
+                  <td style={{ fontSize: 13, whiteSpace: 'nowrap' }}>
                     {e.fecha ? new Date(e.fecha).toLocaleString('es-PE') : '—'}
                   </td>
-                  <td><span style={{ color, fontWeight: 600, fontSize: 12.5 }}>{etiqueta}</span></td>
-                  <td style={{ fontSize: 12.5 }}>{e.email || (e.user_id ? `usuario ${e.user_id}` : '—')}</td>
-                  <td style={{ fontSize: 12, fontFamily: 'monospace', color: '#72706b' }}>{e.ip || '—'}</td>
-                  <td style={{ fontSize: 12, color: '#52524d' }}>{e.detalle || '—'}</td>
+                  <td><span style={{ color, fontWeight: 600, fontSize: 13 }}>{etiqueta}</span></td>
+                  <td style={{ fontSize: 13 }}>{e.email || (e.user_id ? `usuario ${e.user_id}` : '—')}</td>
+                  <td style={{ fontSize: 13, fontFamily: 'monospace', color: '#72706b' }}>{e.ip || '—'}</td>
+                  <td style={{ fontSize: 13, color: '#52524d' }}>{e.detalle || '—'}</td>
                 </tr>
               );
             })}
@@ -439,7 +439,7 @@ function TagsTab({ obras = [] }) {
               sin él, borrar un nombre parece inocuo cuando puede dejar a
               media obra sin su función contractual. */}
           {resumen[c.id] && (
-            <div style={{ fontSize: 11.5, color: '#72706b', marginTop: 2 }}>
+            <div style={{ fontSize: 12, color: '#72706b', marginTop: 2 }}>
               {resumen[c.id].personas} persona{resumen[c.id].personas !== 1 ? 's' : ''}
               {resumen[c.id].obras.length > 0 && (
                 <> · {resumen[c.id].obras.map(o => `${o.obra} (${o.funcion})`).join(' · ')}</>
@@ -609,12 +609,12 @@ export default function SecureProjectsPage({ user, onSelectProject, onLogout, on
             {/* Cabecera Dark 12 (paleta oficial de Claude, D-24) ⇒ logo en Light.
                 «Docs» es el producto, no la marca. */}
             <img src="/brand/ALEPHIA_Logo_Horizontal_Light.svg" alt="ALEPHIA" style={{ height: 28, width: 'auto', display: 'block' }} />
-            <span style={{ fontSize: 13, fontWeight: 600, color: '#FAF9F5', letterSpacing: '0.4px', paddingLeft: 10, borderLeft: '1px solid #72706b' }}>Docs</span>
+            <span style={{ fontSize: 14, fontWeight: 600, color: '#FAF9F5', letterSpacing: '0.4px', paddingLeft: 10, borderLeft: '1px solid #72706b' }}>Docs</span>
           </span>
         </div>
         <div className="header-right">
           <div className="header-user" onClick={onLogout} title="Cerrar sesión">
-            <span style={{ fontSize: 13, marginRight: 8, opacity: 0.8 }}>{user.name.split(' ')[0]}</span>
+            <span style={{ fontSize: 14, marginRight: 8, opacity: 0.8 }}>{user.name.split(' ')[0]}</span>
             <div className="header-avatar">{getInitials(user.name)}</div>
           </div>
         </div>
@@ -646,7 +646,7 @@ export default function SecureProjectsPage({ user, onSelectProject, onLogout, on
                   <h3 style={{ margin: '0 0 6px', fontSize: 16 }}>
                     {falloDeCarga.sesion ? 'Tu sesión caducó' : 'No se pudieron cargar los proyectos'}
                   </h3>
-                  <p style={{ color: 'var(--text-secondary, #72706b)', fontSize: 13, margin: '0 0 18px', lineHeight: 1.5 }}>
+                  <p style={{ color: 'var(--text-secondary, #72706b)', fontSize: 14, margin: '0 0 18px', lineHeight: 1.5 }}>
                     {falloDeCarga.sesion
                       ? 'Vuelve a entrar con tu correo y contraseña; no se ha perdido nada.'
                       : `${falloDeCarga.mensaje} Puede que el servidor se esté reiniciando: espera unos segundos y reintenta.`}
@@ -669,7 +669,7 @@ export default function SecureProjectsPage({ user, onSelectProject, onLogout, on
                   <div style={{ maxWidth: 400, margin: '40px auto', background: 'var(--eg-sup)', padding: 32, borderRadius: 4, border: '1px solid var(--eg-linea)', textAlign: 'center' }}>
                     <div style={{ marginBottom: 16, color: 'var(--eg-texto-3)' }}><svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" /><path d="M10 17l5-5-5-5" /><path d="M15 12H3" /></svg></div>
                     <h3 style={{ marginBottom: 8, fontSize: 18 }}>Únete a tu primer proyecto</h3>
-                    <p style={{ color: '#72706b', fontSize: 13, marginBottom: 24, lineHeight: 1.5 }}>Ingresa el código de invitación de 6 caracteres proporcionado por el administrador para acceder.</p>
+                    <p style={{ color: '#72706b', fontSize: 14, marginBottom: 24, lineHeight: 1.5 }}>Ingresa el código de invitación de 6 caracteres proporcionado por el administrador para acceder.</p>
                     
                     <form onSubmit={handleJoinProject} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                       <input 
@@ -680,7 +680,7 @@ export default function SecureProjectsPage({ user, onSelectProject, onLogout, on
                         maxLength={6}
                         style={{ textAlign: 'center', letterSpacing: 2, fontSize: 16, textTransform: 'uppercase' }}
                       />
-                      {joinError && <div style={{ color: 'var(--danger)', fontSize: 12 }}>{joinError}</div>}
+                      {joinError && <div style={{ color: 'var(--danger)', fontSize: 13 }}>{joinError}</div>}
                       <button type="submit" className="btn btn-primary" disabled={joining} style={{ width: '100%', justifyContent: 'center' }}>
                         {joining ? 'Verificando...' : 'Unirme al Proyecto'}
                       </button>
@@ -693,18 +693,18 @@ export default function SecureProjectsPage({ user, onSelectProject, onLogout, on
                   <tbody>
                     {filtered.map(p => (
                       <tr key={p.id} onClick={() => onSelectProject(p)}>
-                        <td style={{ fontSize: 13, fontWeight: 500 }}>{p.hub_name || 'Gral'}</td>
+                        <td style={{ fontSize: 14, fontWeight: 500 }}>{p.hub_name || 'Gral'}</td>
                         <td><div className="project-name-main">{p.name}</div>{p.location && <div className="project-name-sub">{p.location}</div>}</td>
                         <td>{p.number || '—'}</td>
                         <td><span className="access-badge access-badge-docs"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /></svg>Docs</span></td>
-                        <td style={{ fontSize: 13 }}>{p.account}</td>
+                        <td style={{ fontSize: 14 }}>{p.account}</td>
                         {isAdmin && (
-                          <td style={{ fontSize: 12.5, fontFamily: 'ui-monospace, SFMono-Regular, Consolas, monospace', fontWeight: 500, letterSpacing: '0.06em' }}>
+                          <td style={{ fontSize: 13, fontFamily: 'ui-monospace, SFMono-Regular, Consolas, monospace', fontWeight: 500, letterSpacing: '0.06em' }}>
                             {p.invite_code || '---'}
                           </td>
                         )}
-                        <td style={{ fontSize: 13 }}>{formatDate(p.created_at)}</td>
-                        {isAdmin && (<td><button className="btn btn-secondary" style={{ padding: '0 10px', fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 6 }} title="Elegir qué usuarios acceden a este proyecto" onClick={(e) => openAccess(p, e)}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /></svg>Accesos</button></td>)}
+                        <td style={{ fontSize: 14 }}>{formatDate(p.created_at)}</td>
+                        {isAdmin && (<td><button className="btn btn-secondary" style={{ padding: '0 10px', fontSize: 13, display: 'inline-flex', alignItems: 'center', gap: 6 }} title="Elegir qué usuarios acceden a este proyecto" onClick={(e) => openAccess(p, e)}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /></svg>Accesos</button></td>)}
                       </tr>
                     ))}
                   </tbody>
@@ -741,18 +741,18 @@ export default function SecureProjectsPage({ user, onSelectProject, onLogout, on
         <div className="modal-overlay" onClick={() => setShowAccess(null)}>
           <div className="modal-box" onClick={e => e.stopPropagation()}>
             <h3>Accesos a {showAccess.name}</h3>
-            <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 12 }}>Selecciona qué usuarios tienen acceso a ver este proyecto.</p>
+            <p style={{ fontSize: 14, color: 'var(--text-muted)', marginBottom: 12 }}>Selecciona qué usuarios tienen acceso a ver este proyecto.</p>
             <div style={{ border: '1px solid var(--border)', borderRadius: 4, maxHeight: 300, overflowY: 'auto' }}>
               {allUsers.filter(u => u.role !== 'admin').map(u => (
                 <label key={u.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderBottom: '1px solid #f1f0e8', cursor: 'pointer' }}>
                   <input type="checkbox" checked={projectUsers.includes(u.id)} onChange={(e) => { if (e.target.checked) setProjectUsers([...projectUsers, u.id]); else setProjectUsers(projectUsers.filter(id => id !== u.id)); }} />
                   <div style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-                    <span style={{ fontSize: 13, fontWeight: 500, whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>{u.name}</span>
-                    <span style={{ fontSize: 11, color: 'var(--text-muted)', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>{u.email}</span>
+                    <span style={{ fontSize: 14, fontWeight: 500, whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>{u.name}</span>
+                    <span style={{ fontSize: 12, color: 'var(--text-muted)', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>{u.email}</span>
                   </div>
                 </label>
               ))}
-              {allUsers.filter(u => u.role !== 'admin').length === 0 && (<div style={{ padding: 16, fontSize: 13, color: '#72706b', textAlign: 'center' }}>No hay usuarios normales creados.</div>)}
+              {allUsers.filter(u => u.role !== 'admin').length === 0 && (<div style={{ padding: 16, fontSize: 14, color: '#72706b', textAlign: 'center' }}>No hay usuarios normales creados.</div>)}
             </div>
             <div className="modal-actions">
               <button className="btn btn-secondary" onClick={() => setShowAccess(null)}>Cerrar</button>

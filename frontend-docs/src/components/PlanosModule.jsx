@@ -99,7 +99,7 @@ export default function PlanosModule({ project, API, user, isAdmin }) {
   };
 
   if (planos === null) {
-    return <div style={{ padding: 24, fontSize: 13, color: '#72706b' }}>Cargando planos…</div>;
+    return <div style={{ padding: 24, fontSize: 14, color: '#72706b' }}>Cargando planos…</div>;
   }
 
   return (
@@ -108,7 +108,7 @@ export default function PlanosModule({ project, API, user, isAdmin }) {
         <h2 style={{ margin: 0, fontSize: 17, fontWeight: 650, color: '#141413' }}>Planos</h2>
         <select value={filtro} onChange={e => setFiltro(e.target.value)}
                 style={{ padding: '5px 8px', border: '1px solid #e8e6dc', borderRadius: 5,
-                         fontSize: 12.5, color: '#52524d' }}>
+                         fontSize: 13, color: '#52524d' }}>
           <option value="">Todas las disciplinas</option>
           {disciplinas.map(d => (
             <option key={d.codigo} value={d.codigo}>{d.etiqueta}</option>
@@ -117,11 +117,11 @@ export default function PlanosModule({ project, API, user, isAdmin }) {
         <button type="button" onClick={() => setCreando(true)}
                 style={{ marginLeft: 'auto', padding: '7px 14px', borderRadius: 6,
                          border: 'none', background: 'var(--accent, #507294)', color: '#fff',
-                         fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+                         fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
           Nuevo plano
         </button>
       </div>
-      <p style={{ margin: '0 0 16px', fontSize: 12.5, color: '#72706b',
+      <p style={{ margin: '0 0 16px', fontSize: 13, color: '#72706b',
                   maxWidth: 700, lineHeight: 1.55 }}>
         Cada plano es una <b>identidad</b> —su número— con una serie de revisiones.
         Solo una está <b>vigente</b>; las superadas se conservan para poder
@@ -131,7 +131,7 @@ export default function PlanosModule({ project, API, user, isAdmin }) {
       {error && (
         <div role="alert" style={{ marginBottom: 14, padding: '9px 12px', borderRadius: 6,
                                    background: '#fbebeb', border: '1px solid #fbebeb',
-                                   color: '#b93535', fontSize: 12.5 }}>
+                                   color: '#b93535', fontSize: 13 }}>
           {error} <b>La lista está incompleta</b>, no vacía — no la uses para decidir
           qué revisión está vigente.
         </div>
@@ -139,7 +139,7 @@ export default function PlanosModule({ project, API, user, isAdmin }) {
 
       {planos.length === 0 && !error && (
         <div style={{ padding: '28px 20px', textAlign: 'center', color: '#72706b',
-                      fontSize: 13, border: '1px dashed #e8e6dc', borderRadius: 8 }}>
+                      fontSize: 14, border: '1px dashed #e8e6dc', borderRadius: 8 }}>
           {!filtro && (
             <LaminaVacia nombre="alcantarilla" />
           )}
@@ -154,33 +154,33 @@ export default function PlanosModule({ project, API, user, isAdmin }) {
             <div onClick={() => verRevisiones(p.id)}
                  style={{ padding: '12px 14px', cursor: 'pointer', display: 'flex',
                           alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-              <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: 13,
+              <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: 14,
                              fontWeight: 700, color: '#507294', minWidth: 110 }}>
                 {p.numero}
               </span>
-              <span style={{ fontSize: 13.5, color: '#141413', flex: 1, minWidth: 180 }}>
+              <span style={{ fontSize: 14, color: '#141413', flex: 1, minWidth: 180 }}>
                 {p.titulo}
               </span>
               {p.disciplina && (
-                <span style={{ fontSize: 11, color: '#72706b', border: '1px solid #e8e6dc',
+                <span style={{ fontSize: 12, color: '#72706b', border: '1px solid #e8e6dc',
                                borderRadius: 4, padding: '1px 6px' }}>
                   {p.disciplina_etiqueta}
                 </span>
               )}
               {/* LO MÁS IMPORTANTE DE LA FILA: qué revisión vale. */}
               {p.vigente ? (
-                <span style={{ padding: '3px 10px', borderRadius: 11, fontSize: 12,
+                <span style={{ padding: '3px 10px', borderRadius: 11, fontSize: 13,
                                fontWeight: 700, background: '#e0e3d7', color: '#64744e' }}>
                   rev {p.vigente.codigo} · vigente
                 </span>
               ) : (
                 <span title="Este plano no tiene ninguna revisión emitida: no hay nada que usar en obra."
-                      style={{ padding: '3px 10px', borderRadius: 11, fontSize: 12,
+                      style={{ padding: '3px 10px', borderRadius: 11, fontSize: 13,
                                fontWeight: 700, background: '#f9eeda', color: '#734500' }}>
                   sin revisión emitida
                 </span>
               )}
-              <span style={{ fontSize: 11.5, color: '#72706b' }}>
+              <span style={{ fontSize: 12, color: '#72706b' }}>
                 {p.revisiones} {p.revisiones === 1 ? 'revisión' : 'revisiones'}
               </span>
             </div>
@@ -190,7 +190,7 @@ export default function PlanosModule({ project, API, user, isAdmin }) {
                             padding: '10px 14px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10,
                               marginBottom: 9, flexWrap: 'wrap' }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: '#72706b',
+                  <div style={{ fontSize: 12, fontWeight: 700, color: '#72706b',
                                 letterSpacing: '.04em' }}>
                     HISTORIA DEL PLANO
                   </div>
@@ -198,16 +198,16 @@ export default function PlanosModule({ project, API, user, isAdmin }) {
                           onClick={e => { e.stopPropagation(); setEmitiendo(p); }}
                           style={{ marginLeft: 'auto', padding: '5px 12px', borderRadius: 6,
                                    border: 'none', background: 'var(--accent, #507294)',
-                                   color: '#fff', fontSize: 12, fontWeight: 600,
+                                   color: '#fff', fontSize: 13, fontWeight: 600,
                                    cursor: 'pointer' }}>
                     Emitir revisión
                   </button>
-                  <span style={{ fontSize: 11, color: '#72706b' }}>
+                  <span style={{ fontSize: 12, color: '#72706b' }}>
                     la nueva pasa a vigente y la anterior queda superada
                   </span>
                 </div>
                 {!revisiones[p.id] && (
-                  <div style={{ fontSize: 12.5, color: '#72706b' }}>Cargando…</div>
+                  <div style={{ fontSize: 13, color: '#72706b' }}>Cargando…</div>
                 )}
                 {(revisiones[p.id] || []).map(r => {
                   const c = COLOR_REVISION[r.estado] || COLOR_REVISION['Superada'];
@@ -215,30 +215,30 @@ export default function PlanosModule({ project, API, user, isAdmin }) {
                     <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 10,
                                              padding: '7px 0', borderBottom: '1px solid #f1f0e8',
                                              flexWrap: 'wrap' }}>
-                      <span style={{ padding: '2px 9px', borderRadius: 5, fontSize: 11.5,
+                      <span style={{ padding: '2px 9px', borderRadius: 5, fontSize: 12,
                                      fontWeight: 700, background: c.fondo, color: c.texto,
                                      border: `1px solid ${c.borde}` }}>
                         rev {r.codigo}
                       </span>
-                      <span style={{ fontSize: 12, color: c.texto, fontWeight: 500 }}>
+                      <span style={{ fontSize: 13, color: c.texto, fontWeight: 500 }}>
                         {r.estado}
                       </span>
                       {r.emitida_en && (
-                        <span style={{ fontSize: 11.5, color: '#72706b' }}>
+                        <span style={{ fontSize: 12, color: '#72706b' }}>
                           emitida {r.emitida_en.slice(0, 10)}
                         </span>
                       )}
                       {r.superada_en && (
-                        <span style={{ fontSize: 11.5, color: '#72706b' }}>
+                        <span style={{ fontSize: 12, color: '#72706b' }}>
                           · superada {r.superada_en.slice(0, 10)}
                         </span>
                       )}
                       {r.set && (
-                        <span style={{ fontSize: 11.5, color: '#52524d' }}>· {r.set}</span>
+                        <span style={{ fontSize: 12, color: '#52524d' }}>· {r.set}</span>
                       )}
                       {r.anclajes > 0 && (
                         <span title="Observaciones, RFI o submittals clavados sobre esta revisión concreta"
-                              style={{ fontSize: 11.5, color: '#507294', fontWeight: 600 }}>
+                              style={{ fontSize: 12, color: '#507294', fontWeight: 600 }}>
                           · {r.anclajes} anclado{r.anclajes === 1 ? '' : 's'}
                         </span>
                       )}
@@ -246,7 +246,7 @@ export default function PlanosModule({ project, API, user, isAdmin }) {
                   );
                 })}
                 {(revisiones[p.id] || []).length === 0 && revisiones[p.id] && (
-                  <div style={{ fontSize: 12.5, color: '#72706b', padding: '6px 0' }}>
+                  <div style={{ fontSize: 13, color: '#72706b', padding: '6px 0' }}>
                     Sin revisiones emitidas todavía.
                   </div>
                 )}
@@ -258,13 +258,13 @@ export default function PlanosModule({ project, API, user, isAdmin }) {
 
       {sets.length > 0 && (
         <div style={{ marginTop: 20, paddingTop: 14, borderTop: '1px dashed #e8e6dc' }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: '#72706b',
+          <div style={{ fontSize: 12, fontWeight: 700, color: '#72706b',
                         letterSpacing: '.04em', marginBottom: 7 }}>
             EMISIONES · qué se entregó y cuándo
           </div>
           {sets.map(x => (
             <div key={x.id} style={{ display: 'flex', alignItems: 'center', gap: 10,
-                                     padding: '6px 0', fontSize: 12.5, color: '#52524d',
+                                     padding: '6px 0', fontSize: 13, color: '#52524d',
                                      borderBottom: '1px solid #f1f0e8' }}>
               <b style={{ color: '#141413' }}>{x.nombre}</b>
               {x.emitido_en && <span style={{ color: '#72706b' }}>{x.emitido_en.slice(0, 10)}</span>}
@@ -332,32 +332,32 @@ function ModalNuevoPlano({ API, urn, disciplinas, onCerrar, onCreado }) {
            style={{ background: '#fff', borderRadius: 10, padding: 24, width: 460,
                     maxWidth: '92vw', boxShadow: '0 12px 40px rgba(0,0,0,.22)' }}>
         <h3 style={{ margin: '0 0 4px', fontSize: 16, fontWeight: 650 }}>Nuevo plano</h3>
-        <p style={{ margin: '0 0 16px', fontSize: 12.5, color: '#72706b', lineHeight: 1.5 }}>
+        <p style={{ margin: '0 0 16px', fontSize: 13, color: '#72706b', lineHeight: 1.5 }}>
           El <b>número es la identidad</b> del plano y no se repite en la obra. Las
           revisiones se emiten después, cada una con su documento.
         </p>
         <div style={{ marginBottom: 12 }}>
-          <label style={{ display: 'block', fontSize: 12, fontWeight: 500,
+          <label style={{ display: 'block', fontSize: 13, fontWeight: 500,
                           color: '#52524d', marginBottom: 5 }}>Número *</label>
           <input value={f.numero} onChange={e => set('numero', e.target.value)}
                  placeholder="PL-EST-104"
-                 style={{ width: '100%', height: 38, padding: '0 10px', fontSize: 13,
+                 style={{ width: '100%', height: 38, padding: '0 10px', fontSize: 14,
                           fontFamily: 'ui-monospace, monospace',
                           border: '1px solid #e8e6dc', borderRadius: 6, boxSizing: 'border-box' }} />
         </div>
         <div style={{ marginBottom: 12 }}>
-          <label style={{ display: 'block', fontSize: 12, fontWeight: 500,
+          <label style={{ display: 'block', fontSize: 13, fontWeight: 500,
                           color: '#52524d', marginBottom: 5 }}>Título *</label>
           <input value={f.titulo} onChange={e => set('titulo', e.target.value)}
                  placeholder="Encofrado de losa, eje 4"
-                 style={{ width: '100%', height: 38, padding: '0 10px', fontSize: 13,
+                 style={{ width: '100%', height: 38, padding: '0 10px', fontSize: 14,
                           border: '1px solid #e8e6dc', borderRadius: 6, boxSizing: 'border-box' }} />
         </div>
         <div style={{ marginBottom: 18 }}>
-          <label style={{ display: 'block', fontSize: 12, fontWeight: 500,
+          <label style={{ display: 'block', fontSize: 13, fontWeight: 500,
                           color: '#52524d', marginBottom: 5 }}>Disciplina</label>
           <select value={f.disciplina} onChange={e => set('disciplina', e.target.value)}
-                  style={{ width: '100%', height: 38, padding: '0 8px', fontSize: 13,
+                  style={{ width: '100%', height: 38, padding: '0 8px', fontSize: 14,
                            border: '1px solid #e8e6dc', borderRadius: 6 }}>
             <option value="">— sin asignar —</option>
             {disciplinas.map(d => (
@@ -368,10 +368,10 @@ function ModalNuevoPlano({ API, urn, disciplinas, onCerrar, onCreado }) {
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
           <button type="button" onClick={onCerrar} disabled={guardando}
                   style={{ padding: '8px 14px', borderRadius: 6, border: '1px solid #e8e6dc',
-                           background: '#fff', fontSize: 13, cursor: 'pointer' }}>Cancelar</button>
+                           background: '#fff', fontSize: 14, cursor: 'pointer' }}>Cancelar</button>
           <button type="button" onClick={crear} disabled={guardando}
                   style={{ padding: '8px 16px', borderRadius: 6, border: 'none',
-                           background: 'var(--accent, #507294)', color: '#fff', fontSize: 13,
+                           background: 'var(--accent, #507294)', color: '#fff', fontSize: 14,
                            fontWeight: 600, cursor: guardando ? 'wait' : 'pointer' }}>
             {guardando ? 'Creando…' : 'Crear plano'}
           </button>
@@ -494,46 +494,46 @@ function ModalEmitirRevision({ API, urn, project, plano, sets, onCerrar, onEmiti
         <h3 style={{ margin: '0 0 4px', fontSize: 16, fontWeight: 650 }}>
           Emitir revisión de {plano.numero}
         </h3>
-        <p style={{ margin: '0 0 16px', fontSize: 12.5, color: '#72706b', lineHeight: 1.5 }}>
+        <p style={{ margin: '0 0 16px', fontSize: 13, color: '#72706b', lineHeight: 1.5 }}>
           {plano.titulo}. La nueva revisión pasa a ser la <b>vigente</b> y la
           anterior queda <b>superada</b>, en el mismo acto — nunca hay dos vigentes.
         </p>
 
         <button type="button" onClick={() => setEligiendo(true)}
                 style={{ ...CAJA, width: '100%', padding: '10px 12px', background: '#faf9f5',
-                         cursor: 'pointer', textAlign: 'left', fontSize: 12.5,
+                         cursor: 'pointer', textAlign: 'left', fontSize: 13,
                          marginBottom: 10, color: doc ? '#141413' : '#72706b' }}>
           {doc ? '📄 ' + doc.nombre + (doc.version ? ' · v' + doc.version : '')
                : '📄 Elegir la lámina en el expediente *'}
         </button>
         {leyendo && (
-          <div style={{ fontSize: 12, color: '#72706b', marginBottom: 10 }}>
+          <div style={{ fontSize: 13, color: '#72706b', marginBottom: 10 }}>
             Leyendo el cajetín…
           </div>
         )}
         {aviso && (
           <div style={{ ...CAJA, borderColor: '#f9eeda', background: '#faf9f5',
-                        padding: '8px 11px', marginBottom: 10, fontSize: 12,
+                        padding: '8px 11px', marginBottom: 10, fontSize: 13,
                         color: '#734500', lineHeight: 1.5 }}>{aviso}</div>
         )}
 
         <div style={{ display: 'flex', gap: 10, marginBottom: 10 }}>
           <div style={{ flex: '0 0 130px' }}>
-            <label style={{ display: 'block', fontSize: 11.5, color: '#52524d',
+            <label style={{ display: 'block', fontSize: 12, color: '#52524d',
                             marginBottom: 4 }}>Revisión</label>
             <input value={f.codigo_revision}
                    onChange={e => setF(p => ({ ...p, codigo_revision: e.target.value }))}
                    placeholder="automática"
                    style={{ ...CAJA, width: '100%', height: 36, padding: '0 10px',
-                            fontSize: 13, fontFamily: 'ui-monospace, monospace' }} />
+                            fontSize: 14, fontFamily: 'ui-monospace, monospace' }} />
           </div>
           <div style={{ flex: 1 }}>
-            <label style={{ display: 'block', fontSize: 11.5, color: '#52524d',
+            <label style={{ display: 'block', fontSize: 12, color: '#52524d',
                             marginBottom: 4 }}>Emisión (opcional)</label>
             <select value={f.set_id}
                     onChange={e => setF(p => ({ ...p, set_id: e.target.value }))}
                     style={{ ...CAJA, width: '100%', height: 36, padding: '0 8px',
-                             fontSize: 13, background: '#fff' }}>
+                             fontSize: 14, background: '#fff' }}>
               <option value="">— suelta —</option>
               {(sets || []).map(x => (
                 <option key={x.id} value={x.id}>{x.nombre}</option>
@@ -541,7 +541,7 @@ function ModalEmitirRevision({ API, urn, project, plano, sets, onCerrar, onEmiti
             </select>
           </div>
         </div>
-        <p style={{ margin: '0 0 10px', fontSize: 11.5, color: '#72706b', lineHeight: 1.5 }}>
+        <p style={{ margin: '0 0 10px', fontSize: 12, color: '#72706b', lineHeight: 1.5 }}>
           Si dejas la revisión en blanco se continúa la serie que el plano ya usa
           —letras o números—: la convención la fija el contrato, no la plataforma.
         </p>
@@ -549,9 +549,9 @@ function ModalEmitirRevision({ API, urn, project, plano, sets, onCerrar, onEmiti
         <div style={{ display: 'flex', gap: 7, marginBottom: 12 }}>
           <input value={setNuevo} onChange={e => setSetNuevo(e.target.value)}
                  placeholder="Nueva emisión — «Entrega 3, expediente técnico»"
-                 style={{ ...CAJA, flex: 1, height: 34, padding: '0 10px', fontSize: 12.5 }} />
+                 style={{ ...CAJA, flex: 1, height: 34, padding: '0 10px', fontSize: 13 }} />
           <button type="button" onClick={crearSet} disabled={!setNuevo.trim()}
-                  style={{ ...CAJA, padding: '0 12px', background: '#fff', fontSize: 12.5,
+                  style={{ ...CAJA, padding: '0 12px', background: '#fff', fontSize: 13,
                            cursor: setNuevo.trim() ? 'pointer' : 'not-allowed',
                            color: '#507294' }}>
             Crear
@@ -561,16 +561,16 @@ function ModalEmitirRevision({ API, urn, project, plano, sets, onCerrar, onEmiti
         <input value={f.motivo} onChange={e => setF(p => ({ ...p, motivo: e.target.value }))}
                placeholder="Motivo del cambio (opcional, queda en la historia)"
                style={{ ...CAJA, width: '100%', height: 36, padding: '0 10px',
-                        fontSize: 13, marginBottom: 18 }} />
+                        fontSize: 14, marginBottom: 18 }} />
 
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
           <button type="button" onClick={onCerrar} disabled={enviando}
                   style={{ ...CAJA, padding: '8px 14px', background: '#fff',
-                           fontSize: 13, cursor: 'pointer' }}>Cancelar</button>
+                           fontSize: 14, cursor: 'pointer' }}>Cancelar</button>
           <button type="button" onClick={emitir} disabled={enviando || !doc}
                   style={{ padding: '8px 16px', borderRadius: 6, border: 'none',
                            background: doc ? 'var(--accent, #507294)' : '#cccac0',
-                           color: '#fff', fontSize: 13, fontWeight: 600,
+                           color: '#fff', fontSize: 14, fontWeight: 600,
                            cursor: enviando ? 'wait' : (doc ? 'pointer' : 'not-allowed') }}>
             {enviando ? 'Emitiendo…' : 'Emitir revisión'}
           </button>

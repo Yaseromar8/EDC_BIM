@@ -87,12 +87,12 @@ export default function PlantillasDeObra({ obras = [] }) {
         <div style={{ fontSize: 14, fontWeight: 600, color: '#333330' }}>
           Plantillas de obra
         </div>
-        <button className="btn btn-primary" style={{ padding: '5px 12px', fontSize: 12.5 }}
+        <button className="btn btn-primary" style={{ padding: '5px 12px', fontSize: 13 }}
                 onClick={() => setCapturando({ nombre: '', descripcion: '', desde_obra: '' })}>
           + Capturar de una obra
         </button>
       </div>
-      <p style={{ fontSize: 12.5, color: '#72706b', margin: '0 0 14px', maxWidth: 760,
+      <p style={{ fontSize: 13, color: '#72706b', margin: '0 0 14px', maxWidth: 760,
                   lineHeight: 1.55 }}>
         La <b>configuración</b> de una obra, para reproducirla en otras: estructura de
         carpetas, herramientas activas, empresas con su función y códigos de
@@ -101,7 +101,7 @@ export default function PlantillasDeObra({ obras = [] }) {
 
       <div role="note" style={{ background: '#faf9f5', border: '1px solid #e8e6dc',
                                 borderRadius: 6, padding: '10px 12px', marginBottom: 16,
-                                fontSize: 12.3, color: '#52524d', lineHeight: 1.55 }}>
+                                fontSize: 13, color: '#52524d', lineHeight: 1.55 }}>
         <b>Un molde vacío, no una fotocopia.</b> Nunca copia documentos, RFI,
         observaciones, revisiones, transmittals, auditoría ni responsabilidades —
         eso es la historia de <i>esa</i> obra. Y <b>tampoco copia los miembros</b>: la
@@ -111,31 +111,31 @@ export default function PlantillasDeObra({ obras = [] }) {
       {error && (
         <div role="alert" style={{ marginBottom: 12, padding: '9px 11px', borderRadius: 6,
                                    background: '#fbebeb', border: '1px solid #fbebeb',
-                                   color: '#b93535', fontSize: 12.5 }}>
+                                   color: '#b93535', fontSize: 13 }}>
           {error} <b>La lista está incompleta</b>, no vacía.
         </div>
       )}
 
       {plantillas === null ? (
-        <div style={{ fontSize: 13, color: '#72706b' }}>Cargando…</div>
+        <div style={{ fontSize: 14, color: '#72706b' }}>Cargando…</div>
       ) : plantillas.length === 0 ? (
-        <div style={{ fontSize: 13, color: '#72706b', padding: '8px 2px' }}>
+        <div style={{ fontSize: 14, color: '#72706b', padding: '8px 2px' }}>
           Todavía no hay plantillas. Se capturan de una obra ya montada, cuando
           repetir su estructura a mano empieza a producir resultados distintos.
         </div>
       ) : (
-        <table className="data-table" style={{ width: '100%', fontSize: 13 }}>
+        <table className="data-table" style={{ width: '100%', fontSize: 14 }}>
           <tbody>
             {plantillas.map(p => (
               <tr key={p.id}>
                 <td style={{ padding: '10px 8px' }}>
                   <div style={{ fontWeight: 500 }}>{p.nombre}</div>
                   {p.descripcion && (
-                    <div style={{ fontSize: 11.5, color: '#72706b', marginTop: 2 }}>
+                    <div style={{ fontSize: 12, color: '#72706b', marginTop: 2 }}>
                       {p.descripcion}
                     </div>
                   )}
-                  <div style={{ fontSize: 11.5, color: '#72706b', marginTop: 3 }}>
+                  <div style={{ fontSize: 12, color: '#72706b', marginTop: 3 }}>
                     {p.contiene?.carpetas} carpetas ·{' '}
                     {p.contiene?.herramientas_activas} herramientas ·{' '}
                     {p.contiene?.empresas} empresas ·{' '}
@@ -157,7 +157,7 @@ export default function PlantillasDeObra({ obras = [] }) {
         <div className="modal-overlay" onClick={() => setCapturando(null)}>
           <div className="modal-box" onClick={e => e.stopPropagation()} style={{ maxWidth: 500 }}>
             <h3 style={{ margin: 0 }}>Capturar plantilla</h3>
-            <p style={{ fontSize: 12.3, color: '#72706b', margin: '8px 0 14px', lineHeight: 1.5 }}>
+            <p style={{ fontSize: 13, color: '#72706b', margin: '8px 0 14px', lineHeight: 1.5 }}>
               Se lee la <b>configuración</b> de la obra elegida. No se copia ni un
               documento, ni un acto, ni un miembro.
             </p>
@@ -172,7 +172,7 @@ export default function PlantillasDeObra({ obras = [] }) {
             <select value={capturando.desde_obra}
                     onChange={e => setCapturando(c => ({ ...c, desde_obra: e.target.value }))}
                     style={{ width: '100%', padding: '8px', border: '1px solid #e8e6dc',
-                             borderRadius: 5, fontSize: 13 }}>
+                             borderRadius: 5, fontSize: 14 }}>
               <option value="">Capturar de la obra…</option>
               {obras.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
             </select>

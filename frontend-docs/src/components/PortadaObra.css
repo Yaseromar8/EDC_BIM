@@ -2,7 +2,7 @@
    tarjetas blancas con borde Light Gray, lo atrasado en el rojo de la lista, sin
    píldoras, sin degradados, sin iconos de colores. */
 
-.portada { flex: 1; min-height: 0; overflow: auto; padding: 24px; color: #141413; font-size: 13px; }
+.portada { flex: 1; min-height: 0; overflow: auto; padding: 24px; color: #141413; font-size: 14px; }
 .portada__cab { display: flex; align-items: baseline; gap: 12px; margin-bottom: 16px; }
 .portada__cab h1 { margin: 0; font-size: 24px; font-weight: 400; }
 .portada__cab span { color: #72706B; }
@@ -20,11 +20,11 @@
 .portada__tarjeta { background: #FFFFFF; border: 1px solid #E8E6DC; border-radius: 8px; padding: 16px 18px; }
 .portada__tarjeta h2 { margin: 0 0 12px; font-size: 15px; font-weight: 600; }
 .portada__tarjeta h2 em, .portada__tramo h3 em { font-style: normal; font-weight: 400; color: #72706B; margin-left: 4px; }
-.portada__nota { margin: 10px 0 0; color: #72706B; font-size: 12px; }
+.portada__nota { margin: 10px 0 0; color: #72706B; font-size: 13px; }
 
 .portada__tramos { display: grid; gap: 14px; }
 .portada__tramo h3 {
-  margin: 0 0 6px; font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: #52524D;
+  margin: 0 0 6px; font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: #52524D;
 }
 .portada__tramo--atrasado h3 { color: #B93535; }
 .portada__tramo ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
@@ -34,14 +34,14 @@
   text-align: left; cursor: pointer;
 }
 .portada__tramo button:hover { background: #F1F0E8; }
-.portada__tipo { color: #52524D; font-size: 12px; }
+.portada__tipo { color: #52524D; font-size: 13px; }
 .portada__asunto { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.portada__plazo { color: #72706B; font-size: 12px; white-space: nowrap; }
+.portada__plazo { color: #72706B; font-size: 13px; white-space: nowrap; }
 .portada__tramo--atrasado .portada__plazo { color: #B93535; }
 
 .portada__tabla { width: 100%; border-collapse: collapse; }
 .portada__tabla th, .portada__tabla td { padding: 8px 10px; border-bottom: 1px solid #F1F0E8; text-align: right; white-space: nowrap; }
-.portada__tabla thead th { font-size: 12px; font-weight: 600; color: #52524D; border-bottom-color: #E8E6DC; }
+.portada__tabla thead th { font-size: 13px; font-weight: 600; color: #52524D; border-bottom-color: #E8E6DC; }
 .portada__tabla tbody th {
   text-align: left; font-weight: 400; display: flex; align-items: center; gap: 8px; color: #141413;
 }

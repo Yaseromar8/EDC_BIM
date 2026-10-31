@@ -64,19 +64,19 @@ export default function DeletedTable({ items, selectedIds, onToggle, onRestore, 
                   ) : (
                     renderFileIconSop(item.name, 22)
                   )}
-                  <span style={{ fontSize: 13, color: isRestoring ? '#b0aea5' : '#141413', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name}</span>
+                  <span style={{ fontSize: 14, color: isRestoring ? '#b0aea5' : '#141413', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name}</span>
                 </div>
-                <div className="td-cell" style={{ width: colWidths.filename, fontSize: 13, color: isRestoring ? '#cccac0' : '#72706b', borderRight: 'none' }}>{item.filename}</div>
+                <div className="td-cell" style={{ width: colWidths.filename, fontSize: 14, color: isRestoring ? '#cccac0' : '#72706b', borderRight: 'none' }}>{item.filename}</div>
                 <div className="td-cell" style={{ width: colWidths.user }}>
                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <div className="user-avatar-acc" style={{ width: 24, height: 24, fontSize: 10, background: isRestoring ? '#f1f0e8' : '#fbebeb', color: isRestoring ? '#cccac0' : 'white' }}>{item.deletedBy.initials}</div>
+                      <div className="user-avatar-acc" style={{ width: 24, height: 24, fontSize: 12, background: isRestoring ? '#f1f0e8' : '#fbebeb', color: isRestoring ? '#cccac0' : 'white' }}>{item.deletedBy.initials}</div>
                       <div style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-                        <span style={{ fontSize: 13, color: isRestoring ? '#b0aea5' : '#141413', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.deletedBy.name}</span>
-                        <span style={{ fontSize: 11, color: isRestoring ? '#e8e6dc' : '#72706b' }}>Trial account ysan...</span>
+                        <span style={{ fontSize: 14, color: isRestoring ? '#b0aea5' : '#141413', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.deletedBy.name}</span>
+                        <span style={{ fontSize: 12, color: isRestoring ? '#e8e6dc' : '#72706b' }}>Trial account ysan...</span>
                       </div>
                    </div>
                 </div>
-                <div className="td-cell" style={{ width: colWidths.date, fontSize: 13, color: isRestoring ? '#cccac0' : '#72706b', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingRight: 12 }}>
+                <div className="td-cell" style={{ width: colWidths.date, fontSize: 14, color: isRestoring ? '#cccac0' : '#72706b', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingRight: 12 }}>
                    <span>{item.date}</span>
                    {!isRestoring && (
                      <button 
@@ -93,7 +93,7 @@ export default function DeletedTable({ items, selectedIds, onToggle, onRestore, 
             );
           })}
         </div>
-        <div style={{ height: 32, borderTop: '1px solid #f1f0e8', display: 'flex', alignItems: 'center', padding: '0 16px', fontSize: 12, color: '#72706b', background: '#fff' }}>
+        <div style={{ height: 32, borderTop: '1px solid #f1f0e8', display: 'flex', alignItems: 'center', padding: '0 16px', fontSize: 13, color: '#72706b', background: '#fff' }}>
           Mostrando {items.length} elementos
         </div>
       </div>

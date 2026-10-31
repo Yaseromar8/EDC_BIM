@@ -538,29 +538,29 @@ export default function MultimediaModule({ project, user }) {
               placeholder="Buscar por descripción..." 
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}
-              style={{ border: 'none', background: 'transparent', padding: '6px 12px', outline: 'none', fontSize: 13, width: 200 }}
+              style={{ border: 'none', background: 'transparent', padding: '6px 12px', outline: 'none', fontSize: 14, width: 200 }}
             />
           </div>
           
           <div style={{ display: 'flex', gap: 4 }}>
-            <button className="acc-filter-btn" onClick={() => setQuickFilter('today')} style={{ padding: '6px 12px', background: '#f1f0e8', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 12 }}>Hoy</button>
-            <button className="acc-filter-btn" onClick={() => setQuickFilter('week')} style={{ padding: '6px 12px', background: '#f1f0e8', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 12 }}>Semana</button>
-            <button className="acc-filter-btn" onClick={() => setQuickFilter('month')} style={{ padding: '6px 12px', background: '#f1f0e8', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 12 }}>Mes</button>
+            <button className="acc-filter-btn" onClick={() => setQuickFilter('today')} style={{ padding: '6px 12px', background: '#f1f0e8', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 13 }}>Hoy</button>
+            <button className="acc-filter-btn" onClick={() => setQuickFilter('week')} style={{ padding: '6px 12px', background: '#f1f0e8', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 13 }}>Semana</button>
+            <button className="acc-filter-btn" onClick={() => setQuickFilter('month')} style={{ padding: '6px 12px', background: '#f1f0e8', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 13 }}>Mes</button>
           </div>
 
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginLeft: 8 }}>
-            <span style={{ fontSize: 12, fontWeight: 600, color: '#72706b' }}>Desde:</span>
-            <input type="date" value={dateRange.start} onChange={e => setDateRange({...dateRange, start: e.target.value})} style={{ border: '1px solid #e8e6dc', padding: '4px 8px', borderRadius: 4, fontSize: 12 }} />
-            <span style={{ fontSize: 12, fontWeight: 600, color: '#72706b' }}>Hasta:</span>
-            <input type="date" value={dateRange.end} onChange={e => setDateRange({...dateRange, end: e.target.value})} style={{ border: '1px solid #e8e6dc', padding: '4px 8px', borderRadius: 4, fontSize: 12 }} />
+            <span style={{ fontSize: 13, fontWeight: 600, color: '#72706b' }}>Desde:</span>
+            <input type="date" value={dateRange.start} onChange={e => setDateRange({...dateRange, start: e.target.value})} style={{ border: '1px solid #e8e6dc', padding: '4px 8px', borderRadius: 4, fontSize: 13 }} />
+            <span style={{ fontSize: 13, fontWeight: 600, color: '#72706b' }}>Hasta:</span>
+            <input type="date" value={dateRange.end} onChange={e => setDateRange({...dateRange, end: e.target.value})} style={{ border: '1px solid #e8e6dc', padding: '4px 8px', borderRadius: 4, fontSize: 13 }} />
             {(dateRange.start || dateRange.end) && (
-              <button onClick={() => setDateRange({start: '', end: ''})} style={{ background: 'none', border: '1px solid #cccac0', padding: '4px 8px', borderRadius: 4, cursor: 'pointer', fontSize: 11 }}>× Reset</button>
+              <button onClick={() => setDateRange({start: '', end: ''})} style={{ background: 'none', border: '1px solid #cccac0', padding: '4px 8px', borderRadius: 4, cursor: 'pointer', fontSize: 12 }}>× Reset</button>
             )}
           </div>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <span style={{ fontSize: 13, color: '#72706b' }}>{filteredPhotos.length} ítems</span>
+          <span style={{ fontSize: 14, color: '#72706b' }}>{filteredPhotos.length} ítems</span>
           <button
             onClick={() => fileInputRef.current?.click()}
             style={{ background: 'var(--accent)', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: 4, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}
@@ -583,7 +583,7 @@ export default function MultimediaModule({ project, user }) {
               <section key={dayKey} data-day={dayKey} style={{ marginBottom: 26 }}>
                 <div style={{ position: 'sticky', top: 0, zIndex: 2, background: '#f1f0e8', padding: '8px 2px 10px', display: 'flex', alignItems: 'baseline', gap: 10 }}>
                   <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#333330', textTransform: 'capitalize' }}>{formatDayHeader(dayKey)}</h3>
-                  <span style={{ fontSize: 12, color: '#72706b' }}>{dayPhotos.length} {dayPhotos.length === 1 ? 'elemento' : 'elementos'}</span>
+                  <span style={{ fontSize: 13, color: '#72706b' }}>{dayPhotos.length} {dayPhotos.length === 1 ? 'elemento' : 'elementos'}</span>
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 5 }}>
                   {dayPhotos.map((p) => (
@@ -600,16 +600,16 @@ export default function MultimediaModule({ project, user }) {
                           onError={e => { if (!e.currentTarget.dataset.gen) { e.currentTarget.dataset.gen = '1'; e.currentTarget.src = `${p.src}&gen=1`; } }} />
                       )}
                       {(p.mediaType === 'video' || isVideoFile(p.filename || p.desc)) && (
-                        <div style={{ position: 'absolute', top: 6, right: 6, background: 'rgba(0,0,0,0.6)', color: '#fff', borderRadius: 4, fontSize: 11, padding: '1px 6px' }}>▶ video</div>
+                        <div style={{ position: 'absolute', top: 6, right: 6, background: 'rgba(0,0,0,0.6)', color: '#fff', borderRadius: 4, fontSize: 12, padding: '1px 6px' }}>▶ video</div>
                       )}
                       {p.location && (
-                        <div style={{ position: 'absolute', bottom: 6, left: 6, background: 'rgba(0,0,0,0.6)', color: '#fff', borderRadius: 10, fontSize: 10, padding: '2px 6px' }} title="Con ubicación GPS">📍</div>
+                        <div style={{ position: 'absolute', bottom: 6, left: 6, background: 'rgba(0,0,0,0.6)', color: '#fff', borderRadius: 10, fontSize: 12, padding: '2px 6px' }} title="Con ubicación GPS">📍</div>
                       )}
                       {p.desc && (
-                        <div className="mm-tile-desc" style={{ position: 'absolute', left: 0, right: 0, bottom: 0, padding: '14px 8px 6px', background: 'linear-gradient(transparent, rgba(0,0,0,0.7))', color: '#fff', fontSize: 11, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.desc}</div>
+                        <div className="mm-tile-desc" style={{ position: 'absolute', left: 0, right: 0, bottom: 0, padding: '14px 8px 6px', background: 'linear-gradient(transparent, rgba(0,0,0,0.7))', color: '#fff', fontSize: 12, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.desc}</div>
                       )}
                       {p.isUploading && (
-                        <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(255,255,255,0.7)', fontWeight: 600, color: 'var(--accent)', fontSize: 12 }}>Subiendo…</div>
+                        <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(255,255,255,0.7)', fontWeight: 600, color: 'var(--accent)', fontSize: 13 }}>Subiendo…</div>
                       )}
                     </div>
                   ))}
@@ -630,10 +630,10 @@ export default function MultimediaModule({ project, user }) {
             style={{ position: 'absolute', top: 8, right: 4, bottom: 24, width: 34, cursor: 'ns-resize', zIndex: 5 }}
           >
             {yearMarkers.map(m => (
-              <span key={m.year} style={{ position: 'absolute', right: 4, top: `${m.frac * 100}%`, transform: 'translateY(-50%)', fontSize: 11, color: '#72706b', background: '#f1f0e8', padding: '1px 4px', borderRadius: 4, pointerEvents: 'none', userSelect: 'none' }}>{m.year}</span>
+              <span key={m.year} style={{ position: 'absolute', right: 4, top: `${m.frac * 100}%`, transform: 'translateY(-50%)', fontSize: 12, color: '#72706b', background: '#f1f0e8', padding: '1px 4px', borderRadius: 4, pointerEvents: 'none', userSelect: 'none' }}>{m.year}</span>
             ))}
             {scrubLabel && (
-              <span style={{ position: 'absolute', right: 40, top: `${scrubY * 100}%`, transform: 'translateY(-50%)', background: '#333330', color: '#fff', fontSize: 12, fontWeight: 600, padding: '4px 10px', borderRadius: 6, whiteSpace: 'nowrap', boxShadow: '0 4px 12px rgba(0,0,0,0.25)', pointerEvents: 'none' }}>{scrubLabel}</span>
+              <span style={{ position: 'absolute', right: 40, top: `${scrubY * 100}%`, transform: 'translateY(-50%)', background: '#333330', color: '#fff', fontSize: 13, fontWeight: 600, padding: '4px 10px', borderRadius: 6, whiteSpace: 'nowrap', boxShadow: '0 4px 12px rgba(0,0,0,0.25)', pointerEvents: 'none' }}>{scrubLabel}</span>
             )}
           </div>
         )}
@@ -645,13 +645,13 @@ export default function MultimediaModule({ project, user }) {
           
           {/* Barra superior mínima: fecha + zoom + cerrar (paleta de la interfaz) */}
           <div style={{ padding: '14px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'linear-gradient(to bottom, rgba(0,0,0,0.6), transparent)', zIndex: 4 }}>
-            <span style={{ color: 'rgba(255,255,255,0.85)', fontSize: 13, fontWeight: 500 }}>
+            <span style={{ color: 'rgba(255,255,255,0.85)', fontSize: 14, fontWeight: 500 }}>
               {selectedPhoto.displayDate || selectedPhoto.date}
             </span>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <div style={{ display: 'flex', gap: 4, background: 'rgba(255,255,255,0.1)', borderRadius: 8, padding: 4 }}>
                 <button style={lbBtn} onClick={() => setLbZoom(z => Math.max(z / 1.3, 1))}>−</button>
-                <button style={{ ...lbBtn, width: 36, fontSize: 12 }} onClick={() => { setLbZoom(1); setLbPan({x:0, y:0}); }}>1:1</button>
+                <button style={{ ...lbBtn, width: 36, fontSize: 13 }} onClick={() => { setLbZoom(1); setLbPan({x:0, y:0}); }}>1:1</button>
                 <button style={lbBtn} onClick={() => setLbZoom(z => Math.min(z * 1.3, 6))}>+</button>
               </div>
               <button onClick={() => setSelectedPhoto(null)} title="Cerrar (Esc)" style={{ background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff', fontSize: 22, cursor: 'pointer', width: 38, height: 38, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
@@ -704,7 +704,7 @@ export default function MultimediaModule({ project, user }) {
                           placeholder="Añade una descripción…"
                           style={{ flex: 1, background: 'rgba(0,0,0,0.35)', border: '1px solid rgba(255,255,255,0.3)', borderRadius: 8, color: '#fff', padding: '9px 12px', fontSize: 14, outline: 'none', textAlign: 'center' }}
                         />
-                        <button onClick={saveSelectedDescription} style={{ border: 'none', background: 'var(--accent)', color: '#fff', padding: '9px 14px', borderRadius: 8, fontWeight: 600, cursor: 'pointer', fontSize: 13 }}>Guardar</button>
+                        <button onClick={saveSelectedDescription} style={{ border: 'none', background: 'var(--accent)', color: '#fff', padding: '9px 14px', borderRadius: 8, fontWeight: 600, cursor: 'pointer', fontSize: 14 }}>Guardar</button>
                         <button onClick={() => { setEditingDescription(false); setDescriptionDraft(selectedPhoto.desc || ''); }} title="Cancelar" style={{ border: '1px solid rgba(255,255,255,0.25)', background: 'transparent', color: '#fff', width: 36, height: 36, borderRadius: 8, cursor: 'pointer', fontSize: 16 }}>×</button>
                       </div>
                     ) : (
@@ -714,7 +714,7 @@ export default function MultimediaModule({ project, user }) {
                         <span style={{ fontSize: 15, fontWeight: 600, color: selectedPhoto.desc ? '#fff' : 'rgba(255,255,255,0.6)' }}>
                           {selectedPhoto.desc || 'Añade una descripción…'}
                         </span>
-                        <span style={{ opacity: 0.8, fontSize: 13 }}>✎</span>
+                        <span style={{ opacity: 0.8, fontSize: 14 }}>✎</span>
                       </div>
                     )}
                   </div>

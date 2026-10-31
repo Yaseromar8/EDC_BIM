@@ -56,7 +56,7 @@ function SelectFolderNode({ folder, defaultExpanded = false, selectedPath, onSel
         <svg viewBox="0 0 24 24" width="18" height="18" style={{ marginRight: 6, fill: isSelected ? 'var(--accent)' : 'var(--text-muted)' }}>
           <path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"></path>
         </svg>
-        <span style={{ fontSize: 13, userSelect: 'none', whiteSpace: 'nowrap', flex: 1 }}>{folder.name.replace(/\/$/, '')}</span>
+        <span style={{ fontSize: 14, userSelect: 'none', whiteSpace: 'nowrap', flex: 1 }}>{folder.name.replace(/\/$/, '')}</span>
       </div>
       {expanded && children && (
         <div>
@@ -93,7 +93,7 @@ export default function MoveModal({ moveState, setMoveState, projectPrefix, proj
               donde significa algo: se lee mientras se elige la carpeta. */}
           <div style={{ display: 'flex', gap: 8, marginBottom: 14, padding: '10px 12px',
                         background: 'var(--neutral-100, #f1f0e8)', borderRadius: 4,
-                        fontSize: 12.5, color: 'var(--text-secondary, #52524d)', lineHeight: 1.5 }}>
+                        fontSize: 13, color: 'var(--text-secondary, #52524d)', lineHeight: 1.5 }}>
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ flexShrink: 0, marginTop: 1 }}>
               <circle cx="12" cy="12" r="10" /><path d="M12 16v-4" /><path d="M12 8h.01" />
             </svg>
@@ -114,7 +114,7 @@ export default function MoveModal({ moveState, setMoveState, projectPrefix, proj
 
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, padding: '16px 24px', borderTop: '1px solid #f1f0e8', background: '#faf9f5' }}>
           {(
-            <div style={{ marginRight: 'auto', display: 'flex', alignItems: 'center', gap: 8, color: 'var(--accent)', fontSize: 12 }}>
+            <div style={{ marginRight: 'auto', display: 'flex', alignItems: 'center', gap: 8, color: 'var(--accent)', fontSize: 13 }}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" strokeWidth="2"/><path d="M12 16v-4m0-4h.01"/></svg>
               <span>¿Estos archivos se sincronizan...?</span>
             </div>

@@ -62,17 +62,17 @@ export default function AvanceModule({ project, API, user, isAdmin }) {
           Avance físico
         </h1>
         {dataset && (
-          <span style={{ fontSize: 11.5, color: 'var(--text-secondary, #777)' }}
+          <span style={{ fontSize: 12, color: 'var(--text-secondary, #777)' }}
             title={dataset.huella}>plan: {dataset.id}</span>
         )}
       </div>
-      <p style={{ fontSize: 12.5, color: 'var(--text-secondary, #666)', margin: '0 0 14px' }}>
+      <p style={{ fontSize: 13, color: 'var(--text-secondary, #666)', margin: '0 0 14px' }}>
         Se reporta la <b>cantidad física ejecutada</b> (no un %); solo lo que la
         supervisión aprueba suma al 4D. El acumulado y el porcentaje se derivan.
       </p>
       {bloqueo && (
         <div style={{ background: '#fdecea', border: '1px solid #f5c6c0', borderRadius: 8,
-                      padding: '10px 14px', fontSize: 12.5, color: '#8a1c14', marginBottom: 12 }}>
+                      padding: '10px 14px', fontSize: 13, color: '#8a1c14', marginBottom: 12 }}>
           <b>{bloqueo}</b> — esta obra no tiene un sujeto contractual resoluble
           para aprobar avances (se resuelve declarando SUPERVISION —o ENTIDAD
           como contingencia— en el directorio, con una empresa o persona concreta).
@@ -83,7 +83,7 @@ export default function AvanceModule({ project, API, user, isAdmin }) {
         {[['actividades', 'Actividades'], ['registrar', 'Registrar'],
           ['bandeja', 'Bandeja']].map(([id, texto]) => (
           <button key={id} onClick={() => setPestana(id)}
-            style={{ padding: '8px 14px', fontSize: 13, cursor: 'pointer',
+            style={{ padding: '8px 14px', fontSize: 14, cursor: 'pointer',
                      background: 'transparent', border: 'none',
                      borderBottom: pestana === id ? '2px solid var(--accent, #3e6f91)' : '2px solid transparent',
                      color: pestana === id ? 'var(--accent, #3e6f91)' : 'var(--text-secondary, #666)',
@@ -94,7 +94,7 @@ export default function AvanceModule({ project, API, user, isAdmin }) {
       </div>
 
       {cargando ? (
-        <div style={{ padding: 40, textAlign: 'center', color: '#888', fontSize: 13 }}>Cargando…</div>
+        <div style={{ padding: 40, textAlign: 'center', color: '#888', fontSize: 14 }}>Cargando…</div>
       ) : pestana === 'actividades' ? (
         <Actividades actividades={actividades} />
       ) : pestana === 'registrar' ? (
@@ -109,18 +109,18 @@ export default function AvanceModule({ project, API, user, isAdmin }) {
 
 function Actividades({ actividades }) {
   if (!actividades.length) {
-    return <div style={{ padding: 30, color: '#888', fontSize: 13 }}>
+    return <div style={{ padding: 30, color: '#888', fontSize: 14 }}>
       Esta obra no tiene un plan LOB activo con partidas. El avance se reporta
       contra el plan importado; impórtalo desde el workspace LOB.
     </div>;
   }
   return (
     <div style={{ overflowX: 'auto' }}>
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
         <thead>
           <tr style={{ borderBottom: '1px solid var(--border, #ddd)', textAlign: 'left' }}>
             {['Partida', 'Descripción', 'Unidad', 'Objetivo', 'Aprobado', '% actual', 'Inicio real', 'Fin real'].map(h => (
-              <th key={h} style={{ padding: '8px 10px', fontSize: 11, textTransform: 'uppercase',
+              <th key={h} style={{ padding: '8px 10px', fontSize: 12, textTransform: 'uppercase',
                                    letterSpacing: '0.05em', color: 'var(--text-secondary, #777)' }}>{h}</th>
             ))}
           </tr>
@@ -135,7 +135,7 @@ function Actividades({ actividades }) {
               <td style={{ padding: '8px 10px', fontVariantNumeric: 'tabular-nums' }}>
                 {a.acumulado_aprobado}
                 {a.exceso && <span title="El aprobado excede el objetivo: quedó confirmado explícitamente al aprobar"
-                  style={{ marginLeft: 6, fontSize: 10.5, color: '#b3261e', fontWeight: 700 }}>EXCESO</span>}
+                  style={{ marginLeft: 6, fontSize: 12, color: '#b3261e', fontWeight: 700 }}>EXCESO</span>}
               </td>
               <td style={{ padding: '8px 10px', fontVariantNumeric: 'tabular-nums' }}>
                 {a.porcentaje_actual == null ? '—' : `${a.porcentaje_actual}%`}
@@ -213,11 +213,11 @@ function Registrar({ API, user, project, projectPrefix, actividades, onHecho }) 
     }
   };
 
-  const campoEstilo = { width: '100%', padding: '8px 10px', fontSize: 13,
+  const campoEstilo = { width: '100%', padding: '8px 10px', fontSize: 14,
                        border: '1px solid var(--border, #ccc)', borderRadius: 6, boxSizing: 'border-box' };
   return (
     <div style={{ maxWidth: 560 }}>
-      <label style={{ fontSize: 11.5, color: '#666' }}>Partida / actividad</label>
+      <label style={{ fontSize: 12, color: '#666' }}>Partida / actividad</label>
       <select value={actividad} onChange={e => setActividad(e.target.value)} style={campoEstilo}>
         <option value="">— elige del plan —</option>
         {actividades.map(a => (
@@ -227,41 +227,41 @@ function Registrar({ API, user, project, projectPrefix, actividades, onHecho }) 
         ))}
       </select>
       {elegida && (
-        <div style={{ fontSize: 12, color: '#555', margin: '6px 0 2px' }}>
+        <div style={{ fontSize: 13, color: '#555', margin: '6px 0 2px' }}>
           Objetivo {elegida.metrado ?? '—'} {elegida.unidad} · aprobado hoy{' '}
           <b>{acumulado}</b> — reporta el <b>incremento</b> ejecutado.
         </div>
       )}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 8 }}>
         <div>
-          <label style={{ fontSize: 11.5, color: '#666' }}>Cantidad ejecutada ({elegida?.unidad || 'unidad'})</label>
+          <label style={{ fontSize: 12, color: '#666' }}>Cantidad ejecutada ({elegida?.unidad || 'unidad'})</label>
           <input type="number" min="0" step="any" value={cantidad}
             onChange={e => setCantidad(e.target.value)} style={campoEstilo} />
         </div>
         <div>
-          <label style={{ fontSize: 11.5, color: '#666' }}>Fecha operativa</label>
+          <label style={{ fontSize: 12, color: '#666' }}>Fecha operativa</label>
           <input type="date" value={fecha} max={hoy}
             onChange={e => setFecha(e.target.value)} style={campoEstilo} />
         </div>
         <div>
-          <label style={{ fontSize: 11.5, color: '#666' }}>Progresiva inicio (m)</label>
+          <label style={{ fontSize: 12, color: '#666' }}>Progresiva inicio (m)</label>
           <input type="number" step="any" value={pIni} onChange={e => setPIni(e.target.value)} style={campoEstilo} />
         </div>
         <div>
-          <label style={{ fontSize: 11.5, color: '#666' }}>Progresiva fin (m)</label>
+          <label style={{ fontSize: 12, color: '#666' }}>Progresiva fin (m)</label>
           <input type="number" step="any" value={pFin} onChange={e => setPFin(e.target.value)} style={campoEstilo} />
         </div>
       </div>
-      <label style={{ fontSize: 11.5, color: '#666', display: 'block', marginTop: 8 }}>Descripción</label>
+      <label style={{ fontSize: 12, color: '#666', display: 'block', marginTop: 8 }}>Descripción</label>
       <textarea value={descripcion} onChange={e => setDescripcion(e.target.value)}
         rows={2} style={{ ...campoEstilo, resize: 'vertical' }} />
-      <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, margin: '10px 0' }}>
+      <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, margin: '10px 0' }}>
         <input type="checkbox" checked={termina} onChange={e => setTermina(e.target.checked)} />
         Declaro que con esto la actividad TERMINA (el fin real solo existe por
         esta declaración, aprobada — nunca se infiere)
       </label>
       <button onClick={enviar} disabled={ocupado}
-        style={{ padding: '9px 18px', fontSize: 13, fontWeight: 600, background: 'var(--accent, #3e6f91)',
+        style={{ padding: '9px 18px', fontSize: 14, fontWeight: 600, background: 'var(--accent, #3e6f91)',
                  color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', opacity: ocupado ? 0.6 : 1 }}>
         Reportar avance
       </button>
@@ -316,35 +316,35 @@ function Bandeja({ API, user, avances, onHecho }) {
       <div style={{ border: '1px solid var(--border, #e2e2e2)', borderRadius: 8,
                     padding: '10px 14px', marginBottom: 8 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-          <b style={{ fontSize: 13 }}>N.º {a.numero}</b>
-          <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 10,
+          <b style={{ fontSize: 14 }}>N.º {a.numero}</b>
+          <span style={{ fontSize: 12, padding: '2px 8px', borderRadius: 10,
                          background: c.bg, color: c.fg, fontWeight: 600 }}>{c.texto || a.estado}</span>
-          <span style={{ fontSize: 12.5 }}>
+          <span style={{ fontSize: 13 }}>
             {a.tipo !== 'AVANCE' ? `${a.tipo === 'AJUSTE_NEGATIVO' ? '−' : '+'} ajuste ` : ''}
             <b>{a.cantidad} {a.unidad}</b>
             {a.cost_item_codigo ? ` · ${a.cost_item_codigo}` : ''}
             {a.progresiva_inicio != null ? ` · ${a.progresiva_inicio}→${a.progresiva_fin}` : ''}
           </span>
-          <span style={{ fontSize: 11.5, color: '#888' }}>{a.fecha_operativa}
+          <span style={{ fontSize: 12, color: '#888' }}>{a.fecha_operativa}
             {a.origen === 'offline' ? ' · capturado sin red' : ''}</span>
         </div>
         {(a.conflictos_detectados || []).length > 0 && (
-          <div style={{ fontSize: 11.5, color: '#8a5a00', marginTop: 5 }}>
+          <div style={{ fontSize: 12, color: '#8a5a00', marginTop: 5 }}>
             ⚠ {a.conflictos_detectados.join(' · ')}
           </div>
         )}
         {a.estado === 'DEVUELTO' && a.motivo_devolucion && (
-          <div style={{ fontSize: 11.5, color: '#b3261e', marginTop: 5 }}>
+          <div style={{ fontSize: 12, color: '#b3261e', marginTop: 5 }}>
             Devuelto: {a.motivo_devolucion}
           </div>
         )}
         {a.estado === 'REPORTADO' && (
           <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-            <button onClick={() => aprobar(a)} style={{ padding: '5px 12px', fontSize: 12,
+            <button onClick={() => aprobar(a)} style={{ padding: '5px 12px', fontSize: 13,
               background: '#1e7d3e', color: '#fff', border: 'none', borderRadius: 5, cursor: 'pointer' }}>
               Aprobar
             </button>
-            <button onClick={() => devolver(a)} style={{ padding: '5px 12px', fontSize: 12,
+            <button onClick={() => devolver(a)} style={{ padding: '5px 12px', fontSize: 13,
               background: '#fff', border: '1px solid #b3261e', color: '#b3261e', borderRadius: 5, cursor: 'pointer' }}>
               Devolver
             </button>
@@ -359,39 +359,39 @@ function Bandeja({ API, user, avances, onHecho }) {
       {confirmando && (
         <div style={{ border: '1px solid #e6c26a', background: '#fdf6e3', borderRadius: 8,
                       padding: '12px 16px', marginBottom: 12 }}>
-          <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 6 }}>
+          <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 6 }}>
             El avance N.º {confirmando.numero} tiene conflictos: aprobar exige
             confirmarlos uno a uno, con motivo (queda trazado con tu firma y hora).
           </div>
           {confirmando.conflictos.map(codigo => (
             <div key={codigo} style={{ marginBottom: 6 }}>
-              <label style={{ fontSize: 11.5, color: '#8a5a00', fontWeight: 700 }}>{codigo}</label>
+              <label style={{ fontSize: 12, color: '#8a5a00', fontWeight: 700 }}>{codigo}</label>
               <input placeholder="motivo por el que se aprueba igualmente"
                 value={motivos[codigo] || ''}
                 onChange={e => setMotivos(m => ({ ...m, [codigo]: e.target.value }))}
-                style={{ width: '100%', padding: '6px 9px', fontSize: 12.5,
+                style={{ width: '100%', padding: '6px 9px', fontSize: 13,
                          border: '1px solid #d9c48a', borderRadius: 5, boxSizing: 'border-box' }} />
             </div>
           ))}
           <div style={{ display: 'flex', gap: 8 }}>
             <button onClick={() => aprobar(confirmando,
               confirmando.conflictos.map(c => ({ codigo: c, motivo: motivos[c] || '' })))}
-              style={{ padding: '6px 14px', fontSize: 12, background: '#1e7d3e', color: '#fff',
+              style={{ padding: '6px 14px', fontSize: 13, background: '#1e7d3e', color: '#fff',
                        border: 'none', borderRadius: 5, cursor: 'pointer' }}>
               Confirmar y aprobar
             </button>
             <button onClick={() => { setConfirmando(null); setMotivos({}); }}
-              style={{ padding: '6px 14px', fontSize: 12, background: 'transparent',
+              style={{ padding: '6px 14px', fontSize: 13, background: 'transparent',
                        border: 'none', color: '#777', cursor: 'pointer' }}>
               Cancelar
             </button>
           </div>
         </div>
       )}
-      <h3 style={{ fontSize: 13, color: '#555', margin: '4px 0 8px' }}>Por validar ({pendientes.length})</h3>
-      {pendientes.length === 0 && <div style={{ fontSize: 12.5, color: '#999', marginBottom: 12 }}>Nada pendiente.</div>}
+      <h3 style={{ fontSize: 14, color: '#555', margin: '4px 0 8px' }}>Por validar ({pendientes.length})</h3>
+      {pendientes.length === 0 && <div style={{ fontSize: 13, color: '#999', marginBottom: 12 }}>Nada pendiente.</div>}
       {pendientes.map(a => <Tarjeta key={a.id} a={a} />)}
-      <h3 style={{ fontSize: 13, color: '#555', margin: '16px 0 8px' }}>Historial</h3>
+      <h3 style={{ fontSize: 14, color: '#555', margin: '16px 0 8px' }}>Historial</h3>
       {resto.map(a => <Tarjeta key={a.id} a={a} />)}
     </div>
   );

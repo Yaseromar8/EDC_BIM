@@ -99,10 +99,10 @@ export default function AccesoAHerramientas({ obra, persona, onClose }) {
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-box" onClick={e => e.stopPropagation()} style={{ maxWidth: 560 }}>
         <h3 style={{ margin: 0 }}>Acceso a herramientas</h3>
-        <div style={{ fontSize: 13, color: '#72706b', marginTop: 2 }}>
+        <div style={{ fontSize: 14, color: '#72706b', marginTop: 2 }}>
           {persona.name || persona.email} · en esta obra
         </div>
-        <p style={{ fontSize: 12.3, color: '#72706b', margin: '10px 0 14px', lineHeight: 1.55 }}>
+        <p style={{ fontSize: 13, color: '#72706b', margin: '10px 0 14px', lineHeight: 1.55 }}>
           A qué herramientas entra esta persona <b>aquí</b>. Esto no le da ningún
           documento —eso lo decide el permiso de cada carpeta— ni la saca de la
           obra. Y una herramienta <b>apagada para toda la obra</b> no se arregla
@@ -112,13 +112,13 @@ export default function AccesoAHerramientas({ obra, persona, onClose }) {
         {error && (
           <div role="alert" style={{ marginBottom: 12, padding: '9px 11px', borderRadius: 6,
                                      background: '#fbebeb', border: '1px solid #fbebeb',
-                                     color: '#b93535', fontSize: 12.5 }}>
+                                     color: '#b93535', fontSize: 13 }}>
             {error} <b>La lista está incompleta</b>, no vacía.
           </div>
         )}
 
         {filas === null ? (
-          <div style={{ padding: 20, textAlign: 'center', color: '#72706b', fontSize: 13 }}>
+          <div style={{ padding: 20, textAlign: 'center', color: '#72706b', fontSize: 14 }}>
             Cargando…
           </div>
         ) : (
@@ -130,27 +130,27 @@ export default function AccesoAHerramientas({ obra, persona, onClose }) {
                      style={{ display: 'flex', alignItems: 'center', gap: 12,
                               padding: '10px 2px', borderBottom: '1px solid #f1f0e8' }}>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <span style={{ fontSize: 13.5, fontWeight: 500,
+                    <span style={{ fontSize: 14, fontWeight: 500,
                                    color: h.efectivo ? '#141413' : '#b0aea5' }}>
                       {h.etiqueta}
                     </span>
                     {apagada && (
                       <span style={{ marginLeft: 8, padding: '1px 7px', borderRadius: 10,
-                                     fontSize: 10.5, fontWeight: 600,
+                                     fontSize: 12, fontWeight: 600,
                                      background: '#f1f0e8', color: '#72706b' }}>
                         APAGADA EN LA OBRA
                       </span>
                     )}
                     {!apagada && !h.acceso_del_miembro && (
                       <span style={{ marginLeft: 8, padding: '1px 7px', borderRadius: 10,
-                                     fontSize: 10.5, fontWeight: 600,
+                                     fontSize: 12, fontWeight: 600,
                                      background: '#faf9f5', color: '#9e5943' }}>
                         RETIRADA A ESTA PERSONA
                       </span>
                     )}
                   </div>
                   <label style={{ display: 'inline-flex', alignItems: 'center', gap: 7,
-                                  fontSize: 12, color: apagada ? '#cccac0' : '#52524d',
+                                  fontSize: 13, color: apagada ? '#cccac0' : '#52524d',
                                   cursor: apagada ? 'not-allowed'
                                         : guardando === h.codigo ? 'wait' : 'pointer' }}
                          title={apagada
@@ -169,7 +169,7 @@ export default function AccesoAHerramientas({ obra, persona, onClose }) {
 
         {perfiles.length > 0 && (
           <div style={{ marginTop: 16, paddingTop: 14, borderTop: '1px dashed #e8e6dc' }}>
-            <div style={{ fontSize: 11.5, fontWeight: 600, color: '#72706b',
+            <div style={{ fontSize: 12, fontWeight: 600, color: '#72706b',
                           letterSpacing: '.04em', marginBottom: 6 }}>
               APLICAR UN PERFIL
             </div>
@@ -177,12 +177,12 @@ export default function AccesoAHerramientas({ obra, persona, onClose }) {
               <select defaultValue="" disabled={aplicando}
                       onChange={e => { aplicarPerfil(e.target.value); e.target.value = ''; }}
                       style={{ flex: 1, padding: '6px 8px', border: '1px solid #e8e6dc',
-                               borderRadius: 5, fontSize: 13 }}>
+                               borderRadius: 5, fontSize: 14 }}>
                 <option value="">Elegir perfil…</option>
                 {perfiles.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
               </select>
             </div>
-            <div style={{ fontSize: 11.5, color: '#72706b', marginTop: 6, lineHeight: 1.5 }}>
+            <div style={{ fontSize: 12, color: '#72706b', marginTop: 6, lineHeight: 1.5 }}>
               Deja escrita la configuración del perfil sobre las casillas de arriba.
               A partir de ahí manda lo que se vea aquí: si el perfil cambia mañana,
               esta persona <b>no</b> cambia.

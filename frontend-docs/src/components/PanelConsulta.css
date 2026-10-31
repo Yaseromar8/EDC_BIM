@@ -11,7 +11,7 @@
   border-radius: 8px;
   overflow-y: auto;
   color: #141413;
-  font-size: 13px;
+  font-size: 14px;
 }
 
 .consulta__cab {
@@ -27,7 +27,7 @@
   font-size: 14px;
   overflow-wrap: anywhere;
 }
-.consulta__titulo span { color: #72706B; font-size: 12px; }
+.consulta__titulo span { color: #72706B; font-size: 13px; }
 
 .consulta__cerrar {
   width: 28px;
@@ -58,14 +58,14 @@
 }
 .consulta__sec h3 {
   margin: 0 0 10px;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   letter-spacing: .06em;
   text-transform: uppercase;
   color: #52524D;
 }
 
-.consulta__nota { margin: 8px 0 0; color: #72706B; font-size: 12px; }
+.consulta__nota { margin: 8px 0 0; color: #72706B; font-size: 13px; }
 .consulta__nota b { color: #141413; }
 .consulta__error {
   margin: 0;
@@ -73,7 +73,7 @@
   border-top: 1px solid #E8E6DC;
   background: #FBEBEB;
   color: #B93535;
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .consulta__enlace {
@@ -116,8 +116,8 @@
 }
 .recorrido .hecho i { background: #141413; border-color: #141413; }
 .recorrido .aqui i { border-color: #141413; box-shadow: 0 0 0 3px #F7ECE5; }
-.recorrido b { display: block; font-size: 12px; font-weight: 600; }
-.recorrido small { display: block; color: #72706B; font-size: 11px; }
+.recorrido b { display: block; font-size: 13px; font-weight: 600; }
+.recorrido small { display: block; color: #72706B; font-size: 12px; }
 
 /* Integridad: Green tinte cuando hay huella; neutra cuando falta. */
 .integridad {
@@ -131,10 +131,10 @@
 }
 .integridad--ok { background: #E0E3D7; color: #64744E; }
 .integridad b { display: block; color: #141413; font-weight: 600; }
-.integridad span { display: block; font-size: 12px; color: #52524D; }
+.integridad span { display: block; font-size: 13px; color: #52524D; }
 .integridad code {
   font-family: ui-monospace, Consolas, monospace;
-  font-size: 11.5px;
+  font-size: 12px;
   background: rgb(255 255 255 / .6);
   padding: 0 4px;
   border-radius: 4px;
@@ -154,13 +154,13 @@
   border-bottom: 1px solid #E8E6DC;
   min-width: 0;
 }
-.codigo-leido b { display: block; font-size: 12px; overflow-wrap: anywhere; }
-.codigo-leido small { color: #72706B; font-size: 10px; text-transform: uppercase; }
+.codigo-leido b { display: block; font-size: 13px; overflow-wrap: anywhere; }
+.codigo-leido small { color: #72706B; font-size: 12px; text-transform: uppercase; }
 
 .movimientos { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 9px; }
 .movimientos li { display: flex; flex-direction: column; }
 .movimientos__que { color: #141413; }
-.movimientos__quien { color: #72706B; font-size: 12px; }
+.movimientos__quien { color: #72706B; font-size: 13px; }
 
 /* La fila consultada, como la carpeta abierta del árbol: tinte Blue. */
 .data-row.consultada,

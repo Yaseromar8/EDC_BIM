@@ -74,7 +74,7 @@ export default function ShareModal({ isOpen, shareTarget, user, projectPrefix, s
     <div className="modal-overlay" onClick={onClose}>
       <div className="share-modal-box" onClick={e => e.stopPropagation()}>
         <div className="share-header"><h2>Compartir &quot;{shareTarget.name.replace(/\/$/, '')}&quot;</h2></div>
-        <div style={{ padding: '8px 0', fontSize: 13, color: '#52524d', lineHeight: 1.55 }}>
+        <div style={{ padding: '8px 0', fontSize: 14, color: '#52524d', lineHeight: 1.55 }}>
           Este piloto crea enlaces públicos de solo lectura. Las invitaciones individuales y los enlaces restringidos se habilitarán cuando exista una lista de acceso persistente. Para usuarios registrados, usa permisos de carpeta.
         </div>
 
@@ -82,7 +82,7 @@ export default function ShareModal({ isOpen, shareTarget, user, projectPrefix, s
           <div role="alert" style={{ margin: '4px 0 12px', padding: '12px 14px',
                                      border: '1px solid var(--border-warning, #f9eeda)',
                                      background: 'var(--bg-warning, #f9eeda)',
-                                     borderRadius: 6, fontSize: 12.5, lineHeight: 1.5,
+                                     borderRadius: 6, fontSize: 13, lineHeight: 1.5,
                                      color: 'var(--text-primary, #141413)' }}>
             <b>
               {puerta.estado === 'caducado'
@@ -100,7 +100,7 @@ export default function ShareModal({ isOpen, shareTarget, user, projectPrefix, s
               <button type="button"
                 onClick={() => { onClose(); onIrAlTriaje(); }}
                 style={{ marginTop: 10, padding: '7px 14px', border: 'none', borderRadius: 6,
-                         background: 'var(--accent)', color: '#fff', fontSize: 12.5,
+                         background: 'var(--accent)', color: '#fff', fontSize: 13,
                          fontWeight: 600, cursor: 'pointer' }}>
                 Hacer el triaje de seguridad
               </button>
@@ -112,14 +112,14 @@ export default function ShareModal({ isOpen, shareTarget, user, projectPrefix, s
             destinatarios, número y acuse. Se dice, para que nadie crea que el
             documento está atrapado. */}
         {bloqueada && (
-          <div style={{ margin: '0 0 10px', fontSize: 12, color: 'var(--text-secondary, #72706b)' }}>
+          <div style={{ margin: '0 0 10px', fontSize: 13, color: 'var(--text-secondary, #72706b)' }}>
             Mientras tanto puedes emitirlo por <b>Transmittal</b>, que es canal formal
             con acuse y no depende del triaje.
           </div>
         )}
         <div className="share-access-list">
           <div className="share-user-item">
-            <div className="user-avatar-acc" style={{ width: 32, height: 32, fontSize: 13 }}>{getInitials(user?.email || 'US')}</div>
+            <div className="user-avatar-acc" style={{ width: 32, height: 32, fontSize: 14 }}>{getInitials(user?.email || 'US')}</div>
             <div className="share-user-info"><span className="share-user-name">{user?.name || 'Usuario'} (tú)</span><span className="share-user-email">{user?.email || ''}</span></div>
             <span className="share-user-role">Propietario</span>
           </div>
@@ -128,7 +128,7 @@ export default function ShareModal({ isOpen, shareTarget, user, projectPrefix, s
           <div className="share-access-details"><strong>Cualquier persona con el enlace</strong><div className="share-access-desc">Lector; revoca el enlace al terminar el piloto.</div></div>
           <span className="share-user-role">Lector</span>
         </div>
-        <div style={{ marginTop: 16, display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, color: '#333330' }}>
+        <div style={{ marginTop: 16, display: 'flex', alignItems: 'center', gap: 10, fontSize: 14, color: '#333330' }}>
           <span>El enlace caduca en:</span>
           <select value={expiresDays} onChange={e => setExpiresDays(Number(e.target.value))} disabled={creating}>
             <option value={1}>1 día</option><option value={7}>7 días</option><option value={30}>30 días</option><option value={90}>90 días</option>

@@ -111,8 +111,8 @@ function SustituirRevisor({ rev, onCerrar, onHecho }) {
         <div style={{ padding: '14px 20px', borderBottom: '1px solid #f1f0e8', fontSize: 15, fontWeight: 600 }}>
           Sustituir al revisor del paso {rev.current_step + 1}
         </div>
-        <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14, fontSize: 13 }}>
-          <div style={{ background: '#fbebeb', border: '1px solid #fbebeb', borderRadius: 6, padding: '8px 10px', color: '#993458', fontSize: 12 }}>
+        <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14, fontSize: 14 }}>
+          <div style={{ background: '#fbebeb', border: '1px solid #fbebeb', borderRadius: 6, padding: '8px 10px', color: '#993458', fontSize: 13 }}>
             {rev.flujo_motivo || 'La revisión está bloqueada.'}
           </div>
           <div>
@@ -120,12 +120,12 @@ function SustituirRevisor({ rev, onCerrar, onHecho }) {
               Revisor actual
             </label>
             <div style={{ color: '#52524d' }}>{paso.name || paso.email || `usuario ${paso.user_id}`}</div>
-            <div style={{ color: '#72706b', fontSize: 11, marginTop: 2 }}>Se conserva en el historial de la revisión.</div>
+            <div style={{ color: '#72706b', fontSize: 12, marginTop: 2 }}>Se conserva en el historial de la revisión.</div>
           </div>
           <div>
             <label style={{ display: 'block', color: '#72706b', marginBottom: 6, fontWeight: 600 }}>Nuevo revisor</label>
             <select value={elegido} onChange={e => setElegido(e.target.value)}
-              style={{ width: '100%', padding: '7px 10px', border: '1px solid #e8e6dc', borderRadius: 4, fontSize: 13 }}>
+              style={{ width: '100%', padding: '7px 10px', border: '1px solid #e8e6dc', borderRadius: 4, fontSize: 14 }}>
               <option value="">Elige a un miembro de la obra…</option>
               {users.filter(u => String(u.id) !== String(paso.user_id)).map(u => (
                 <option key={u.id} value={u.id}>{u.name || u.email}</option>
@@ -136,7 +136,7 @@ function SustituirRevisor({ rev, onCerrar, onHecho }) {
             <label style={{ display: 'block', color: '#72706b', marginBottom: 6, fontWeight: 600 }}>Motivo</label>
             <textarea value={motivo} onChange={e => setMotivo(e.target.value)} rows={2}
               placeholder="Por ejemplo: dejó la obra el 15 de agosto"
-              style={{ width: '100%', padding: '7px 10px', border: '1px solid #e8e6dc', borderRadius: 4, fontSize: 13, resize: 'vertical' }} />
+              style={{ width: '100%', padding: '7px 10px', border: '1px solid #e8e6dc', borderRadius: 4, fontSize: 14, resize: 'vertical' }} />
           </div>
         </div>
         <div style={{ padding: '12px 20px', borderTop: '1px solid #f1f0e8', display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
@@ -421,40 +421,40 @@ export default function RevisionDetalle({ rid, projectPrefix, onVolver, onCambio
 }
 
 const S = {
-  pagina: { padding: 32, flex: 1, overflowY: 'auto', fontSize: 13, color: '#333330' },
+  pagina: { padding: 32, flex: 1, overflowY: 'auto', fontSize: 14, color: '#333330' },
   cabecera: { display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 4 },
-  codigo: { fontSize: 13, color: '#72706b', fontWeight: 700 },
+  codigo: { fontSize: 14, color: '#72706b', fontWeight: 700 },
   titulo: { margin: 0, fontSize: 20, fontWeight: 600, color: '#141413', flex: 1, minWidth: 200 },
-  meta: { fontSize: 12, color: '#72706b', marginBottom: 16 },
-  leve: { fontSize: 11, color: '#72706b' },
+  meta: { fontSize: 13, color: '#72706b', marginBottom: 16 },
+  leve: { fontSize: 12, color: '#72706b' },
   error: { marginTop: 12, padding: '12px 14px', borderRadius: 6, background: '#fbebeb',
            border: '1px solid #fbebeb', color: '#993458' },
   bloqueo: { marginBottom: 14, padding: '10px 12px', borderRadius: 6, background: '#fbebeb',
-             border: '1px solid #fbebeb', color: '#993458', fontSize: 12 },
+             border: '1px solid #fbebeb', color: '#993458', fontSize: 13 },
   nota: { marginBottom: 14, padding: '8px 12px', borderRadius: 6, background: '#faf9f5',
-          border: '1px solid #f1f0e8', color: '#52524d', fontSize: 12 },
+          border: '1px solid #f1f0e8', color: '#52524d', fontSize: 13 },
   aviso: { marginBottom: 10, padding: '8px 10px', borderRadius: 6, background: '#faf9f5',
-           border: '1px solid #f9eeda', color: '#734500', fontSize: 12 },
+           border: '1px solid #f9eeda', color: '#734500', fontSize: 13 },
   seccion: { background: '#fff', border: '1px solid #e8e6dc', borderRadius: 8, marginBottom: 14 },
-  seccionTitulo: { margin: 0, padding: '10px 16px', fontSize: 13, fontWeight: 700, color: '#333330',
+  seccionTitulo: { margin: 0, padding: '10px 16px', fontSize: 14, fontWeight: 700, color: '#333330',
                    borderBottom: '1px solid #f1f0e8' },
-  consecuencia: { margin: '0 0 10px', fontSize: 12, color: '#52524d', lineHeight: 1.5 },
-  etiqueta: { display: 'block', color: '#72706b', marginBottom: 6, fontWeight: 600, fontSize: 12 },
+  consecuencia: { margin: '0 0 10px', fontSize: 13, color: '#52524d', lineHeight: 1.5 },
+  etiqueta: { display: 'block', color: '#72706b', marginBottom: 6, fontWeight: 600, fontSize: 13 },
   texto: { width: '100%', boxSizing: 'border-box', padding: '7px 10px', border: '1px solid #e8e6dc',
-           borderRadius: 4, fontSize: 13, resize: 'vertical' },
+           borderRadius: 4, fontSize: 14, resize: 'vertical' },
   botonera: { display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' },
   lista: { listStyle: 'none', margin: 0, padding: 0 },
   fila: { display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', padding: '5px 0' },
   docInvalido: { background: '#fbebeb', border: '1px solid #fbebeb', color: '#993458',
-                 padding: '3px 10px', borderRadius: 12, fontSize: 12, fontWeight: 600 },
+                 padding: '3px 10px', borderRadius: 12, fontSize: 13, fontWeight: 600 },
   otraRevision: { background: '#faf9f5', border: '1px solid #f9eeda', color: '#734500',
-                  padding: '1px 8px', borderRadius: 10, fontSize: 11 },
+                  padding: '1px 8px', borderRadius: 10, fontSize: 12 },
   paso: { padding: '6px 0', borderBottom: '1px solid #f1f0e8' },
   numero: { width: 22, height: 22, borderRadius: '50%', background: '#f1f0e8', color: '#507294',
-            display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 11,
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 12,
             fontWeight: 700 },
-  pasoDetalle: { marginLeft: 30, fontSize: 12, color: '#72706b', display: 'flex', flexDirection: 'column', gap: 2 },
+  pasoDetalle: { marginLeft: 30, fontSize: 13, color: '#72706b', display: 'flex', flexDirection: 'column', gap: 2 },
   evento: { display: 'flex', gap: 10, padding: '6px 0', borderBottom: '1px solid #f1f0e8' },
   punto: { width: 10, height: 10, borderRadius: '50%', marginTop: 4, flex: '0 0 auto' },
-  cita: { marginTop: 2, fontSize: 12, color: '#52524d', fontStyle: 'italic' },
+  cita: { marginTop: 2, fontSize: 13, color: '#52524d', fontStyle: 'italic' },
 };

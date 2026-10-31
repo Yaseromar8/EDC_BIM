@@ -48,14 +48,14 @@ const COLOR_ESTADO = {
 };
 
 const CAJA = { border: '1px solid #e8e6dc', borderRadius: 6, padding: '7px 9px',
-               fontSize: 13, width: '100%' };
-const BTN = { padding: '6px 12px', borderRadius: 6, fontSize: 12.5,
+               fontSize: 14, width: '100%' };
+const BTN = { padding: '6px 12px', borderRadius: 6, fontSize: 13,
               border: '1px solid #cccac0', background: '#fff', cursor: 'pointer' };
 const BTN_OSCURO = { ...BTN, border: 'none', background: '#141413', color: '#fff',
                      fontWeight: 600 };
 
 function Chip({ texto, color }) {
-  return <span style={{ fontSize: 10.5, fontWeight: 700, color: '#fff',
+  return <span style={{ fontSize: 12, fontWeight: 700, color: '#fff',
                         background: color || '#52524d', padding: '2px 7px',
                         borderRadius: 4 }}>{texto}</span>;
 }
@@ -239,7 +239,7 @@ function FormAsiento({ API, urn, parte, fotos, instrucciones, user, project,
             Traer clima de la obra (Open-Meteo)
           </button>
           {clima && (
-            <div style={{ fontSize: 12.5, marginTop: 8, color: '#333330' }}>
+            <div style={{ fontSize: 13, marginTop: 8, color: '#333330' }}>
               <b>{clima.dato.cielo}</b> · {clima.dato.temperatura_min}–{clima.dato.temperatura_max} °C ·
               precip. {clima.dato.precipitacion_mm} mm · viento {clima.dato.viento_kmh} km/h
               <div style={{ color: '#72706b', marginTop: 2 }}>
@@ -254,7 +254,7 @@ function FormAsiento({ API, urn, parte, fotos, instrucciones, user, project,
                        value={correccion.cielo || ''}
                        onChange={e => setCorreccion(p => ({ ...p, cielo: e.target.value }))} />
               </div>
-              <div style={{ fontSize: 11.5, color: '#734500', marginTop: 2 }}>
+              <div style={{ fontSize: 12, color: '#734500', marginTop: 2 }}>
                 La corrección NO reemplaza el dato recibido: quedan los dos, con quién corrigió.
               </div>
             </div>
@@ -324,16 +324,16 @@ function TarjetaAsiento({ asiento, onAprobar, onDevolver }) {
     <div style={{ border: '1px solid #e8e6dc', borderRadius: 8, padding: '10px 12px',
                   marginBottom: 8, background: '#fff' }}>
       <div style={{ display: 'flex', gap: 8, alignItems: 'baseline', flexWrap: 'wrap' }}>
-        <b style={{ fontSize: 13 }}>N.º {a.numero}</b>
-        <span style={{ fontSize: 12, color: '#52524d' }}>{ETIQUETA_TIPO[a.tipo] || a.tipo}</span>
+        <b style={{ fontSize: 14 }}>N.º {a.numero}</b>
+        <span style={{ fontSize: 13, color: '#52524d' }}>{ETIQUETA_TIPO[a.tipo] || a.tipo}</span>
         <Chip texto={a.estado} color={COLOR_ESTADO[a.estado]} />
-        <span style={{ fontSize: 11, color: '#72706b', marginLeft: 'auto' }}>
+        <span style={{ fontSize: 12, color: '#72706b', marginLeft: 'auto' }}>
           {a.created_by} {a.autor_funcion ? `· ${a.autor_funcion}` : '· sin función'} · id {a.id}
         </span>
       </div>
-      {a.texto && <div style={{ fontSize: 13, marginTop: 6 }}>{a.texto}</div>}
+      {a.texto && <div style={{ fontSize: 14, marginTop: 6 }}>{a.texto}</div>}
       {a.contenido && a.contenido.dato && (
-        <div style={{ fontSize: 12, color: '#333330', marginTop: 4 }}>
+        <div style={{ fontSize: 13, color: '#333330', marginTop: 4 }}>
           {a.contenido.dato.cielo} {a.contenido.origen === 'proveedor'
             ? `· ${a.contenido.proveedor} (obra: ${a.contenido.lat?.toFixed?.(3)}, ${a.contenido.lon?.toFixed?.(3)})`
             : '· registro manual'}
@@ -341,24 +341,24 @@ function TarjetaAsiento({ asiento, onAprobar, onDevolver }) {
         </div>
       )}
       {a.contenido && a.contenido.filas && a.contenido.filas.length > 0 && (
-        <div style={{ fontSize: 12, color: '#333330', marginTop: 4 }}>
+        <div style={{ fontSize: 13, color: '#333330', marginTop: 4 }}>
           {a.contenido.filas.map((f, i) => <div key={i}>· {Object.values(f).join(' — ')}</div>)}
         </div>
       )}
       {a.contenido && (a.contenido.progresiva || a.contenido.frente) && (
-        <div style={{ fontSize: 12, color: '#52524d', marginTop: 4 }}>
+        <div style={{ fontSize: 13, color: '#52524d', marginTop: 4 }}>
           {a.contenido.progresiva && <>prog. {a.contenido.progresiva} </>}
           {a.contenido.frente && <>· frente {a.contenido.frente} </>}
           {a.contenido.partida && <>· partida {a.contenido.partida}</>}
         </div>
       )}
       {Object.keys(a.referencias || {}).length > 0 && (
-        <div style={{ fontSize: 11.5, color: '#507294', marginTop: 4 }}>
+        <div style={{ fontSize: 12, color: '#507294', marginTop: 4 }}>
           cita: {Object.entries(a.referencias).map(([k, v]) => `${k}=${v}`).join(' · ')}
         </div>
       )}
       {a.estado === 'DEVUELTO' && (
-        <div style={{ fontSize: 12, color: '#b93535', marginTop: 4 }}>
+        <div style={{ fontSize: 13, color: '#b93535', marginTop: 4 }}>
           Devuelto: {a.motivo_devolucion} — se corrige RE-REGISTRANDO otro asiento
           que lo referencia (id {a.id}); este queda tal cual.
         </div>
@@ -454,18 +454,18 @@ function TarjetaInstruccion({ instr, onAccion, onRectificar }) {
     <div style={{ border: '1px solid #e8e6dc', borderRadius: 8, padding: '10px 12px',
                   marginBottom: 8, background: '#fff' }}>
       <div style={{ display: 'flex', gap: 8, alignItems: 'baseline', flexWrap: 'wrap' }}>
-        <b style={{ fontSize: 13 }}>{d.codigo}</b>
+        <b style={{ fontSize: 14 }}>{d.codigo}</b>
         <Chip texto={d.estado} color={COLOR_ESTADO[d.estado]} />
-        {d.rectifica_a && <span style={{ fontSize: 11, color: '#b93535' }}>rectifica a #{d.rectifica_a}</span>}
-        <span style={{ fontSize: 11, color: '#72706b', marginLeft: 'auto' }}>
+        {d.rectifica_a && <span style={{ fontSize: 12, color: '#b93535' }}>rectifica a #{d.rectifica_a}</span>}
+        <span style={{ fontSize: 12, color: '#72706b', marginLeft: 'auto' }}>
           {d.emisor_funcion} → {dest.tipo === 'empresa'
             ? `${dest.empresa} (empresa · ${dest.funcion || 's/f'})`
             : `${dest.nombre || dest.email || dest.usuario_id} (${dest.empresa || 's/e'})`}
         </span>
       </div>
-      <div style={{ fontSize: 13, marginTop: 4 }}><b>{d.asunto}</b></div>
-      <div style={{ fontSize: 12.5, color: '#333330', marginTop: 2, whiteSpace: 'pre-wrap' }}>{d.contenido}</div>
-      <div style={{ fontSize: 11.5, color: '#52524d', marginTop: 4 }}>
+      <div style={{ fontSize: 14, marginTop: 4 }}><b>{d.asunto}</b></div>
+      <div style={{ fontSize: 13, color: '#333330', marginTop: 2, whiteSpace: 'pre-wrap' }}>{d.contenido}</div>
+      <div style={{ fontSize: 12, color: '#52524d', marginTop: 4 }}>
         {(d.acuses || []).length
           ? `Acuses (${d.acuses.length}): ${d.acuses.map(a => a.por).join(', ')}`
           : 'Sin acuse todavía'}
@@ -622,7 +622,7 @@ export default function CuadernoModule({ project, API, user }) {
   };
 
   const estilo = (activa) => ({
-    padding: '6px 14px', borderRadius: 8, fontSize: 13, cursor: 'pointer',
+    padding: '6px 14px', borderRadius: 8, fontSize: 14, cursor: 'pointer',
     border: '1px solid #cccac0',
     background: activa ? '#141413' : '#fff', color: activa ? '#fff' : '#141413',
   });
@@ -641,7 +641,7 @@ export default function CuadernoModule({ project, API, user }) {
         <>
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10,
                         alignItems: 'center', marginBottom: 12, flexWrap: 'wrap' }}>
-            <div style={{ fontSize: 12.5, color: '#72706b' }}>
+            <div style={{ fontSize: 13, color: '#72706b' }}>
               La jornada es única por obra y fecha operativa — la fecha DECLARADA
               del día de obra, no la del reloj del servidor.
             </div>
@@ -668,11 +668,11 @@ export default function CuadernoModule({ project, API, user }) {
                           display: 'flex', gap: 10, alignItems: 'baseline', flexWrap: 'wrap' }}>
               <b style={{ fontSize: 14 }}>{p.fecha_operativa}</b>
               <Chip texto={p.estado} color={COLOR_ESTADO[p.estado]} />
-              <span style={{ fontSize: 12, color: '#52524d' }}>{p.asientos} asiento(s)</span>
+              <span style={{ fontSize: 13, color: '#52524d' }}>{p.asientos} asiento(s)</span>
               {p.en_aprobacion > 0 && (
-                <span style={{ fontSize: 11.5, color: '#734500' }}>{p.en_aprobacion} por aprobar</span>
+                <span style={{ fontSize: 12, color: '#734500' }}>{p.en_aprobacion} por aprobar</span>
               )}
-              <span style={{ fontSize: 11.5, color: '#72706b', marginLeft: 'auto' }}>{p.created_by}</span>
+              <span style={{ fontSize: 12, color: '#72706b', marginLeft: 'auto' }}>{p.created_by}</span>
             </div>
           ))}
         </>
@@ -686,12 +686,12 @@ export default function CuadernoModule({ project, API, user }) {
             <b style={{ fontSize: 15 }}>Parte del {parte.fecha_operativa}</b>
             <Chip texto={parte.estado} color={COLOR_ESTADO[parte.estado]} />
             {parte.sinServidor && (
-              <span style={{ fontSize: 11.5, color: '#734500' }}>
+              <span style={{ fontSize: 12, color: '#734500' }}>
                 guardado EN ESTE DISPOSITIVO — subirá con cobertura
               </span>
             )}
             {parte.aprobador_contractual === false && (
-              <span style={{ fontSize: 11.5, color: '#b93535' }}>
+              <span style={{ fontSize: 12, color: '#b93535' }}>
                 SIN_APROBADOR_CONTRACTUAL: nadie ejerce SUPERVISION/ENTIDAD aquí —
                 la administración no la sustituye
               </span>
@@ -714,7 +714,7 @@ export default function CuadernoModule({ project, API, user }) {
           )}
           <div style={{ marginTop: 12 }}>
             {(parte.asientos || []).length === 0 && (
-              <div style={{ padding: 24, textAlign: 'center', color: '#72706b', fontSize: 13 }}>
+              <div style={{ padding: 24, textAlign: 'center', color: '#72706b', fontSize: 14 }}>
                 La jornada no tiene asientos todavía.
               </div>
             )}
@@ -731,7 +731,7 @@ export default function CuadernoModule({ project, API, user }) {
         <>
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10,
                         alignItems: 'center', marginBottom: 12, flexWrap: 'wrap' }}>
-            <div style={{ fontSize: 12.5, color: '#72706b' }}>
+            <div style={{ fontSize: 13, color: '#72706b' }}>
               Una instrucción emitida es INMUTABLE: se corrige emitiendo una
               rectificación que la referencia. Emiten SUPERVISION y ENTIDAD.
             </div>

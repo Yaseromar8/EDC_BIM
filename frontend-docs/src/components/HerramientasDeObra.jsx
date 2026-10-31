@@ -98,7 +98,7 @@ export default function HerramientasDeObra({ projectPrefix, isAdmin }) {
   };
 
   if (catalogo === null) {
-    return <div style={{ fontSize: 13, color: '#72706b' }}>Cargando herramientas…</div>;
+    return <div style={{ fontSize: 14, color: '#72706b' }}>Cargando herramientas…</div>;
   }
 
   return (
@@ -111,7 +111,7 @@ export default function HerramientasDeObra({ projectPrefix, isAdmin }) {
         </svg>
         Herramientas de esta obra
       </div>
-      <p style={{ fontSize: 12.5, color: '#72706b', margin: '0 0 16px', maxWidth: 680,
+      <p style={{ fontSize: 13, color: '#72706b', margin: '0 0 16px', maxWidth: 680,
                   lineHeight: 1.55 }}>
         Qué herramientas <b>existen</b> en esta obra. Apagada, no la usa nadie del
         proyecto —tampoco un administrador—, sin importar sus permisos.
@@ -123,7 +123,7 @@ export default function HerramientasDeObra({ projectPrefix, isAdmin }) {
       {error && (
         <div role="alert" style={{ marginBottom: 12, padding: '9px 11px', borderRadius: 6,
                                    background: '#fbebeb', border: '1px solid #fbebeb',
-                                   color: '#b93535', fontSize: 12.5 }}>
+                                   color: '#b93535', fontSize: 13 }}>
           {error} <b>La lista está incompleta</b>, no vacía.
         </div>
       )}
@@ -136,19 +136,19 @@ export default function HerramientasDeObra({ projectPrefix, isAdmin }) {
                  style={{ display: 'flex', alignItems: 'center', gap: 14,
                           padding: '11px 2px', borderBottom: '1px solid #f1f0e8' }}>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 13.5, fontWeight: 500, color: activa ? '#141413' : '#b0aea5' }}>
+                <div style={{ fontSize: 14, fontWeight: 500, color: activa ? '#141413' : '#b0aea5' }}>
                   {h.etiqueta}
                   {!activa && (
                     <span style={{ marginLeft: 8, padding: '1px 7px', borderRadius: 10,
-                                   fontSize: 10.5, fontWeight: 600,
+                                   fontSize: 12, fontWeight: 600,
                                    background: '#f1f0e8', color: '#72706b' }}>NO DISPONIBLE</span>
                   )}
                 </div>
-                <div style={{ fontSize: 11.5, color: '#72706b', marginTop: 2 }}>{h.descripcion}</div>
+                <div style={{ fontSize: 12, color: '#72706b', marginTop: 2 }}>{h.descripcion}</div>
               </div>
               {isAdmin ? (
                 <label style={{ display: 'inline-flex', alignItems: 'center', gap: 7,
-                                fontSize: 12, color: '#52524d',
+                                fontSize: 13, color: '#52524d',
                                 cursor: guardando === h.codigo ? 'wait' : 'pointer' }}>
                   <input type="checkbox" checked={activa}
                          disabled={guardando === h.codigo || Boolean(error)}
@@ -156,7 +156,7 @@ export default function HerramientasDeObra({ projectPrefix, isAdmin }) {
                   {activa ? 'Disponible' : 'Apagada'}
                 </label>
               ) : (
-                <span style={{ fontSize: 12, color: activa ? '#507294' : '#b0aea5' }}>
+                <span style={{ fontSize: 13, color: activa ? '#507294' : '#b0aea5' }}>
                   {activa ? 'Disponible' : 'No disponible'}
                 </span>
               )}
@@ -165,7 +165,7 @@ export default function HerramientasDeObra({ projectPrefix, isAdmin }) {
         })}
       </div>
 
-      <p style={{ fontSize: 11.5, color: '#72706b', margin: '14px 0 0', maxWidth: 680,
+      <p style={{ fontSize: 12, color: '#72706b', margin: '14px 0 0', maxWidth: 680,
                   lineHeight: 1.5 }}>
         El <b>expediente documental</b> no aparece aquí: es la base sobre la que se
         apoyan las demás y no se apaga.
@@ -173,14 +173,14 @@ export default function HerramientasDeObra({ projectPrefix, isAdmin }) {
 
       {isAdmin && plantillas.length > 0 && (
         <div style={{ marginTop: 18, paddingTop: 14, borderTop: '1px dashed #e8e6dc' }}>
-          <div style={{ fontSize: 11.5, fontWeight: 600, color: '#72706b',
+          <div style={{ fontSize: 12, fontWeight: 600, color: '#72706b',
                         letterSpacing: '.04em', marginBottom: 6 }}>
             APLICAR UNA PLANTILLA A ESTA OBRA
           </div>
           <select defaultValue="" disabled={aplicandoPlantilla}
                   onChange={e => { aplicarPlantilla(e.target.value); e.target.value = ''; }}
                   style={{ width: '100%', maxWidth: 380, padding: '6px 8px',
-                           border: '1px solid #e8e6dc', borderRadius: 5, fontSize: 13 }}>
+                           border: '1px solid #e8e6dc', borderRadius: 5, fontSize: 14 }}>
             <option value="">Elegir plantilla…</option>
             {plantillas.map(p => (
               <option key={p.id} value={p.id}>
@@ -188,7 +188,7 @@ export default function HerramientasDeObra({ projectPrefix, isAdmin }) {
               </option>
             ))}
           </select>
-          <div style={{ fontSize: 11.5, color: '#72706b', marginTop: 6, maxWidth: 680,
+          <div style={{ fontSize: 12, color: '#72706b', marginTop: 6, maxWidth: 680,
                         lineHeight: 1.5 }}>
             Crea la <b>configuración</b>: carpetas, herramientas, empresas y códigos de
             idoneidad. <b>No trae documentos, ni historia, ni miembros</b> — la gente se

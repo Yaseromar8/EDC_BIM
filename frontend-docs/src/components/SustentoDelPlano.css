@@ -26,7 +26,7 @@
   border-radius: 2px 2px 0 0;
   background: #507294;
   color: #fff;
-  font: 600 10.5px/1.5 var(--a-font-sans);
+  font: 600 12px/1.5 var(--a-font-sans);
   white-space: nowrap;
 }
 
@@ -54,7 +54,7 @@
   border-radius: 4px;
   background: #faf9f5;
   color: #141413;
-  font: 12.5px/1.4 var(--a-font-sans);
+  font: 13px/1.4 var(--a-font-sans);
   box-shadow: 2px 3px 0 rgba(20, 20, 19, 0.05);
 }
 
@@ -65,7 +65,7 @@
   padding: 8px 8px 7px 12px;
   border-bottom: 1px solid #e2ddd0;
   color: #6d6b67;
-  font-size: 9.5px;
+  font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.09em;
   text-transform: uppercase;
@@ -84,15 +84,15 @@
 .sustento-fila__l1 { display: flex; justify-content: space-between; gap: 8px; }
 .sustento-item { font-family: ui-monospace, Consolas, monospace; font-weight: 600; }
 .sustento-q { font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.sustento-fila__l3 { display: flex; justify-content: space-between; gap: 8px; margin-top: 3px; color: #6d6b67; font-size: 11.5px; }
-.sustento-nota { margin-top: 3px; color: #52524d; font-size: 11.5px; }
-.sustento-aviso { margin-top: 5px; padding: 4px 7px; border-radius: 3px; background: #f6efe2; color: #734500; font-size: 11.5px; }
+.sustento-fila__l3 { display: flex; justify-content: space-between; gap: 8px; margin-top: 3px; color: #6d6b67; font-size: 12px; }
+.sustento-nota { margin-top: 3px; color: #52524d; font-size: 12px; }
+.sustento-aviso { margin-top: 5px; padding: 4px 7px; border-radius: 3px; background: #f6efe2; color: #734500; font-size: 12px; }
 .sustento-retirar { padding: 0; border: 0; background: none; color: #b93535; font: inherit; cursor: pointer; }
 .sustento-retirar:hover { text-decoration: underline; }
 
 .sustento-pie, .sustento-form { padding: 10px 12px; border-top: 1px solid #e2ddd0; }
 .sustento-pie { display: flex; flex-direction: column; gap: 6px; }
-.sustento-ayuda { color: #6d6b67; font-size: 11.5px; }
+.sustento-ayuda { color: #6d6b67; font-size: 12px; }
 
 .sustento-pie button, .sustento-form__pie button {
   height: 30px;
@@ -110,14 +110,14 @@
 .sustento-pie button:disabled, .sustento-form__pie button:disabled { opacity: 0.45; cursor: default; }
 
 .sustento-form__t { margin-bottom: 8px; font-weight: 600; }
-.sustento-form label { display: flex; flex-direction: column; gap: 3px; margin-bottom: 8px; color: #6d6b67; font-size: 11.5px; }
-.sustento-form input { height: 30px; padding: 0 8px; border: 1px solid #cfcabb; border-radius: 4px; background: #fff; color: #141413; font: inherit; font-size: 12.5px; }
+.sustento-form label { display: flex; flex-direction: column; gap: 3px; margin-bottom: 8px; color: #6d6b67; font-size: 12px; }
+.sustento-form input { height: 30px; padding: 0 8px; border: 1px solid #cfcabb; border-radius: 4px; background: #fff; color: #141413; font: inherit; font-size: 13px; }
 .sustento-form input:focus { outline: 2px solid #6a9bcc; outline-offset: 0; border-color: #6a9bcc; }
 .sustento-form__par { display: grid; grid-template-columns: 1fr 90px; gap: 8px; }
 .sustento-form__pie { display: flex; justify-content: flex-end; gap: 8px; }
-.sustento-error { margin-bottom: 8px; color: #b93535; font-size: 11.5px; }
+.sustento-error { margin-bottom: 8px; color: #b93535; font-size: 12px; }
 /* Cómo se entendió la cantidad («9,490» = 9 490): se ve antes de guardar. */
-.sustento-leida { margin: -2px 0 8px; color: #52524d; font-size: 11.5px; }
+.sustento-leida { margin: -2px 0 8px; color: #52524d; font-size: 12px; }
 .sustento-form input[aria-invalid="true"] { border-color: #b93535; }
 
 /* Llegando desde la planilla: de qué partida se trata y la vuelta. */

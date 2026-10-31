@@ -40,7 +40,7 @@
 .a-sup__producto {
   padding-left: 10px;
   border-left: 1px solid var(--a-border-default);
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
   letter-spacing: .02em;
 }
@@ -63,9 +63,9 @@
   text-align: left;
   cursor: pointer;
 }
-.a-sup__selector small { font-size: 10px; line-height: 1.1; color: var(--a-text-muted); }
+.a-sup__selector small { font-size: 12px; line-height: 1.1; color: var(--a-text-muted); }
 .a-sup__selector b {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 500;
   line-height: 1.3;
   white-space: nowrap;
@@ -108,7 +108,7 @@
 }
 .a-sup__titulo {
   margin: 0 10px 6px;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   letter-spacing: .06em;
   text-transform: uppercase;
@@ -126,7 +126,7 @@
   background: none;
   color: var(--a-text-primary);
   font: inherit;
-  font-size: 13px;
+  font-size: 14px;
   text-align: left;
   white-space: nowrap;
   cursor: pointer;
@@ -154,14 +154,14 @@
   box-shadow: inset 0 0 0 1px var(--a-border-default);
   color: var(--a-text-muted);
   font: inherit;
-  font-size: 13px;
+  font-size: 14px;
   text-align: left;
   cursor: pointer;
 }
 .a-sup__buscar svg { color: var(--a-text-secondary); flex-shrink: 0; }
 .a-sup__buscar span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .a-sup__buscar kbd {
-  font: 600 10px var(--a-font-sans);
+  font: 600 12px var(--a-font-sans);
   color: var(--a-text-secondary);
   background: var(--bg-hover);
   border: 1px solid var(--a-border-default);

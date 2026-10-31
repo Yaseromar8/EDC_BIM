@@ -58,7 +58,7 @@
   align-items: center;
   padding: 6px 12px;
   cursor: pointer;
-  font-size: 13px;
+  font-size: 14px;
   white-space: nowrap;
   color: var(--adsk-text);
   border-left: 3px solid transparent;
@@ -129,7 +129,7 @@
   outline: none;
   margin-left: 8px;
   flex: 1;
-  font-size: 13px;
+  font-size: 14px;
 }
 
 /* Matrix Table */
@@ -141,7 +141,7 @@
 .matrix-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 13.5px;
+  font-size: 14px;
   /* Cifras de ancho fijo: versiones, tamaños y fechas alinean en columna. */
   font-variant-numeric: tabular-nums;
 }
@@ -154,7 +154,7 @@
   color: var(--neutral-500, #72706b);
   font-weight: 600;
   text-transform: uppercase;
-  font-size: 11px;
+  font-size: 12px;
   letter-spacing: 0.06em;
   white-space: nowrap;
 }
@@ -172,7 +172,7 @@
 .matrix-table td.date-col,
 .matrix-table td.user-col {
   color: var(--text-secondary, #52524d);
-  font-size: 12.5px;
+  font-size: 13px;
 }
 .matrix-table td.version-col { font-weight: 600; }
 
@@ -220,7 +220,7 @@ tr:hover .pencil-btn { opacity: 1; }
 .inline-edit input {
   border: 1px solid var(--adsk-blue);
   padding: 2px 4px;
-  font-size: 13px;
+  font-size: 14px;
 }
 
 /* Context Menu */
@@ -241,7 +241,7 @@ tr:hover .pencil-btn { opacity: 1; }
   display: flex;
   align-items: center;
   gap: 12px;
-  font-size: 13px;
+  font-size: 14px;
 }
 
 .menu-item:hover { background: #f1f0e8; }

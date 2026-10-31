@@ -10,7 +10,7 @@
   min-height: 0;
   background: #f5f2ea;
   color: #141413;
-  font-size: 12.5px;
+  font-size: 13px;
 }
 
 .tabla-lda__estado { margin: auto; padding: 40px; color: #52524d; font-size: 14px; text-align: center; }
@@ -54,7 +54,7 @@
   border-right: 1px solid #e2ddd0;
   border-bottom: 1px solid #cfcabb;
   color: #52524d;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   text-align: center;
 }
@@ -77,7 +77,7 @@
   min-width: 44px;
   background: #f6f5f0 !important;
   color: #8a877e;
-  font-size: 11px;
+  font-size: 12px;
   text-align: center;
 }
 
@@ -155,7 +155,7 @@
   border-radius: 3px;
   background: #fff;
   color: #141413;
-  font-size: 10px;
+  font-size: 12px;
   line-height: 1;
   cursor: pointer;
   flex-shrink: 0;
@@ -191,7 +191,7 @@
   border-radius: 999px;
   background: rgba(20, 20, 19, 0.08);
   color: #52524d;
-  font-size: 10.5px;
+  font-size: 12px;
   font-weight: 600;
   line-height: 16px;
 }
@@ -208,7 +208,7 @@
 .tabla-lda__niveles-rot {
   padding: 0 6px;
   color: #6d6b67;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
 }
 .tabla-lda__niveles button {
@@ -219,7 +219,7 @@
   background: transparent;
   color: #52524d;
   font: inherit;
-  font-size: 11.5px;
+  font-size: 12px;
   cursor: pointer;
 }
 .tabla-lda__niveles button:hover { color: #141413; background: rgba(255, 255, 255, 0.6); }
@@ -258,7 +258,7 @@
   border-radius: 3px;
   background: #f1f0e8;
   color: #52524d;
-  font-size: 11.5px;
+  font-size: 12px;
 }
 
 .tabla-lda__fila button {
@@ -270,7 +270,7 @@
   background: #141413;
   color: #fff;
   font: inherit;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
   cursor: pointer;
 }
@@ -309,11 +309,11 @@
 /* El sustento de cada partida (ESTANDAR_LDA §6): la columna al final y la línea de la fila elegida. */
 .tabla-lda__rejilla th.tabla-lda__sus { min-width: 200px; text-align: left; }
 .tabla-lda__rejilla td.tabla-lda__sus { max-width: none; background: #fcfbf8; }
-.sus-chip { display: inline-block; margin-right: 4px; padding: 0 6px; border: 1px solid #507294; border-radius: 3px; color: #507294; font-size: 11px; font-weight: 600; line-height: 18px; }
+.sus-chip { display: inline-block; margin-right: 4px; padding: 0 6px; border: 1px solid #507294; border-radius: 3px; color: #507294; font-size: 12px; font-weight: 600; line-height: 18px; }
 .sus-chip.sus-cuadra { border-color: #667650; color: #667650; }
 .sus-chip.sus-falta, .sus-chip.sus-sobra { border-color: #b93535; color: #b93535; }
 .sus-chip.sus-version { border-color: #734500; color: #734500; }
-.sus-sin { color: #a8a59c; font-size: 11px; }
+.sus-sin { color: #a8a59c; font-size: 12px; }
 
 .tabla-lda__sustento {
   display: flex;
@@ -325,7 +325,7 @@
   border-top: 1px solid #e2ddd0;
 }
 
-.tabla-lda__rot { color: #6d6b67; font-size: 9.5px; font-weight: 600; letter-spacing: 0.09em; text-transform: uppercase; }
+.tabla-lda__rot { color: #6d6b67; font-size: 12px; font-weight: 600; letter-spacing: 0.09em; text-transform: uppercase; }
 
 .sus-plano {
   height: 24px;
@@ -335,7 +335,7 @@
   background: #fff;
   color: #507294;
   font: inherit;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
   cursor: pointer;
 }
@@ -343,10 +343,10 @@
 .sus-plano:hover { background: #e6ecef; }
 .sus-plano:focus-visible { outline: 2px solid #6a9bcc; outline-offset: 2px; }
 .sus-plano.sus-version { border-color: #734500; color: #734500; }
-.sus-cuadre { font-size: 12px; }
+.sus-cuadre { font-size: 13px; }
 .sus-cuadre.sus-cuadra { color: #667650; font-weight: 600; }
 .sus-cuadre.sus-falta, .sus-cuadre.sus-sobra { color: #b93535; font-weight: 600; }
-.sus-vincular { height: 24px; margin-left: auto; padding: 0 10px; border: 0; border-radius: 3px; background: #141413; color: #fff; font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
+.sus-vincular { height: 24px; margin-left: auto; padding: 0 10px; border: 0; border-radius: 3px; background: #141413; color: #fff; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
 .sus-vincular:hover { background: #302f2e; }
 .sus-vincular:focus-visible { outline: 2px solid #6a9bcc; outline-offset: 2px; }
 .tabla-lda__metrado { display: inline-flex; align-items: center; gap: 6px; color: #6d6b67; }

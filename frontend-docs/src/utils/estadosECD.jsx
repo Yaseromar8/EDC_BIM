@@ -120,7 +120,7 @@ export function FichaIdoneidad({ codigo, familia, etiqueta }) {
       title={etiqueta || codigo}
       style={{
         display: 'inline-block', padding: '1px 7px', borderRadius: 6,
-        fontSize: 10.5, fontWeight: 700, fontFamily: 'monospace',
+        fontSize: 12, fontWeight: 700, fontFamily: 'monospace',
         background: c.fondo, border: `1px solid ${c.borde}`, color: c.texto,
         whiteSpace: 'nowrap',
       }}

@@ -217,7 +217,7 @@
 :root:not([data-theme="dark"]) .data-header {
   background: #F1F0E8 !important;
   color: #52524D;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
   text-transform: none;
   letter-spacing: 0;

@@ -117,8 +117,8 @@ export function TriajeSeguridadView({ projectPrefix, isAdmin }) {
               border: `1px solid ${requiere === valor ? 'var(--accent)' : 'var(--border)'}`,
               borderRadius: 10, padding: '13px 15px',
             }}>
-      <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--text-primary)' }}>{titulo}</div>
-      <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 5, lineHeight: 1.55 }}>
+      <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>{titulo}</div>
+      <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 5, lineHeight: 1.55 }}>
         {texto}
       </div>
     </button>
@@ -127,7 +127,7 @@ export function TriajeSeguridadView({ projectPrefix, isAdmin }) {
   return (
     <div style={{ padding: '18px 22px', color: 'var(--text-primary)', overflow: 'auto', height: '100%' }}>
       <h2 style={{ margin: 0, fontSize: 17, fontWeight: 600 }}>Triaje de seguridad de la obra</h2>
-      <p style={{ margin: '4px 0 0', fontSize: 12.5, color: 'var(--text-secondary)', maxWidth: 680 }}>
+      <p style={{ margin: '4px 0 0', fontSize: 13, color: 'var(--text-secondary)', maxWidth: 680 }}>
         La primera pregunta de ISO 19650-5, y la que manda sobre todo lo demás: ¿esta
         obra maneja información que necesite un tratamiento especial? Una obra sin nada
         delicado no tiene que cargar con medidas que estorban; una con información
@@ -137,7 +137,7 @@ export function TriajeSeguridadView({ projectPrefix, isAdmin }) {
       {error && (
         <div style={{ marginTop: 16, padding: '14px 16px', borderRadius: 10,
                       background: 'var(--bg-danger)', border: '1px solid var(--border-danger)' }}>
-          <p style={{ margin: 0, fontSize: 13.5, color: 'var(--danger)', fontWeight: 600 }}>{error}</p>
+          <p style={{ margin: 0, fontSize: 14, color: 'var(--danger)', fontWeight: 600 }}>{error}</p>
         </div>
       )}
 
@@ -146,12 +146,12 @@ export function TriajeSeguridadView({ projectPrefix, isAdmin }) {
       {datos && (datos.sin_evaluar || caducado) && (
         <div style={{ marginTop: 16, padding: '11px 14px', borderRadius: 9,
                       background: 'var(--bg-warning)', border: '1px solid var(--border-warning)' }}>
-          <p style={{ margin: 0, fontSize: 12.5, color: 'var(--warning)', fontWeight: 600 }}>
+          <p style={{ margin: 0, fontSize: 13, color: 'var(--warning)', fontWeight: 600 }}>
             {caducado
               ? 'El triaje de esta obra está caducado.'
               : 'Esta obra todavía no tiene triaje de seguridad.'}
           </p>
-          <p style={{ margin: '5px 0 0', fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.55 }}>
+          <p style={{ margin: '5px 0 0', fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.55 }}>
             Mientras siga así <strong>no se pueden emitir enlaces públicos</strong> de sus
             documentos. No es un castigo: la norma existe para que no salga del ECD lo que
             nadie ha mirado. Contestar las dos preguntas de abajo desbloquea los
@@ -164,7 +164,7 @@ export function TriajeSeguridadView({ projectPrefix, isAdmin }) {
       {t && !caducado && (
         <div style={{ marginTop: 16, padding: '11px 14px', borderRadius: 9,
                       background: 'var(--bg-secondary)', border: '1px solid var(--border)' }}>
-          <p style={{ margin: 0, fontSize: 12.5, color: 'var(--text-secondary)' }}>
+          <p style={{ margin: 0, fontSize: 13, color: 'var(--text-secondary)' }}>
             Evaluada por <strong style={{ color: 'var(--text-primary)' }}>{t.evaluado_por || '—'}</strong>
             {t.evaluado_en ? ` el ${String(t.evaluado_en).slice(0, 10)}` : ''}
             {t.revisar_en ? ` · toca revisarlo el ${String(t.revisar_en).slice(0, 10)}` : ''}
@@ -182,14 +182,14 @@ export function TriajeSeguridadView({ projectPrefix, isAdmin }) {
       </div>
 
       <div style={{ marginTop: 16 }}>
-        <div style={{ fontSize: 10.5, color: 'var(--text-muted)', letterSpacing: 0.3, marginBottom: 4 }}>
+        <div style={{ fontSize: 12, color: 'var(--text-muted)', letterSpacing: 0.3, marginBottom: 4 }}>
           POR QUÉ — queda en el expediente
         </div>
         <textarea value={justificacion} onChange={e => setJustificacion(e.target.value)}
                   disabled={!isAdmin} rows={3}
                   placeholder="En qué te basas. Un triaje sin motivo no se puede auditar: dentro de un año nadie sabrá si se pensó o se pulsó."
                   style={{
-                    width: '100%', maxWidth: 680, fontSize: 12.5, lineHeight: 1.5,
+                    width: '100%', maxWidth: 680, fontSize: 13, lineHeight: 1.5,
                     background: 'var(--bg-primary)', color: 'var(--text-primary)',
                     border: '1px solid var(--border)', borderRadius: 7, padding: '8px 11px',
                     resize: 'vertical', fontFamily: 'inherit',
@@ -198,13 +198,13 @@ export function TriajeSeguridadView({ projectPrefix, isAdmin }) {
 
       <div style={{ marginTop: 14, display: 'flex', gap: 14, alignItems: 'flex-end', flexWrap: 'wrap' }}>
         <div>
-          <div style={{ fontSize: 10.5, color: 'var(--text-muted)', letterSpacing: 0.3, marginBottom: 4 }}>
+          <div style={{ fontSize: 12, color: 'var(--text-muted)', letterSpacing: 0.3, marginBottom: 4 }}>
             REVISARLO EL
           </div>
           <input type="date" value={revisarEn} onChange={e => setRevisarEn(e.target.value)}
                  disabled={!isAdmin}
                  style={{
-                   fontSize: 12.5, background: 'var(--bg-primary)', color: 'var(--text-primary)',
+                   fontSize: 13, background: 'var(--bg-primary)', color: 'var(--text-primary)',
                    border: '1px solid var(--border)', borderRadius: 7, padding: '7px 10px',
                  }} />
         </div>
@@ -212,7 +212,7 @@ export function TriajeSeguridadView({ projectPrefix, isAdmin }) {
           <button onClick={guardar} disabled={guardando}
                   style={{
                     background: 'var(--accent)', color: 'var(--text-on-accent)', border: 'none',
-                    borderRadius: 7, padding: '9px 18px', fontSize: 12.5, fontWeight: 600,
+                    borderRadius: 7, padding: '9px 18px', fontSize: 13, fontWeight: 600,
                     cursor: guardando ? 'default' : 'pointer', opacity: guardando ? 0.6 : 1,
                   }}>
             {guardando ? 'Guardando…' : t ? 'Actualizar triaje' : 'Registrar triaje'}
@@ -220,7 +220,7 @@ export function TriajeSeguridadView({ projectPrefix, isAdmin }) {
         )}
       </div>
 
-      <p style={{ margin: '10px 0 0', fontSize: 11.5, color: 'var(--text-muted)', maxWidth: 680, lineHeight: 1.6 }}>
+      <p style={{ margin: '10px 0 0', fontSize: 12, color: 'var(--text-muted)', maxWidth: 680, lineHeight: 1.6 }}>
         La fecha de revisión no es burocracia: sin ella el triaje envejece y deja de
         valer. Una obra cambia — entran subcontratas, cambia el alcance — y lo que se
         decidió hace dos años puede no seguir siendo cierto.

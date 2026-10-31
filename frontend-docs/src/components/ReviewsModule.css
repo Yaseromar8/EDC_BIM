@@ -18,7 +18,7 @@
 }
 
 .rev-subtitulo {
-  font-size: 13px;
+  font-size: 14px;
   color: var(--a-text-muted);
   margin-bottom: 16px;
 }
@@ -40,7 +40,7 @@
   background: var(--a-surface-base);
   color: var(--a-text-secondary);
   font: inherit;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
   cursor: pointer;
   transition: background-color var(--a-motion-fast) var(--a-ease),
@@ -70,14 +70,14 @@
   border-radius: var(--a-radius-md);
   background: var(--a-status-danger-surface);
   color: var(--a-status-danger);
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .rev-vacio {
   text-align: center;
   padding: 48px;
   color: var(--a-text-muted);
-  font-size: 13px;
+  font-size: 14px;
 }
 
 /* ── Tabla (como la Revisiones de ACC, 13-oct-2026) ──
@@ -104,7 +104,7 @@
 .rev-tabla__cabeza {
   min-height: 40px;
   border-bottom: 1px solid var(--a-border-strong);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
   color: var(--a-text-secondary);
 }
@@ -123,7 +123,7 @@
   background: var(--a-surface-base);
   color: var(--a-text-primary);
   font: inherit;
-  font-size: 13px;
+  font-size: 14px;
   text-align: left;
   cursor: pointer;
 }
@@ -149,14 +149,14 @@
 }
 
 .rev-estado__texto {
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
   letter-spacing: .03em;
   text-transform: uppercase;
 }
 
 .rev-estado__nota {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   color: var(--a-action-text);
 }
@@ -224,7 +224,7 @@
   border-radius: var(--a-radius-full);
   background: transparent;
   color: inherit;
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1;
   cursor: pointer;
 }
@@ -245,7 +245,7 @@
   background: var(--a-state-selected);
   color: var(--a-action-text);
   font: inherit;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
   cursor: pointer;
 }

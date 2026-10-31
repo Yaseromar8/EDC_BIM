@@ -69,7 +69,7 @@ function ChipSujeto({ tipo, children }) {
   return (
     <span style={{
       display: 'inline-flex', alignItems: 'center', gap: 5, padding: '2px 8px',
-      borderRadius: 11, fontSize: 11, fontWeight: 600,
+      borderRadius: 11, fontSize: 12, fontWeight: 600,
       background: t.fondo, border: `1px solid ${t.borde}`, color: t.texto,
     }}>
       {ICONO_SUJETO[tipo]}{children}
@@ -83,10 +83,10 @@ function ChipSujeto({ tipo, children }) {
 function ComoSeResuelve() {
   const [abierto, setAbierto] = useState(false);
   return (
-    <div style={{ margin: '0 0 12px', fontSize: 12 }}>
+    <div style={{ margin: '0 0 12px', fontSize: 13 }}>
       <button onClick={() => setAbierto(v => !v)}
               style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer',
-                       color: 'var(--accent)', fontSize: 12 }}>
+                       color: 'var(--accent)', fontSize: 13 }}>
         {abierto ? '− ' : '+ '}Cómo se resuelve un permiso
       </button>
       {abierto && (
@@ -169,21 +169,21 @@ function PermisoEfectivo({ folder, modelUrn, apiBaseUrl }) {
   const m = res && res.motivo;
   return (
     <div style={{ borderTop: '1px solid #e8e6dc', padding: '14px 16px', background: '#faf9f5' }}>
-      <div style={{ fontSize: 11, fontWeight: 700, color: '#52524d', letterSpacing: '.4px',
+      <div style={{ fontSize: 12, fontWeight: 700, color: '#52524d', letterSpacing: '.4px',
                     textTransform: 'uppercase', marginBottom: 8 }}>
         Comprobar el permiso de una persona
       </div>
       {falloLista && (
         <div role="alert" style={{ marginBottom: 8, padding: '8px 10px', borderRadius: 5,
                                    background: '#fbebeb', border: '1px solid #fbebeb',
-                                   color: '#b93535', fontSize: 12.3 }}>
+                                   color: '#b93535', fontSize: 13 }}>
           {falloLista} <b>La lista está incompleta</b>, no vacía.
         </div>
       )}
       <select value={quien} onChange={e => setQuien(e.target.value)}
               disabled={Boolean(falloLista)}
               style={{ width: '100%', padding: '7px 8px', border: '1px solid #e8e6dc',
-                       borderRadius: 5, fontSize: 13 }}>
+                       borderRadius: 5, fontSize: 14 }}>
         <option value="">
           {falloLista ? 'No se pudo cargar' : 'Elegir persona de la obra…'}
         </option>
@@ -194,10 +194,10 @@ function PermisoEfectivo({ folder, modelUrn, apiBaseUrl }) {
         ))}
       </select>
 
-      {cargando && <div style={{ marginTop: 10, fontSize: 12.5, color: '#72706b' }}>Consultando…</div>}
+      {cargando && <div style={{ marginTop: 10, fontSize: 13, color: '#72706b' }}>Consultando…</div>}
 
       {res && res.success === false && (
-        <div style={{ marginTop: 10, fontSize: 12.5, color: 'var(--danger, #b93535)' }}>{res.error}</div>
+        <div style={{ marginTop: 10, fontSize: 13, color: 'var(--danger, #b93535)' }}>{res.error}</div>
       )}
 
       {res && res.success && (
@@ -206,10 +206,10 @@ function PermisoEfectivo({ folder, modelUrn, apiBaseUrl }) {
                       background: res.denegado ? '#fbebeb' : '#e0e3d7' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 9, flexWrap: 'wrap' }}>
             <ACCPillBars level={res.nivel} />
-            <b style={{ fontSize: 13, color: res.denegado ? '#b93535' : '#64744e' }}>
+            <b style={{ fontSize: 14, color: res.denegado ? '#b93535' : '#64744e' }}>
               {res.nivel_label}
             </b>
-            <span style={{ fontSize: 12, color: '#72706b' }}>
+            <span style={{ fontSize: 13, color: '#72706b' }}>
               sobre <b>{folder?.name}</b>
             </span>
           </div>
@@ -217,7 +217,7 @@ function PermisoEfectivo({ folder, modelUrn, apiBaseUrl }) {
           {/* EL POR QUÉ, con los tres datos: carpeta ganadora, sujeto ganador
               y nivel. Sin esto, «Restringido» es un misterio que se resuelve
               concediendo de más. */}
-          <div style={{ marginTop: 9, fontSize: 12.3, color: '#52524d', lineHeight: 1.6 }}>
+          <div style={{ marginTop: 9, fontSize: 13, color: '#52524d', lineHeight: 1.6 }}>
             {m && m.regla === 'sujeto' && (
               <>
                 Gana la regla de <ChipSujeto tipo={m.sujeto_tipo}>{res.sujeto_ganador_label}</ChipSujeto>
@@ -235,7 +235,7 @@ function PermisoEfectivo({ folder, modelUrn, apiBaseUrl }) {
                         {d.sujeto_label || d.sujeto_tipo} = {d.nivel_label || d.nivel}
                       </div>
                     ))}
-                    <div style={{ fontSize: 11.5, marginTop: 2 }}>
+                    <div style={{ fontSize: 12, marginTop: 2 }}>
                       Motivo: al mismo nivel, la regla más específica manda —
                       Persona &gt; Empresa &gt; Función contractual.
                     </div>
@@ -253,7 +253,7 @@ function PermisoEfectivo({ folder, modelUrn, apiBaseUrl }) {
                         <b>{d.carpeta_nombre || '—'}</b>
                       </div>
                     ))}
-                    <div style={{ fontSize: 11.5, marginTop: 2 }}>
+                    <div style={{ fontSize: 12, marginTop: 2 }}>
                       Motivo: la regla de la carpeta más cercana tiene precedencia;
                       las de arriba no se aplican, aunque concedan más.
                     </div>
@@ -275,7 +275,7 @@ function PermisoEfectivo({ folder, modelUrn, apiBaseUrl }) {
           {/* Con qué identidades le alcanza una regla AQUÍ: es lo que hace
               comprensible que gane su empresa y no ella. */}
           <div style={{ marginTop: 9, paddingTop: 8, borderTop: '1px dashed #e8e6dc',
-                        fontSize: 11.5, color: '#72706b' }}>
+                        fontSize: 12, color: '#72706b' }}>
             Le alcanzan reglas dirigidas a: <b>ella misma</b>
             {res.alcanzable_por?.COMPANY && <>, su empresa <b>{res.alcanzable_por.COMPANY}</b></>}
             {res.alcanzable_por?.CONTRACTUAL_FUNCTION && <>, y la función <b>{res.alcanzable_por.CONTRACTUAL_FUNCTION}</b></>}
@@ -367,7 +367,7 @@ export default function FolderPermissionsPanel({ folder, modelUrn, apiBaseUrl, o
               {folder?.name}
             </span>
           </h3>
-          <p style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#72706b', fontSize: 12, margin: '4px 0 0' }}>
+          <p style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#72706b', fontSize: 13, margin: '4px 0 0' }}>
             {/* Se cuentan REGLAS, no usuarios: una sola regla de función puede
                 alcanzar a media obra, y decir «1 usuario» sería mentir. */}
             <span>{cuantas} {cuantas === 1 ? 'regla en esta carpeta' : 'reglas en esta carpeta'}</span>
@@ -430,7 +430,7 @@ export default function FolderPermissionsPanel({ folder, modelUrn, apiBaseUrl, o
                           <span className="user-name">{perm.sujeto_nombre}</span>
                           {/* El detalle identifica sin ambigüedad: el correo de
                               la persona, o a quién alcanza la regla. */}
-                          <span className="user-email" style={{ fontSize: 11, color: '#72706b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          <span className="user-email" style={{ fontSize: 12, color: '#72706b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                             {perm.sujeto_detalle}
                           </span>
                         </div>
@@ -439,7 +439,7 @@ export default function FolderPermissionsPanel({ folder, modelUrn, apiBaseUrl, o
                     <td>
                       <div className="perm-badge">
                         <ACCPillBars level={perm.permission_level} />
-                        <span className="lvl-text" style={{fontSize: '11px', color: '#72706b', marginTop: '2px'}}>{perm.permission_label}</span>
+                        <span className="lvl-text" style={{fontSize: '12px', color: '#72706b', marginTop: '2px'}}>{perm.permission_label}</span>
                       </div>
                     </td>
                     <td>

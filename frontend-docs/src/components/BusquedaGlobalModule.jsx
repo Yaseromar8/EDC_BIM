@@ -73,7 +73,7 @@ export default function BusquedaGlobalModule({ project }) {
   return (
     <div style={{ padding: 32, flex: 1, overflowY: 'auto' }}>
       <div style={{ fontSize: 24, fontWeight: 400, marginBottom: 4 }}>Buscar documentos</div>
-      <div style={{ fontSize: 12.5, color: '#72706b', marginBottom: 20, maxWidth: 720 }}>
+      <div style={{ fontSize: 13, color: '#72706b', marginBottom: 20, maxWidth: 720 }}>
         Busca en <b>toda esta obra</b> por nombre, código, etiqueta o metadatos.
         Sólo aparece lo que puedes ver.
       </div>
@@ -97,24 +97,24 @@ export default function BusquedaGlobalModule({ project }) {
       </div>
 
       {texto.trim().length === 1 && (
-        <div style={{ fontSize: 12.5, color: '#72706b' }}>
+        <div style={{ fontSize: 13, color: '#72706b' }}>
           Escribe al menos dos caracteres.
         </div>
       )}
 
       {buscando && (
-        <div style={{ fontSize: 13, color: '#72706b' }}>Buscando…</div>
+        <div style={{ fontSize: 14, color: '#72706b' }}>Buscando…</div>
       )}
 
       {!buscando && resultados !== null && resultados.length === 0 && (
         <div style={{ padding: '16px 18px', background: '#faf9f5',
                       border: '1px dashed #e8e6dc', borderRadius: 8,
-                      fontSize: 13, color: '#72706b', maxWidth: 720 }}>
+                      fontSize: 14, color: '#72706b', maxWidth: 720 }}>
           Ningún documento de esta obra coincide con «{texto.trim()}»
           {/* Se dice también la otra posibilidad, sin revelar nada: que exista
               y no se pueda ver es indistinguible de que no exista, y así debe
               ser -- pero quien busca merece saber que esa puerta existe. */}
-          <div style={{ marginTop: 5, fontSize: 12, opacity: .85 }}>
+          <div style={{ marginTop: 5, fontSize: 13, opacity: .85 }}>
             Si crees que debería estar, puede vivir en una carpeta a la que no
             tienes acceso. Pídeselo a quien administra la obra.
           </div>
@@ -123,11 +123,11 @@ export default function BusquedaGlobalModule({ project }) {
 
       {!buscando && resultados !== null && resultados.length > 0 && (
         <>
-          <div style={{ fontSize: 12, color: '#72706b', marginBottom: 8 }}>
+          <div style={{ fontSize: 13, color: '#72706b', marginBottom: 8 }}>
             {resultados.length} documento{resultados.length !== 1 ? 's' : ''}
             {truncado && ' (se muestran los más recientes)'}
           </div>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
             <thead><tr style={{ borderBottom: '2px solid #f1f0e8', color: '#72706b',
                                 fontWeight: 500 }}>
               <th style={{ padding: '9px 12px', textAlign: 'left' }}>Documento</th>
@@ -144,19 +144,19 @@ export default function BusquedaGlobalModule({ project }) {
                     onMouseOver={e => (e.currentTarget.style.background = '#faf9f5')}
                     onMouseOut={e => (e.currentTarget.style.background = 'none')}>
                   <td style={{ padding: '11px 12px', fontWeight: 500 }}>{it.name}</td>
-                  <td style={{ padding: '11px 12px', color: '#72706b', fontSize: 12 }}>
+                  <td style={{ padding: '11px 12px', color: '#72706b', fontSize: 13 }}>
                     {it.ruta || <span style={{ color: '#cccac0' }}>raíz</span>}
                   </td>
                   <td style={{ padding: '11px 12px' }}>
                     {it.status ? <Ficha estado={it.status} tamano="pequena" />
                                : <span style={{ color: '#cccac0' }}>—</span>}
                   </td>
-                  <td style={{ padding: '11px 12px', color: '#72706b', fontSize: 12 }}>
+                  <td style={{ padding: '11px 12px', color: '#72706b', fontSize: 13 }}>
                     {/* La VIGENTE. Un documento heredado no tiene versión propia:
                         lo vigente es el nodo, y se dice así en vez de fingir. */}
                     {it.version_id ? `v${it.version_number}` : 'versión actual'}
                   </td>
-                  <td style={{ padding: '11px 12px', color: '#72706b', fontSize: 12 }}>
+                  <td style={{ padding: '11px 12px', color: '#72706b', fontSize: 13 }}>
                     {it.updated_at ? new Date(it.updated_at).toLocaleDateString() : '—'}
                   </td>
                 </tr>
@@ -187,7 +187,7 @@ export default function BusquedaGlobalModule({ project }) {
               </div>
               <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
                 <a href={preview.url} target="_blank" rel="noreferrer"
-                   style={{ fontSize: 12, color: 'var(--accent)' }}>Abrir aparte</a>
+                   style={{ fontSize: 13, color: 'var(--accent)' }}>Abrir aparte</a>
                 <button onClick={cerrar}
                         style={{ border: 'none', background: 'none', fontSize: 20,
                                  cursor: 'pointer', color: '#72706b' }}>×</button>

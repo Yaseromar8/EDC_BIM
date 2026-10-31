@@ -446,18 +446,18 @@ export default function App() {
           <h2 style={{ margin: '0 0 12px', fontSize: 18, fontWeight: 600 }}>
             Esta invitación no es para tu sesión
           </h2>
-          <p style={{ margin: '0 0 8px', fontSize: 13.5, lineHeight: 1.6, color: '#cccac0' }}>
+          <p style={{ margin: '0 0 8px', fontSize: 14, lineHeight: 1.6, color: '#cccac0' }}>
             Estás dentro como <b>{user.email}</b>, y esta invitación es para{' '}
             <b>{invitacionPendiente.email}</b>.
           </p>
-          <p style={{ margin: '0 0 20px', fontSize: 13.5, lineHeight: 1.6, color: '#cccac0' }}>
+          <p style={{ margin: '0 0 20px', fontSize: 14, lineHeight: 1.6, color: '#cccac0' }}>
             Para activarla hay que cerrar esta sesión. El enlace <b>no se gasta
             por abrirlo</b>: seguirá siendo válido.
           </p>
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
             <button onClick={logoutFull}
                     style={{ padding: '9px 16px', borderRadius: 6, border: 'none',
-                             background: '#507294', color: '#fff', fontSize: 13,
+                             background: '#507294', color: '#fff', fontSize: 14,
                              cursor: 'pointer' }}>
               Cerrar sesión y activar la invitación
             </button>
@@ -465,7 +465,7 @@ export default function App() {
                       window.history.replaceState({}, '', window.location.pathname);
                       setInvitacionPendiente(null);
                     }}
-                    style={{ padding: '9px 16px', borderRadius: 6, fontSize: 13,
+                    style={{ padding: '9px 16px', borderRadius: 6, fontSize: 14,
                              border: '1px solid rgba(255,255,255,0.18)',
                              background: 'transparent', color: '#cccac0', cursor: 'pointer' }}>
               Seguir como {user.email}
@@ -502,7 +502,7 @@ export default function App() {
       <div role="alert" style={{ position: 'fixed', top: 14, left: '50%', transform: 'translateX(-50%)',
                                  zIndex: 30000, background: '#fbebeb', color: '#993458',
                                  border: '1px solid #fbebeb', borderRadius: 8, padding: '10px 14px',
-                                 fontSize: 13, boxShadow: '0 8px 24px rgba(0,0,0,.15)',
+                                 fontSize: 14, boxShadow: '0 8px 24px rgba(0,0,0,.15)',
                                  display: 'flex', gap: 10, alignItems: 'center' }}>
         {avisoDeEnlace}
         <button type="button" onClick={() => setAvisoDeEnlace(null)} aria-label="Cerrar aviso"

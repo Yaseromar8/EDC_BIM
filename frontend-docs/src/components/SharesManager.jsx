@@ -39,15 +39,15 @@ export default function SharesManager({ projectPrefix }) {
   return (
     <div style={{ background: '#fff', border: '1px solid #e8e6dc', borderRadius: 8, padding: 24, marginBottom: 20 }}>
       <div style={{ fontSize: 14, fontWeight: 600, color: '#333330', marginBottom: 4 }}>Enlaces compartidos</div>
-      <div style={{ fontSize: 12, color: '#72706b', marginBottom: 16 }}>
+      <div style={{ fontSize: 13, color: '#72706b', marginBottom: 16 }}>
         Enlaces públicos generados desde "Compartir". Revócalos para cortar el acceso externo al instante.
       </div>
       {shares === null ? (
         <div style={{ textAlign: 'center', padding: 24 }}><div className="adsk-spinner" style={{ margin: '0 auto' }} /></div>
       ) : shares.length === 0 ? (
-        <div style={{ fontSize: 13, color: '#72706b', padding: 12 }}>No hay enlaces compartidos en este proyecto.</div>
+        <div style={{ fontSize: 14, color: '#72706b', padding: 12 }}>No hay enlaces compartidos en este proyecto.</div>
       ) : (
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
           <thead>
             <tr style={{ borderBottom: '2px solid #f1f0e8', color: '#72706b', fontWeight: 500, textAlign: 'left' }}>
               <th style={{ padding: '8px 10px' }}>Documento</th>
@@ -66,13 +66,13 @@ export default function SharesManager({ projectPrefix }) {
                   <td style={{ padding: '8px 10px', color: '#72706b' }}>{s.shared_by}</td>
                   <td style={{ padding: '8px 10px', color: '#72706b' }}>{s.expires_at ? formatDate(s.expires_at) : 'Nunca'}</td>
                   <td style={{ padding: '8px 10px' }}>
-                    <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 9px', borderRadius: 10, background: chip.bg, color: chip.color }}>{chip.label}</span>
+                    <span style={{ fontSize: 12, fontWeight: 700, padding: '2px 9px', borderRadius: 10, background: chip.bg, color: chip.color }}>{chip.label}</span>
                   </td>
                   <td style={{ padding: '8px 10px', textAlign: 'right', whiteSpace: 'nowrap' }}>
                     {s.state === 'active' && (
                       <>
-                        <button onClick={() => copy(s.id)} style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', fontSize: 12, fontWeight: 600, marginRight: 12 }}>Copiar</button>
-                        <button onClick={() => revoke(s)} style={{ background: 'none', border: 'none', color: '#b93535', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>Revocar</button>
+                        <button onClick={() => copy(s.id)} style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', fontSize: 13, fontWeight: 600, marginRight: 12 }}>Copiar</button>
+                        <button onClick={() => revoke(s)} style={{ background: 'none', border: 'none', color: '#b93535', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>Revocar</button>
                       </>
                     )}
                   </td>

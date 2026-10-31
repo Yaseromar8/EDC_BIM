@@ -298,11 +298,11 @@ export function ReviewModal({ isOpen, onClose, items, projectPrefix, onCreated }
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18" /><line x1="18" y1="6" x2="6" y2="18" /></svg>
           </IconButton>
         </div>
-        <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 16, fontSize: 13 }}>
+        <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 16, fontSize: 14 }}>
           <div>
             <label style={{ display: 'block', color: '#72706b', marginBottom: 6, fontWeight: 600 }}>Título</label>
             <input autoFocus value={title} onChange={e => setTitle(e.target.value)} placeholder="Ej: Aprobación planos estructuras Rev B"
-              style={{ width: '100%', boxSizing: 'border-box', padding: '8px 10px', border: '1px solid #e8e6dc', borderRadius: 4, fontSize: 13, outline: 'none' }} />
+              style={{ width: '100%', boxSizing: 'border-box', padding: '8px 10px', border: '1px solid #e8e6dc', borderRadius: 4, fontSize: 14, outline: 'none' }} />
           </div>
 
           <div>
@@ -318,7 +318,7 @@ export function ReviewModal({ isOpen, onClose, items, projectPrefix, onCreated }
                       <span style={{ color: 'var(--accent)', fontWeight: 600 }}>V{it.version || 1}</span>
                     </div>
                     {aviso && (
-                      <div style={{ marginTop: 2, fontSize: 11, color: '#734500' }}
+                      <div style={{ marginTop: 2, fontSize: 12, color: '#734500' }}
                            title={otras.map(o => `${o.codigo} · ${o.title}`).join('\n')}>
                         {aviso}
                       </div>
@@ -328,14 +328,14 @@ export function ReviewModal({ isOpen, onClose, items, projectPrefix, onCreated }
               })}
             </div>
             {Object.keys(enCurso).length > 0 && (
-              <div style={{ marginTop: 6, fontSize: 11, color: '#734500', lineHeight: 1.5 }}>
+              <div style={{ marginTop: 6, fontSize: 12, color: '#734500', lineHeight: 1.5 }}>
                 {AVISO_DOCUMENTOS_EN_CURSO}
               </div>
             )}
           </div>
 
           {errorPlantillas && (
-            <div role="alert" style={{ fontSize: 12, color: '#734500', background: '#faf9f5',
+            <div role="alert" style={{ fontSize: 13, color: '#734500', background: '#faf9f5',
                                        border: '1px solid #f9eeda', borderRadius: 4, padding: '6px 9px',
                                        lineHeight: 1.5 }}>
               {errorPlantillas}
@@ -345,13 +345,13 @@ export function ReviewModal({ isOpen, onClose, items, projectPrefix, onCreated }
             <div>
               <label style={{ display: 'block', color: '#72706b', marginBottom: 6, fontWeight: 600 }}>
                 Flujo de revisión
-                <span style={{ fontWeight: 400, color: '#72706b', fontSize: 11 }}>
+                <span style={{ fontWeight: 400, color: '#72706b', fontSize: 12 }}>
                   {' '}· la revisión se queda con una copia; cambiar la plantilla después no la toca
                 </span>
               </label>
               <select value={plantillaId} onChange={e => elegirPlantilla(e.target.value)}
                       style={{ width: '100%', padding: '8px 10px', border: '1px solid #e8e6dc',
-                               borderRadius: 4, fontSize: 13, background: '#fff' }}>
+                               borderRadius: 4, fontSize: 14, background: '#fff' }}>
                 <option value="">— a mano, paso a paso —</option>
                 {plantillas.map(p => {
                   // Un flujo que no se puede usar aquí se ve, pero no se elige (E1.3).
@@ -364,7 +364,7 @@ export function ReviewModal({ isOpen, onClose, items, projectPrefix, onCreated }
                 })}
               </select>
               {noUtilizables.length > 0 && (
-                <details style={{ marginTop: 6, fontSize: 11, color: '#734500' }}>
+                <details style={{ marginTop: 6, fontSize: 12, color: '#734500' }}>
                   <summary style={{ cursor: 'pointer' }}>
                     {noUtilizables.length === 1 ? 'Un flujo no se puede usar aquí'
                       : `${noUtilizables.length} flujos no se pueden usar aquí`}
@@ -381,7 +381,7 @@ export function ReviewModal({ isOpen, onClose, items, projectPrefix, onCreated }
                   {Object.keys(opciones).sort((a, b) => Number(a) - Number(b)).map(i => {
                     const molde = (plantillaElegida?.pasos || [])[Number(i)] || {};
                     return (
-                      <label key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}>
+                      <label key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
                         <span style={{ flex: '0 0 45%', color: '#333330' }}>
                           Paso {Number(i) + 1}{molde.etiqueta ? ` · ${molde.etiqueta}` : ''}
                           {molde.funcion && <span style={{ color: '#72706b' }}> · función {molde.funcion}</span>}
@@ -389,7 +389,7 @@ export function ReviewModal({ isOpen, onClose, items, projectPrefix, onCreated }
                         <select value={elecciones[i] || ''} onChange={e => elegirPersona(i, e.target.value)}
                                 aria-label={`Quién hace el paso ${Number(i) + 1}`}
                                 style={{ flex: 1, padding: '6px 8px', border: '1px solid #e8e6dc', borderRadius: 4,
-                                         fontSize: 12, background: '#fff' }}>
+                                         fontSize: 13, background: '#fff' }}>
                           <option value="">— elige a quién —</option>
                           {opciones[i].map(c => (
                             <option key={c.id} value={c.id}>{c.name || c.email}{c.empresa ? ` · ${c.empresa}` : ''}</option>
@@ -401,17 +401,17 @@ export function ReviewModal({ isOpen, onClose, items, projectPrefix, onCreated }
                 </div>
               )}
               {plantillaId && previsualizando && (
-                <div style={{ marginTop: 6, fontSize: 12, color: '#72706b' }}>Comprobando el flujo…</div>
+                <div style={{ marginTop: 6, fontSize: 13, color: '#72706b' }}>Comprobando el flujo…</div>
               )}
               {plantillaId && bloqueo && !previsualizando && (
-                <div role="alert" style={{ marginTop: 6, fontSize: 12, color: '#993458', background: '#fbebeb',
+                <div role="alert" style={{ marginTop: 6, fontSize: 13, color: '#993458', background: '#fbebeb',
                                            border: '1px solid #fbebeb', borderRadius: 4, padding: '6px 9px',
                                            lineHeight: 1.5 }}>
                   {bloqueo}
                 </div>
               )}
               {avisoPlantilla && (
-                <div style={{ marginTop: 6, fontSize: 12, color: '#734500',
+                <div style={{ marginTop: 6, fontSize: 13, color: '#734500',
                               background: '#faf9f5', border: '1px solid #f9eeda',
                               borderRadius: 4, padding: '6px 9px', lineHeight: 1.5 }}>
                   {avisoPlantilla}
@@ -426,13 +426,13 @@ export function ReviewModal({ isOpen, onClose, items, projectPrefix, onCreated }
               {/* Se dice aquí y no sólo en el tooltip: un plazo que el usuario
                   cree en días hábiles y el sistema cuenta en naturales es una
                   discusión garantizada la primera vez que uno vence en sábado. */}
-              <span style={{ fontWeight: 400, color: '#72706b', fontSize: 11 }}> · el plazo se cuenta en días calendario (naturales)</span>
+              <span style={{ fontWeight: 400, color: '#72706b', fontSize: 12 }}> · el plazo se cuenta en días calendario (naturales)</span>
             </label>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
               {pasosVisibles && steps.map((s, i) => (
                 // La clave lleva la POSICIÓN (E1.3): una misma persona puede estar en dos
                 // pasos, y con la clave repetida React mezclaba sus controles.
-                <span key={`${i}-${s.id || s.email}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: '#f1f0e8', color: '#507294', padding: '4px 10px', borderRadius: 6, fontSize: 12, fontWeight: 600 }}>
+                <span key={`${i}-${s.id || s.email}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: '#f1f0e8', color: '#507294', padding: '4px 10px', borderRadius: 6, fontSize: 13, fontWeight: 600 }}>
                   {i + 1}. {s.etiqueta ? s.etiqueta + ' — ' : ''}{s.name || s.email}
                   {/* QUÉ SE LE PIDE. Editable también cuando viene de una
                       plantilla: cambiarlo suelta la procedencia igual que
@@ -446,7 +446,7 @@ export function ReviewModal({ isOpen, onClose, items, projectPrefix, onCreated }
                       ? 'Sale de la función ' + s.de_funcion
                       : 'REVISA: comenta y da paso. APRUEBA: su firma vale como aprobación. El último paso tiene que aprobar, o la revisión no podría cerrarse.'}
                     style={{ border: '1px solid #cccac0', borderRadius: 8, padding: '1px 2px',
-                             fontSize: 10, fontWeight: 700, color: '#507294', background: '#fff' }}>
+                             fontSize: 12, fontWeight: 700, color: '#507294', background: '#fff' }}>
                     <option value="REVISA">REVISA</option>
                     <option value="APRUEBA">APRUEBA</option>
                   </select>
@@ -460,31 +460,31 @@ export function ReviewModal({ isOpen, onClose, items, projectPrefix, onCreated }
                     title={s.dias_tipo === 'laborables'
                       ? 'Días HÁBILES de plazo para este paso, como dice su flujo: de lunes a viernes, sin feriados.'
                       : 'Días CALENDARIO de plazo para este paso (opcional): un plazo de 3 días vence en 3 días aunque caigan en fin de semana. Los días hábiles se eligen en el flujo.'}
-                    style={{ width: 52, border: '1px solid #cccac0', borderRadius: 8, padding: '1px 5px', fontSize: 11, color: '#507294', background: '#fff' }}
+                    style={{ width: 52, border: '1px solid #cccac0', borderRadius: 8, padding: '1px 5px', fontSize: 12, color: '#507294', background: '#fff' }}
                   />
                   <button type="button" aria-label={`Quitar el paso ${i + 1}`} title="Quitar este paso"
                     onClick={() => { soltarPlantilla(); setSteps(prev => prev.filter((_x, j) => j !== i)); }}
                     className="rev-quitar-paso">×</button>
                 </span>
               ))}
-              {pasosVisibles && !steps.length && <span style={{ color: '#72706b', fontSize: 12 }}>Haz clic en un usuario para añadirlo como paso…</span>}
-              {!pasosVisibles && <span style={{ color: '#72706b', fontSize: 12 }}>Los pasos del flujo aparecen aquí cuando esté completo.</span>}
+              {pasosVisibles && !steps.length && <span style={{ color: '#72706b', fontSize: 13 }}>Haz clic en un usuario para añadirlo como paso…</span>}
+              {!pasosVisibles && <span style={{ color: '#72706b', fontSize: 13 }}>Los pasos del flujo aparecen aquí cuando esté completo.</span>}
             </div>
             <div style={{ maxHeight: 140, overflowY: 'auto', border: '1px solid #f1f0e8', borderRadius: 4 }}>
               {users.filter(u => !steps.find(s => s.id === u.id)).map(u => (
                 <button type="button" key={u.email} className="rev-persona"
                   onClick={() => { soltarPlantilla(); setSteps(prev => [...prev, { id: u.id, email: u.email, name: u.name, dias: '' }]); }}>
-                  <span style={{ width: 26, height: 26, borderRadius: '50%', background: 'var(--accent)', color: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700 }}>{getInitials(u.name || u.email)}</span>
-                  <span>{u.name || '—'} <span style={{ color: '#72706b', fontSize: 11 }}>{u.email}{u.empresa ? ` · ${u.empresa}` : ''}</span>
-                    {u.pendiente && <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 600, color: '#9e5943' }}>PENDIENTE</span>}
+                  <span style={{ width: 26, height: 26, borderRadius: '50%', background: 'var(--accent)', color: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700 }}>{getInitials(u.name || u.email)}</span>
+                  <span>{u.name || '—'} <span style={{ color: '#72706b', fontSize: 12 }}>{u.email}{u.empresa ? ` · ${u.empresa}` : ''}</span>
+                    {u.pendiente && <span style={{ marginLeft: 6, fontSize: 12, fontWeight: 600, color: '#9e5943' }}>PENDIENTE</span>}
                   </span>
                 </button>
               ))}
               {!users.length && (
-                <div style={{ padding: '8px 10px', color: '#72706b', fontSize: 12 }}>No hay participantes activos en esta obra.</div>
+                <div style={{ padding: '8px 10px', color: '#72706b', fontSize: 13 }}>No hay participantes activos en esta obra.</div>
               )}
             </div>
-            <div style={{ marginTop: 6, fontSize: 11, color: '#72706b', lineHeight: 1.5 }}>{AYUDA_PARTICIPANTES}</div>
+            <div style={{ marginTop: 6, fontSize: 12, color: '#72706b', lineHeight: 1.5 }}>{AYUDA_PARTICIPANTES}</div>
           </div>
 
           <div>
@@ -510,14 +510,14 @@ export function ReviewModal({ isOpen, onClose, items, projectPrefix, onCreated }
             <select
               value={idoneidad}
               onChange={e => setIdoneidad(e.target.value)}
-              style={{ width: '100%', padding: '7px 9px', border: '1px solid #e8e6dc', borderRadius: 4, fontSize: 13 }}
+              style={{ width: '100%', padding: '7px 9px', border: '1px solid #e8e6dc', borderRadius: 4, fontSize: 14 }}
             >
               <option value="">{finalStatus === 'PUBLISHED' ? '— Obligatorio al publicar —' : '— Sin especificar —'}</option>
               {codigos.filter(c => c.familia === (finalStatus === 'PUBLISHED' ? 'publicado' : 'compartido')).map(c => (
                 <option key={c.codigo} value={c.codigo}>{c.codigo} · {c.etiqueta}</option>
               ))}
             </select>
-            <p style={{ margin: '6px 0 0', fontSize: 12, color: '#72706b', lineHeight: 1.5 }}>
+            <p style={{ margin: '6px 0 0', fontSize: 13, color: '#72706b', lineHeight: 1.5 }}>
               El estado dice dónde está el documento; esto dice para qué puede usarse.
               Un plano publicado «solo para información» no autoriza a construir.
             </p>

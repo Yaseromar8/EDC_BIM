@@ -90,17 +90,17 @@ export function IdoneidadHost() {
           <h3 id="idoneidad-title" style={{ margin: 0, fontSize: 15, fontWeight: 600, color: '#141413' }}>
             ¿Para qué queda autorizado?
           </h3>
-          <p style={{ margin: '6px 0 0', fontSize: 13, color: '#52524d', lineHeight: 1.55 }}>
+          <p style={{ margin: '6px 0 0', fontSize: 14, color: '#52524d', lineHeight: 1.55 }}>
             Publicar no dice para qué sirve el documento. El código de idoneidad sí, y es
             lo que se le enseña a una supervisión.
           </p>
         </div>
 
         <div style={{ padding: '14px 22px', maxHeight: '46vh', overflowY: 'auto' }}>
-          {cargando && <div style={{ fontSize: 13, color: '#72706b' }}>Cargando el catálogo de la obra…</div>}
-          {error && <div style={{ fontSize: 13, color: '#b93535' }}>{error}</div>}
+          {cargando && <div style={{ fontSize: 14, color: '#72706b' }}>Cargando el catálogo de la obra…</div>}
+          {error && <div style={{ fontSize: 14, color: '#b93535' }}>{error}</div>}
           {!cargando && !error && codigos.length === 0 && (
-            <div style={{ fontSize: 13, color: '#72706b' }}>
+            <div style={{ fontSize: 14, color: '#72706b' }}>
               Esta obra no tiene códigos de idoneidad configurados para esa acción.
             </div>
           )}
@@ -122,8 +122,8 @@ export function IdoneidadHost() {
                 style={{ marginTop: 2 }}
               />
               <span style={{ minWidth: 0 }}>
-                <span style={{ fontWeight: 600, fontSize: 13, color: '#141413' }}>{c.codigo}</span>
-                <span style={{ fontSize: 13, color: '#52524d' }}> · {c.etiqueta}</span>
+                <span style={{ fontWeight: 600, fontSize: 14, color: '#141413' }}>{c.codigo}</span>
+                <span style={{ fontSize: 14, color: '#52524d' }}> · {c.etiqueta}</span>
               </span>
             </label>
           ))}
@@ -133,7 +133,7 @@ export function IdoneidadHost() {
           <button
             onClick={() => cerrar(null)}
             style={{
-              padding: '7px 16px', fontSize: 13, fontWeight: 500, cursor: 'pointer',
+              padding: '7px 16px', fontSize: 14, fontWeight: 500, cursor: 'pointer',
               background: '#fff', color: '#333330', border: '1px solid #cccac0', borderRadius: 5,
             }}
           >
@@ -143,7 +143,7 @@ export function IdoneidadHost() {
             disabled={!elegido}
             onClick={() => cerrar(elegido)}
             style={{
-              padding: '7px 16px', fontSize: 13, fontWeight: 600,
+              padding: '7px 16px', fontSize: 14, fontWeight: 600,
               cursor: elegido ? 'pointer' : 'not-allowed',
               background: elegido ? 'var(--accent)' : '#cccac0', color: '#fff',
               border: 'none', borderRadius: 5,

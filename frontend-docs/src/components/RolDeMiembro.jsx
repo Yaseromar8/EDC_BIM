@@ -48,7 +48,7 @@ export function RolDeMiembro({ miembro, isAdmin, onCambiado }) {
   if (!isAdmin || esYo) {
     return (
       <span title={esYo ? 'Tu propio rol lo cambia otro administrador.' : undefined}
-            style={{ padding: '3px 10px', borderRadius: 12, fontSize: 11, fontWeight: 600,
+            style={{ padding: '3px 10px', borderRadius: 12, fontSize: 12, fontWeight: 600,
                      textTransform: 'uppercase', background: '#f1f0e8', color: '#507294' }}>
         {rol}
       </span>
@@ -116,7 +116,7 @@ export function RolDeMiembro({ miembro, isAdmin, onCambiado }) {
             onChange={e => cambiar(e.target.value)}
             title="Cambiar el rol de este miembro"
             style={{
-              padding: '4px 8px', borderRadius: 8, fontSize: 12, fontWeight: 600,
+              padding: '4px 8px', borderRadius: 8, fontSize: 13, fontWeight: 600,
               border: '1px solid #ecf0f1', background: cambiando ? '#f1f0e8' : '#fff',
               color: '#507294', cursor: cambiando ? 'default' : 'pointer',
             }}>

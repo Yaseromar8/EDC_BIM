@@ -148,7 +148,7 @@ function Thumbnail({ pdf, pageNum, isActive, onClick }) {
       }}>
         <canvas ref={canvasRef} />
       </div>
-      <span style={{ fontSize: 11, color: '#52524d', marginTop: 8, fontVariantNumeric: 'tabular-nums', fontWeight: isActive ? 600 : 400 }}>
+      <span style={{ fontSize: 12, color: '#52524d', marginTop: 8, fontVariantNumeric: 'tabular-nums', fontWeight: isActive ? 600 : 400 }}>
         {pageNum}
       </span>
     </div>
@@ -2767,5 +2767,5 @@ export default function PDFViewer({ url, preparando = false,
 const styles = {
   center: { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', width: '100%', gap: 4, background: 'var(--alephia-mist, #F1F0E8)' },
   spinner: { width: 36, height: 36, border: '3px solid #e8e6dc', borderTop: '3px solid var(--accent)', borderRadius: '50%', animation: 'spin-acc 1s linear infinite' },
-  downloadBtn: { marginTop: 16, padding: '8px 20px', background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 4, textDecoration: 'none', fontSize: 13, fontWeight: 500 },
+  downloadBtn: { marginTop: 16, padding: '8px 20px', background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 4, textDecoration: 'none', fontSize: 14, fontWeight: 500 },
 };

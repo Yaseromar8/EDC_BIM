@@ -65,7 +65,7 @@ const EVENTO = {
 function Chip({ mapa, valor, texto }) {
   const c = mapa[valor] || { fondo: '#f1f0e8', texto: '#72706b' };
   return (
-    <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 10,
+    <span style={{ fontSize: 12, fontWeight: 700, padding: '2px 8px', borderRadius: 10,
                    background: c.fondo, color: c.texto, whiteSpace: 'nowrap' }}>
       {texto || valor}
     </span>
@@ -79,11 +79,11 @@ function Papel({ rotulo, uid, nombres, esElTurno, ausenteGrave }) {
   const nombre = uid ? (nombres[uid] || `usuario ${uid}`) : null;
   return (
     <div style={{ minWidth: 0 }}>
-      <div style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '.05em',
+      <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: '.05em',
                     color: esElTurno ? '#b93535' : '#b0aea5' }}>
         {rotulo}{esElTurno ? ' · LE TOCA' : ''}
       </div>
-      <div style={{ fontSize: 12, color: nombre ? '#141413' : (ausenteGrave ? '#b93535' : '#b0aea5'),
+      <div style={{ fontSize: 13, color: nombre ? '#141413' : (ausenteGrave ? '#b93535' : '#b0aea5'),
                     fontWeight: esElTurno ? 650 : 400, whiteSpace: 'nowrap',
                     overflow: 'hidden', textOverflow: 'ellipsis' }}>
         {nombre || 'sin designar'}
@@ -204,14 +204,14 @@ export default function PunchModule({ project, API, user, isAdmin }) {
         <h2 style={{ margin: 0, fontSize: 19, fontWeight: 650, color: '#141413' }}>
           Issues y punch
         </h2>
-        <span style={{ fontSize: 12.5, color: '#72706b' }}>
+        <span style={{ fontSize: 13, color: '#72706b' }}>
           Un defecto se cierra cuando <b>otro</b> verifica que se corrigió.
         </span>
         <div style={{ flex: 1 }} />
         <button type="button" onClick={() => setCreando(true)}
                 style={{ padding: '8px 15px', borderRadius: 6, border: 'none',
                          background: 'var(--accent, #507294)', color: '#fff',
-                         fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+                         fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
           Levantar issue
         </button>
       </div>
@@ -228,7 +228,7 @@ export default function PunchModule({ project, API, user, isAdmin }) {
                            color: (COLOR_ESTADO[e] || {}).texto || '#141413' }}>
               {totalPor(e)}
             </span>
-            <span style={{ fontSize: 11.5, color: '#72706b', marginLeft: 6 }}>{e}</span>
+            <span style={{ fontSize: 12, color: '#72706b', marginLeft: 6 }}>{e}</span>
           </button>
         ))}
         <button type="button" onClick={() => setFiltro(f => ({ ...f, mios: !f.mios }))}
@@ -236,10 +236,10 @@ export default function PunchModule({ project, API, user, isAdmin }) {
                          background: filtro.mios ? '#f9eeda' : '#fff',
                          borderColor: filtro.mios ? '#734500' : '#e8e6dc' }}>
           <span style={{ fontSize: 16, fontWeight: 700, color: '#734500' }}>{meToca}</span>
-          <span style={{ fontSize: 11.5, color: '#72706b', marginLeft: 6 }}>me toca a mí</span>
+          <span style={{ fontSize: 12, color: '#72706b', marginLeft: 6 }}>me toca a mí</span>
         </button>
         <select value={filtro.tipo} onChange={e => setFiltro(f => ({ ...f, tipo: e.target.value }))}
-                style={{ ...CAJA, height: 34, padding: '0 8px', fontSize: 12.5, background: '#fff' }}>
+                style={{ ...CAJA, height: 34, padding: '0 8px', fontSize: 13, background: '#fff' }}>
           <option value="">Todos los tipos</option>
           {(catalogo.tipos || []).map(t => (
             <option key={t.codigo} value={t.codigo}>{t.etiqueta}</option>
@@ -249,7 +249,7 @@ export default function PunchModule({ project, API, user, isAdmin }) {
 
       {sinVerificador > 0 && (
         <div style={{ ...CAJA, borderColor: '#f7ece5', background: '#f7ece5',
-                      padding: '9px 13px', marginBottom: 12, fontSize: 12.5,
+                      padding: '9px 13px', marginBottom: 12, fontSize: 13,
                       color: '#734500' }}>
           <b>{sinVerificador}</b> issue(s) corregidos sin verificador designado: nadie
           tiene la pelota. Hasta que se les asigne uno, solo un administrador de la
@@ -259,19 +259,19 @@ export default function PunchModule({ project, API, user, isAdmin }) {
 
       {error && (
         <div style={{ ...CAJA, borderColor: '#fbebeb', background: '#fbebeb',
-                      padding: '9px 13px', marginBottom: 12, fontSize: 12.5,
+                      padding: '9px 13px', marginBottom: 12, fontSize: 13,
                       color: '#b93535' }}>{error}</div>
       )}
 
       {issues === null && (
-        <div style={{ padding: 30, textAlign: 'center', color: '#72706b', fontSize: 13 }}>
+        <div style={{ padding: 30, textAlign: 'center', color: '#72706b', fontSize: 14 }}>
           Cargando…
         </div>
       )}
 
       {issues !== null && visibles.length === 0 && (
         <div style={{ padding: '26px 20px', textAlign: 'center', color: '#72706b',
-                      fontSize: 13, border: '1px dashed #e8e6dc', borderRadius: 8 }}>
+                      fontSize: 14, border: '1px dashed #e8e6dc', borderRadius: 8 }}>
           {filtro.mios ? 'No tienes ningún issue esperándote.' : 'Sin issues con este filtro.'}
         </div>
       )}
@@ -307,15 +307,15 @@ function FilaIssue({ d, nombres, yo, onAbrir, abierta }) {
                   borderColor: abierta ? '#507294' : (esMio ? '#f9eeda' : '#e8e6dc'),
                   borderLeft: esMio ? '3px solid #734500' : undefined }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-        <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: 12.5,
+        <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: 13,
                        fontWeight: 700, color: '#507294' }}>{d.codigo}</span>
         <Chip mapa={COLOR_TIPO} valor={d.tipo} texto={d.tipo_etiqueta} />
-        <span style={{ fontSize: 13.5, color: '#141413', flex: 1, minWidth: 160 }}>
+        <span style={{ fontSize: 14, color: '#141413', flex: 1, minWidth: 160 }}>
           {d.titulo}
         </span>
         {d.autoverificacion && (
           <span title={d.autoverificacion_motivo || ''}
-                style={{ fontSize: 10.5, fontWeight: 700, padding: '2px 7px', borderRadius: 10,
+                style={{ fontSize: 12, fontWeight: 700, padding: '2px 7px', borderRadius: 10,
                          background: '#ecf0f1', color: '#507294' }}>
             AUTOVERIFICACIÓN AUTORIZADA
           </span>
@@ -326,7 +326,7 @@ function FilaIssue({ d, nombres, yo, onAbrir, abierta }) {
         <Identidades d={d} nombres={nombres} />
       </div>
       {(d.ubicacion || d.progresiva || d.origen_tipo) && (
-        <div style={{ marginTop: 7, fontSize: 11.5, color: '#72706b' }}>
+        <div style={{ marginTop: 7, fontSize: 12, color: '#72706b' }}>
           {[d.ubicacion, d.progresiva].filter(Boolean).join(' · ')}
           {d.origen_tipo && (
             <span style={{ marginLeft: 8 }}>
@@ -398,7 +398,7 @@ function PanelIssue({ d, API, user, isAdmin, nombres, onCerrar, onCambio }) {
                     maxWidth: '94vw', maxHeight: '90vh', overflowY: 'auto',
                     boxShadow: '0 12px 40px rgba(0,0,0,.22)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-          <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: 13,
+          <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: 14,
                          fontWeight: 700, color: '#507294' }}>{d.codigo}</span>
           <Chip mapa={COLOR_TIPO} valor={d.tipo} texto={d.tipo_etiqueta} />
           <Chip mapa={COLOR_ESTADO} valor={d.estado} />
@@ -409,7 +409,7 @@ function PanelIssue({ d, API, user, isAdmin, nombres, onCerrar, onCambio }) {
         </div>
         <h3 style={{ margin: '10px 0 4px', fontSize: 16.5, fontWeight: 650 }}>{d.titulo}</h3>
         {d.descripcion && (
-          <p style={{ margin: '0 0 12px', fontSize: 13, color: '#52524d', lineHeight: 1.55 }}>
+          <p style={{ margin: '0 0 12px', fontSize: 14, color: '#52524d', lineHeight: 1.55 }}>
             {d.descripcion}
           </p>
         )}
@@ -417,7 +417,7 @@ function PanelIssue({ d, API, user, isAdmin, nombres, onCerrar, onCambio }) {
         <div style={{ ...CAJA, padding: '11px 13px', background: '#faf9f5', margin: '12px 0' }}>
           <Identidades d={d} nombres={nombres} />
           {d.verificado_por && d.verificado_por !== d.verificador_id && (
-            <div style={{ marginTop: 9, fontSize: 11.5, color: '#734500' }}>
+            <div style={{ marginTop: 9, fontSize: 12, color: '#734500' }}>
               Lo verificó <b>{nombres[d.verificado_por] || d.verificado_por}</b>, que no
               era el verificador designado. Quedan registradas las dos cosas.
             </div>
@@ -426,7 +426,7 @@ function PanelIssue({ d, API, user, isAdmin, nombres, onCerrar, onCambio }) {
 
         {d.autoverificacion && (
           <div style={{ ...CAJA, borderColor: '#c8d8e7', background: '#ecf0f1',
-                        padding: '9px 13px', marginBottom: 12, fontSize: 12.5,
+                        padding: '9px 13px', marginBottom: 12, fontSize: 13,
                         color: '#507294' }}>
             <b>Autoverificación autorizada.</b> Quien corrige puede cerrar este issue.
             {d.autoverificacion_motivo && <> Motivo: «{d.autoverificacion_motivo}»</>}
@@ -435,12 +435,12 @@ function PanelIssue({ d, API, user, isAdmin, nombres, onCerrar, onCambio }) {
 
         {(d.evidencia_correccion || []).length > 0 && (
           <div style={{ marginBottom: 12 }}>
-            <div style={{ fontSize: 10.5, fontWeight: 700, color: '#72706b',
+            <div style={{ fontSize: 12, fontWeight: 700, color: '#72706b',
                           letterSpacing: '.05em', marginBottom: 5 }}>
               EVIDENCIA DE LA CORRECCIÓN
             </div>
             {d.evidencia_correccion.map((e, n) => (
-              <div key={n} style={{ fontSize: 12, color: '#52524d' }}>
+              <div key={n} style={{ fontSize: 13, color: '#52524d' }}>
                 · {e.nombre || 'evidencia'} <span style={{ color: '#72706b' }}>— {e.por}</span>
               </div>
             ))}
@@ -450,19 +450,19 @@ function PanelIssue({ d, API, user, isAdmin, nombres, onCerrar, onCambio }) {
         {/* ── LOS ACTOS ─────────────────────────────────────────────────── */}
         {puedeCorregir && (
           <div style={{ ...CAJA, padding: 13, marginBottom: 10 }}>
-            <div style={{ fontSize: 12.5, fontWeight: 650, marginBottom: 7 }}>
+            <div style={{ fontSize: 13, fontWeight: 650, marginBottom: 7 }}>
               Declarar corregido
             </div>
-            <p style={{ margin: '0 0 8px', fontSize: 12, color: '#72706b', lineHeight: 1.5 }}>
+            <p style={{ margin: '0 0 8px', fontSize: 13, color: '#72706b', lineHeight: 1.5 }}>
               Exige evidencia: sin ella, quien verifica tiene que volver a la obra —
               y cuando ya se ha construido encima, a veces no se puede.
             </p>
-            <div style={{ fontSize: 12, color: evidencias.length ? '#64744e' : '#b93535',
+            <div style={{ fontSize: 13, color: evidencias.length ? '#64744e' : '#b93535',
                           marginBottom: 8 }}>
               {evidencias.length ? `✓ ${evidencias.length} evidencia(s)` : '✕ Sin evidencia'}
               <button type="button"
                       onClick={() => setEvidencias(a => [...a, { nombre: `correccion-${a.length + 1}.jpg` }])}
-                      style={{ marginLeft: 8, padding: '2px 9px', fontSize: 11.5,
+                      style={{ marginLeft: 8, padding: '2px 9px', fontSize: 12,
                                borderRadius: 4, border: '1px solid #cccac0',
                                background: '#fff', cursor: 'pointer' }}>
                 Adjuntar
@@ -470,7 +470,7 @@ function PanelIssue({ d, API, user, isAdmin, nombres, onCerrar, onCambio }) {
             </div>
             <textarea value={texto} onChange={e => setTexto(e.target.value)} rows={2}
                       placeholder="Qué se hizo (opcional)"
-                      style={{ ...CAJA, width: '100%', padding: '6px 9px', fontSize: 12.5,
+                      style={{ ...CAJA, width: '100%', padding: '6px 9px', fontSize: 13,
                                fontFamily: 'inherit', marginBottom: 8 }} />
             <button type="button" disabled={ocupado || !evidencias.length}
                     onClick={() => llamar('corregir',
@@ -478,7 +478,7 @@ function PanelIssue({ d, API, user, isAdmin, nombres, onCerrar, onCambio }) {
                                           'Corregido: la pelota pasa a quien verifica')}
                     style={{ padding: '8px 15px', borderRadius: 6, border: 'none',
                              background: evidencias.length ? 'var(--accent, #507294)' : '#cccac0',
-                             color: '#fff', fontSize: 13, fontWeight: 600,
+                             color: '#fff', fontSize: 14, fontWeight: 600,
                              cursor: evidencias.length ? 'pointer' : 'not-allowed' }}>
               {ocupado ? 'Guardando…' : 'Declarar corregido'}
             </button>
@@ -487,24 +487,24 @@ function PanelIssue({ d, API, user, isAdmin, nombres, onCerrar, onCambio }) {
 
         {puedeVerificar && (
           <div style={{ ...CAJA, padding: 13, marginBottom: 10 }}>
-            <div style={{ fontSize: 12.5, fontWeight: 650, marginBottom: 7 }}>
+            <div style={{ fontSize: 13, fontWeight: 650, marginBottom: 7 }}>
               Verificar la corrección
             </div>
             <textarea value={texto} onChange={e => setTexto(e.target.value)} rows={2}
                       placeholder="Motivo (obligatorio si rechazas)"
-                      style={{ ...CAJA, width: '100%', padding: '6px 9px', fontSize: 12.5,
+                      style={{ ...CAJA, width: '100%', padding: '6px 9px', fontSize: 13,
                                fontFamily: 'inherit', marginBottom: 8 }} />
             <div style={{ display: 'flex', gap: 8 }}>
               <button type="button" disabled={ocupado} onClick={() => verificar(true)}
                       style={{ padding: '8px 15px', borderRadius: 6, border: 'none',
-                               background: '#64744e', color: '#fff', fontSize: 13,
+                               background: '#64744e', color: '#fff', fontSize: 14,
                                fontWeight: 600, cursor: 'pointer' }}>
                 Verificar y cerrar
               </button>
               <button type="button" disabled={ocupado} onClick={() => verificar(false)}
                       style={{ padding: '8px 15px', borderRadius: 6,
                                border: '1px solid #fbebeb', background: '#fff',
-                               color: '#b93535', fontSize: 13, fontWeight: 600,
+                               color: '#b93535', fontSize: 14, fontWeight: 600,
                                cursor: 'pointer' }}>
                 Rechazar y reabrir
               </button>
@@ -515,7 +515,7 @@ function PanelIssue({ d, API, user, isAdmin, nombres, onCerrar, onCambio }) {
         {/* POR QUÉ NO PUEDES: decirlo es parte de enseñar la separación. Un
             botón ausente sin explicación se lee como un fallo de la pantalla. */}
         {d.estado === 'Corregido' && !puedeVerificar && (
-          <div style={{ ...CAJA, padding: '10px 13px', marginBottom: 10, fontSize: 12.5,
+          <div style={{ ...CAJA, padding: '10px 13px', marginBottom: 10, fontSize: 13,
                         color: '#72706b', background: '#faf9f5' }}>
             {soyResponsable
               ? 'Corregiste tú: quien corrige no verifica su propia corrección. '
@@ -531,10 +531,10 @@ function PanelIssue({ d, API, user, isAdmin, nombres, onCerrar, onCambio }) {
           && d.responsable_id && !d.verificador_id && (
           <div style={{ ...CAJA, padding: 13, marginBottom: 10, borderColor: '#c8d8e7',
                         background: '#faf9f5' }}>
-            <div style={{ fontSize: 12.5, fontWeight: 650, marginBottom: 5 }}>
+            <div style={{ fontSize: 13, fontWeight: 650, marginBottom: 5 }}>
               Autorizar autoverificación
             </div>
-            <p style={{ margin: '0 0 8px', fontSize: 12, color: '#72706b', lineHeight: 1.5 }}>
+            <p style={{ margin: '0 0 8px', fontSize: 13, color: '#72706b', lineHeight: 1.5 }}>
               Excepción: permite que <b>quien corrigió</b> cierre este issue. Exige motivo
               escrito y queda en el historial. Una excepción que se puede leer es gobierno;
               una que se concede en silencio es un agujero.
@@ -542,13 +542,13 @@ function PanelIssue({ d, API, user, isAdmin, nombres, onCerrar, onCambio }) {
             <input value={texto} onChange={e => setTexto(e.target.value)}
                    placeholder="Motivo — por qué en este caso no hay un tercero"
                    style={{ ...CAJA, width: '100%', height: 34, padding: '0 9px',
-                            fontSize: 12.5, marginBottom: 8 }} />
+                            fontSize: 13, marginBottom: 8 }} />
             <button type="button" disabled={ocupado || !texto.trim()}
                     onClick={() => llamar('autoverificacion', { motivo: texto.trim() },
                                           'Autoverificación autorizada')}
                     style={{ padding: '7px 14px', borderRadius: 6, border: 'none',
                              background: texto.trim() ? '#507294' : '#cccac0', color: '#fff',
-                             fontSize: 12.5, fontWeight: 600,
+                             fontSize: 13, fontWeight: 600,
                              cursor: texto.trim() ? 'pointer' : 'not-allowed' }}>
               Autorizar
             </button>
@@ -556,13 +556,13 @@ function PanelIssue({ d, API, user, isAdmin, nombres, onCerrar, onCambio }) {
         )}
 
         {/* ── EL HISTORIAL: quién hizo cada acto ────────────────────────── */}
-        <div style={{ fontSize: 10.5, fontWeight: 700, color: '#72706b',
+        <div style={{ fontSize: 12, fontWeight: 700, color: '#72706b',
                       letterSpacing: '.05em', margin: '14px 0 6px' }}>
           HISTORIAL
         </div>
         <div style={{ borderLeft: '2px solid #f1f0e8', paddingLeft: 11 }}>
           {(d.history || []).map((h, n) => (
-            <div key={n} style={{ marginBottom: 7, fontSize: 12 }}>
+            <div key={n} style={{ marginBottom: 7, fontSize: 13 }}>
               <b style={{ color: '#141413' }}>{EVENTO[h.event] || h.event}</b>
               <span style={{ color: '#72706b' }}> — {h.by}</span>
               {h.at && (
@@ -669,7 +669,7 @@ function ModalLevantar({ API, urn, catalogo, miembros, planos, yo,
   const selPersona = (campo, excluir) => (
     <select value={f[campo]} onChange={e => setF(p => ({ ...p, [campo]: e.target.value }))}
             style={{ ...CAJA, width: '100%', height: 36, padding: '0 8px',
-                     fontSize: 13, background: '#fff' }}>
+                     fontSize: 14, background: '#fff' }}>
       <option value="">Sin designar</option>
       {miembros.filter(m => String(m.id) !== String(excluir)).map(m => (
         <option key={m.id} value={m.id}>
@@ -688,7 +688,7 @@ function ModalLevantar({ API, urn, catalogo, miembros, planos, yo,
                     maxWidth: '94vw', maxHeight: '90vh', overflowY: 'auto',
                     boxShadow: '0 12px 40px rgba(0,0,0,.22)' }}>
         <h3 style={{ margin: '0 0 4px', fontSize: 16, fontWeight: 650 }}>Levantar issue</h3>
-        <p style={{ margin: '0 0 16px', fontSize: 12.5, color: '#72706b', lineHeight: 1.5 }}>
+        <p style={{ margin: '0 0 16px', fontSize: 13, color: '#72706b', lineHeight: 1.5 }}>
           Tú quedas como <b>quien lo detectó</b>. Eso no se elige y no te convierte en
           quien lo cierra: el cierre lo aprueba el verificador designado.
         </p>
@@ -696,7 +696,7 @@ function ModalLevantar({ API, urn, catalogo, miembros, planos, yo,
         <div style={{ display: 'flex', gap: 10, marginBottom: 10 }}>
           <select value={f.tipo} onChange={e => setF(p => ({ ...p, tipo: e.target.value }))}
                   style={{ ...CAJA, flex: '0 0 210px', height: 36, padding: '0 8px',
-                           fontSize: 13, background: '#fff' }}>
+                           fontSize: 14, background: '#fff' }}>
             {/* La observación de documento se levanta desde una marca del lector, no aquí (37). */}
             {(catalogo.tipos || []).filter(t => !t.solo_desde_marca).map(t => (
               <option key={t.codigo} value={t.codigo}>{t.etiqueta}</option>
@@ -704,45 +704,45 @@ function ModalLevantar({ API, urn, catalogo, miembros, planos, yo,
           </select>
           <input value={f.titulo} onChange={e => setF(p => ({ ...p, titulo: e.target.value }))}
                  placeholder="Qué está mal"
-                 style={{ ...CAJA, flex: 1, height: 36, padding: '0 10px', fontSize: 13 }} />
+                 style={{ ...CAJA, flex: 1, height: 36, padding: '0 10px', fontSize: 14 }} />
         </div>
 
         <textarea value={f.descripcion} rows={2}
                   onChange={e => setF(p => ({ ...p, descripcion: e.target.value }))}
                   placeholder="Descripción (opcional)"
-                  style={{ ...CAJA, width: '100%', padding: '7px 10px', fontSize: 12.5,
+                  style={{ ...CAJA, width: '100%', padding: '7px 10px', fontSize: 13,
                            fontFamily: 'inherit', marginBottom: 12 }} />
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10,
                       marginBottom: 4 }}>
           <div>
-            <label style={{ fontSize: 10.5, fontWeight: 700, color: '#72706b',
+            <label style={{ fontSize: 12, fontWeight: 700, color: '#72706b',
                             letterSpacing: '.05em' }}>
               CORRIGE{tipo.exige_responsable ? ' *' : ''}
             </label>
             {selPersona('responsable_id', f.verificador_id)}
           </div>
           <div>
-            <label style={{ fontSize: 10.5, fontWeight: 700, color: '#72706b',
+            <label style={{ fontSize: 12, fontWeight: 700, color: '#72706b',
                             letterSpacing: '.05em' }}>
               VERIFICA{tipo.exige_verificador ? ' *' : ''}
             </label>
             {selPersona('verificador_id', f.responsable_id)}
           </div>
         </div>
-        <p style={{ margin: '6px 0 14px', fontSize: 11.5, color: '#72706b', lineHeight: 1.5 }}>
+        <p style={{ margin: '6px 0 14px', fontSize: 12, color: '#72706b', lineHeight: 1.5 }}>
           Tienen que ser personas distintas. Si se deja sin designar quien verifica,
           al corregirse el issue no habrá a quién pasarle la pelota.
         </p>
 
         {tipo.exige_ubicacion && (
           <div style={{ marginBottom: 12 }}>
-            <label style={{ fontSize: 10.5, fontWeight: 700, color: '#72706b',
+            <label style={{ fontSize: 12, fontWeight: 700, color: '#72706b',
                             letterSpacing: '.05em' }}>LÁMINA *</label>
             <select value={f.revision_id}
                     onChange={e => setF(p => ({ ...p, revision_id: e.target.value }))}
                     style={{ ...CAJA, width: '100%', height: 36, padding: '0 8px',
-                             fontSize: 13, background: '#fff' }}>
+                             fontSize: 14, background: '#fff' }}>
               <option value="">Elegir la lámina vigente…</option>
               {conVigente.map(p => (
                 <option key={p.id} value={p.vigente.id}>
@@ -751,7 +751,7 @@ function ModalLevantar({ API, urn, catalogo, miembros, planos, yo,
               ))}
             </select>
             {conVigente.length === 0 && (
-              <div style={{ fontSize: 11.5, color: '#b93535', marginTop: 5 }}>
+              <div style={{ fontSize: 12, color: '#b93535', marginTop: 5 }}>
                 No hay planos con revisión vigente en esta obra: un punch no puede
                 levantarse sin decir dónde.
               </div>
@@ -762,22 +762,22 @@ function ModalLevantar({ API, urn, catalogo, miembros, planos, yo,
         <div style={{ display: 'flex', gap: 10, marginBottom: 16 }}>
           <input value={f.ubicacion} onChange={e => setF(p => ({ ...p, ubicacion: e.target.value }))}
                  placeholder="Ubicación — «Losa eje 4, nivel +3.20»"
-                 style={{ ...CAJA, flex: 1, height: 36, padding: '0 10px', fontSize: 13 }} />
+                 style={{ ...CAJA, flex: 1, height: 36, padding: '0 10px', fontSize: 14 }} />
           <input value={f.progresiva} onChange={e => setF(p => ({ ...p, progresiva: e.target.value }))}
                  placeholder="PK 0+340"
-                 style={{ ...CAJA, flex: '0 0 130px', height: 36, padding: '0 10px', fontSize: 13 }} />
+                 style={{ ...CAJA, flex: '0 0 130px', height: 36, padding: '0 10px', fontSize: 14 }} />
           <input type="date" value={f.vence_en}
                  onChange={e => setF(p => ({ ...p, vence_en: e.target.value }))}
-                 style={{ ...CAJA, flex: '0 0 150px', height: 36, padding: '0 8px', fontSize: 13 }} />
+                 style={{ ...CAJA, flex: '0 0 150px', height: 36, padding: '0 8px', fontSize: 14 }} />
         </div>
 
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
           <button type="button" onClick={onCerrar} disabled={guardando}
                   style={{ ...CAJA, padding: '8px 14px', background: '#fff',
-                           fontSize: 13, cursor: 'pointer' }}>Cancelar</button>
+                           fontSize: 14, cursor: 'pointer' }}>Cancelar</button>
           <button type="button" onClick={crear} disabled={guardando}
                   style={{ padding: '8px 16px', borderRadius: 6, border: 'none',
-                           background: 'var(--accent, #507294)', color: '#fff', fontSize: 13,
+                           background: 'var(--accent, #507294)', color: '#fff', fontSize: 14,
                            fontWeight: 600, cursor: guardando ? 'wait' : 'pointer' }}>
             {guardando ? 'Levantando…' : 'Levantar'}
           </button>

@@ -94,7 +94,7 @@ export default function FlujosDeRevisionModule({ project, API, user, isAdmin }) 
         <h2 style={{ margin: 0, fontSize: 19, fontWeight: 650, color: '#141413' }}>
           Flujos de revisión
         </h2>
-        <span style={{ fontSize: 12.5, color: '#72706b' }}>
+        <span style={{ fontSize: 13, color: '#72706b' }}>
           El molde. Cada revisión se queda con su copia.
         </span>
         <div style={{ flex: 1 }} />
@@ -102,13 +102,13 @@ export default function FlujosDeRevisionModule({ project, API, user, isAdmin }) 
           <button type="button" onClick={() => setEditando({})}
                   style={{ padding: '8px 15px', borderRadius: 6, border: 'none',
                            background: 'var(--accent, #507294)', color: '#fff',
-                           fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+                           fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
             Nuevo flujo
           </button>
         )}
       </div>
 
-      <p style={{ margin: '10px 0 16px', fontSize: 12.5, color: '#72706b', lineHeight: 1.6,
+      <p style={{ margin: '10px 0 16px', fontSize: 13, color: '#72706b', lineHeight: 1.6,
                   maxWidth: 760 }}>
         Cambiar un flujo <b>no toca las revisiones ya abiertas ni las cerradas</b>: cada
         una guardó los pasos con los que nació. Deshabilitarlo tampoco las cancela —
@@ -117,19 +117,19 @@ export default function FlujosDeRevisionModule({ project, API, user, isAdmin }) 
 
       {error && (
         <div style={{ ...CAJA, borderColor: '#fbebeb', background: '#fbebeb',
-                      padding: '9px 13px', marginBottom: 12, fontSize: 12.5,
+                      padding: '9px 13px', marginBottom: 12, fontSize: 13,
                       color: '#b93535' }}>{error}</div>
       )}
 
       {plantillas === null && (
-        <div style={{ padding: 30, textAlign: 'center', color: '#72706b', fontSize: 13 }}>
+        <div style={{ padding: 30, textAlign: 'center', color: '#72706b', fontSize: 14 }}>
           Cargando…
         </div>
       )}
 
       {plantillas !== null && plantillas.length === 0 && (
         <div style={{ padding: '26px 20px', textAlign: 'center', color: '#72706b',
-                      fontSize: 13, border: '1px dashed #e8e6dc', borderRadius: 8,
+                      fontSize: 14, border: '1px dashed #e8e6dc', borderRadius: 8,
                       lineHeight: 1.6 }}>
           Sin flujos definidos. Cada revisión se arma a mano, y en la siguiente obra
           habrá que volver a armarla igual — o distinta sin querer.
@@ -144,26 +144,26 @@ export default function FlujosDeRevisionModule({ project, API, user, isAdmin }) 
               <span style={{ fontSize: 14, fontWeight: 650, color: '#141413' }}>
                 {p.nombre}
               </span>
-              <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px',
+              <span style={{ fontSize: 12, fontWeight: 700, padding: '2px 8px',
                              borderRadius: 10, background: '#f1f0e8', color: '#52524d' }}>
                 v{p.version}
               </span>
               {p.alcance === 'ENTIDAD' && (
                 <span title="Definida en la entidad: sirve en todas las obras"
-                      style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px',
+                      style={{ fontSize: 12, fontWeight: 700, padding: '2px 8px',
                                borderRadius: 10, background: '#ecf0f1', color: '#507294' }}>
                   DE LA ENTIDAD
                 </span>
               )}
               {!p.activa && (
-                <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px',
+                <span style={{ fontSize: 12, fontWeight: 700, padding: '2px 8px',
                                borderRadius: 10, background: '#fbebeb', color: '#b93535' }}>
                   DESHABILITADO
                 </span>
               )}
               {p.activa && p.utilizable === false && (
                 <span title={p.motivo_no_utilizable || ''}
-                      style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px',
+                      style={{ fontSize: 12, fontWeight: 700, padding: '2px 8px',
                                borderRadius: 10, background: '#f9eeda', color: '#734500' }}>
                   NO SE PUEDE USAR
                 </span>
@@ -171,14 +171,14 @@ export default function FlujosDeRevisionModule({ project, API, user, isAdmin }) 
               <div style={{ flex: 1 }} />
               {/* Cuántas revisiones se abrieron con él. Es el dato que hace
                   visible que editarlo NO las cambia. */}
-              <span style={{ fontSize: 11.5, color: p.aplicada_a ? '#507294' : '#cccac0' }}>
+              <span style={{ fontSize: 12, color: p.aplicada_a ? '#507294' : '#cccac0' }}>
                 {p.aplicada_a || 0} revisión(es) abiertas con él
               </span>
               {isAdmin && (
                 <>
                   <button type="button" onClick={() => setEditando(p)}
                           style={{ ...CAJA, padding: '4px 11px', background: '#fff',
-                                   fontSize: 12, cursor: 'pointer', color: '#507294' }}>
+                                   fontSize: 13, cursor: 'pointer', color: '#507294' }}>
                     Editar
                   </button>
                   {/* Duplicar (como ACC): abre el alta con sus pasos, para crear otro
@@ -187,12 +187,12 @@ export default function FlujosDeRevisionModule({ project, API, user, isAdmin }) 
                           onClick={() => setEditando({ nombre: `${p.nombre} (copia)`, descripcion: p.descripcion,
                                                        alcance: p.alcance, pasos: (p.pasos || []).map(x => ({ ...x })) })}
                           style={{ ...CAJA, padding: '4px 11px', background: '#fff',
-                                   fontSize: 12, cursor: 'pointer', color: '#507294' }}>
+                                   fontSize: 13, cursor: 'pointer', color: '#507294' }}>
                     Duplicar
                   </button>
                   <button type="button" onClick={() => activar(p, !p.activa)}
                           style={{ ...CAJA, padding: '4px 11px', background: '#fff',
-                                   fontSize: 12, cursor: 'pointer',
+                                   fontSize: 13, cursor: 'pointer',
                                    color: p.activa ? '#b93535' : '#64744e' }}>
                     {p.activa ? 'Deshabilitar' : 'Habilitar'}
                   </button>
@@ -201,7 +201,7 @@ export default function FlujosDeRevisionModule({ project, API, user, isAdmin }) 
             </div>
 
             {p.descripcion && (
-              <div style={{ fontSize: 12.5, color: '#72706b', marginTop: 5 }}>
+              <div style={{ fontSize: 13, color: '#72706b', marginTop: 5 }}>
                 {p.descripcion}
               </div>
             )}
@@ -209,7 +209,7 @@ export default function FlujosDeRevisionModule({ project, API, user, isAdmin }) 
             {/* E1.3 · por qué no abre revisiones nuevas aquí, en vez de dejar que se
                 descubra al pulsar «Iniciar revisión». */}
             {p.activa && p.utilizable === false && p.motivo_no_utilizable && (
-              <div style={{ fontSize: 12.5, color: '#734500', marginTop: 5 }}>
+              <div style={{ fontSize: 13, color: '#734500', marginTop: 5 }}>
                 No se puede usar en esta obra: {p.motivo_no_utilizable}
               </div>
             )}
@@ -218,12 +218,12 @@ export default function FlujosDeRevisionModule({ project, API, user, isAdmin }) 
               {(p.pasos || []).map((paso, i) => {
                 const c = COLOR_DECISION[paso.decision] || COLOR_DECISION.REVISA;
                 return (
-                  <span key={i} style={{ ...CAJA, padding: '4px 10px', fontSize: 12,
+                  <span key={i} style={{ ...CAJA, padding: '4px 10px', fontSize: 13,
                                          background: '#faf9f5', display: 'inline-flex',
                                          alignItems: 'center', gap: 7 }}>
                     <b style={{ color: '#72706b' }}>{i + 1}</b>
                     <span style={{ color: '#141413' }}>{paso.etiqueta}</span>
-                    <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 6px',
+                    <span style={{ fontSize: 12, fontWeight: 700, padding: '1px 6px',
                                    borderRadius: 8, background: c.fondo, color: c.texto }}>
                       {paso.decision}
                     </span>
@@ -327,7 +327,7 @@ function ModalFlujo({ API, urn, catalogo, miembros, inicial, onCerrar, onGuardad
 
         {editar && (
           <div style={{ ...CAJA, borderColor: '#f9eeda', background: '#faf9f5',
-                        padding: '9px 12px', margin: '10px 0 14px', fontSize: 12.5,
+                        padding: '9px 12px', margin: '10px 0 14px', fontSize: 13,
                         color: '#734500', lineHeight: 1.55 }}>
             Va a la <b>versión {(inicial.version || 1) + 1}</b>. Las{' '}
             <b>{inicial.aplicada_a || 0} revisión(es)</b> ya abiertas con este flujo{' '}
@@ -339,12 +339,12 @@ function ModalFlujo({ API, urn, catalogo, miembros, inicial, onCerrar, onGuardad
         <div style={{ display: 'flex', gap: 10, marginBottom: 10, marginTop: editar ? 0 : 14 }}>
           <input value={f.nombre} onChange={e => setF(p => ({ ...p, nombre: e.target.value }))}
                  placeholder="Nombre — «Aprobación de planos estructurales»"
-                 style={{ ...CAJA, flex: 1, height: 38, padding: '0 10px', fontSize: 13 }} />
+                 style={{ ...CAJA, flex: 1, height: 38, padding: '0 10px', fontSize: 14 }} />
           {!editar && (
             <select value={f.alcance}
                     onChange={e => setF(p => ({ ...p, alcance: e.target.value }))}
                     style={{ ...CAJA, flex: '0 0 180px', height: 38, padding: '0 8px',
-                             fontSize: 13, background: '#fff' }}>
+                             fontSize: 14, background: '#fff' }}>
               <option value="OBRA">Solo esta obra</option>
               <option value="ENTIDAD">Toda la entidad</option>
             </select>
@@ -354,36 +354,36 @@ function ModalFlujo({ API, urn, catalogo, miembros, inicial, onCerrar, onGuardad
                onChange={e => setF(p => ({ ...p, descripcion: e.target.value }))}
                placeholder="Para qué sirve (opcional)"
                style={{ ...CAJA, width: '100%', height: 36, padding: '0 10px',
-                        fontSize: 12.5, marginBottom: 6 }} />
+                        fontSize: 13, marginBottom: 6 }} />
         {f.alcance === 'ENTIDAD' && !editar && (
-          <p style={{ margin: '0 0 12px', fontSize: 11.5, color: '#507294', lineHeight: 1.5 }}>
+          <p style={{ margin: '0 0 12px', fontSize: 12, color: '#507294', lineHeight: 1.5 }}>
             Un flujo de la entidad designa <b>funciones</b>, no personas: una persona
             concreta no significa nada en otra obra. Al aplicarlo, la función se
             resuelve contra los miembros de la obra donde se use.
           </p>
         )}
 
-        <div style={{ fontSize: 10.5, fontWeight: 700, color: '#72706b',
+        <div style={{ fontSize: 12, fontWeight: 700, color: '#72706b',
                       letterSpacing: '.05em', margin: '12px 0 7px' }}>
           PASOS, EN ORDEN
         </div>
         {pasos.map((p, i) => (
           <div key={i} style={{ display: 'flex', gap: 6, marginBottom: 6,
                                 alignItems: 'center', flexWrap: 'wrap' }}>
-            <b style={{ color: '#72706b', fontSize: 12, width: 14 }}>{i + 1}</b>
+            <b style={{ color: '#72706b', fontSize: 13, width: 14 }}>{i + 1}</b>
             <input value={p.etiqueta} onChange={e => cambiar(i, 'etiqueta', e.target.value)}
                    placeholder="Qué paso es"
                    style={{ ...CAJA, flex: 1, minWidth: 130, height: 34, padding: '0 9px',
-                            fontSize: 12.5 }} />
+                            fontSize: 13 }} />
             <select value={p.decision} onChange={e => cambiar(i, 'decision', e.target.value)}
-                    style={{ ...CAJA, height: 34, fontSize: 12, background: '#fff' }}>
+                    style={{ ...CAJA, height: 34, fontSize: 13, background: '#fff' }}>
               {(catalogo.decisiones || []).map(d => (
                 <option key={d.codigo} value={d.codigo}>{d.etiqueta}</option>
               ))}
             </select>
             {f.alcance === 'OBRA' && (
               <select value={p.user_id || ''} onChange={e => cambiar(i, 'user_id', e.target.value)}
-                      style={{ ...CAJA, height: 34, fontSize: 12, background: '#fff',
+                      style={{ ...CAJA, height: 34, fontSize: 13, background: '#fff',
                                maxWidth: 160 }}>
                 <option value="">— persona —</option>
                 {miembros.map(m => (
@@ -392,7 +392,7 @@ function ModalFlujo({ API, urn, catalogo, miembros, inicial, onCerrar, onGuardad
               </select>
             )}
             <select value={p.funcion || ''} onChange={e => cambiar(i, 'funcion', e.target.value)}
-                    style={{ ...CAJA, height: 34, fontSize: 12, background: '#fff' }}>
+                    style={{ ...CAJA, height: 34, fontSize: 13, background: '#fff' }}>
               <option value="">— función —</option>
               {(catalogo.funciones || []).map(x => (
                 <option key={x} value={x}>{x}</option>
@@ -401,11 +401,11 @@ function ModalFlujo({ API, urn, catalogo, miembros, inicial, onCerrar, onGuardad
             <input type="number" min="1" step="1" value={p.dias ?? ''}
                    onChange={e => cambiar(i, 'dias', e.target.value)}
                    placeholder="días"
-                   style={{ ...CAJA, width: 66, height: 34, padding: '0 8px', fontSize: 12 }} />
+                   style={{ ...CAJA, width: 66, height: 34, padding: '0 8px', fontSize: 13 }} />
             <select value={p.dias_tipo || 'naturales'} onChange={e => cambiar(i, 'dias_tipo', e.target.value)}
                     aria-label={`Cómo se cuentan los días del paso ${i + 1}`}
                     disabled={!String(p.dias ?? '').trim()}
-                    style={{ ...CAJA, height: 34, fontSize: 12, background: '#fff' }}>
+                    style={{ ...CAJA, height: 34, fontSize: 13, background: '#fff' }}>
               <option value="naturales">calendario</option>
               <option value="laborables">hábiles</option>
             </select>
@@ -418,12 +418,12 @@ function ModalFlujo({ API, urn, catalogo, miembros, inicial, onCerrar, onGuardad
           <button type="button"
                   onClick={() => setPasos(a => [...a, { etiqueta: '', decision: 'REVISA',
                                                         user_id: '', funcion: '', dias: '' }])}
-                  style={{ ...CAJA, borderStyle: 'dashed', padding: '4px 11px', fontSize: 12,
+                  style={{ ...CAJA, borderStyle: 'dashed', padding: '4px 11px', fontSize: 13,
                            background: '#fff', cursor: 'pointer', color: '#52524d' }}>
             + Añadir paso
           </button>
         )}
-        <p style={{ margin: '8px 0 0', fontSize: 11.5, color: '#72706b', lineHeight: 1.5 }}>
+        <p style={{ margin: '8px 0 0', fontSize: 12, color: '#72706b', lineHeight: 1.5 }}>
           Cada paso designa <b>una persona o una función</b>, no las dos: al aplicarlo
           no se sabría cuál manda. El plazo se cuenta desde que empieza ese turno, en
           días calendario o en días hábiles (de lunes a viernes, sin feriados). Máximo {catalogo.max_pasos || 6} pasos
@@ -434,16 +434,16 @@ function ModalFlujo({ API, urn, catalogo, miembros, inicial, onCerrar, onGuardad
           <input value={f.motivo} onChange={e => setF(p => ({ ...p, motivo: e.target.value }))}
                  placeholder="Motivo del cambio (queda en el historial del flujo)"
                  style={{ ...CAJA, width: '100%', height: 34, padding: '0 10px',
-                          fontSize: 12.5, marginTop: 12 }} />
+                          fontSize: 13, marginTop: 12 }} />
         )}
 
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 18 }}>
           <button type="button" onClick={onCerrar} disabled={guardando}
                   style={{ ...CAJA, padding: '8px 14px', background: '#fff',
-                           fontSize: 13, cursor: 'pointer' }}>Cancelar</button>
+                           fontSize: 14, cursor: 'pointer' }}>Cancelar</button>
           <button type="button" onClick={guardar} disabled={guardando}
                   style={{ padding: '8px 16px', borderRadius: 6, border: 'none',
-                           background: 'var(--accent, #507294)', color: '#fff', fontSize: 13,
+                           background: 'var(--accent, #507294)', color: '#fff', fontSize: 14,
                            fontWeight: 600, cursor: guardando ? 'wait' : 'pointer' }}>
             {guardando ? 'Guardando…' : (editar ? 'Guardar nueva versión' : 'Crear flujo')}
           </button>

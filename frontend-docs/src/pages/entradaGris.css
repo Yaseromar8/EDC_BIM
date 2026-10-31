@@ -49,7 +49,7 @@
     border: none;
     padding: 0;
     color: var(--eg-cab-texto);
-    font-size: 13px;
+    font-size: 14px;
     font-family: inherit;
     cursor: pointer;
     transition: color .15s;
@@ -62,7 +62,7 @@
 .entrada-gris .header-avatar {
     width: 28px;
     height: 28px;
-    font-size: 11.5px;
+    font-size: 12px;
     background: var(--eg-avatar);
     color: #141413;
 }
@@ -132,7 +132,7 @@
     border: none;
     outline: none;
     background: none;
-    font-size: 13.5px;
+    font-size: 14px;
     font-family: inherit;
     color: var(--eg-texto);
 }
@@ -160,7 +160,7 @@
     text-overflow: ellipsis;
     background: var(--eg-fila);
     color: var(--eg-texto-2);
-    font-size: 12px;
+    font-size: 13px;
     font-weight: 600;
     border-bottom: 1px solid var(--eg-linea);
 }
@@ -184,7 +184,7 @@
 
 .entrada-gris .eg-tabla .project-name-sub {
     margin-top: 2px;
-    font-size: 12px;
+    font-size: 13px;
     color: var(--eg-texto-3);
 }
 

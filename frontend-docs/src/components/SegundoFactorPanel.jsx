@@ -21,7 +21,7 @@ const CAJA = {
 };
 const BOTON = {
   background: 'var(--accent)', border: 'none', borderRadius: 7, color: '#fff',
-  padding: '9px 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+  padding: '9px 16px', fontSize: 14, fontWeight: 600, cursor: 'pointer',
 };
 const BOTON_SUAVE = { ...BOTON, background: 'rgba(255,255,255,0.07)', color: '#cccac0', fontWeight: 500 };
 const CAMPO = {
@@ -109,7 +109,7 @@ export default function SegundoFactorPanel({ onClose }) {
         </div>
 
         {error && (
-          <p style={{ margin: '14px 0 0', padding: '9px 11px', borderRadius: 7, fontSize: 13,
+          <p style={{ margin: '14px 0 0', padding: '9px 11px', borderRadius: 7, fontSize: 14,
                       background: 'rgba(185,53,53,0.12)', border: '1px solid rgba(185,53,53,0.35)',
                       color: '#FBEBEB' }}>{error}</p>
         )}
@@ -117,13 +117,13 @@ export default function SegundoFactorPanel({ onClose }) {
         {/* ── Códigos de recuperación recién generados ── */}
         {recuperacion ? (
           <>
-            <p style={{ fontSize: 13, lineHeight: 1.5, color: '#cccac0' }}>
+            <p style={{ fontSize: 14, lineHeight: 1.5, color: '#cccac0' }}>
               Ya está activa. Guarda estos códigos: cada uno sirve <b>una sola vez</b> y
               son la única forma de entrar si pierdes el teléfono. No se vuelven a mostrar.
             </p>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6,
                           background: '#141413', border: '1px solid rgba(255,255,255,0.09)',
-                          borderRadius: 7, padding: 12, fontFamily: 'monospace', fontSize: 13 }}>
+                          borderRadius: 7, padding: 12, fontFamily: 'monospace', fontSize: 14 }}>
               {recuperacion.map((c) => <span key={c}>{c}</span>)}
             </div>
             <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
@@ -134,7 +134,7 @@ export default function SegundoFactorPanel({ onClose }) {
         ) : alta ? (
           /* ── Alta en curso: clave + comprobación ── */
           <>
-            <p style={{ fontSize: 13, lineHeight: 1.5, color: '#cccac0' }}>
+            <p style={{ fontSize: 14, lineHeight: 1.5, color: '#cccac0' }}>
               Añade esta clave en tu aplicación de autenticación (Google Authenticator,
               Aegis, 1Password…) con la opción de <i>introducir clave manualmente</i>, o
               abre el enlace desde el móvil.
@@ -146,12 +146,12 @@ export default function SegundoFactorPanel({ onClose }) {
             </code>
             <div style={{ display: 'flex', gap: 8, margin: '8px 0 16px' }}>
               <button onClick={() => navigator.clipboard?.writeText(alta.secreto)}
-                      style={{ ...BOTON_SUAVE, fontSize: 12 }}>Copiar clave</button>
-              <a href={alta.uri} style={{ ...BOTON_SUAVE, fontSize: 12, textDecoration: 'none' }}>
+                      style={{ ...BOTON_SUAVE, fontSize: 13 }}>Copiar clave</button>
+              <a href={alta.uri} style={{ ...BOTON_SUAVE, fontSize: 13, textDecoration: 'none' }}>
                 Abrir en la aplicación
               </a>
             </div>
-            <label style={{ fontSize: 12, color: '#72706b' }}>Código de 6 cifras</label>
+            <label style={{ fontSize: 13, color: '#72706b' }}>Código de 6 cifras</label>
             <input
               value={codigo} onChange={(e) => setCodigo(e.target.value)}
               inputMode="numeric" autoComplete="one-time-code" autoFocus
@@ -165,11 +165,11 @@ export default function SegundoFactorPanel({ onClose }) {
         ) : estado?.activo ? (
           /* ── Ya activa ── */
           <>
-            <p style={{ fontSize: 13, lineHeight: 1.5, color: '#cccac0' }}>
+            <p style={{ fontSize: 14, lineHeight: 1.5, color: '#cccac0' }}>
               Activa{estado.activado_en ? ` desde el ${new Date(estado.activado_en).toLocaleDateString('es-PE')}` : ''}.
               Te quedan {estado.codigos_de_recuperacion_sin_usar} códigos de recuperación sin usar.
             </p>
-            <p style={{ fontSize: 12, color: '#72706b', lineHeight: 1.5 }}>
+            <p style={{ fontSize: 13, color: '#72706b', lineHeight: 1.5 }}>
               Para desactivarla hace falta un código: tener la sesión abierta no basta.
             </p>
             <input
@@ -185,7 +185,7 @@ export default function SegundoFactorPanel({ onClose }) {
         ) : (
           /* ── Sin activar ── */
           <>
-            <p style={{ fontSize: 13, lineHeight: 1.5, color: '#cccac0' }}>
+            <p style={{ fontSize: 14, lineHeight: 1.5, color: '#cccac0' }}>
               Añade un código temporal de tu teléfono a la contraseña. Si alguien te la
               roba, seguirá sin poder entrar.
               {estado?.exigido && <b> A tu cuenta se le exige por el rol que tiene.</b>}

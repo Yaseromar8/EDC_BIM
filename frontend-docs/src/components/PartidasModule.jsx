@@ -702,11 +702,11 @@ const PartidasModule = ({ project, API, user, isAdmin }) => {
       const data = payload[0].payload;
       const isCantidad = payload[0].dataKey === 'cantidad';
       return (
-        <div style={{ backgroundColor: '#fff', border: '1px solid #ccc', padding: '10px', fontSize: '13px', borderRadius: '4px', boxShadow: '0 2px 8px rgba(0,0,0,0.15)' }}>
+        <div style={{ backgroundColor: '#fff', border: '1px solid #ccc', padding: '10px', fontSize: '14px', borderRadius: '4px', boxShadow: '0 2px 8px rgba(0,0,0,0.15)' }}>
           <p style={{ margin: 0, color: '#333' }}>
             <b>{data.name}</b>: {isCantidad ? data.cantidad : `${data.value}%`}
           </p>
-          <p style={{ margin: '4px 0 0', color: '#666', fontSize: '11px' }}>Clic para filtrar</p>
+          <p style={{ margin: '4px 0 0', color: '#666', fontSize: '12px' }}>Clic para filtrar</p>
         </div>
       );
     }
@@ -733,28 +733,28 @@ const PartidasModule = ({ project, API, user, isAdmin }) => {
             placeholder="Buscar partida..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            style={{ padding: '8px 12px', border: '1px solid #ddd', borderRadius: 4, width: 200, fontSize: 13 }}
+            style={{ padding: '8px 12px', border: '1px solid #ddd', borderRadius: 4, width: 200, fontSize: 14 }}
           />
           {isAdmin && (
             <>
-              <button onClick={deleteAllPartidas} style={{ background: '#fff', color: '#d93025', border: '1px solid #d93025', padding: '8px 16px', borderRadius: 4, cursor: 'pointer', fontWeight: 500, fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}>
+              <button onClick={deleteAllPartidas} style={{ background: '#fff', color: '#d93025', border: '1px solid #d93025', padding: '8px 16px', borderRadius: 4, cursor: 'pointer', fontWeight: 500, fontSize: 14, display: 'flex', alignItems: 'center', gap: 6 }}>
                 Limpiar Presupuesto
               </button>
-              <button onClick={() => fileInputRef.current?.click()} style={{ background: '#fff', color: '#1e8e3e', border: '1px solid #1e8e3e', padding: '8px 16px', borderRadius: 4, cursor: 'pointer', fontWeight: 500, fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}>
+              <button onClick={() => fileInputRef.current?.click()} style={{ background: '#fff', color: '#1e8e3e', border: '1px solid #1e8e3e', padding: '8px 16px', borderRadius: 4, cursor: 'pointer', fontWeight: 500, fontSize: 14, display: 'flex', alignItems: 'center', gap: 6 }}>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
                 Importar Excel
               </button>
               <input type="file" ref={fileInputRef} onChange={handleImportExcel} accept=".xlsx,.xls,.csv" style={{ display: 'none' }} />
-              <button onClick={createPartida} style={{ background: '#0a8af6', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: 4, cursor: 'pointer', fontWeight: 500, fontSize: 13 }}>
+              <button onClick={createPartida} style={{ background: '#0a8af6', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: 4, cursor: 'pointer', fontWeight: 500, fontSize: 14 }}>
                 + Nueva Partida
               </button>
             </>
           )}
-          <button onClick={() => setCollapsedNodes(new Set(parentPrefixes))} title="Contraer Todo" style={{ height: 36, padding: '0 12px', background: '#f5f5f5', border: '1px solid #ddd', borderRadius: 4, cursor: 'pointer', fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}>
+          <button onClick={() => setCollapsedNodes(new Set(parentPrefixes))} title="Contraer Todo" style={{ height: 36, padding: '0 12px', background: '#f5f5f5', border: '1px solid #ddd', borderRadius: 4, cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', gap: 6 }}>
              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="18 15 12 9 6 15"></polyline></svg>
              Contraer Todo
           </button>
-          <button onClick={() => setCollapsedNodes(new Set())} title="Expandir Todo" style={{ height: 36, padding: '0 12px', background: '#f5f5f5', border: '1px solid #ddd', borderRadius: 4, cursor: 'pointer', fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}>
+          <button onClick={() => setCollapsedNodes(new Set())} title="Expandir Todo" style={{ height: 36, padding: '0 12px', background: '#f5f5f5', border: '1px solid #ddd', borderRadius: 4, cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', gap: 6 }}>
              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
              Expandir Todo
           </button>
@@ -781,7 +781,7 @@ const PartidasModule = ({ project, API, user, isAdmin }) => {
 
       {/* DATA GRID */}
       <div style={{ border: '1px solid #e0e0e0', borderRadius: 8, background: '#fff', overflowX: 'auto', overflowY: 'auto', flex: 1, minHeight: 0, marginBottom: 16 }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: 11, tableLayout: 'fixed' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: 12, tableLayout: 'fixed' }}>
           <thead style={{ background: '#faf9f5', color: '#5f6368', borderBottom: '2px solid #e0e0e0', position: 'sticky', top: 0, zIndex: 2 }}>
             <tr>
               {COL_DEFS.map((col, idx) => (
@@ -838,7 +838,7 @@ const PartidasModule = ({ project, API, user, isAdmin }) => {
                             </button>
                           ) : (
                             <div style={{ width: 16, height: 16, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                              {depth > 0 && <span style={{ color: '#ccc', fontSize: 10 }}>↳</span>}
+                              {depth > 0 && <span style={{ color: '#ccc', fontSize: 12 }}>↳</span>}
                             </div>
                           )}
                           {p.descripcion}
@@ -887,7 +887,7 @@ const PartidasModule = ({ project, API, user, isAdmin }) => {
                         </select>
                       ) : (
                         <span style={{ 
-                          padding: '2px 8px', borderRadius: 12, fontSize: 10, fontWeight: 'bold',
+                          padding: '2px 8px', borderRadius: 12, fontSize: 12, fontWeight: 'bold',
                           background: p.metodologia === 'BIM' ? '#f0eee6' : p.metodologia === 'CONVENCIONAL' ? '#fef7e0' : 'transparent',
                           color: p.metodologia === 'BIM' ? '#7e9bbd' : p.metodologia === 'CONVENCIONAL' ? '#b06000' : '#333'
                         }}>
@@ -960,11 +960,11 @@ const PartidasModule = ({ project, API, user, isAdmin }) => {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flex: 1 }}>
             
             <div style={{ background: '#fff', padding: '12px', borderRadius: 6, border: '1px solid #e0e0e0', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-              <div style={{ fontSize: 11, color: '#888', marginBottom: 4 }}>Partidas BIM</div>
+              <div style={{ fontSize: 12, color: '#888', marginBottom: 4 }}>Partidas BIM</div>
               <div style={{ fontSize: 22, fontWeight: 'bold', color: '#7e9bbd' }}>{countBim}</div>
             </div>
             <div style={{ background: '#fff', padding: '12px', borderRadius: 6, border: '1px solid #e0e0e0', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-              <div style={{ fontSize: 11, color: '#888', marginBottom: 4 }}>Partidas Convencionales</div>
+              <div style={{ fontSize: 12, color: '#888', marginBottom: 4 }}>Partidas Convencionales</div>
               <div style={{ fontSize: 22, fontWeight: 'bold', color: '#e37400' }}>{countConv}</div>
             </div>
           </div>
@@ -973,14 +973,14 @@ const PartidasModule = ({ project, API, user, isAdmin }) => {
         {/* GRAFICA 1: METODOLOGIA (DONA) */}
         {totalInc > 0 && (
           <div style={{ background: '#fff', padding: '10px', borderRadius: 6, border: '1px solid #e0e0e0', flex: '1 1 200px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-            <h4 style={{ margin: '0 0 8px 0', fontSize: 13, color: '#444' }}>Por Metodología</h4>
+            <h4 style={{ margin: '0 0 8px 0', fontSize: 14, color: '#444' }}>Por Metodología</h4>
             <ResponsiveContainer width="100%" height={160}>
               <PieChart>
                 <Pie data={chartBimConv} cx="50%" cy="45%" innerRadius={40} outerRadius={65} paddingAngle={4} dataKey="value" onClick={handleChartClick} style={{ cursor: 'pointer' }} label={renderCustomizedPieLabel} labelLine={false}>
                   {chartBimConv.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.color} />)}
                 </Pie>
                 <Tooltip content={renderCustomTooltip} />
-                <Legend verticalAlign="bottom" height={24} wrapperStyle={{ fontSize: 11, paddingTop: 5 }} />
+                <Legend verticalAlign="bottom" height={24} wrapperStyle={{ fontSize: 12, paddingTop: 5 }} />
               </PieChart>
             </ResponsiveContainer>
           </div>
@@ -989,16 +989,16 @@ const PartidasModule = ({ project, API, user, isAdmin }) => {
         {/* GRAFICA 2: SOFTWARE (BARRAS) */}
         {softwareData.total > 0 && (
           <div style={{ background: '#fff', padding: '10px', borderRadius: 6, border: '1px solid #e0e0e0', flex: '1 1 250px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-            <h4 style={{ margin: '0 0 8px 0', fontSize: 13, color: '#444' }}>Por Software</h4>
+            <h4 style={{ margin: '0 0 8px 0', fontSize: 14, color: '#444' }}>Por Software</h4>
             <ResponsiveContainer width="100%" height={160}>
               <BarChart data={chartSoftware} margin={{ top: 15, right: 20, left: -20, bottom: 5 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                <XAxis dataKey="name" tick={{ fontSize: 9 }} interval={0} />
-                <YAxis tick={{ fontSize: 10 }} allowDecimals={false} />
+                <XAxis dataKey="name" tick={{ fontSize: 12 }} interval={0} />
+                <YAxis tick={{ fontSize: 12 }} allowDecimals={false} />
                 <Tooltip content={renderCustomTooltip} cursor={{ fill: '#f5f5f5' }} />
                 <Bar dataKey="value" radius={[4, 4, 0, 0]} barSize={30} onClick={handleChartClick} style={{ cursor: 'pointer' }}>
                   {chartSoftware.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.color} />)}
-                  <LabelList dataKey="cantidad" position="top" style={{ fontSize: '10px', fill: '#444', fontWeight: 'bold' }} />
+                  <LabelList dataKey="cantidad" position="top" style={{ fontSize: '12px', fill: '#444', fontWeight: 'bold' }} />
                 </Bar>
               </BarChart>
             </ResponsiveContainer>

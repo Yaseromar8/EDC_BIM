@@ -266,7 +266,7 @@ export function EstadoVacio({ ilustracion, titulo, texto }) {
                                 justifyContent: 'center', gap: 10, padding: 32, textAlign: 'center' }}>
       <div style={{ color: 'var(--a-neutral-400, #B0AEA5)' }}>{ilustracion}</div>
       <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--a-neutral-700, #333330)' }}>{titulo}</div>
-      {texto && <div style={{ fontSize: 13, color: 'var(--a-neutral-500, #72706B)', maxWidth: 360, lineHeight: 1.5 }}>{texto}</div>}
+      {texto && <div style={{ fontSize: 14, color: 'var(--a-neutral-500, #72706B)', maxWidth: 360, lineHeight: 1.5 }}>{texto}</div>}
     </div>
   );
 }

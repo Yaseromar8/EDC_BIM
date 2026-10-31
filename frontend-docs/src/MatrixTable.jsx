@@ -134,7 +134,7 @@ const ReviewStatusControl = ({ item, isAdmin, onStatusChange }) => {
           border: 'none',
           borderRadius: 6,   // sin píldora (D-24)
           padding: '2px 10px',
-          fontSize: 11,
+          fontSize: 12,
           fontWeight: 600,
           cursor: isAdmin && transitions.length > 0 ? 'pointer' : 'default',
           whiteSpace: 'nowrap',
@@ -193,7 +193,7 @@ const ReviewStatusControl = ({ item, isAdmin, onStatusChange }) => {
                   border: 'none',
                   background: 'none',
                   cursor: 'pointer',
-                  fontSize: 12,
+                  fontSize: 13,
                   color: '#333330',
                   textAlign: 'left',
                 }}
@@ -509,7 +509,7 @@ const TableRow = ({ index, style, data }) => {
             {AVISO_CAD[estadosCad[item.id]] && (
               <span
                 title={AVISO_CAD[estadosCad[item.id]].titulo}
-                style={{ flexShrink: 0, fontSize: 11, color: AVISO_CAD[estadosCad[item.id]].color }}
+                style={{ flexShrink: 0, fontSize: 12, color: AVISO_CAD[estadosCad[item.id]].color }}
               >
                 {AVISO_CAD[estadosCad[item.id]].texto}
               </span>
@@ -520,7 +520,7 @@ const TableRow = ({ index, style, data }) => {
             {item.bloqueado_por && (
               <span
                 title={`Reservado por ${item.bloqueado_por}` + (item.bloqueado_en ? ` desde el ${new Date(item.bloqueado_en).toLocaleDateString()}` : '')}
-                style={{ display: 'inline-flex', alignItems: 'center', gap: 4, flexShrink: 0, color: '#734500', fontSize: 11 }}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 4, flexShrink: 0, color: '#734500', fontSize: 12 }}
               >
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
                   <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
@@ -667,13 +667,13 @@ const TableRow = ({ index, style, data }) => {
           <div className="td-cell" style={{ width: columnWidths.updated }} title={formatDate(item.updated)}>{fechaDeLista(item.updated)}</div>
           <div className="td-cell" style={{ width: columnWidths.user }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-               <div className="user-avatar-acc" style={{ width: 24, height: 24, fontSize: 10, flexShrink: 0 }}>
+               <div className="user-avatar-acc" style={{ width: 24, height: 24, fontSize: 12, flexShrink: 0 }}>
                   {typeof item.updated_by === 'object' && item.updated_by !== null
                     ? (item.updated_by.initials || '??') 
                     : getInitials(String(item.updated_by || 'ADMIN'))}
                </div>
                <div style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-                 <span style={{ fontSize: 13, textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
+                 <span style={{ fontSize: 14, textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
                     {typeof item.updated_by === 'object' && item.updated_by !== null
                       ? (item.updated_by.name || 'Usuario')
                       : String(item.updated_by || 'ADMIN')}

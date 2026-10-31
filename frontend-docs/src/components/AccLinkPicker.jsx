@@ -160,7 +160,7 @@ export default function AccLinkPicker({ API, file, docsVersionId, docsGcsUrn,
           <strong>Vincular vista de Autodesk Docs</strong>
           <button type="button" onClick={onClose} aria-label="Cerrar">✕</button>
         </div>
-        <div style={{ padding: '12px 20px', fontSize: 13, lineHeight: 1.5 }}>
+        <div style={{ padding: '12px 20px', fontSize: 14, lineHeight: 1.5 }}>
           Documento: <strong>{file.name}</strong>. Elige el mismo archivo ya preparado en ACC y su versión.
           El original de ALEPHIA Docs permanecerá en su carpeta y se podrá descargar.
           {previewOnly && <p style={{ margin: '8px 0 0', color: '#9e5943' }}>
@@ -168,7 +168,7 @@ export default function AccLinkPicker({ API, file, docsVersionId, docsGcsUrn,
           </p>}
           {currentLink && <p style={{ margin: '8px 0 0' }}>Vista actual: {currentLink.name} · ACC V{currentLink.version_number || '?'}</p>}
         </div>
-        <div style={{ padding: '8px 20px', borderTop: '1px solid #f1f0e8', borderBottom: '1px solid #f1f0e8', display: 'flex', gap: 8, alignItems: 'center', fontSize: 13 }}>
+        <div style={{ padding: '8px 20px', borderTop: '1px solid #f1f0e8', borderBottom: '1px solid #f1f0e8', display: 'flex', gap: 8, alignItems: 'center', fontSize: 14 }}>
           {(hub || project || folders.length || item) && <button type="button" onClick={back} disabled={loading}>← Volver</button>}
           <span>{[label(hub), label(project), ...folders.map(label), label(item)].filter(value => value !== 'Sin nombre').join(' / ') || 'Centros de Autodesk'}</span>
         </div>
@@ -195,7 +195,7 @@ export default function AccLinkPicker({ API, file, docsVersionId, docsGcsUrn,
           {!loading && !entries.length && !error && <div style={{ padding: 16 }}>No hay elementos en esta ubicación.</div>}
           {more && <button type="button" style={row} onClick={loadMore} disabled={loading}>Cargar más resultados de ACC…</button>}
         </div>
-        <div style={{ padding: '8px 20px', minHeight: 25, fontSize: 12, color: '#b93535' }} role="alert">
+        <div style={{ padding: '8px 20px', minHeight: 25, fontSize: 13, color: '#b93535' }} role="alert">
           {error || (item && !sameName ? 'El nombre del archivo ACC debe coincidir con el de Docs.' : '')}
         </div>
         <div style={{ padding: '12px 20px', borderTop: '1px solid #f1f0e8', display: 'flex', justifyContent: 'flex-end', gap: 10 }}>

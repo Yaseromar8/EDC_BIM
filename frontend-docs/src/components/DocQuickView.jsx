@@ -23,13 +23,13 @@ export default function DocQuickView({ file, projectPrefix, onClose,
           <span style={{ display: 'flex', alignItems: 'center', gap: 9, minWidth: 0 }}>
             {versionLabel && (
               <span style={{ flexShrink: 0, padding: '2px 8px', border: '1px solid #cccac0', borderRadius: 4,
-                             background: '#f1f0e8', color: '#507294', fontSize: 11.5, fontWeight: 700,
+                             background: '#f1f0e8', color: '#507294', fontSize: 12, fontWeight: 700,
                              letterSpacing: '0.04em' }} title={versionInfo || versionLabel}>{versionLabel}</span>
             )}
-            <span style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--text-primary, #141413)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{file.name}</span>
+            <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary, #141413)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{file.name}</span>
             {versionInfo && (
               <span style={{ flexShrink: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis',
-                             whiteSpace: 'nowrap', fontSize: 11.5, color: 'var(--text-secondary, #72706b)' }}>{versionInfo}</span>
+                             whiteSpace: 'nowrap', fontSize: 12, color: 'var(--text-secondary, #72706b)' }}>{versionInfo}</span>
             )}
           </span>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -57,7 +57,7 @@ export default function DocQuickView({ file, projectPrefix, onClose,
           {!isPdf && !isImage && !isVideo && (
             <div style={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 14, color: '#72706b', fontSize: 14 }}>
               Sin vista previa para este formato.
-              <a href={file.url} target="_blank" rel="noopener noreferrer" style={{ background: 'var(--accent)', color: '#fff', padding: '9px 20px', borderRadius: 6, textDecoration: 'none', fontWeight: 600, fontSize: 13 }}>Descargar archivo</a>
+              <a href={file.url} target="_blank" rel="noopener noreferrer" style={{ background: 'var(--accent)', color: '#fff', padding: '9px 20px', borderRadius: 6, textDecoration: 'none', fontWeight: 600, fontSize: 14 }}>Descargar archivo</a>
             </div>
           )}
         </div>

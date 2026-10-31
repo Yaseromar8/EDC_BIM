@@ -753,7 +753,7 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
           <input
             autoFocus
             placeholder="Texto…"
-            style={{ position: 'absolute', left: `${(s[0] / vpInfo.w) * 100}%`, top: `calc(${(s[1] / vpInfo.h) * 100}% - 14px)`, width: 180, padding: '4px 8px', fontSize: 13, border: `2px solid ${color}`, borderRadius: 4, outline: 'none', background: '#fff' }}
+            style={{ position: 'absolute', left: `${(s[0] / vpInfo.w) * 100}%`, top: `calc(${(s[1] / vpInfo.h) * 100}% - 14px)`, width: 180, padding: '4px 8px', fontSize: 14, border: `2px solid ${color}`, borderRadius: 4, outline: 'none', background: '#fff' }}
             onKeyDown={(e) => {
               if (e.key === 'Enter') { const v = e.target.value.trim(); if (v) saveMarkup('text', { p: textDraft.p }, v); setTextDraft(null); }
               if (e.key === 'Escape') setTextDraft(null);
@@ -766,35 +766,35 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
       {/* Diálogo de calibración */}
       {calibAsk && (
         <div style={{ position: 'absolute', top: 16, left: '50%', transform: 'translateX(-50%)', background: '#faf9f5', color: '#141413', padding: '10px 14px', border: '1px solid #cfcabb', borderRadius: 4, boxShadow: '0 2px 8px rgba(20,20,19,0.12)', display: 'flex', alignItems: 'center', gap: 8, zIndex: 50 }}>
-          <span style={{ fontSize: 13 }}>Distancia real entre los dos puntos:</span>
+          <span style={{ fontSize: 14 }}>Distancia real entre los dos puntos:</span>
           <input id="calib-input" autoFocus type="number" step="any" placeholder="10.00"
-            style={{ width: 90, padding: '5px 8px', borderRadius: 3, border: '1px solid #cfcabb', background: '#fff', color: '#141413', fontSize: 13 }}
+            style={{ width: 90, padding: '5px 8px', borderRadius: 3, border: '1px solid #cfcabb', background: '#fff', color: '#141413', fontSize: 14 }}
             onKeyDown={(e) => { if (e.key === 'Enter') confirmCalibration(parseFloat(e.target.value), document.getElementById('calib-unit').value); }} />
           <select id="calib-unit" defaultValue="m" style={{ padding: '5px', borderRadius: 3, background: '#fff', color: '#141413', border: '1px solid #cfcabb' }}>
             <option value="m">m</option><option value="cm">cm</option><option value="km">km</option><option value="ft">ft</option>
           </select>
           <button onClick={() => confirmCalibration(parseFloat(document.getElementById('calib-input').value), document.getElementById('calib-unit').value)}
-            style={{ background: '#141413', border: 'none', color: '#fff', padding: '6px 14px', borderRadius: 3, fontWeight: 600, cursor: 'pointer', fontSize: 13 }}>Fijar escala</button>
-          <button onClick={() => { setCalibAsk(null); setRecalibrar(false); }} aria-label="Cancelar" style={{ background: 'transparent', border: '1px solid #cfcabb', color: '#52524d', padding: '6px 10px', borderRadius: 3, cursor: 'pointer', fontSize: 13 }}>Cancelar</button>
+            style={{ background: '#141413', border: 'none', color: '#fff', padding: '6px 14px', borderRadius: 3, fontWeight: 600, cursor: 'pointer', fontSize: 14 }}>Fijar escala</button>
+          <button onClick={() => { setCalibAsk(null); setRecalibrar(false); }} aria-label="Cancelar" style={{ background: 'transparent', border: '1px solid #cfcabb', color: '#52524d', padding: '6px 10px', borderRadius: 3, cursor: 'pointer', fontSize: 14 }}>Cancelar</button>
         </div>
       )}
 
       {/* LA ESCALA, AL MEDIR: si falta, qué hacer; si está, cuál es y «Cambiar». */}
       {midiendo && !calibAsk && (
-        <div style={{ position: 'absolute', top: 12, left: 12, zIndex: 40, display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', border: '1px solid #cfcabb', borderRadius: 4, background: faltaEscala ? '#f6efe2' : '#faf9f5', color: faltaEscala ? '#734500' : '#141413', fontSize: 12.5 }}>
+        <div style={{ position: 'absolute', top: 12, left: 12, zIndex: 40, display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', border: '1px solid #cfcabb', borderRadius: 4, background: faltaEscala ? '#f6efe2' : '#faf9f5', color: faltaEscala ? '#734500' : '#141413', fontSize: 13 }}>
           {faltaEscala
             ? <span>Primero la escala: marca dos puntos de una distancia conocida (por ejemplo, la escala gráfica del plano).</span>
             : <><span>Escala {escalaLegible(cal.units_per_pdf, cal.display_unit) || 'fijada'}</span>
                 <button type="button" onClick={() => { setDraft(null); setRecalibrar(true); }}
-                  style={{ padding: '2px 8px', border: '1px solid #cfcabb', borderRadius: 3, background: '#fff', color: '#141413', fontSize: 12, cursor: 'pointer' }}>Cambiar</button></>}
+                  style={{ padding: '2px 8px', border: '1px solid #cfcabb', borderRadius: 3, background: '#fff', color: '#141413', fontSize: 13, cursor: 'pointer' }}>Cambiar</button></>}
           {recalibrar && cal && <button type="button" onClick={() => { setDraft(null); setRecalibrar(false); }}
-            style={{ padding: '2px 8px', border: '1px solid #cfcabb', borderRadius: 3, background: '#fff', color: '#52524d', fontSize: 12, cursor: 'pointer' }}>Cancelar</button>}
+            style={{ padding: '2px 8px', border: '1px solid #cfcabb', borderRadius: 3, background: '#fff', color: '#52524d', fontSize: 13, cursor: 'pointer' }}>Cancelar</button>}
         </div>
       )}
 
       {/* Barra de estado: totales de la página */}
       {(pageMarkups.length > 0 || draft) && (
-        <div style={{ position: 'absolute', bottom: 10, left: '50%', transform: 'translateX(-50%)', background: '#faf9f5', color: '#141413', border: '1px solid #cfcabb', padding: '5px 12px', borderRadius: 4, fontSize: 12, display: 'flex', gap: 14, pointerEvents: 'none', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>
+        <div style={{ position: 'absolute', bottom: 10, left: '50%', transform: 'translateX(-50%)', background: '#faf9f5', color: '#141413', border: '1px solid #cfcabb', padding: '5px 12px', borderRadius: 4, fontSize: 13, display: 'flex', gap: 14, pointerEvents: 'none', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>
           <span>{cal ? `Escala ${escalaLegible(cal.units_per_pdf, cal.display_unit) || 'fijada'}` : 'Sin escala'}</span>
           {countTotal > 0 && <span>Conteo: <b>{countTotal}</b></span>}
           {(() => {

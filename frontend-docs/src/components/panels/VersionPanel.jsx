@@ -89,11 +89,11 @@ export default function VersionPanel({
                       }}
                     />
                   </th>
-                  <th style={{ width: 80, padding: '0 12px', fontSize: 13, color: '#72706b', fontWeight: 600, textAlign: 'left', position: 'sticky', left: 40, top: 0, background: '#f1f0e8', zIndex: 20, borderBottom: '1px solid #e8e6dc', whiteSpace: 'nowrap' }}>Versión</th>
-                  <th style={{ minWidth: 300, padding: '0 12px', fontSize: 13, color: '#72706b', fontWeight: 600, textAlign: 'left', whiteSpace: 'nowrap' }}>Nombre</th>
-                  <th style={{ width: 100, padding: '0 12px', fontSize: 13, color: '#72706b', fontWeight: 600, textAlign: 'left', whiteSpace: 'nowrap' }}>Tamaño</th>
-                  <th style={{ width: 150, padding: '0 12px', fontSize: 13, color: '#72706b', fontWeight: 600, textAlign: 'left', whiteSpace: 'nowrap' }}>Fecha de versión</th>
-                  <th style={{ width: 220, padding: '0 12px', fontSize: 13, color: '#72706b', fontWeight: 600, textAlign: 'left', whiteSpace: 'nowrap' }}>Versión añadida por</th>
+                  <th style={{ width: 80, padding: '0 12px', fontSize: 14, color: '#72706b', fontWeight: 600, textAlign: 'left', position: 'sticky', left: 40, top: 0, background: '#f1f0e8', zIndex: 20, borderBottom: '1px solid #e8e6dc', whiteSpace: 'nowrap' }}>Versión</th>
+                  <th style={{ minWidth: 300, padding: '0 12px', fontSize: 14, color: '#72706b', fontWeight: 600, textAlign: 'left', whiteSpace: 'nowrap' }}>Nombre</th>
+                  <th style={{ width: 100, padding: '0 12px', fontSize: 14, color: '#72706b', fontWeight: 600, textAlign: 'left', whiteSpace: 'nowrap' }}>Tamaño</th>
+                  <th style={{ width: 150, padding: '0 12px', fontSize: 14, color: '#72706b', fontWeight: 600, textAlign: 'left', whiteSpace: 'nowrap' }}>Fecha de versión</th>
+                  <th style={{ width: 220, padding: '0 12px', fontSize: 14, color: '#72706b', fontWeight: 600, textAlign: 'left', whiteSpace: 'nowrap' }}>Versión añadida por</th>
                   <th style={{ width: 40, padding: '0 12px' }}></th>
                 </tr>
               </thead>
@@ -122,21 +122,21 @@ export default function VersionPanel({
                         <div style={{ display: 'flex', gap: 12 }}>
                           {renderFileIconSop(versionTarget.name, 22)}
                           <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                            <span style={{ fontSize: 13, fontWeight: 500, color: '#333330' }}>{versionTarget.name}</span>
-                            {v.updated_by && <span style={{ fontSize: 11, color: '#72706b' }}>Cargado por <span style={{ textTransform: 'uppercase' }}>{v.updated_by}</span></span>}
+                            <span style={{ fontSize: 14, fontWeight: 500, color: '#333330' }}>{versionTarget.name}</span>
+                            {v.updated_by && <span style={{ fontSize: 12, color: '#72706b' }}>Cargado por <span style={{ textTransform: 'uppercase' }}>{v.updated_by}</span></span>}
                           </div>
                         </div>
                       </td>
-                      <td style={{ padding: '16px 12px', fontSize: 13, color: '#333330', whiteSpace: 'nowrap' }}>{formatSize(v.size || 0)}</td>
-                      <td style={{ padding: '16px 12px', fontSize: 13, color: '#333330', whiteSpace: 'nowrap' }}>{formatDate(v.updated)}</td>
+                      <td style={{ padding: '16px 12px', fontSize: 14, color: '#333330', whiteSpace: 'nowrap' }}>{formatSize(v.size || 0)}</td>
+                      <td style={{ padding: '16px 12px', fontSize: 14, color: '#333330', whiteSpace: 'nowrap' }}>{formatDate(v.updated)}</td>
                       <td style={{ padding: '16px 12px', whiteSpace: 'nowrap' }}>
                         {v.updated_by ? (
                           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                             <div className="user-avatar-acc" style={{ width: 24, height: 24, fontSize: 10, flexShrink: 0 }}>{getInitials(v.updated_by)}</div>
-                             <span style={{ fontSize: 13, color: '#333330', textOverflow: 'ellipsis', overflow: 'hidden' }}>{v.updated_by}</span>
+                             <div className="user-avatar-acc" style={{ width: 24, height: 24, fontSize: 12, flexShrink: 0 }}>{getInitials(v.updated_by)}</div>
+                             <span style={{ fontSize: 14, color: '#333330', textOverflow: 'ellipsis', overflow: 'hidden' }}>{v.updated_by}</span>
                           </div>
                         ) : (
-                          <span style={{ fontSize: 13, color: '#72706b' }}>—</span>
+                          <span style={{ fontSize: 14, color: '#72706b' }}>—</span>
                         )}
                       </td>
                       <td style={{ padding: '16px 12px', whiteSpace: 'nowrap' }}>
@@ -160,14 +160,14 @@ export default function VersionPanel({
             </table>
           </div>
           
-          <footer style={{ height: 40, borderTop: '1px solid #e8e6dc', padding: '0 16px', display: 'flex', alignItems: 'center', fontSize: 12, color: '#72706b', background: '#fff' }}>
+          <footer style={{ height: 40, borderTop: '1px solid #e8e6dc', padding: '0 16px', display: 'flex', alignItems: 'center', fontSize: 13, color: '#72706b', background: '#fff' }}>
              <span>{selectedVersions.size > 0 ? `${selectedVersions.size} de ${versionHistory.length} seleccionadas` : `Se están mostrando ${versionHistory.length} versiones`}</span>
              {isPdf && (
                <button
                  onClick={() => canCompare && setCompareOpen(true)}
                  disabled={!canCompare}
                  title={canCompare ? 'Comparar las 2 versiones seleccionadas' : 'Marca exactamente 2 versiones para comparar'}
-                 style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6, padding: '5px 12px', background: canCompare ? 'var(--accent)' : '#f1f0e8', color: canCompare ? '#fff' : '#b0aea5', border: 'none', borderRadius: 4, fontSize: 12, fontWeight: 600, cursor: canCompare ? 'pointer' : 'default' }}>
+                 style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6, padding: '5px 12px', background: canCompare ? 'var(--accent)' : '#f1f0e8', color: canCompare ? '#fff' : '#b0aea5', border: 'none', borderRadius: 4, fontSize: 13, fontWeight: 600, cursor: canCompare ? 'pointer' : 'default' }}>
                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="2" y="4" width="9" height="16" rx="1"/><rect x="13" y="4" width="9" height="16" rx="1"/></svg>
                  Comparar versiones
                </button>

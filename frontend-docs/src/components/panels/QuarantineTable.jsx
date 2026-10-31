@@ -123,7 +123,7 @@ export default function QuarantineTable({ projectPrefix, API, isAdmin, user }) {
           <svg width="28" height="28" viewBox="0 0 24 24" fill="#f9eeda"><path d="M12 2L1 21h22M12 6l7.53 13H4.47zM11 10v4h2v-4zM11 16v2h2v-2z"/></svg>
           <h2 style={{ fontSize: 22, fontWeight: 400, color: '#333330', margin: 0 }}>Sala de Cuarentena (ISO 19650)</h2>
         </div>
-        <p style={{ margin: 0, color: '#72706b', fontSize: 13, lineHeight: '1.5' }}>
+        <p style={{ margin: 0, color: '#72706b', fontSize: 14, lineHeight: '1.5' }}>
           Documentos cuyo <strong>nombre no sigue la convención</strong> del proyecto. Conservan su punto del ciclo de vida;
           lo que les falta es el nombre. Se sale de aquí corrigiéndolo.
           {isAdmin && " Como administrador puedes corregir el nombre o destruir el archivo."}
@@ -141,12 +141,12 @@ export default function QuarantineTable({ projectPrefix, API, isAdmin, user }) {
           <table className="acc-matrix-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
             <thead style={{ position: 'sticky', top: 0, background: '#fff', boxShadow: '0 1px 0 #e8e6dc', zIndex: 10 }}>
               <tr>
-                <th style={{ padding: '12px 24px', fontSize: 12, fontWeight: 600, color: '#72706b', width: '35%' }}>Nombre del Archivo</th>
-                <th style={{ padding: '12px 16px', fontSize: 12, fontWeight: 600, color: '#72706b' }}>Ruta Original</th>
-                <th style={{ padding: '12px 16px', fontSize: 12, fontWeight: 600, color: '#72706b', width: '15%' }}>Actualizado el</th>
-                <th style={{ padding: '12px 16px', fontSize: 12, fontWeight: 600, color: '#72706b', width: '10%' }}>Tamaño</th>
+                <th style={{ padding: '12px 24px', fontSize: 13, fontWeight: 600, color: '#72706b', width: '35%' }}>Nombre del Archivo</th>
+                <th style={{ padding: '12px 16px', fontSize: 13, fontWeight: 600, color: '#72706b' }}>Ruta Original</th>
+                <th style={{ padding: '12px 16px', fontSize: 13, fontWeight: 600, color: '#72706b', width: '15%' }}>Actualizado el</th>
+                <th style={{ padding: '12px 16px', fontSize: 13, fontWeight: 600, color: '#72706b', width: '10%' }}>Tamaño</th>
                 {isAdmin && (
-                  <th style={{ padding: '12px 24px', fontSize: 12, fontWeight: 600, color: '#72706b', width: '150px', textAlign: 'right' }}>Acciones</th>
+                  <th style={{ padding: '12px 24px', fontSize: 13, fontWeight: 600, color: '#72706b', width: '150px', textAlign: 'right' }}>Acciones</th>
                 )}
               </tr>
             </thead>
@@ -158,7 +158,7 @@ export default function QuarantineTable({ projectPrefix, API, isAdmin, user }) {
                       <span style={{ fontSize: 20 }}>{renderFileIconSop(f.name, false)}</span>
                       <div style={{ display: 'flex', flexDirection: 'column' }}>
                         <span style={{ fontSize: 14, fontWeight: 500, color: '#333330' }}>{f.name}</span>
-                        <span style={{ fontSize: 11, color: '#f9eeda', fontWeight: 600 }}>
+                        <span style={{ fontSize: 12, color: '#f9eeda', fontWeight: 600 }}>
                           Nombre fuera de convención
                           {f.status && f.status !== 'WIP' && (
                             <span style={{ color: '#72706b', fontWeight: 400 }}>
@@ -169,14 +169,14 @@ export default function QuarantineTable({ projectPrefix, API, isAdmin, user }) {
                       </div>
                     </div>
                   </td>
-                  <td style={{ padding: '12px 16px', fontSize: 13, color: '#72706b' }}>
+                  <td style={{ padding: '12px 16px', fontSize: 14, color: '#72706b' }}>
                     <span style={{ background: '#f1f0e8', padding: '2px 6px', borderRadius: 4, fontFamily: 'monospace' }}>{f.path || '/'}</span>
                   </td>
-                  <td style={{ padding: '12px 16px', fontSize: 13, color: '#72706b' }}>
+                  <td style={{ padding: '12px 16px', fontSize: 14, color: '#72706b' }}>
                     {formatDate(f.updated_at)}
-                    <div style={{ fontSize: 11, color: '#72706b', marginTop: 2 }}>por {f.updated_by || 'Sistema'}</div>
+                    <div style={{ fontSize: 12, color: '#72706b', marginTop: 2 }}>por {f.updated_by || 'Sistema'}</div>
                   </td>
-                  <td style={{ padding: '12px 16px', fontSize: 13, color: '#72706b' }}>
+                  <td style={{ padding: '12px 16px', fontSize: 14, color: '#72706b' }}>
                     {formatSize(f.size_bytes)}
                   </td>
                   {isAdmin && (
@@ -185,7 +185,7 @@ export default function QuarantineTable({ projectPrefix, API, isAdmin, user }) {
                         <button
                           onClick={() => corregirNombre(f)}
                           title="Corregir el nombre para que cumpla la convención"
-                          style={{ background: '#e0e3d7', color: '#64744e', border: '1px solid #e0e3d7', borderRadius: 4, padding: '6px 10px', fontSize: 12, fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
+                          style={{ background: '#e0e3d7', color: '#64744e', border: '1px solid #e0e3d7', borderRadius: 4, padding: '6px 10px', fontSize: 13, fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
                         >
                           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
                           Corregir nombre

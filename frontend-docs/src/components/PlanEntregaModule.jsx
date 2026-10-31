@@ -51,7 +51,7 @@ function Chip({ estado, etiqueta }) {
   const c = COLOR[estado] || COLOR.comprometido;
   return (
     <span style={{
-      display: 'inline-block', padding: '2px 9px', borderRadius: 4, fontSize: 11.5,
+      display: 'inline-block', padding: '2px 9px', borderRadius: 4, fontSize: 12,
       fontWeight: 600, background: c.fondo, border: `1px solid ${c.borde}`, color: c.texto,
       whiteSpace: 'nowrap',
     }}>{etiqueta}</span>
@@ -66,7 +66,7 @@ function Cifra({ n, texto, color, resaltado }) {
       border: `1px solid ${resaltado ? 'var(--border-danger)' : 'var(--border)'}`,
     }}>
       <div style={{ fontSize: 26, fontWeight: 700, color: color || 'var(--text-primary)', lineHeight: 1.1 }}>{n}</div>
-      <div style={{ fontSize: 11.5, color: 'var(--text-secondary)', marginTop: 3 }}>{texto}</div>
+      <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 3 }}>{texto}</div>
     </div>
   );
 }
@@ -75,11 +75,11 @@ function Seccion({ titulo, sub, children }) {
   return (
     <section style={{ marginTop: 20 }}>
       <h3 style={{
-        margin: 0, fontSize: 11.5, fontWeight: 700, letterSpacing: 0.7,
+        margin: 0, fontSize: 12, fontWeight: 700, letterSpacing: 0.7,
         textTransform: 'uppercase', color: 'var(--text-muted)',
       }}>{titulo}</h3>
       {sub && (
-        <p style={{ margin: '3px 0 0', fontSize: 12, color: 'var(--text-secondary)' }}>{sub}</p>
+        <p style={{ margin: '3px 0 0', fontSize: 13, color: 'var(--text-secondary)' }}>{sub}</p>
       )}
       <div style={{ marginTop: 9 }}>{children}</div>
     </section>
@@ -92,7 +92,7 @@ function Requisito({ etiqueta, valores, sufijo }) {
   if (!valores || !valores.length) return null;
   return (
     <div style={{ display: 'flex', gap: 12, padding: '7px 0', borderTop: '1px solid var(--divider)' }}>
-      <div style={{ flex: '0 0 118px', fontSize: 12, color: 'var(--text-secondary)', paddingTop: 2 }}>
+      <div style={{ flex: '0 0 118px', fontSize: 13, color: 'var(--text-secondary)', paddingTop: 2 }}>
         {etiqueta}
       </div>
       <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap' }}>
@@ -100,11 +100,11 @@ function Requisito({ etiqueta, valores, sufijo }) {
           <span key={v.clave} style={{
             display: 'inline-flex', alignItems: 'baseline', gap: 5,
             background: 'var(--bg-secondary)', border: '1px solid var(--border)',
-            borderRadius: 7, padding: '3px 9px', fontSize: 12.5,
+            borderRadius: 7, padding: '3px 9px', fontSize: 13,
           }}>
             <strong style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{v.clave}</strong>
-            <span style={{ color: 'var(--text-muted)', fontSize: 11.5 }}>{v.n}{sufijo || ''}</span>
-            {v.nota && <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>· {v.nota}</span>}
+            <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>{v.n}{sufijo || ''}</span>
+            {v.nota && <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>· {v.nota}</span>}
           </span>
         ))}
       </div>
@@ -144,14 +144,14 @@ function Nomenclatura({ nom }) {
                 color: 'var(--text-primary)',
               }}>{nom.piezas[k]}</span>
               <span style={{
-                display: 'block', fontSize: 10, color: 'var(--text-muted)',
+                display: 'block', fontSize: 12, color: 'var(--text-muted)',
                 marginTop: 2, letterSpacing: 0.2,
               }}>{nombre}</span>
             </span>
           </React.Fragment>
         ))}
       </div>
-      <p style={{ margin: '10px 0 0', fontSize: 11.5, color: 'var(--text-secondary)' }}>
+      <p style={{ margin: '10px 0 0', fontSize: 12, color: 'var(--text-secondary)' }}>
         Así se nombra cada contenedor. El fichero que se entregue tiene que llevar
         este código para poder cotejarlo con su compromiso.
       </p>
@@ -172,18 +172,18 @@ function Ficha({ f }) {
 
   const dato = (etiqueta, valor) => (
     <div style={{ flex: '1 1 120px', minWidth: 110 }}>
-      <div style={{ fontSize: 10.5, color: 'var(--text-muted)', letterSpacing: 0.3 }}>{etiqueta}</div>
-      <div style={{ fontSize: 12.5, color: valor ? 'var(--text-primary)' : 'var(--text-muted)', marginTop: 1 }}>
+      <div style={{ fontSize: 12, color: 'var(--text-muted)', letterSpacing: 0.3 }}>{etiqueta}</div>
+      <div style={{ fontSize: 13, color: valor ? 'var(--text-primary)' : 'var(--text-muted)', marginTop: 1 }}>
         {valor || '—'}
       </div>
     </div>
   );
   return (
     <div style={{ padding: '13px 14px', background: 'var(--bg-secondary)' }}>
-      <p style={{ margin: 0, fontSize: 13, color: 'var(--text-primary)', lineHeight: 1.65 }}>
+      <p style={{ margin: 0, fontSize: 14, color: 'var(--text-primary)', lineHeight: 1.65 }}>
         Se entrega <strong>{f.titulo || 'este contenedor'}</strong>
         {f.descripcion ? ` (${f.descripcion})` : ''} como{' '}
-        <code style={{ fontFamily: 'monospace', fontSize: 12.5 }}>{f.identificador}</code>
+        <code style={{ fontFamily: 'monospace', fontSize: 13 }}>{f.identificador}</code>
         {f.formato ? <> en <strong>{f.formato}</strong></> : null}
         {f.lod || f.loi ? <>, con nivel de información <strong>LOD {f.lod || '—'} / LOI {f.loi || '—'}</strong></> : null}
         {f.idoneidad_prevista ? <>, idoneidad <strong>{f.idoneidad_prevista}</strong></> : null}
@@ -205,7 +205,7 @@ function Ficha({ f }) {
       </div>
       {(discrepa || malFormado) && (
         <p style={{
-          margin: '11px 0 0', padding: '8px 11px', borderRadius: 7, fontSize: 12,
+          margin: '11px 0 0', padding: '8px 11px', borderRadius: 7, fontSize: 13,
           background: 'var(--bg-warning)', border: '1px solid var(--border-warning)',
           color: 'var(--text-primary)', lineHeight: 1.5,
         }}>
@@ -218,7 +218,7 @@ function Ficha({ f }) {
         </p>
       )}
       {f.documento && (
-        <p style={{ margin: '11px 0 0', fontSize: 12, color: 'var(--text-secondary)' }}>
+        <p style={{ margin: '11px 0 0', fontSize: 13, color: 'var(--text-secondary)' }}>
           Cotejado con <strong>{f.documento.nombre}</strong> — entregado como{' '}
           {f.documento.idoneidad || '—'} / {f.documento.revision || '—'}.
         </p>
@@ -426,7 +426,7 @@ export function PlanEntregaView({ projectPrefix, isAdmin }) {
       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 16 }}>
         <div>
           <h2 style={{ margin: 0, fontSize: 17, fontWeight: 600 }}>Plan de entrega de información</h2>
-          <p style={{ margin: '4px 0 0', fontSize: 12.5, color: 'var(--text-secondary)', maxWidth: 660 }}>
+          <p style={{ margin: '4px 0 0', fontSize: 13, color: 'var(--text-secondary)', maxWidth: 660 }}>
             Lo que la obra se comprometió a entregar (MIDP/TIDP): qué contenedores,
             con qué requisitos y para cuándo. Un compromiso existe aunque todavía no
             exista el documento.
@@ -442,7 +442,7 @@ export function PlanEntregaView({ projectPrefix, isAdmin }) {
                       style={{
                         background: 'var(--accent)', border: 'none', borderRadius: 7,
                         color: 'var(--text-on-accent)',
-                        padding: '8px 14px', fontSize: 12.5, fontWeight: 600,
+                        padding: '8px 14px', fontSize: 13, fontWeight: 600,
                         cursor: subiendo ? 'default' : 'pointer', opacity: subiendo ? 0.6 : 1,
                       }}>
                 {subiendo ? 'Importando…' : `Importar ${t}`}
@@ -459,10 +459,10 @@ export function PlanEntregaView({ projectPrefix, isAdmin }) {
           marginTop: 20, padding: '14px 16px', borderRadius: 10,
           background: 'var(--bg-danger)', border: '1px solid var(--border-danger)',
         }}>
-          <p style={{ margin: 0, fontSize: 13.5, color: 'var(--danger)', fontWeight: 600 }}>
+          <p style={{ margin: 0, fontSize: 14, color: 'var(--danger)', fontWeight: 600 }}>
             {datos.error}
           </p>
-          <p style={{ margin: '6px 0 0', fontSize: 12, color: 'var(--text-secondary)' }}>
+          <p style={{ margin: '6px 0 0', fontSize: 13, color: 'var(--text-secondary)' }}>
             El plan puede estar cargado: lo que ha fallado es leerlo. Si acabas de
             actualizar el servidor, reinícialo y vuelve a probar.
           </p>
@@ -476,10 +476,10 @@ export function PlanEntregaView({ projectPrefix, isAdmin }) {
         }}>
           {/* El calendario de los compromisos (ilustración plana de estado vacío). */}
           <LaminaVacia nombre="perfil" />
-          <p style={{ margin: 0, fontSize: 13.5, color: 'var(--text-primary)' }}>
+          <p style={{ margin: 0, fontSize: 14, color: 'var(--text-primary)' }}>
             Esta obra todavía no tiene plan de entrega cargado.
           </p>
-          <p style={{ margin: '6px 0 0', fontSize: 12, color: 'var(--text-secondary)' }}>
+          <p style={{ margin: '6px 0 0', fontSize: 13, color: 'var(--text-secondary)' }}>
             {isAdmin ? 'Importa el Excel del MIDP o del TIDP con el botón de arriba.'
                      : 'Pide al administrador de la obra que importe el MIDP.'}
           </p>
@@ -501,12 +501,12 @@ export function PlanEntregaView({ projectPrefix, isAdmin }) {
                         borderRadius: 10, padding: '12px 14px',
                       }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 10 }}>
-                  <span style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--text-primary)' }}>{h.hito}</span>
-                  <span style={{ fontSize: 12, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
+                  <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>{h.hito}</span>
+                  <span style={{ fontSize: 13, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
                     {fecha(h.fecha) || 'sin fecha'}
                   </span>
                 </div>
-                <div style={{ fontSize: 12.5, color: 'var(--text-secondary)', marginTop: 5 }}>
+                <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 5 }}>
                   <strong style={{ color: 'var(--text-primary)' }}>{h.total}</strong> contenedores ·{' '}
                   {h.responsables > 0
                     ? `${h.responsables} responsables`
@@ -540,7 +540,7 @@ export function PlanEntregaView({ projectPrefix, isAdmin }) {
             <Requisito etiqueta="Disciplina"
                        valores={(req.disciplinas || []).map(v => ({ clave: v.valor, n: v.n }))} />
           </div>
-          <p style={{ margin: '10px 0 0', fontSize: 11.5, color: 'var(--text-muted)', lineHeight: 1.55 }}>
+          <p style={{ margin: '10px 0 0', fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.55 }}>
             La idoneidad dice para qué sirve lo entregado: la familia <strong>S</strong> es
             material compartido para revisión y coordinación; la familia <strong>A</strong> o{' '}
             <strong>B</strong> es material autorizado. Con un código S no se construye.
@@ -556,7 +556,7 @@ export function PlanEntregaView({ projectPrefix, isAdmin }) {
               const err = a.nivel === 'error';
               return (
                 <div key={i} style={{
-                  padding: '9px 12px', borderRadius: 8, fontSize: 12.5, lineHeight: 1.5,
+                  padding: '9px 12px', borderRadius: 8, fontSize: 13, lineHeight: 1.5,
                   background: err ? 'var(--bg-danger)' : 'var(--bg-warning)',
                   border: `1px solid ${err ? 'var(--border-danger)' : 'var(--border-warning)'}`,
                   color: err ? 'var(--danger)' : 'var(--text-primary)',
@@ -585,10 +585,10 @@ export function PlanEntregaView({ projectPrefix, isAdmin }) {
               marginTop: 10, padding: '11px 14px', borderRadius: 9,
               background: 'var(--bg-warning)', border: '1px solid var(--border-warning)',
             }}>
-              <p style={{ margin: 0, fontSize: 12.5, color: 'var(--warning)', fontWeight: 600 }}>
+              <p style={{ margin: 0, fontSize: 13, color: 'var(--warning)', fontWeight: 600 }}>
                 Ningún compromiso está todavía cotejado con un documento del ECD.
               </p>
-              <p style={{ margin: '5px 0 0', fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+              <p style={{ margin: '5px 0 0', fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
                 «Plazo cumplido» quiere decir que la fecha pasó, <strong>no</strong> que no se
                 haya entregado: eso el ECD todavía no lo sabe. El plan está cargado; el
                 cotejo con los documentos es el paso siguiente.
@@ -609,11 +609,11 @@ export function PlanEntregaView({ projectPrefix, isAdmin }) {
                      flex: '1 1 280px', background: 'var(--bg-primary)',
                      color: 'var(--text-primary)',
                      border: '1px solid var(--border)', borderRadius: 7,
-                     padding: '8px 11px', fontSize: 13,
+                     padding: '8px 11px', fontSize: 14,
                    }} />
             <select value={tipo} onChange={e => setTipo(e.target.value)}
                     style={{
-                      background: 'var(--bg-primary)', color: 'var(--text-primary)', fontSize: 13,
+                      background: 'var(--bg-primary)', color: 'var(--text-primary)', fontSize: 14,
                       border: '1px solid var(--border)', borderRadius: 7, padding: '8px 10px',
                     }}>
               <option value="">MIDP y TIDP</option>
@@ -624,24 +624,24 @@ export function PlanEntregaView({ projectPrefix, isAdmin }) {
               <button onClick={() => setHito('')}
                       style={{
                         background: 'var(--bg-secondary)', border: '1px solid var(--border)',
-                        borderRadius: 7, padding: '7px 11px', fontSize: 12.5, cursor: 'pointer',
+                        borderRadius: 7, padding: '7px 11px', fontSize: 13, cursor: 'pointer',
                         color: 'var(--text-primary)',
                       }}>
                 {hito} ✕
               </button>
             )}
-            <label style={{ fontSize: 12.5, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <label style={{ fontSize: 13, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: 6 }}>
               <input type="checkbox" checked={soloPendientes}
                      onChange={e => setSoloPendientes(e.target.checked)} />
               Solo lo que falta
             </label>
-            <span style={{ fontSize: 12, color: 'var(--text-muted)', marginLeft: 'auto' }}>
+            <span style={{ fontSize: 13, color: 'var(--text-muted)', marginLeft: 'auto' }}>
               {filas.length} de {datos.plan.length}
             </span>
           </div>
 
           <div style={{ overflowX: 'auto', border: '1px solid var(--border)', borderRadius: 9 }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5, minWidth: 900 }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: 900 }}>
               <thead>
                 <tr style={{ background: 'var(--bg-secondary)', textAlign: 'left' }}>
                   {['Código', 'Título', 'Formato', 'LOD/LOI', 'Idoneidad', 'Rev.',
@@ -660,7 +660,7 @@ export function PlanEntregaView({ projectPrefix, isAdmin }) {
                     <tr onClick={() => setPlegadas(p => ({ ...p, [disc]: !(p[disc] ?? !buscando) }))}
                         style={{ cursor: 'pointer', background: 'var(--neutral-100)' }}>
                       <td colSpan={9} style={{
-                        padding: '7px 11px', fontWeight: 600, fontSize: 12,
+                        padding: '7px 11px', fontWeight: 600, fontSize: 13,
                         color: 'var(--text-primary)', borderBottom: '1px solid var(--border)',
                       }}>
                         {plegado ? '▸' : '▾'} Disciplina {disc}
@@ -679,7 +679,7 @@ export function PlanEntregaView({ projectPrefix, isAdmin }) {
                           <td style={{ padding: '8px 11px', fontFamily: 'monospace', whiteSpace: 'nowrap' }}>
                             {f.identificador}
                             {f.tipo === 'TIDP' && (
-                              <span style={{ marginLeft: 6, fontSize: 10, color: 'var(--text-muted)' }}>TIDP</span>
+                              <span style={{ marginLeft: 6, fontSize: 12, color: 'var(--text-muted)' }}>TIDP</span>
                             )}
                           </td>
                           <td style={{ padding: '8px 11px', maxWidth: 260 }}>{f.titulo || '—'}</td>

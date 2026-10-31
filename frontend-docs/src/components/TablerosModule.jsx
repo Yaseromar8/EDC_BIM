@@ -110,12 +110,12 @@ export default function TablerosModule({ projectPrefix, user, isAdmin }) {
     <button type="button" onClick={() => ordenarPor(campo)} aria-sort={orden?.campo === campo ? (orden.asc ? 'ascending' : 'descending') : 'none'}
       title="Ordenar" style={{ ...cabecera, display: 'flex', alignItems: 'center', gap: 4, height: '100%', border: 'none', background: 'none', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left' }}>
       {children}
-      <span aria-hidden="true" style={{ fontSize: 10, color: orden?.campo === campo ? TINTA : 'transparent' }}>{orden?.campo === campo && !orden.asc ? '▼' : '▲'}</span>
+      <span aria-hidden="true" style={{ fontSize: 12, color: orden?.campo === campo ? TINTA : 'transparent' }}>{orden?.campo === campo && !orden.asc ? '▼' : '▲'}</span>
     </button>
   );
   const tMenu = menu && (lista || []).find(t => t.id === menu.id);
-  const celda = { padding: '0 12px', fontSize: 13, color: '#333330', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' };
-  const cabecera = { ...celda, fontSize: 12, fontWeight: 600, color: GRIS };
+  const celda = { padding: '0 12px', fontSize: 14, color: '#333330', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' };
+  const cabecera = { ...celda, fontSize: 13, fontWeight: 600, color: GRIS };
   const COLUMNAS = 'minmax(280px, 1fr) 240px 200px 44px';
 
   return (
@@ -125,7 +125,7 @@ export default function TablerosModule({ projectPrefix, user, isAdmin }) {
         <div role="tablist" style={{ display: 'flex', gap: 20, borderBottom: `1px solid ${LINEA}` }}>
           {[[false, 'Tableros'], [true, 'Archivados']].map(([valor, texto]) => (
             <button key={texto} role="tab" aria-selected={archivados === valor} onClick={() => setArchivados(valor)}
-              style={{ background: 'none', border: 'none', padding: '6px 0 8px', cursor: 'pointer', fontSize: 13,
+              style={{ background: 'none', border: 'none', padding: '6px 0 8px', cursor: 'pointer', fontSize: 14,
                 fontWeight: archivados === valor ? 600 : 400, color: archivados === valor ? TINTA : GRIS,
                 borderBottom: archivados === valor ? `2px solid ${TINTA}` : '2px solid transparent', marginBottom: -1 }}>
               {texto}
@@ -142,7 +142,7 @@ export default function TablerosModule({ projectPrefix, user, isAdmin }) {
         )}
         <div style={{ flex: 1 }} />
         <input type="search" value={filtro} onChange={e => setFiltro(e.target.value)} placeholder="Buscar por nombre" aria-label="Buscar tableros por nombre"
-          style={{ width: 240, height: 30, padding: '0 10px', border: `1px solid ${LINEA}`, borderRadius: 6, fontSize: 13, fontFamily: 'inherit', outline: 'none' }} />
+          style={{ width: 240, height: 30, padding: '0 10px', border: `1px solid ${LINEA}`, borderRadius: 6, fontSize: 14, fontFamily: 'inherit', outline: 'none' }} />
       </div>
 
       <div style={{ flex: 1, overflow: 'auto' }}>
@@ -155,9 +155,9 @@ export default function TablerosModule({ projectPrefix, user, isAdmin }) {
         {lista === null ? (
           <div style={{ textAlign: 'center', padding: 48 }}><div className="adsk-spinner" style={{ margin: '0 auto' }} /></div>
         ) : error ? (
-          <div style={{ padding: 48, textAlign: 'center', fontSize: 13, color: GRIS }}>{error}</div>
+          <div style={{ padding: 48, textAlign: 'center', fontSize: 14, color: GRIS }}>{error}</div>
         ) : !visibles.length ? (
-          <div style={{ padding: '56px 24px', textAlign: 'center', color: GRIS, fontSize: 13, lineHeight: 1.6 }}>
+          <div style={{ padding: '56px 24px', textAlign: 'center', color: GRIS, fontSize: 14, lineHeight: 1.6 }}>
             {filtro.trim() ? 'Ningún tablero se llama así.'
               : archivados ? 'No hay tableros archivados.'
                 : <>Aún no hay tableros en esta obra.<br />Un tablero es una pizarra de la obra: notas, textos y secciones para ordenar una reunión, un frente o una entrega.</>}
@@ -176,7 +176,7 @@ export default function TablerosModule({ projectPrefix, user, isAdmin }) {
                   onClick={e => e.stopPropagation()}
                   onKeyDown={e => { e.stopPropagation(); if (e.key === 'Enter') renombrar(t, e.currentTarget.value); if (e.key === 'Escape') setRenombrando(null); }}
                   onBlur={e => renombrar(t, e.currentTarget.value)}
-                  style={{ flex: 1, height: 28, padding: '0 8px', border: `1px solid ${LINEA}`, borderRadius: 4, fontSize: 13, fontFamily: 'inherit' }} />
+                  style={{ flex: 1, height: 28, padding: '0 8px', border: `1px solid ${LINEA}`, borderRadius: 4, fontSize: 14, fontFamily: 'inherit' }} />
               ) : <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.nombre}</span>}
             </div>
             <div style={{ ...celda, color: t.abierto_por_mi ? '#333330' : GRIS }}>{t.abierto_por_mi ? fecha(t.abierto_por_mi) : 'Nunca'}</div>
@@ -202,7 +202,7 @@ export default function TablerosModule({ projectPrefix, user, isAdmin }) {
             puedeArchivar(tMenu) && (archivados ? ['Recuperar', () => archivar(tMenu, false)] : ['Archivar', () => archivar(tMenu, true)]),
           ].filter(Boolean).map(([texto, accion]) => (
             <button key={texto} role="menuitem" onClick={() => { setMenu(null); accion(); }}
-              style={{ display: 'block', width: '100%', textAlign: 'left', padding: '8px 14px', border: 'none', background: 'none', cursor: 'pointer', fontSize: 13, fontFamily: 'inherit', color: TINTA }}
+              style={{ display: 'block', width: '100%', textAlign: 'left', padding: '8px 14px', border: 'none', background: 'none', cursor: 'pointer', fontSize: 14, fontFamily: 'inherit', color: TINTA }}
               onMouseEnter={e => { e.currentTarget.style.background = SUAVE; }} onMouseLeave={e => { e.currentTarget.style.background = 'none'; }}>
               {texto}
             </button>
@@ -360,7 +360,7 @@ function TableroEditor({ id, onCerrar }) {
     <div role="dialog" aria-label={`Tablero ${nombre}`} style={{ position: 'fixed', inset: 0, zIndex: 9000, display: 'flex', flexDirection: 'column', background: '#faf9f5' }}>
       <header style={{ height: 48, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 10, padding: '0 12px', background: '#fff', borderBottom: `1px solid ${LINEA}` }}>
         <button type="button" onClick={cerrar} title="Volver a los tableros"
-          style={{ display: 'flex', alignItems: 'center', gap: 6, height: 32, padding: '0 10px 0 6px', border: 'none', borderRadius: 6, background: 'transparent', cursor: 'pointer', fontSize: 13, fontFamily: 'inherit', color: TINTA }}
+          style={{ display: 'flex', alignItems: 'center', gap: 6, height: 32, padding: '0 10px 0 6px', border: 'none', borderRadius: 6, background: 'transparent', cursor: 'pointer', fontSize: 14, fontFamily: 'inherit', color: TINTA }}
           onMouseEnter={e => { e.currentTarget.style.background = SUAVE; }} onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M14.5 6 8.5 12l6 6" /></svg>
           Tableros
@@ -378,13 +378,13 @@ function TableroEditor({ id, onCerrar }) {
         {estado === 'error' && (
           <button type="button" className="barra-btn" onClick={() => { pendiente.current = true; guardar(); }}>Reintentar</button>
         )}
-        <span aria-live="polite" style={{ fontSize: 12, color: estado === 'error' || estado === 'sinConexion' ? '#b93535' : GRIS, minWidth: 130, textAlign: 'right' }}>
+        <span aria-live="polite" style={{ fontSize: 13, color: estado === 'error' || estado === 'sinConexion' ? '#b93535' : GRIS, minWidth: 130, textAlign: 'right' }}>
           {datos ? (aviso && estado === 'guardado' ? aviso : textoEstado) : ''}
         </span>
       </header>
       <div style={{ flex: 1, position: 'relative', minHeight: 0 }}>
         {fallo ? (
-          <div style={{ padding: 48, textAlign: 'center', color: GRIS, fontSize: 13 }}>{fallo}</div>
+          <div style={{ padding: 48, textAlign: 'center', color: GRIS, fontSize: 14 }}>{fallo}</div>
         ) : !datos ? (
           <div style={{ textAlign: 'center', padding: 48 }}><div className="adsk-spinner" style={{ margin: '0 auto' }} /></div>
         ) : (

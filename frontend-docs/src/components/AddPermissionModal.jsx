@@ -170,7 +170,7 @@ export default function AddPermissionModal({ folder, modelUrn, apiBaseUrl, onClo
                     type="button"
                     onClick={() => { setTipo(s.tipo); setSujetoId(''); }}
                     style={{
-                      flex: 1, padding: '7px 8px', fontSize: 12.5, borderRadius: 5,
+                      flex: 1, padding: '7px 8px', fontSize: 13, borderRadius: 5,
                       cursor: 'pointer',
                       border: `1px solid ${tipo === s.tipo ? 'var(--accent)' : '#e8e6dc'}`,
                       background: tipo === s.tipo ? 'var(--accent)' : '#fff',
@@ -183,7 +183,7 @@ export default function AddPermissionModal({ folder, modelUrn, apiBaseUrl, onClo
 
               <select value={sujetoId} onChange={e => setSujetoId(e.target.value)}
                       style={{ width: '100%', padding: '8px', border: '1px solid #e8e6dc',
-                               borderRadius: 5, fontSize: 13 }}>
+                               borderRadius: 5, fontSize: 14 }}>
                 <option value="">
                   {errorCatalogo ? 'No se pudo cargar'
                     : catalogo === null ? 'Cargando…'
@@ -205,7 +205,7 @@ export default function AddPermissionModal({ folder, modelUrn, apiBaseUrl, onClo
               {tipo === 'CONTRACTUAL_FUNCTION' && (
                 <div role="note" style={{
                   marginTop: 10, background: '#faf9f5', border: '1px solid #f9eeda',
-                  color: '#9e5943', borderRadius: 6, padding: '9px 11px', fontSize: 12,
+                  color: '#9e5943', borderRadius: 6, padding: '9px 11px', fontSize: 13,
                   lineHeight: 1.5,
                 }}>
                   <b>Alcanza también a quien llegue después.</b> Cualquier empresa que
@@ -217,7 +217,7 @@ export default function AddPermissionModal({ folder, modelUrn, apiBaseUrl, onClo
               {tipo === 'COMPANY' && elegido && (
                 <div role="note" style={{
                   marginTop: 10, background: '#faf9f5', border: '1px solid #e8e6dc',
-                  color: '#52524d', borderRadius: 6, padding: '9px 11px', fontSize: 12,
+                  color: '#52524d', borderRadius: 6, padding: '9px 11px', fontSize: 13,
                 }}>
                   Alcanza a <b>todas las personas de {elegido.nombre}</b> en esta obra,
                   también a las que se incorporen después.

@@ -42,7 +42,7 @@ export default function DeleteModal({ isOpen, deleteTask, onConfirm, onClose }) 
           </h3>
           <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 20, color: '#72706b', cursor: 'pointer' }}>×</button>
         </div>
-        <div className="modal-body" style={{ padding: '24px 16px', fontSize: 13, color: '#333330' }}>
+        <div className="modal-body" style={{ padding: '24px 16px', fontSize: 14, color: '#333330' }}>
           {/* CUÁNTOS y A DÓNDE. «Se suprimirán del proyecto» sonaba definitivo
               sin serlo: van a la papelera y se pueden recuperar, y saberlo
               cambia la decisión de quien está a punto de pulsar. */}
@@ -51,7 +51,7 @@ export default function DeleteModal({ isOpen, deleteTask, onConfirm, onClose }) 
             : `Estos ${deleteTask.count} elementos pasan a la papelera. Puedes recuperarlos desde allí.`}
           {citados.length > 0 && (
             <div role="alert" style={{ marginTop: 14, padding: '10px 12px', borderRadius: 6, background: '#f9eeda',
-                                       color: '#734500', fontSize: 12.5, lineHeight: 1.5 }}>
+                                       color: '#734500', fontSize: 13, lineHeight: 1.5 }}>
               {citados.length === 1
                 ? <>«{citados[0].nombre}» está citado en <b>{citados[0].marcas === 1 ? '1 marca' : `${citados[0].marcas} marcas`}</b> de {citados[0].planos === 1 ? '1 plano' : `${citados[0].planos} planos`}.</>
                 : <><b>{citados.length} de estos documentos</b> están citados en {marcas === 1 ? '1 marca' : `${marcas} marcas`} de planos.</>}
@@ -66,13 +66,13 @@ export default function DeleteModal({ isOpen, deleteTask, onConfirm, onClose }) 
         <div className="modal-footer" style={{ padding: '16px', display: 'flex', justifyContent: 'flex-end', gap: 12, background: '#faf9f5', borderTop: '1px solid #f1f0e8' }}>
           <button 
             onClick={onClose} 
-            style={{ padding: '8px 16px', background: '#fff', border: '1px solid #e8e6dc', borderRadius: 4, fontSize: 13, fontWeight: 500, color: '#333330', cursor: 'pointer' }}
+            style={{ padding: '8px 16px', background: '#fff', border: '1px solid #e8e6dc', borderRadius: 4, fontSize: 14, fontWeight: 500, color: '#333330', cursor: 'pointer' }}
           >
             Cancelar
           </button>
           <button 
             onClick={onConfirm}
-            style={{ padding: '8px 24px', background: '#b93535', color: '#fff', border: 'none', borderRadius: 4, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
+            style={{ padding: '8px 24px', background: '#b93535', color: '#fff', border: 'none', borderRadius: 4, fontSize: 14, fontWeight: 600, cursor: 'pointer' }}
           >
             Suprimir
           </button>

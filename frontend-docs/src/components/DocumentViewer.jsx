@@ -486,12 +486,12 @@ export default function DocumentViewer({
 
   const popoverVersiones = (
               <div className="version-popover" style={{ top: 32, left: 0, width: 350 }}>
-                <div style={{ padding: '8px 12px', borderBottom: '1px solid #f1f0e8', fontSize: 12, fontWeight: 600, color: '#72706b' }}>
+                <div style={{ padding: '8px 12px', borderBottom: '1px solid #f1f0e8', fontSize: 13, fontWeight: 600, color: '#72706b' }}>
                   Versiones
                 </div>
                 <div style={{ maxHeight: 300, overflowY: 'auto', overflowX: 'hidden' }}>  {/* overflowX explícito: fijar solo overflowY hace que el navegador calcule overflowX=auto, y ahí nacía la barra horizontal */}
                   {(!versionHistory || versionHistory.length === 0) ? (
-                    <div style={{ padding: '24px', textAlign: 'center', color: '#72706b', fontSize: 13 }}>
+                    <div style={{ padding: '24px', textAlign: 'center', color: '#72706b', fontSize: 14 }}>
                        <div className="adsk-spinner" style={{ width: 20, height: 20, margin: '0 auto 8px', borderWidth: 2 }} />
                        Cargando historial...
                     </div>
@@ -517,8 +517,8 @@ export default function DocumentViewer({
                         >
                            <div className="version-link-acc" style={{ minWidth: 32 }}>V{v.version_number || 1}</div>
                            <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                             <span title={file.name} style={{ fontSize: 13, fontWeight: 500, color: '#333330' }}>{file.name}</span>
-                             <span style={{ fontSize: 11, color: '#72706b' }}>
+                             <span title={file.name} style={{ fontSize: 14, fontWeight: 500, color: '#333330' }}>{file.name}</span>
+                             <span style={{ fontSize: 12, color: '#72706b' }}>
                                Cargado por <span style={{ textTransform: 'uppercase' }}>{v.updated_by || 'ADMIN'}</span> el {formatDate(v.updated)}
                              </span>
                            </div>
@@ -531,7 +531,7 @@ export default function DocumentViewer({
                             title="Hacer versión actual"
                             style={{ 
                               padding: '4px 8px', 
-                              fontSize: 11, 
+                              fontSize: 12, 
                               background: '#fff', 
                               border: '1px solid var(--accent)', 
                               color: 'var(--accent)', 
@@ -577,7 +577,7 @@ export default function DocumentViewer({
               <div 
                 className="version-link-acc" 
                 onClick={() => { if (!isShared && setShowVersions) setShowVersions(!showVersions); }}
-                style={{ fontSize: 13, padding: '2px 12px', cursor: isShared ? 'default' : 'pointer' }}
+                style={{ fontSize: 14, padding: '2px 12px', cursor: isShared ? 'default' : 'pointer' }}
               >
                 {viewedVersionInfo ? `V${viewedVersionInfo.version_number}` : (file.version ? `V${file.version}` : 'V1')}
                 {!isShared && (
@@ -601,7 +601,7 @@ export default function DocumentViewer({
         <div className="file-viewer-actions">
            {esCad && !isShared && !esVistaPuente && accLinkFor === accKey && accLink && (
              <span title="Se usa la vista ya preparada de Autodesk; el original sigue en Docs"
-               style={{ marginRight: 12, color: '#507294', fontSize: 12 }}>
+               style={{ marginRight: 12, color: '#507294', fontSize: 13 }}>
                {previewOnly ? 'Prueba local' : 'Vista ACC'} · V{accLink.version_number || '?'}
              </span>
            )}
@@ -615,7 +615,7 @@ export default function DocumentViewer({
              <button onClick={abrirEnEscritorio}
                title="Descarga el original con su nombre real; al abrirlo, Windows usa la aplicacion asociada"
                style={{ display: 'inline-flex', alignItems: 'center', gap: 7, marginRight: 14,
-                        padding: '5px 12px', fontSize: 12.5, fontWeight: 600,
+                        padding: '5px 12px', fontSize: 13, fontWeight: 600,
                         background: '#fff', border: '1px solid var(--accent)', color: 'var(--accent)',
                         borderRadius: 4, cursor: 'pointer' }}>
                <SelloEscritorio app={appEscritorio} tamano={16} />
@@ -623,7 +623,7 @@ export default function DocumentViewer({
              </button>
            )}
            {isShared && sharedRole && (
-             <span style={{ fontFamily: 'var(--a-font-sans)', fontSize: 13, fontWeight: 500, color: '#72706b', marginRight: 16 }}>
+             <span style={{ fontFamily: 'var(--a-font-sans)', fontSize: 14, fontWeight: 500, color: '#72706b', marginRight: 16 }}>
                Acceso compartido: {sharedRole === 'viewer' ? 'Lector' : 'Comentador'}
              </span>
            )}
@@ -669,7 +669,7 @@ export default function DocumentViewer({
             <div style={{ fontSize: 15.5, fontWeight: 700, color: '#141413', marginBottom: 8 }}>
               ¿Se abrió en tu software?
             </div>
-            <div style={{ fontSize: 13, color: '#52524d', lineHeight: 1.6, marginBottom: 14 }}>
+            <div style={{ fontSize: 14, color: '#52524d', lineHeight: 1.6, marginBottom: 14 }}>
               Acabamos de avisar al Conector ALEPHIA. Si el modelo se está abriendo (verás un aviso
               junto al reloj), confirma abajo y no volveremos a preguntar. Si no pasó nada, es que
               falta el Conector: un instalador de <b>un clic, sin administrador</b> que registra el
@@ -678,26 +678,26 @@ export default function DocumentViewer({
             </div>
             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
               <button onClick={() => { recordarConector(); setConectorAviso(null); toast.success('Recordado: los próximos se abren sin preguntar.'); }}
-                 style={{ padding: '8px 14px', fontSize: 13, fontWeight: 600, background: 'var(--accent)',
+                 style={{ padding: '8px 14px', fontSize: 14, fontWeight: 600, background: 'var(--accent)',
                           color: '#fff', border: 'none', borderRadius: 5, cursor: 'pointer' }}>
                 Sí, se abrió
               </button>
               <a href="/conector/instalar-conector-alephia.bat" download
-                 style={{ padding: '8px 14px', fontSize: 13, fontWeight: 600, background: '#fff',
+                 style={{ padding: '8px 14px', fontSize: 14, fontWeight: 600, background: '#fff',
                           border: '1px solid var(--accent)', color: 'var(--accent)', borderRadius: 5, textDecoration: 'none' }}>
                 No pasó nada — descargar el Conector
               </a>
               <button onClick={() => { window.open(conectorAviso.firmada, '_blank', 'noopener'); setConectorAviso(null); }}
-                 style={{ padding: '8px 12px', fontSize: 13, background: 'transparent', border: 'none',
+                 style={{ padding: '8px 12px', fontSize: 14, background: 'transparent', border: 'none',
                           color: '#72706b', cursor: 'pointer', textDecoration: 'underline' }}>
                 Solo descargar el archivo
               </button>
             </div>
-            <div style={{ fontSize: 11.5, color: '#72706b', marginTop: 12, lineHeight: 1.6 }}>
+            <div style={{ fontSize: 12, color: '#72706b', marginTop: 12, lineHeight: 1.6 }}>
               Tras instalarlo (doble clic al .bat), vuelve y pulsa «Abrir en el escritorio» otra vez.
               Si el navegador bloquea el .bat, abre PowerShell y pega esta línea — hace lo mismo:
               <code style={{ display: 'block', marginTop: 5, padding: '6px 8px', background: '#f1f0e8',
-                             borderRadius: 4, fontSize: 11, color: '#333330', userSelect: 'all' }}>
+                             borderRadius: 4, fontSize: 12, color: '#333330', userSelect: 'all' }}>
                 irm https://visor-ecd-portal.onrender.com/conector/instalar.ps1 | iex
               </code>
             </div>
@@ -749,7 +749,7 @@ export default function DocumentViewer({
             return (
               <div role="alert" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 12, color: '#52524d' }}>
                 <div>No se pudo abrir la vista previa.</div>
-                <div style={{ fontSize: 12, color: '#72706b' }}>{previewError}</div>
+                <div style={{ fontSize: 13, color: '#72706b' }}>{previewError}</div>
                 <button type="button" onClick={() => setPreviewRetry(value => value + 1)} style={{ padding: '8px 16px', background: 'var(--accent)', color: '#fff', border: 0, borderRadius: 4, cursor: 'pointer' }}>
                   Reintentar
                 </button>
@@ -821,7 +821,7 @@ export default function DocumentViewer({
               return (
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 10, color: '#52524d', textAlign: 'center', padding: 24 }}>
                   <div style={{ fontSize: 15, fontWeight: 600, color: '#141413' }}>La vista «Excel» no está disponible en este equipo</div>
-                  <div style={{ fontSize: 13, maxWidth: 460 }}>La muestra el visor de Microsoft, que baja el archivo desde internet y no puede leer uno que está en tu PC. En la plataforma publicada funciona.</div>
+                  <div style={{ fontSize: 14, maxWidth: 460 }}>La muestra el visor de Microsoft, que baja el archivo desde internet y no puede leer uno que está en tu PC. En la plataforma publicada funciona.</div>
                   <button type="button" onClick={() => window.open(officeUrl, '_blank')} className="barra-btn">Descargar el Excel</button>
                 </div>
               );
@@ -978,13 +978,13 @@ export default function DocumentViewer({
                   <polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
                 </svg>
                 <div style={{ fontSize: 15, fontWeight: 600, color: '#141413' }}>{file.name}</div>
-                <div style={{ fontSize: 13, color: '#72706b', maxWidth: 420, lineHeight: 1.6 }}>
+                <div style={{ fontSize: 14, color: '#72706b', maxWidth: 420, lineHeight: 1.6 }}>
                   Este plano CAD todavía no tiene vista previa preparada. Puedes
                   descargar el archivo original y abrirlo en tu AutoCAD, Civil 3D
                   o Revit.
                 </div>
                 <a href={fileUrl} download={file.name}
-                  style={{ padding: '9px 18px', fontSize: 13, fontWeight: 600,
+                  style={{ padding: '9px 18px', fontSize: 14, fontWeight: 600,
                            background: 'var(--accent, #507294)', color: '#fff',
                            borderRadius: 6, textDecoration: 'none' }}>
                   Descargar el archivo original

@@ -123,7 +123,7 @@ export function ConfirmHost() {
           </div>
           <div style={{ minWidth: 0 }}>
             <h3 id="confirm-title" style={{ margin: 0, fontSize: 15, fontWeight: 600, color: '#141413' }}>{title}</h3>
-            <p id="confirm-message" style={{ margin: '6px 0 0', fontSize: 13, color: '#52524d', lineHeight: 1.55, overflowWrap: 'anywhere' }}>
+            <p id="confirm-message" style={{ margin: '6px 0 0', fontSize: 14, color: '#52524d', lineHeight: 1.55, overflowWrap: 'anywhere' }}>
               {message}
             </p>
           </div>
@@ -132,7 +132,7 @@ export function ConfirmHost() {
           <button
             onClick={() => close(false)}
             style={{
-              padding: '7px 16px', fontSize: 13, fontWeight: 500, cursor: 'pointer',
+              padding: '7px 16px', fontSize: 14, fontWeight: 500, cursor: 'pointer',
               background: '#fff', color: '#333330', border: '1px solid #cccac0', borderRadius: 5,
             }}
           >
@@ -142,7 +142,7 @@ export function ConfirmHost() {
             ref={confirmBtnRef}
             onClick={() => close(true)}
             style={{
-              padding: '7px 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+              padding: '7px 16px', fontSize: 14, fontWeight: 600, cursor: 'pointer',
               background: accent, color: '#fff', border: 'none', borderRadius: 5,
             }}
           >

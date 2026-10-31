@@ -86,13 +86,13 @@ export default function SelectorDeDocumento({ API, project, titulo, ayuda,
         <h3 style={{ margin: '0 0 4px', fontSize: 16, fontWeight: 650 }}>
           {titulo || 'Elegir documento del expediente'}
         </h3>
-        <p style={{ margin: '0 0 12px', fontSize: 12.5, color: '#72706b', lineHeight: 1.5 }}>
+        <p style={{ margin: '0 0 12px', fontSize: 13, color: '#72706b', lineHeight: 1.5 }}>
           {ayuda || 'No se sube nada: se apunta al documento que ya está en el '
                   + 'expediente, y se fija la versión concreta.'}
         </p>
 
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center',
-                      fontSize: 12, marginBottom: 10 }}>
+                      fontSize: 13, marginBottom: 10 }}>
           {ruta.map((c, i) => (
             <React.Fragment key={i}>
               {i > 0 && <span style={{ color: '#cccac0' }}>/</span>}
@@ -100,7 +100,7 @@ export default function SelectorDeDocumento({ API, project, titulo, ayuda,
                       style={{ border: 'none', background: 'none', cursor: 'pointer',
                                color: i === ruta.length - 1 ? '#141413' : '#507294',
                                fontWeight: i === ruta.length - 1 ? 600 : 400,
-                               padding: '2px 3px', fontSize: 12 }}>
+                               padding: '2px 3px', fontSize: 13 }}>
                 {c.name}
               </button>
             </React.Fragment>
@@ -110,12 +110,12 @@ export default function SelectorDeDocumento({ API, project, titulo, ayuda,
         <div style={{ flex: 1, overflowY: 'auto', border: '1px solid #f1f0e8',
                       borderRadius: 7, minHeight: 200 }}>
           {cargando && (
-            <div style={{ padding: 26, textAlign: 'center', color: '#72706b', fontSize: 13 }}>
+            <div style={{ padding: 26, textAlign: 'center', color: '#72706b', fontSize: 14 }}>
               Cargando…
             </div>
           )}
           {!cargando && nodos.length === 0 && (
-            <div style={{ padding: 26, textAlign: 'center', color: '#72706b', fontSize: 13 }}>
+            <div style={{ padding: 26, textAlign: 'center', color: '#72706b', fontSize: 14 }}>
               Esta carpeta está vacía.
             </div>
           )}
@@ -124,7 +124,7 @@ export default function SelectorDeDocumento({ API, project, titulo, ayuda,
                     style={{ width: '100%', textAlign: 'left', border: 'none',
                              borderBottom: '1px solid #f1f0e8', background: '#fff',
                              padding: '9px 12px', cursor: 'pointer', display: 'flex',
-                             alignItems: 'center', gap: 9, fontSize: 13 }}>
+                             alignItems: 'center', gap: 9, fontSize: 14 }}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#72706b" strokeWidth="1.6"
                    strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ flex: 'none' }}>
                 {n._carpeta
@@ -136,7 +136,7 @@ export default function SelectorDeDocumento({ API, project, titulo, ayuda,
                 {n.name}
               </span>
               {!n._carpeta && n.version_number && (
-                <span style={{ fontSize: 11, color: '#72706b' }}>v{n.version_number}</span>
+                <span style={{ fontSize: 12, color: '#72706b' }}>v{n.version_number}</span>
               )}
             </button>
           ))}
@@ -145,7 +145,7 @@ export default function SelectorDeDocumento({ API, project, titulo, ayuda,
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 12 }}>
           <button type="button" onClick={onCerrar}
                   style={{ padding: '8px 14px', borderRadius: 6, border: '1px solid #e8e6dc',
-                           background: '#fff', fontSize: 13, cursor: 'pointer' }}>
+                           background: '#fff', fontSize: 14, cursor: 'pointer' }}>
             Cancelar
           </button>
         </div>

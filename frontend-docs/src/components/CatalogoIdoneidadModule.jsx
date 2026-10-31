@@ -27,7 +27,7 @@ const FAMILIAS = [
 
 function Etiqueta({ children }) {
   return (
-    <div style={{ fontSize: 10.5, color: 'var(--text-muted)', letterSpacing: 0.3, marginBottom: 3 }}>
+    <div style={{ fontSize: 12, color: 'var(--text-muted)', letterSpacing: 0.3, marginBottom: 3 }}>
       {children}
     </div>
   );
@@ -109,8 +109,8 @@ export function CatalogoIdoneidadView({ projectPrefix, isAdmin }) {
           padding: '14px 16px', borderRadius: 10, background: 'var(--bg-danger)',
           border: '1px solid var(--border-danger)',
         }}>
-          <p style={{ margin: 0, fontSize: 13.5, color: 'var(--danger)', fontWeight: 600 }}>{error}</p>
-          <p style={{ margin: '6px 0 0', fontSize: 12, color: 'var(--text-secondary)' }}>
+          <p style={{ margin: 0, fontSize: 14, color: 'var(--danger)', fontWeight: 600 }}>{error}</p>
+          <p style={{ margin: '6px 0 0', fontSize: 13, color: 'var(--text-secondary)' }}>
             El catálogo puede existir: lo que ha fallado es leerlo.
           </p>
         </div>
@@ -123,7 +123,7 @@ export function CatalogoIdoneidadView({ projectPrefix, isAdmin }) {
       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 16 }}>
         <div>
           <h2 style={{ margin: 0, fontSize: 17, fontWeight: 600 }}>Códigos de idoneidad</h2>
-          <p style={{ margin: '4px 0 0', fontSize: 12.5, color: 'var(--text-secondary)', maxWidth: 660 }}>
+          <p style={{ margin: '4px 0 0', fontSize: 13, color: 'var(--text-secondary)', maxWidth: 660 }}>
             Para qué queda autorizado un documento al emitirlo. Cada obra lo fija en su
             plan de ejecución BIM, y es lo que se audita.
           </p>
@@ -134,7 +134,7 @@ export function CatalogoIdoneidadView({ projectPrefix, isAdmin }) {
                     background: sucio ? 'var(--accent)' : 'var(--bg-secondary)',
                     color: sucio ? 'var(--text-on-accent)' : 'var(--text-muted)',
                     border: sucio ? 'none' : '1px solid var(--border)',
-                    borderRadius: 7, padding: '8px 16px', fontSize: 12.5, fontWeight: 600,
+                    borderRadius: 7, padding: '8px 16px', fontSize: 13, fontWeight: 600,
                     cursor: (guardando || !sucio) ? 'default' : 'pointer', flexShrink: 0,
                   }}>
             {guardando ? 'Guardando…' : sucio ? 'Guardar cambios' : 'Sin cambios'}
@@ -148,7 +148,7 @@ export function CatalogoIdoneidadView({ projectPrefix, isAdmin }) {
         marginTop: 16, padding: '11px 14px', borderRadius: 9,
         background: 'var(--bg-secondary)', border: '1px solid var(--border)',
       }}>
-        <p style={{ margin: 0, fontSize: 12.5, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+        <p style={{ margin: 0, fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
           Un código <strong>ya usado</strong> en el expediente no se puede quitar ni
           cambiar de familia: hay documentos sellados con él, y moverlo cambiaría lo
           que significa lo que ya se entregó. Lo que sí se puede es{' '}
@@ -161,7 +161,7 @@ export function CatalogoIdoneidadView({ projectPrefix, isAdmin }) {
         <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 7 }}>
           {avisos.map((a, i) => (
             <div key={i} style={{
-              padding: '9px 12px', borderRadius: 8, fontSize: 12.5, lineHeight: 1.5,
+              padding: '9px 12px', borderRadius: 8, fontSize: 13, lineHeight: 1.5,
               background: 'var(--bg-warning)', border: '1px solid var(--border-warning)',
               color: 'var(--text-primary)',
             }}>{a}</div>
@@ -171,7 +171,7 @@ export function CatalogoIdoneidadView({ projectPrefix, isAdmin }) {
 
       {isAdmin && (porFamilia.compartido === 0 || porFamilia.publicado === 0) && (
         <div style={{
-          marginTop: 12, padding: '9px 12px', borderRadius: 8, fontSize: 12.5,
+          marginTop: 12, padding: '9px 12px', borderRadius: 8, fontSize: 13,
           background: 'var(--bg-warning)', border: '1px solid var(--border-warning)',
           color: 'var(--text-primary)', lineHeight: 1.5,
         }}>
@@ -182,7 +182,7 @@ export function CatalogoIdoneidadView({ projectPrefix, isAdmin }) {
       )}
 
       <div style={{ marginTop: 16, overflowX: 'auto', border: '1px solid var(--border)', borderRadius: 9 }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5, minWidth: 720 }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: 720 }}>
           <thead>
             <tr style={{ background: 'var(--bg-secondary)', textAlign: 'left' }}>
               {['Código', 'Qué autoriza', 'Familia', 'Se ofrece', ''].map(h => (
@@ -200,7 +200,7 @@ export function CatalogoIdoneidadView({ projectPrefix, isAdmin }) {
                   <input value={f.codigo} disabled={!isAdmin} maxLength={10}
                          onChange={e => cambiar(i, 'codigo', e.target.value.toUpperCase())}
                          style={{
-                           width: 78, fontFamily: 'monospace', fontSize: 13, fontWeight: 600,
+                           width: 78, fontFamily: 'monospace', fontSize: 14, fontWeight: 600,
                            background: 'var(--bg-primary)', color: 'var(--text-primary)',
                            border: '1px solid var(--border)', borderRadius: 6, padding: '5px 8px',
                          }} />
@@ -210,7 +210,7 @@ export function CatalogoIdoneidadView({ projectPrefix, isAdmin }) {
                          placeholder="Qué permite hacer con el documento"
                          onChange={e => cambiar(i, 'etiqueta', e.target.value)}
                          style={{
-                           width: '100%', minWidth: 260, fontSize: 12.5,
+                           width: '100%', minWidth: 260, fontSize: 13,
                            background: 'var(--bg-primary)', color: 'var(--text-primary)',
                            border: '1px solid var(--border)', borderRadius: 6, padding: '5px 8px',
                          }} />
@@ -219,7 +219,7 @@ export function CatalogoIdoneidadView({ projectPrefix, isAdmin }) {
                   <select value={f.familia} disabled={!isAdmin}
                           onChange={e => cambiar(i, 'familia', e.target.value)}
                           style={{
-                            fontSize: 12.5, background: 'var(--bg-primary)',
+                            fontSize: 13, background: 'var(--bg-primary)',
                             color: 'var(--text-primary)', border: '1px solid var(--border)',
                             borderRadius: 6, padding: '5px 8px',
                           }}>
@@ -237,7 +237,7 @@ export function CatalogoIdoneidadView({ projectPrefix, isAdmin }) {
                     <button onClick={() => quitar(i)} title="Quitar del catálogo"
                             style={{
                               background: 'transparent', border: '1px solid var(--border)',
-                              borderRadius: 6, padding: '3px 9px', fontSize: 12,
+                              borderRadius: 6, padding: '3px 9px', fontSize: 13,
                               color: 'var(--text-muted)', cursor: 'pointer',
                             }}>quitar</button>
                   )}
@@ -253,14 +253,14 @@ export function CatalogoIdoneidadView({ projectPrefix, isAdmin }) {
                 style={{
                   marginTop: 10, background: 'var(--bg-secondary)',
                   border: '1px solid var(--border)', borderRadius: 7,
-                  padding: '7px 13px', fontSize: 12.5, cursor: 'pointer',
+                  padding: '7px 13px', fontSize: 13, cursor: 'pointer',
                   color: 'var(--text-primary)',
                 }}>
           + Añadir código
         </button>
       )}
 
-      <p style={{ margin: '14px 0 0', fontSize: 11.5, color: 'var(--text-muted)', lineHeight: 1.6, maxWidth: 700 }}>
+      <p style={{ margin: '14px 0 0', fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.6, maxWidth: 700 }}>
         Las descripciones son nuestras, en castellano llano. Las definiciones normativas
         viven en la norma, que es de pago: esto no las reproduce ni las sustituye.
       </p>

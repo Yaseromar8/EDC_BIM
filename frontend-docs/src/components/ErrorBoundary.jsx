@@ -48,25 +48,25 @@ export default class ErrorBoundary extends React.Component {
             {this.props.title || 'Esta sección no se pudo mostrar'}
           </h3>
         </div>
-        <p style={{ margin: '0 0 14px', fontSize: 13.5, color: '#72706b', lineHeight: 1.5 }}>
+        <p style={{ margin: '0 0 14px', fontSize: 14, color: '#72706b', lineHeight: 1.5 }}>
           {this.props.message || 'Ocurrió un error inesperado al dibujar esta vista. Tus datos están a salvo — no se perdió nada.'}
         </p>
         <details style={{ marginBottom: 16 }}>
-          <summary style={{ cursor: 'pointer', fontSize: 12, color: '#72706b' }}>Detalle técnico</summary>
-          <pre style={{ fontSize: 11, color: '#72706b', whiteSpace: 'pre-wrap', marginTop: 8, maxHeight: 160, overflow: 'auto' }}>
+          <summary style={{ cursor: 'pointer', fontSize: 13, color: '#72706b' }}>Detalle técnico</summary>
+          <pre style={{ fontSize: 12, color: '#72706b', whiteSpace: 'pre-wrap', marginTop: 8, maxHeight: 160, overflow: 'auto' }}>
             {String(this.state.error?.message || this.state.error)}
           </pre>
         </details>
         <div style={{ display: 'flex', gap: 8 }}>
           <button
             onClick={() => this.setState({ error: null })}
-            style={{ padding: '7px 14px', fontSize: 13, border: '1px solid #e8e6dc', background: '#fff', borderRadius: 4, cursor: 'pointer' }}
+            style={{ padding: '7px 14px', fontSize: 14, border: '1px solid #e8e6dc', background: '#fff', borderRadius: 4, cursor: 'pointer' }}
           >
             Reintentar
           </button>
           <button
             onClick={() => window.location.reload()}
-            style={{ padding: '7px 14px', fontSize: 13, border: 'none', background: 'var(--accent)', color: '#fff', borderRadius: 4, cursor: 'pointer', fontWeight: 600 }}
+            style={{ padding: '7px 14px', fontSize: 14, border: 'none', background: 'var(--accent)', color: '#fff', borderRadius: 4, cursor: 'pointer', fontWeight: 600 }}
           >
             Recargar página
           </button>

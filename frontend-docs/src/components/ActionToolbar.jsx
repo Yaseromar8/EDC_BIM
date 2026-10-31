@@ -15,7 +15,7 @@ export default function ActionToolbar({ search, onSearchChange, onUploadClick, i
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 9l6 6 6-6"></path></svg>
               </button>
             </div>
-            <button className="btn btn-outline" style={{ display: 'flex', alignItems: 'center', gap: 8, height: 32, fontSize: 13, borderColor: '#e8e6dc', background: '#fff', color: '#333330' }} onClick={onCreateFolder}>
+            <button className="btn btn-outline" style={{ display: 'flex', alignItems: 'center', gap: 8, height: 32, fontSize: 14, borderColor: '#e8e6dc', background: '#fff', color: '#333330' }} onClick={onCreateFolder}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 5v14M5 12h14"></path></svg>
               Carpeta
             </button>
