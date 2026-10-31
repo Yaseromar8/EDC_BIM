@@ -9,6 +9,7 @@ import { NIVELES } from './utils/capacidadesDeSeleccion';
 import { API } from './utils/helpers';
 import { apiFetch } from './utils/apiFetch';
 import IconoModulo from './components/IconoModulo';
+import AvisoObservaciones from './components/AvisoObservaciones';
 import { piezasDelCodigo } from './utils/codigoDelNombre';
 
 // ── ISO 19650 Document Lifecycle ──────────────────────────────────────────
@@ -528,6 +529,9 @@ const TableRow = ({ index, style, data }) => {
                 {String(item.bloqueado_por).split('@')[0]}
               </span>
             )}
+            {/* Observaciones del plano (31-oct-2026): ámbar abiertas, rojo alguna vencida, verde todas cerradas.
+                Las nubes sueltas no pintan nada: solo lo que pide una corrección. */}
+            {!isFolder && item.observaciones && <AvisoObservaciones obs={item.observaciones} onAbrir={openItem} />}
             {puedeEditarFila && !isGrey && (
               <svg 
                 className="pencil-icon-acc name-pencil" 

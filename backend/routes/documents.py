@@ -1011,6 +1011,22 @@ def list_documents():
         except Exception as _e:
             print(f"[LIST] entrega del plan sin resolver: {_e}")
 
+        # LAS OBSERVACIONES DE CADA PLANO (31-oct-2026): abiertas, vencidas y cerradas, para el aviso junto al nombre
+        # (observaciones_en_lista.py). Una consulta para toda la carpeta; si falla, la lista sale igual, sin aviso.
+        try:
+            ids = [str(f['id']) for f in contents.get('files', []) if f.get('id')]
+            if ids:
+                import observaciones_en_lista as _obs
+                from db import get_db_connection as _gc
+                with _gc() as _c:
+                    _por_plano = _obs.resumen(_c.cursor(), ids)
+                for f in contents['files']:
+                    _r = _por_plano.get(str(f.get('id')))
+                    if _r:
+                        f['observaciones'] = _r
+        except Exception as _e:
+            print(f"[LIST] observaciones sin resolver: {_e}")
+
         return jsonify({"success": True, "data": {**contents,
                                                   "current_node_id": str(parent_id) if parent_id else None,
                                                   "current_permission_level": nivel_actual}}), 200
