@@ -69,6 +69,7 @@ def _rutinas():
     from routes.cad_review import ensure_cad_review_tables
     from routes.sustento import ensure_sustento_table
     from routes.grupos import ensure_grupos_tables
+    from routes.tableros import ensure_tableros_tables
     from routes.reviews import ensure_reviews_table
     from routes.transmittals import ensure_transmittals_table
     from routes.attributes import ensure_attributes_tables
@@ -113,6 +114,7 @@ def _rutinas():
         ('cad_review', ensure_cad_review_tables),
         ('sustento', ensure_sustento_table),
         ('grupos', ensure_grupos_tables),
+        ('tableros', ensure_tableros_tables),
         ('reviews', ensure_reviews_table),
         ('transmittals', ensure_transmittals_table),
         ('attributes', ensure_attributes_tables),

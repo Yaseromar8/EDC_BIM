@@ -76,6 +76,8 @@ RECURSOS = {
     'vinculos_de_sustento': ('id', 'model_urn'),
     # Grupos de documentos (migración 35): la obra es la del grupo.
     'grupos_de_documentos': ('id', 'model_urn'),
+    # Tableros de Docs (migración 43): la obra es la del tablero.
+    'tableros': ('id', 'model_urn'),
     # La sesion de subida troceada. Sin esto, conocer un id de sesion bastaba
     # para cancelar la subida de otra obra a media carga, o para falsear su
     # progreso.
@@ -154,6 +156,8 @@ RUTAS_POR_RECURSO = {
     'grupo': ('grupos_de_documentos', 'gid'),
     'documentos_del_grupo': ('grupos_de_documentos', 'gid'),
     'documento_del_grupo': ('grupos_de_documentos', 'gid'),
+    # Tableros de Docs: abrir, guardar, renombrar y archivar solo traen el id del tablero.
+    'tablero': ('tableros', 'tid'),
 }
 
 

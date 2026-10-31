@@ -40,7 +40,10 @@ GUARDIAS = ('verify_project_access', 'check_folder_permission', '_hay_acceso', '
             '_node(', '_mark(',
             # Grupos de documentos (15-oct-2026): resuelve la obra DESDE EL GRUPO y aplica
             # guardia_de_recurso + _hay_acceso dentro; no acepta model_urn del cliente.
-            '_guardia_del_grupo')
+            '_guardia_del_grupo',
+            # Tableros de Docs (30-oct-2026): resuelve la obra DESDE EL TABLERO y aplica
+            # guardia_de_recurso + _hay_acceso dentro; no acepta model_urn del cliente.
+            '_guardia_del_tablero')
 
 CLAVES = ('model_urn', 'project_id', 'projectId', 'scope_urn', 'base_project_id',
           'project', 'urn')

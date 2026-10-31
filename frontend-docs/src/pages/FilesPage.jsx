@@ -103,6 +103,7 @@ const MultimediaModule = lazy(() => import('../components/MultimediaModule'));
 const FotosModule = lazy(() => import('../components/FotosModule'));
 const CuadernoModule = lazy(() => import('../components/CuadernoModule'));
 const AvanceModule = lazy(() => import('../components/AvanceModule'));
+const TablerosModule = lazy(() => import('../components/TablerosModule'));
 // ALCANCE DE LA CAJA DE BÚSQUEDA.
 //
 //   'carpeta'   filtra lo que hay en la carpeta donde estás.
@@ -670,6 +671,8 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
                   { label: 'Planos', mode: 'planos', icon: <IconoModulo nombre="planos" />, onClick: () => fe.setSidebarView('planos') },
                   { label: 'Especificaciones', mode: 'specs', icon: <IconoModulo nombre="especificaciones" />, onClick: () => fe.setSidebarView('specs') },
                   { label: 'Conjuntos', mode: 'sets', icon: <IconoModulo nombre="conjuntos" />, onClick: () => fe.setSidebarView('sets') },
+                  // TABLEROS (30-oct-2026, docs/visor/57): la pizarra de la obra, como los Tableros de ACC.
+                  { label: 'Tableros', mode: 'tableros', icon: <IconoModulo nombre="tableros" />, onClick: () => fe.setSidebarView('tableros') },
                   // «Informes» se retira de V1: era un cascaron que decia
                   // «Proximamente disponible» y no habia nada detras. Lo que el
                   // producto SI sabe hacer --el indice del expediente, la actividad,
@@ -907,6 +910,9 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
         {/* SETS VIEW */}
         {fe.sidebarView === 'sets' && (
           <SetsView projectPrefix={projectPrefix} isAdmin={isAdmin} />
+        )}
+        {fe.sidebarView === 'tableros' && (
+          <TablerosModule projectPrefix={projectPrefix} user={user} isAdmin={isAdmin} />
         )}
 
         {/* RED LINES VIEW */}

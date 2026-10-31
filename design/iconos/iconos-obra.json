@@ -32,6 +32,11 @@
    "titulo": "Conjuntos",
    "svg": "<rect x=\"8\" y=\"3.5\" width=\"12.5\" height=\"12.5\" rx=\"2\"/><path d=\"M16 20.5H5.5a2 2 0 0 1-2-2V8\"/>"
   },
+  "tableros": {
+   "grupo": "docs",
+   "titulo": "Tableros",
+   "svg": "<rect x=\"3.5\" y=\"3.5\" width=\"17\" height=\"17\" rx=\"2\"/><path d=\"M7 7.5h4.5V12H7zM12.5 12H17v4.5h-4.5z\"/>"
+  },
   "revisiones": {
    "grupo": "docs",
    "titulo": "Revisiones",

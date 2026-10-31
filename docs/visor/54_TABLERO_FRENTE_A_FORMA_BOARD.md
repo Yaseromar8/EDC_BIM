@@ -218,3 +218,29 @@ Además sugirió revisar tldraw, Excalidraw y dos clones de Miro:
 - A4 crea la sección y **Ctrl+Z la deshace**;
 - notas con sus puntos laterales, texto, Ctrl+Z × 3 y Ctrl+Y, y zoom al 1 %.
 
+## 8 · La paleta izquierda de Forma Board, recorrida (30-oct, noche)
+
+Solo se miró: se abrieron los paneles y sus selectores y **se cancelaron sin elegir nada**. «Imagen» abre el selector de archivos de Windows, así que solo se pasó el ratón. Al terminar, el tablero seguía con 15 elementos.
+
+| Botón | Qué hace |
+|---|---|
+| **Site Design** | «Añadir propuestas de Site Design»: elegir el **emplazamiento** («Avenida Santa Catalina, Talara…») y añadir una **propuesta** de Autodesk Forma (miniatura, nombre, fecha) |
+| **Data Management** | Panel: «Añadir archivo» y **«Visualizados recientemente»** (DWG, XLSX, PDF con icono por tipo, nombre y fecha). Mientras carga, rellenos grises («skeletons»). «Añadir archivo» abre el **selector de archivos de Autodesk**: árbol de proyectos, ruta (CONSORCIO S&P / CONSTRUCCIÓN D06), buscador y tabla (nombre, propietario, tamaño, fecha) con **selección múltiple**. Está **en inglés** («Files/Folders in Current Project», Cancel / Open): es el selector antiguo |
+| **Incidencias** | Panel: un botón principal con el texto **cortado** («…ccione las incidencias que dese…», fallo suyo), «+ Crear incidencia» y **«Últimas incidencias»** como tarjetas (número y título, tipo, flujo y fecha o «Sin fecha límite»). El selector «Seleccione las incidencias que desee añadir al panel» es una **tabla de las 61 incidencias** (ID, título, estado con su color, tipo, vencimiento, **colocación** en documento y versión, publicado), con buscador por título, ID o descripción y filtro. Se añaden **«como tarjetas»** o **«como kanban»** (columnas por estado) |
+| **Imagen** | Subir una imagen desde el equipo |
+| **Buscar** | Busca **solo en el texto del tablero**. «PAISAJISMO» no encontró nada aunque la tarjeta «#132 · PAISAJISMO_VARIOS» está en el tablero, y lo dice: «La búsqueda no lee widgets, incluidos los archivos de Data Management o multimedia» |
+
+Arriba, los iconos (miembros, comentarios, presentar, IA, ajustes) **no tienen nombre accesible** (sin `aria-label`).
+
+### Para ALEPHIA
+
+**Replicar**, con lo que ya tenemos:
+- **«Documentos»**: recientes de la obra y selector propio, **en español**, con multiselección, sobre los permisos de Docs. Para la versión, las miniaturas y las vistas previas sirve lo que ya existe (`/api/docs/vista-previa/url`, `/api/docs/mosaico`).
+- **«Incidencias / Observaciones»**: tabla con buscador y filtro; añadir **como tarjetas o como kanban** (nuestras observaciones de `doc_issues`, con su colocación en documento y versión).
+
+**Hacerlo mejor que ellos:**
+- **una búsqueda que sí lea las tarjetas**: títulos de gráficas, documentos, incidencias, notas;
+- textos completos (no cortados);
+- todo en español y con nombres accesibles;
+- y lo que no tienen: **gráficas del modelo y vistas 3D**.
+
