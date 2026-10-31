@@ -915,7 +915,7 @@ const Lienzo = forwardRef(function Lienzo({ inicial = null, onCambio, claveCamar
         {!notas.length && !secciones.length && (
           <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: C.gris600, pointerEvents: 'none', textAlign: 'center' }}>
             <div style={{ fontSize: 15, fontWeight: 600, color: C.dark, marginBottom: 6 }}>Tablero vacío</div>
-            <div style={{ fontSize: 12.5, lineHeight: 1.6, maxWidth: 380 }}>Abajo tienes las notas (N), el texto (T) y las secciones (F). Doble clic en el vacío para escribir; clic derecho para el menú; ? para los atajos.</div>
+            <div style={{ fontSize: 14, lineHeight: 1.6, maxWidth: 420 }}>Abajo tienes las notas (N), el texto (T) y las secciones (F). Doble clic en el vacío para escribir; clic derecho para el menú; ? para los atajos.</div>
           </div>
         )}
       </div>
@@ -929,14 +929,14 @@ const Lienzo = forwardRef(function Lienzo({ inicial = null, onCambio, claveCamar
       <PildoraZoom textoRef={zoomTextoRef} porcentaje={`${Math.round(view.s * 100)} %`} onMenos={() => zoomPaso(-1)} onMas={() => zoomPaso(1)} onMenu={() => setMenuZoom(m => !m)} />
       {menuZoom && (
         <div onPointerDown={e => e.stopPropagation()} role="menu"
-          style={{ position: 'absolute', right: 14, bottom: 66, zIndex: 5, minWidth: 240, padding: '6px 0', background: '#fff', borderRadius: 8, boxShadow: '0 0 16px rgba(0,0,0,0.12)', fontFamily: FUENTE }}>
+          style={{ position: 'absolute', right: 14, bottom: 66, zIndex: 5, minWidth: 260, padding: '6px 0', background: '#fff', borderRadius: 8, boxShadow: '0 0 16px rgba(0,0,0,0.12)', fontFamily: FUENTE }}>
           {[['Acercar', 'Ctrl +', () => zoomPaso(1)], ['Alejar', 'Ctrl −', () => zoomPaso(-1)], ['Zoom a 100 %', '⇧ 0', () => zoomA(1)],
             ['Ajustar a todo', '⇧ 1', ajustarATodo], ['Zoom a la selección', '⇧ 2', zoomASeleccion, !sel.size], ['Atajos de teclado', '?', () => setAtajos(true)]].map(([texto, atajo, accion, apagado]) => (
             <button key={texto} role="menuitem" disabled={apagado} onClick={() => { setMenuZoom(false); accion(); }}
-              style={{ display: 'flex', justifyContent: 'space-between', gap: 16, width: '100%', padding: '7px 14px', background: 'none', border: 'none',
-                cursor: apagado ? 'default' : 'pointer', fontSize: 12.5, fontFamily: FUENTE, color: apagado ? C.midGray : C.dark }}
+              style={{ display: 'flex', justifyContent: 'space-between', gap: 16, width: '100%', padding: '8px 14px', background: 'none', border: 'none',
+                cursor: apagado ? 'default' : 'pointer', fontSize: 14, fontFamily: FUENTE, color: apagado ? C.midGray : C.dark }}
               onMouseEnter={e => { if (!apagado) e.currentTarget.style.background = C.light50; }} onMouseLeave={e => { e.currentTarget.style.background = 'none'; }}>
-              <span>{texto}</span><span style={{ color: C.gris600, fontSize: 11.5 }}>{atajo}</span>
+              <span>{texto}</span><span style={{ color: C.gris600, fontSize: 13 }}>{atajo}</span>
             </button>
           ))}
         </div>

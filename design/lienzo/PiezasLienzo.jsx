@@ -72,9 +72,9 @@ function Ayuda({ texto, atajo, children }) {
       {ver && (
         <span role="tooltip" style={{ position: 'absolute', bottom: 'calc(100% + 10px)', left: '50%', transform: 'translateX(-50%)', zIndex: 10,
           display: 'inline-flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap', pointerEvents: 'none',
-          background: '#3C3C3C', color: '#fff', borderRadius: 4, padding: '5px 8px', fontFamily: FUENTE, fontSize: 11.5, fontWeight: 600 }}>
+          background: '#3C3C3C', color: '#fff', borderRadius: 4, padding: '5px 8px', fontFamily: FUENTE, fontSize: 12, fontWeight: 600 }}>
           {texto}
-          {atajo && <span style={{ background: 'rgba(255,255,255,0.16)', borderRadius: 3, padding: '0 5px', fontSize: 10.5, fontWeight: 500 }}>{atajo}</span>}
+          {atajo && <span style={{ background: 'rgba(255,255,255,0.16)', borderRadius: 3, padding: '0 5px', fontSize: 11, fontWeight: 500 }}>{atajo}</span>}
         </span>
       )}
     </span>
@@ -166,7 +166,7 @@ export function BarraInferior({ herramienta, onHerramienta, colorNota, onColorNo
               : (
                 <button key={t[0]} role="menuitem" onClick={() => { setMenuSeccion(false); if (t[1]) onSeccionTamano(t[0], t[1]); else onHerramienta('seccion'); }}
                   style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '7px 8px', border: 'none', borderRadius: 5,
-                    background: 'transparent', cursor: 'pointer', fontFamily: FUENTE, fontSize: 12.5, color: '#3C3C3C', textAlign: 'left' }}
+                    background: 'transparent', cursor: 'pointer', fontFamily: FUENTE, fontSize: 14, color: '#3C3C3C', textAlign: 'left' }}
                   onMouseEnter={e => { e.currentTarget.style.background = 'rgba(0,0,0,0.05)'; }} onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
                   <span style={{ width: 14, height: 14, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
                     <span style={{ border: '1px solid #3C3C3C', borderRadius: 1,
@@ -189,7 +189,7 @@ export function PaletaIzquierda({ items, onGrafico, onParametros, parametrosApag
   const item = (icono, texto, onClick, apagado) => (
     <button onClick={onClick} disabled={apagado} title={texto}
       style={{ width: 52, padding: '7px 0 6px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, border: 'none', borderRadius: 7,
-        background: 'transparent', color: apagado ? C.midGray : C.dark, cursor: apagado ? 'default' : 'pointer', fontFamily: FUENTE, fontSize: 10, lineHeight: 1.15 }}
+        background: 'transparent', color: apagado ? C.midGray : C.dark, cursor: apagado ? 'default' : 'pointer', fontFamily: FUENTE, fontSize: 11, lineHeight: 1.15 }}
       onMouseEnter={e => { if (!apagado) e.currentTarget.style.background = C.light50; }} onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
       <Icono nombre={icono} tam={22} grosor={1} />
       <span>{texto}</span>
@@ -218,7 +218,7 @@ export function PildoraZoom({ textoRef, porcentaje, onMenos, onMas, onMenu }) {
       <Boton titulo="Alejar" atajo="Ctrl −" onClick={onMenos}><Icono nombre="menos" tam={18} grosor={1} /></Boton>
       <button onClick={onMenu} title="Opciones de zoom"
         style={{ height: 30, minWidth: 64, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, border: 'none', borderRadius: 6,
-          background: 'transparent', cursor: 'pointer', fontFamily: FUENTE, fontSize: 12, color: C.dark, fontVariantNumeric: 'tabular-nums' }}>
+          background: 'transparent', cursor: 'pointer', fontFamily: FUENTE, fontSize: 13, color: C.dark, fontVariantNumeric: 'tabular-nums' }}>
         <span ref={textoRef}>{porcentaje}</span><Icono nombre="abajo" tam={12} />
       </button>
       <Boton titulo="Acercar" atajo="Ctrl +" onClick={onMas}><Icono nombre="mas" tam={18} grosor={1} /></Boton>
@@ -238,7 +238,7 @@ function Desplegable({ texto, ancho, abierto, onClick, titulo }) {
     <button onClick={onClick} aria-label={titulo} title={titulo} aria-expanded={abierto}
       style={{ height: 30, width: ancho, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6, padding: '0 8px 0 10px',
         border: `1px solid ${abierto ? '#006EAF' : 'rgba(0,0,0,0.18)'}`, borderRadius: 4, background: '#fff', cursor: 'pointer',
-        fontFamily: FUENTE, fontSize: 12.5, color: '#3C3C3C', whiteSpace: 'nowrap', overflow: 'hidden' }}>
+        fontFamily: FUENTE, fontSize: 13, color: '#3C3C3C', whiteSpace: 'nowrap', overflow: 'hidden' }}>
       <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{texto}</span><Icono nombre="abajo" tam={12} />
     </button>
   );
@@ -256,13 +256,13 @@ function Opcion({ elegida, onClick, children, peligro, atajo }) {
   const fondo = elegida ? 'rgba(0,110,175,0.08)' : 'transparent';
   return (
     <button role="menuitem" aria-current={elegida || undefined} onClick={onClick}
-      style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '7px 8px', border: 'none', borderRadius: 5,
-        background: fondo, cursor: 'pointer', fontFamily: FUENTE, fontSize: 12.5,
+      style={{ display: 'flex', alignItems: 'center', gap: 12, width: '100%', padding: '8px 10px', border: 'none', borderRadius: 5,
+        background: fondo, cursor: 'pointer', fontFamily: FUENTE, fontSize: 14,
         color: peligro ? C.error : '#3C3C3C', textAlign: 'left', whiteSpace: 'nowrap' }}
       onMouseEnter={e => { if (!elegida) e.currentTarget.style.background = 'rgba(0,0,0,0.05)'; }}
       onMouseLeave={e => { e.currentTarget.style.background = fondo; }}>
       <span style={{ flex: 1, display: 'inline-flex', alignItems: 'center', gap: 8 }}>{children}</span>
-      {atajo && <span style={{ color: C.gris600, fontSize: 11.5 }}>{atajo}</span>}
+      {atajo && <span style={{ color: C.gris600, fontSize: 13 }}>{atajo}</span>}
     </button>
   );
 }

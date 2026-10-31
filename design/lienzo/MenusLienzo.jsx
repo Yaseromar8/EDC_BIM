@@ -6,8 +6,8 @@ import { C, FUENTE, cajaFlotante } from './tema';
 import { Icono } from './Icono';
 import { COLORES_NOTA } from './notas';
 
-const fila = { display: 'flex', alignItems: 'center', gap: 12, width: '100%', padding: '6px 10px', border: 'none', borderRadius: 5,
-  background: 'transparent', fontFamily: FUENTE, fontSize: 12.5, textAlign: 'left', whiteSpace: 'nowrap', boxSizing: 'border-box' };
+const fila = { display: 'flex', alignItems: 'center', gap: 16, width: '100%', padding: '8px 12px', border: 'none', borderRadius: 5,
+  background: 'transparent', fontFamily: FUENTE, fontSize: 14, textAlign: 'left', whiteSpace: 'nowrap', boxSizing: 'border-box' };
 const raya = <div style={{ height: 1, background: 'rgba(0,0,0,0.08)', margin: '4px 6px' }} />;
 
 // Un menú (o submenú). `items`: [{ texto, atajo, accion, apagado, peligro, hijos }, null = separador].
@@ -16,7 +16,7 @@ function Lista({ items, onCerrar, estilo }) {
   const t = useRef(0);
   const visibles = items.filter((it, i) => it !== null || (i > 0 && items[i - 1] !== null && i < items.length - 1));
   return (
-    <div role="menu" style={{ ...cajaFlotante, minWidth: 220, padding: 5, ...estilo }}>
+    <div role="menu" style={{ ...cajaFlotante, minWidth: 240, padding: 6, ...estilo }}>
       {visibles.map((it, i) => (it === null ? <React.Fragment key={`r${i}`}>{raya}</React.Fragment> : (
         <div key={it.texto} style={{ position: 'relative' }}
           onMouseEnter={() => { clearTimeout(t.current); t.current = setTimeout(() => setAbierto(it.hijos ? it.texto : null), it.hijos ? 80 : 120); }}>
@@ -27,7 +27,7 @@ function Lista({ items, onCerrar, estilo }) {
             onMouseEnter={e => { if (!it.apagado) e.currentTarget.style.background = 'rgba(0,0,0,0.05)'; }}
             onMouseLeave={e => { if (abierto !== it.texto) e.currentTarget.style.background = 'transparent'; }}>
             <span style={{ flex: 1 }}>{it.texto}</span>
-            {it.atajo && <span style={{ color: it.apagado ? C.midGray : C.gris600, fontSize: 11.5 }}>{it.atajo}</span>}
+            {it.atajo && <span style={{ color: it.apagado ? C.midGray : C.gris600, fontSize: 13 }}>{it.atajo}</span>}
             {it.hijos && <Icono nombre="derecha" tam={12} />}
           </button>
           {it.hijos && abierto === it.texto && (
@@ -96,14 +96,14 @@ export function PanelBuscar({ elementos, onIr, onCerrar }) {
             else if (e.key === 'ArrowUp') { e.preventDefault(); setActivo(a => Math.max(a - 1, 0)); }
             else if (e.key === 'Enter') { e.preventDefault(); ir(resultados[activo]); }
           }}
-          style={{ flex: 1, border: 'none', outline: 'none', fontFamily: FUENTE, fontSize: 13, color: C.dark, background: 'transparent' }} />
+          style={{ flex: 1, border: 'none', outline: 'none', fontFamily: FUENTE, fontSize: 14, color: C.dark, background: 'transparent' }} />
         <button onClick={onCerrar} aria-label="Cerrar la búsqueda" title="Cerrar"
           style={{ width: 24, height: 24, border: 'none', background: 'transparent', cursor: 'pointer', color: C.gris600, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}>
           <Icono nombre="cerrar" tam={14} />
         </button>
       </div>
       <div style={{ overflowY: 'auto', padding: consulta ? 5 : 0 }}>
-        {consulta && !resultados.length && <div style={{ padding: '14px 12px', fontSize: 12.5, color: C.gris600 }}>Nada en el tablero dice «{q.trim()}».</div>}
+        {consulta && !resultados.length && <div style={{ padding: '14px 12px', fontSize: 14, color: C.gris600 }}>Nada en el tablero dice «{q.trim()}».</div>}
         {resultados.map((r, i) => {
           const tipo = r.x.titulo !== undefined ? 'Sección' : r.x.tipo === 'texto' ? 'Texto' : 'Nota';
           return (
@@ -114,7 +114,7 @@ export function PanelBuscar({ elementos, onIr, onCerrar }) {
                 border: tipo === 'Nota' ? '1px solid rgba(0,0,0,0.12)' : `1.5px solid ${C.gris600}` }} />
               <span style={{ flex: 1, minWidth: 0 }}>
                 <span style={{ whiteSpace: 'normal', overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>{r.texto.replace(/\s+/g, ' ')}</span>
-                <span style={{ fontSize: 11, color: C.gris600 }}>{tipo}</span>
+                <span style={{ fontSize: 12, color: C.gris600 }}>{tipo}</span>
               </span>
             </button>
           );
@@ -158,11 +158,11 @@ export function VentanaAtajos({ onCerrar }) {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '6px 32px' }}>
           {ATAJOS.map(([grupo, lista]) => (
             <div key={grupo} style={{ marginBottom: 8 }}>
-              <div style={{ fontSize: 11.5, fontWeight: 600, color: C.gris600, textTransform: 'uppercase', letterSpacing: 0.4, margin: '6px 0 4px' }}>{grupo}</div>
+              <div style={{ fontSize: 12, fontWeight: 600, color: C.gris600, textTransform: 'uppercase', letterSpacing: 0.4, margin: '6px 0 4px' }}>{grupo}</div>
               {lista.map(([que, tecla]) => (
-                <div key={que + tecla} style={{ display: 'flex', alignItems: 'center', padding: '4px 0', borderBottom: `1px solid ${C.light50}`, fontSize: 12.5, color: C.dark }}>
+                <div key={que + tecla} style={{ display: 'flex', alignItems: 'center', padding: '4px 0', borderBottom: `1px solid ${C.light50}`, fontSize: 14, color: C.dark }}>
                   <span style={{ flex: 1 }}>{que}</span>
-                  <span style={{ fontSize: 11.5, color: '#3C3C3C', background: C.light50, borderRadius: 4, padding: '1px 7px' }}>{tecla}</span>
+                  <span style={{ fontSize: 13, color: '#3C3C3C', background: C.light50, borderRadius: 4, padding: '1px 7px' }}>{tecla}</span>
                 </div>
               ))}
             </div>
