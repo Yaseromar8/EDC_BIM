@@ -116,6 +116,26 @@ def _miniatura(valor):
     return True, valor
 
 
+# PRESENCIA (fase 5, docs/visor/64): quién tiene el tablero abierto. Sin tabla nueva: el tablero abierto pregunta su
+# versión cada 10 s y, con `latido=1`, anota en `tableros_abiertos` que sigue ahí (así «Abierto por última vez por
+# usted» dice la última vez que estuvo dentro). Está presente quien latió en los últimos 25 s.
+PRESENTE_SEGUNDOS = 25
+
+
+def _latido(tablero_id):
+    with get_db_connection() as conn:
+        cur = conn.cursor()
+        cur.execute('''INSERT INTO tableros_abiertos (tablero_id, user_id) VALUES (%s, %s)
+                       ON CONFLICT (tablero_id, user_id) DO UPDATE SET abierto_en = now()''', (tablero_id, _uid()))
+        cur.execute('''SELECT u.id, COALESCE(NULLIF(u.name, ''), u.email)
+                         FROM tableros_abiertos a JOIN users u ON u.id = a.user_id
+                        WHERE a.tablero_id = %s AND a.abierto_en > now() - make_interval(secs => %s)
+                        ORDER BY a.abierto_en DESC LIMIT 50''', (tablero_id, PRESENTE_SEGUNDOS))
+        presentes = [{'id': r[0], 'nombre': r[1] or ''} for r in cur.fetchall()]
+        conn.commit()
+    return presentes
+
+
 def _guardia_del_tablero(tid):
     """(tablero, negativa). La obra sale de la fila; el usuario tiene que pertenecer a ella."""
     tablero_id = _uuid(tid)
@@ -188,8 +208,8 @@ def tableros():
 @tableros_bp.route('/api/docs/tableros/<tid>', methods=['GET', 'PUT', 'PATCH'])
 def tablero(tid):
     """GET → el tablero con su contenido (y se anota que lo abrí); ?solo_version=1 → solo su versión (para ver
-    si otra persona guardó, sin traer el contenido ni anotar nada); ?sin_apertura=1 → el contenido sin anotar
-    la apertura. PUT {config, version, miniatura?} → guardar sin pisar (409 si la versión no es la del servidor).
+    si otra persona guardó, sin traer el contenido ni anotar nada), y con &latido=1 además anota que sigo
+    dentro y dice quién está (presencia); ?sin_apertura=1 → el contenido sin anotar la apertura. PUT {config, version, miniatura?} → guardar sin pisar (409 si la versión no es la del servidor).
     PATCH {nombre} | {archivado} → renombrar o archivar."""
     tab, denied = _guardia_del_tablero(tid)
     if denied:
@@ -197,7 +217,10 @@ def tablero(tid):
 
     if request.method == 'GET':
         if request.args.get('solo_version') in ('1', 'true'):
-            resp = jsonify({'success': True, 'version': tab['version'], 'archivado': tab['archivado'], 'nombre': tab['nombre']})
+            cuerpo = {'success': True, 'version': tab['version'], 'archivado': tab['archivado'], 'nombre': tab['nombre']}
+            if request.args.get('latido') in ('1', 'true'):
+                cuerpo['presentes'] = _latido(tab['id'])
+            resp = jsonify(cuerpo)
             resp.headers['Cache-Control'] = 'private, no-store'
             return resp
         anotar = request.args.get('sin_apertura') not in ('1', 'true')

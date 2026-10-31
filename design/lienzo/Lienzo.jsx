@@ -115,7 +115,13 @@ function leerHtml(html, tipos) {
 
 // `accionesSeleccion`: [[texto, (ids) => …]] que quien usa el lienzo añade al menú de lo elegido (el ⋮ de su barra y
 // el clic derecho), p. ej. «Publicar vista…» en Docs (docs/visor/63).
-const Lienzo = forwardRef(function Lienzo({ inicial = null, onCambio, claveCamara = '', paletaExtra = null, tipos = SIN_TIPOS, accionesSeleccion = null }, ref) {
+// `herramientasExtra`: [{ id, titulo, atajo, icono, crear(punto) → elemento, alCrear?(elemento), sinDeshacer? }], herramientas
+// propias en la barra de abajo (el comentario en Docs, docs/visor/64): un clic en el lienzo crea su elemento en ese punto
+// (con `sinDeshacer`, como un acto: Ctrl+Z no lo quita).
+// Un tipo puede ser `protegido(el)` (no se borra ni se corta desde el lienzo), `copiable: false` (no se copia ni duplica)
+// y `sinMarco` (elegido solo, sin marco, asas ni barra).
+const Lienzo = forwardRef(function Lienzo({ inicial = null, onCambio, claveCamara = '', paletaExtra = null, tipos = SIN_TIPOS, accionesSeleccion = null,
+  herramientasExtra = null }, ref) {
   const tiposRef = useRef(tipos);
   tiposRef.current = tipos;
   const [notas, setNotas] = useState(() => inicial?.notas || []);
@@ -217,6 +223,11 @@ const Lienzo = forwardRef(function Lienzo({ inicial = null, onCambio, claveCamar
     ocupado: () => hist.current.gesto || !!editandoRef.current,
     // Coloca elementos nuevos (sin id ni posición) en el centro de la vista, en filas de cuatro, y los deja elegidos.
     insertar: (lista, opciones) => insertarRef.current(lista, opciones),
+    // Cambiar o quitar un elemento desde fuera SIN paso de deshacer (un mensaje de un comentario es un acto: Ctrl+Z
+    // no lo deshace), y llevar la cámara a uno.
+    ajustar: (id, patch) => ajusteRef.current.ajustar(id, patch),
+    quitar: (id) => ajusteRef.current.quitar(id),
+    enfocar: (id) => ajusteRef.current.enfocar(id),
   }), []);
 
   // La barra contextual va encima de lo elegido, pero nunca fuera de la pantalla: se corre hacia dentro por los
@@ -679,7 +690,8 @@ const Lienzo = forwardRef(function Lienzo({ inicial = null, onCambio, claveCamar
     if (!ids.size) return;
     marcar();
     const fs = seccionesRef.current.filter(f => ids.has(f.id) && !f.bloqueado);
-    const fuera = (x) => !x.bloqueado && (ids.has(x.id) || (x.tipo && fs.some(f => dentro(x, f))));
+    const protegido = (x) => !!tiposRef.current[x.tipo]?.protegido?.(x);
+    const fuera = (x) => !x.bloqueado && !protegido(x) && (ids.has(x.id) || (x.tipo && fs.some(f => dentro(x, f))));
     setNotas(ns => ns.filter(n => !fuera(n))); setSecciones(xs => xs.filter(f => !fuera(f)));
     setSeleccion(new Set(todos().filter(x => ids.has(x.id) && x.bloqueado).map(x => x.id)));
   };
@@ -721,6 +733,40 @@ const Lienzo = forwardRef(function Lienzo({ inicial = null, onCambio, claveCamar
       onCambioRef.current?.({ notas: nuevas, secciones: seccionesRef.current });   // …pero se guarda
     }
     setNotas(nuevas);
+  };
+  // Añadir un elemento como si siempre hubiera estado: también en el historial, así que deshacer no lo quita.
+  const ponerSinPaso = (nuevo) => {
+    const h = hist.current, f = (c) => ({ ...c, notas: [...c.notas, nuevo] });
+    h.pasado = h.pasado.map(f); h.futuro = h.futuro.map(f);
+    const pasoAbierto = notasRef.current !== h.actual.notas;
+    h.actual = f(h.actual);
+    const nuevas = [...notasRef.current, nuevo];
+    if (!pasoAbierto) {
+      h.aplicando = true;
+      onCambioRef.current?.({ notas: nuevas, secciones: seccionesRef.current });
+    }
+    notasRef.current = nuevas;
+    setNotas(nuevas);
+  };
+  const quitarElemento = (id) => {
+    const h = hist.current, f = (c) => ({ ...c, notas: c.notas.filter(n => n.id !== id) });
+    h.pasado = h.pasado.map(f); h.futuro = h.futuro.map(f);
+    const pasoAbierto = notasRef.current !== h.actual.notas;
+    h.actual = f(h.actual);
+    const nuevas = notasRef.current.filter(n => n.id !== id);
+    if (!pasoAbierto) {
+      h.aplicando = true;
+      onCambioRef.current?.({ notas: nuevas, secciones: seccionesRef.current });
+    }
+    notasRef.current = nuevas;
+    setNotas(nuevas);
+    if (selRef.current.has(id)) setSeleccion(new Set([...selRef.current].filter(x => x !== id)));
+  };
+  const ajusteRef = useRef(null);
+  ajusteRef.current = {
+    ajustar: ajustarElemento,
+    quitar: quitarElemento,
+    enfocar: (id) => { const x = todos().find(e => e.id === id); if (x) { setSeleccion(new Set([id])); encuadrar([x], Math.max(viewRef.current.s, 0.75)); } },
   };
   const insertarRef = useRef(null);
   // `en`: el punto de la pantalla donde se soltó (arrastrar desde un panel, como en ACC): el bloque se centra ahí,
@@ -769,7 +815,8 @@ const Lienzo = forwardRef(function Lienzo({ inicial = null, onCambio, claveCamar
   const recoger = () => {
     const ids = selRef.current;
     const fs = seccionesRef.current.filter(f => ids.has(f.id));
-    return { notas: notasRef.current.filter(n => ids.has(n.id) || fs.some(f => dentro(n, f))), secciones: fs };
+    const copiable = (n) => tiposRef.current[n.tipo]?.copiable !== false;
+    return { notas: notasRef.current.filter(n => copiable(n) && (ids.has(n.id) || fs.some(f => dentro(n, f)))), secciones: fs };
   };
   // Pegar: en el mismo sitio (desplazado 32 px cada vez que se repite) si eso está a la vista; si no, donde está
   // el puntero o en el centro de la pantalla.
@@ -929,6 +976,16 @@ const Lienzo = forwardRef(function Lienzo({ inicial = null, onCambio, claveCamar
     if (herramienta === 'seccion') { dibujarSeccion(e); return; }
     if (herramienta === 'forma') { dibujarForma(e); return; }
     if (herramienta === 'flecha') { dibujarFlecha(e); return; }
+    const propia = herramientasExtra?.find(h => h.id === herramienta);
+    if (propia) {
+      e.preventDefault();
+      const nuevo = { ...propia.crear(puntoDelMundo(e)), id: uid() };
+      if (propia.sinDeshacer) ponerSinPaso(nuevo);
+      else { marcar(); notasRef.current = [...notasRef.current, nuevo]; setNotas(notasRef.current); }
+      setSeleccion(new Set([nuevo.id])); setHerramienta('seleccionar');
+      propia.alCrear?.(nuevo);
+      return;
+    }
     if (herramienta === 'lapiz') { dibujarTrazo(e); return; }
     iniciarMarco(e);
   };
@@ -974,6 +1031,7 @@ const Lienzo = forwardRef(function Lienzo({ inicial = null, onCambio, claveCamar
     else if (e.shiftKey && e.code === 'Digit1') ajustarATodo();
     else if (e.shiftKey && e.code === 'Digit2') zoomASeleccion();
     else if (k.startsWith('arrow') && !ctrl) empujar(k, e.shiftKey);
+    else if (!ctrl && !e.altKey && !e.shiftKey && herramientasExtra?.some(h => h.atajo?.toLowerCase() === k)) setHerramienta(herramientasExtra.find(h => h.atajo?.toLowerCase() === k).id);
     else if (!ctrl && !e.altKey && !e.shiftKey && { v: 1, h: 1, n: 1, t: 1, f: 1, r: 1, a: 1, p: 1 }[k]) setHerramienta({ v: 'seleccionar', h: 'mano', n: 'nota', t: 'texto', f: 'seccion', r: 'forma', a: 'flecha', p: 'lapiz' }[k]);
     else if (k === 'enter' && selRef.current.size === 1 && notasRef.current.some(n => selRef.current.has(n.id))) editar([...selRef.current][0]);
     else hecho = false;
@@ -1001,7 +1059,9 @@ const Lienzo = forwardRef(function Lienzo({ inicial = null, onCambio, claveCamar
   // ── Dibujo ───────────────────────────────────────────────────────────────────────────────────────
   const rejilla = rejillaDe(view);
   const elegidos = [...secciones, ...notas].filter(x => sel.has(x.id));
-  const caja = elegidos.length && !editandoNota ? cajaDe(elegidos) : null;
+  // Un tipo `sinMarco` (el alfiler de un comentario) elegido solo no lleva marco, asas ni barra: abre lo suyo.
+  const sinMarco = elegidos.length === 1 && !!tipos[elegidos[0].tipo]?.sinMarco;
+  const caja = elegidos.length && !editandoNota && !sinMarco ? cajaDe(elegidos) : null;
   const uno = elegidos.length === 1 ? elegidos[0] : null;
   const unaSeccion = uno && !uno.bloqueado && (secciones.includes(uno) || uno.tipo === 'nota' || uno.tipo === 'forma' || uno.tipo === 'flecha' || uno.tipo === 'trazo' || tipos[uno.tipo]?.redimensionable) ? uno : null;
   const extraDeLaBarra = uno && tipos[uno.tipo]?.barra ? tipos[uno.tipo].barra(uno, { actualizar: (patch) => actualizarElemento(uno.id, patch) }) : null;
@@ -1132,7 +1192,7 @@ const Lienzo = forwardRef(function Lienzo({ inicial = null, onCambio, claveCamar
           onIr={(x) => { setSeleccion(new Set([x.id])); encuadrar([x], Math.max(viewRef.current.s, 0.5)); }} />
       )}
       <BarraInferior herramienta={herramienta} onHerramienta={setHerramienta} colorNota={colorNota} onColorNota={setColorNota} onSeccionTamano={seccionDeTamano}
-        forma={formaActual} onForma={(f) => { setFormaActual(f); setHerramienta('forma'); }} />
+        forma={formaActual} onForma={(f) => { setFormaActual(f); setHerramienta('forma'); }} extra={herramientasExtra} />
       <PildoraZoom textoRef={zoomTextoRef} porcentaje={`${Math.round(view.s * 100)} %`} onMenos={() => zoomPaso(-1)} onMas={() => zoomPaso(1)} onMenu={() => setMenuZoom(m => !m)} />
       {menuZoom && (
         <div onPointerDown={e => e.stopPropagation()} role="menu"

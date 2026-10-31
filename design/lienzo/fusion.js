@@ -14,6 +14,10 @@
 //   - nuevo de cualquiera         → se queda
 // El orden (que es el orden de dibujo) es el del servidor; lo que él ya no tiene y se queda (lo nuevo mío, o
 // lo que él borró y yo cambié) va detrás, encima de todo.
+//
+// Un elemento con `mensajes` (un comentario, docs/visor/64) que cambiamos los dos no se decide entero: sus mensajes
+// se fusionan igual, uno a uno, y quedan en orden de fecha (dos respuestas a la vez se quedan las dos), y cada uno de
+// sus demás campos, a tres bandas (yo respondo y el otro lo resuelve: mi respuesta y resuelto).
 // `vistas` (docs/visor/63): las vistas publicadas del tablero, que también llevan id.
 export const LISTAS = ['notas', 'secciones', 'vistas'];
 
@@ -28,7 +32,15 @@ function fusionarLista(base, mio, suyo) {
     if (!m && !s) return null;                          // los dos lo borraron
     if (!m) return igual(s, b) ? null : s;              // lo borré yo
     if (!s) return igual(m, b) ? null : m;              // lo borró el otro
-    return igual(m, b) ? s : m;                         // cambió uno, el otro o los dos
+    if (igual(m, b)) return s;                          // cambió solo el otro
+    if (igual(s, b) || !(Array.isArray(m.mensajes) || Array.isArray(s.mensajes))) return m;   // solo yo, o los dos
+    const salida = {};
+    for (const k of new Set([...Object.keys(m), ...Object.keys(s)])) {
+      const v = igual(m[k], b[k]) ? s[k] : m[k];
+      if (v !== undefined) salida[k] = v;
+    }
+    salida.mensajes = fusionarLista(b.mensajes, m.mensajes, s.mensajes).sort((x, y) => String(x.fecha || '').localeCompare(String(y.fecha || '')));
+    return salida;                                      // los dos, en un hilo: campo a campo y mensaje a mensaje
   };
   const salida = [], vistos = new Set();
   for (const x of suyo || []) { vistos.add(x.id); const e = elegir(x.id); if (e) salida.push(e); }

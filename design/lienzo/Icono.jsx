@@ -38,6 +38,7 @@ const TRAZOS = {
   incidencia: <><circle cx="12" cy="12" r="8.5" /><path d="m8.5 12.2 2.4 2.4 4.6-4.9" /></>,
   lapiz: <><path d="M4 20l1.2-4.4L15.6 5.2a2 2 0 0 1 2.8 0l.4.4a2 2 0 0 1 0 2.8L8.4 18.8z" /><path d="M13.8 7l3.2 3.2" /></>,
   flecha: <><path d="M5 19 19 5" /><path d="M10 5h9v9" /></>,
+  comentario: <><path d="M4 5.5A1.5 1.5 0 0 1 5.5 4h13A1.5 1.5 0 0 1 20 5.5v9a1.5 1.5 0 0 1-1.5 1.5H10l-4.5 4v-4H5.5A1.5 1.5 0 0 1 4 14.5z" /></>,
   derecha: <><path d="M9 6l6 6-6 6" /></>,
 };
 

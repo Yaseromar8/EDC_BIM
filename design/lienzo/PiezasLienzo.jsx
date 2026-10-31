@@ -189,7 +189,8 @@ const TAMANOS_SECCION = [
 
 // Barra de herramientas de abajo, con las medidas de Forma Board (48 px de alto, 12 px entre botones):
 // seleccionar, mano · nota (taco), texto, sección ▾ (tamaños).
-export function BarraInferior({ herramienta, onHerramienta, colorNota, onColorNota, onSeccionTamano, forma = 'nube', onForma }) {
+// `extra`: herramientas de quien usa el lienzo ([{ id, titulo, atajo, icono }]), al final, como el comentario de ACC.
+export function BarraInferior({ herramienta, onHerramienta, colorNota, onColorNota, onSeccionTamano, forma = 'nube', onForma, extra = null }) {
   const color = COLORES_NOTA[colorNota] || COLORES_NOTA.amarillo;
   const [menuSeccion, setMenuSeccion] = useState(false);
   const [menuFormas, setMenuFormas] = useState(false);
@@ -273,6 +274,10 @@ export function BarraInferior({ herramienta, onHerramienta, colorNota, onColorNo
           </div>
         )}
       </div>
+      {extra?.length > 0 && separador}
+      {(extra || []).map(h => (
+        <Boton key={h.id} activo={herramienta === h.id} titulo={h.titulo} atajo={h.atajo} onClick={() => onHerramienta(h.id)}><Icono nombre={h.icono} tam={24} grosor={1} /></Boton>
+      ))}
     </div>
   );
 }

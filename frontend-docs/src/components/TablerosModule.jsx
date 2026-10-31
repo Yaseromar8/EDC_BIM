@@ -29,6 +29,10 @@ import { miniaturaSvg } from '../../../design/lienzo/miniatura';
 import { limpiarVistas } from '../../../design/lienzo/vista';
 import VistaPublicada from './tableros/VistaPublicada';
 import { leerEnlaceDeTablero, enlaceDeVista, ponerEnLaDireccion } from './tableros/enlaceDeTablero';
+import { ComentariosDelTablero, nuevoComentario, nuevoMensaje, esComentario, sinComentarios, yoDe, colorDe, iniciales, mismoAutor } from './tableros/comentarios';
+import { tipoComentario } from './tableros/tipoComentario';
+import HiloComentario from './tableros/HiloComentario';
+import PanelComentarios from './tableros/PanelComentarios';
 
 const GRIS = '#72706b', LINEA = '#e8e6dc', SUAVE = '#f1f0e8', TINTA = '#141413';
 const ESPERA_GUARDAR_MS = 800;
@@ -260,6 +264,19 @@ function TableroEditor({ id, project, user, isAdmin, vistaInicial = null, onCerr
   const [publicando, setPublicando] = useState(null);           // { ids, titulo }
   const [menuVistas, setMenuVistas] = useState(false);
   const contenidoDe = (lienzo) => ({ ...lienzo.contenido(), vistas: vistasRef.current });
+  // COMENTARIOS Y PRESENCIA (fase 5, docs/visor/64). Los comentarios son elementos del tablero; aquí se lleva una lista
+  // al día (para el panel y el hilo) cada vez que el tablero cambia.
+  const yo = useMemo(() => yoDe(user), [user]);
+  const [comentarios, setComentarios] = useState([]);
+  const ponerComentarios = useCallback((notas) => setComentarios(prev => {
+    const l = (notas || []).filter(esComentario);
+    return l.length === prev.length && l.every((x, i) => x === prev[i]) ? prev : l;
+  }), []);
+  const [hilo, setHilo] = useState(null);                 // { id, inicial? } · el hilo abierto
+  const hiloRef = useRef(null);
+  useEffect(() => { hiloRef.current = hilo; }, [hilo]);
+  const [panelComentarios, setPanelComentarios] = useState(false);
+  const [presentes, setPresentes] = useState([]);
   // DOCUMENTOS (fase 2, docs/visor/59): la versión vigente de cada documento del tablero, para avisar de las nuevas.
   const [vigentes, setVigentes] = useState({});
   const [panelDocumentos, setPanelDocumentos] = useState(false);
@@ -324,11 +341,50 @@ function TableroEditor({ id, project, user, isAdmin, vistaInicial = null, onCerr
       : lista.map(i => ({ tipo: 'incidencia', ...TAMANO_INCIDENCIA, issueId: String(i.id), codigo: i.codigo, nombre: i.titulo }));
     lienzoRef.current?.insertar(elementos, en ? { en } : undefined);
   };
+  // El hilo: abrirlo (cerrando el anterior; uno nuevo que se deja sin escribir desaparece), escribir, resolver, borrar.
+  // Todo con `ajustar`/`quitar` del lienzo: sin paso de deshacer.
+  const elComentario = (cid) => lienzoRef.current?.contenido().notas.find(n => n.id === cid) || null;
+  const quitarSiVacio = useCallback((cid) => {
+    const c = lienzoRef.current?.contenido().notas.find(n => n.id === cid);
+    if (c && esComentario(c) && !c.mensajes?.length) { lienzoRef.current.quitar(cid); setComentarios(l => l.filter(x => x.id !== cid)); }
+  }, []);
+  const abrirHilo = useCallback((cid, inicial = null) => {
+    const h = hiloRef.current;
+    if (h && h.id !== cid) quitarSiVacio(h.id);
+    hiloRef.current = { id: cid, inicial };
+    setHilo({ id: cid, inicial });
+  }, [quitarSiVacio]);
+  const cerrarHilo = () => { if (hilo) quitarSiVacio(hilo.id); hiloRef.current = null; setHilo(null); };
+  const cambiarComentario = (cid, fn) => {
+    const c = elComentario(cid) || (hilo?.id === cid ? hilo.inicial : null);
+    if (!c || !lienzoRef.current) return;
+    const patch = fn(c), nuevo = { ...c, ...patch };
+    lienzoRef.current.ajustar(cid, patch);
+    setComentarios(l => (l.some(x => x.id === cid) ? l.map(x => (x.id === cid ? nuevo : x)) : [...l, nuevo]));
+    setHilo(h => (h?.id === cid ? { ...h, inicial: nuevo } : h));
+  };
+  const borrarHilo = (cid) => {
+    lienzoRef.current?.quitar(cid);
+    setComentarios(l => l.filter(x => x.id !== cid));
+    hiloRef.current = null; setHilo(null);
+    toast.success('Comentario eliminado');
+  };
+  const irAComentario = (cid) => { lienzoRef.current?.enfocar(cid); abrirHilo(cid); };
+  const comentarioDelHilo = hilo ? (comentarios.find(c => c.id === hilo.id) || hilo.inicial) : null;
+  useEffect(() => { if (hilo && !comentarioDelHilo) setHilo(null); }, [hilo, comentarioDelHilo]);
+  const herramientas = useMemo(() => (estado === 'archivado' || !user ? null : [{
+    id: 'comentario', titulo: 'Comentario', atajo: 'C', icono: 'comentario', sinDeshacer: true,
+    crear: (p) => nuevoComentario(p, yo),
+    alCrear: (el) => abrirHilo(el.id, el),
+  }]), [estado, user, yo, abrirHilo]);
+  const contextoComentarios = useMemo(() => ({ abrir: abrirHilo, abiertoId: hilo?.id || null }), [abrirHilo, hilo]);
+
   const tipos = useMemo(() => ({
+    comentario: tipoComentario({ abrir: abrirHilo }),
     documento: tipoDocumento({ abrir, extraer: extraerPaginas }),
     incidencia: tipoIncidencia({ abrir: abrirIncidencia }),
     kanban: tipoKanban(),
-  }), [abrir, extraerPaginas, abrirIncidencia]);
+  }), [abrir, extraerPaginas, abrirIncidencia, abrirHilo]);
   // `en`: el punto donde se soltó al jalarlo desde «Visualizados recientemente» (fuera del tablero no se añade).
   const zonaRef = useRef(null);
   const anadirDocumentos = async (filas, en = null) => {
@@ -354,12 +410,13 @@ function TableroEditor({ id, project, user, isAdmin, vistaInicial = null, onCerr
       if (!d.ok) { setFallo(d.error || 'No se pudo abrir el tablero.'); return; }
       base.current = { config: d.config || {}, version: d.version };
       ponerVistas(limpiarVistas(d.config?.vistas));
+      ponerComentarios(d.config?.notas);
       setNombre(d.nombre);
       setEstado(d.archivado ? 'archivado' : 'guardado');
       setDatos(d);
     });
     return () => { vivo = false; };
-  }, [id, ponerVistas]);
+  }, [id, ponerVistas, ponerComentarios]);
 
   const guardar = useCallback(async () => {
     clearTimeout(temporizador.current);
@@ -372,7 +429,7 @@ function TableroEditor({ id, project, user, isAdmin, vistaInicial = null, onCerr
         if (mismoContenido(mio, base.current.config)) { pendiente.current = false; setEstado('guardado'); return true; }
         const config = { ...base.current.config, ...mio };
         setEstado('guardando');
-        const d = await llamar(`${API}/api/docs/tableros/${id}`, 'PUT', { config, version: base.current.version, miniatura: miniaturaSvg(config) });
+        const d = await llamar(`${API}/api/docs/tableros/${id}`, 'PUT', { config, version: base.current.version, miniatura: miniaturaSvg(sinComentarios(config)) });
         if (d.ok) {
           base.current = { config, version: d.version };
           // Si se siguió dibujando mientras guardaba, queda pendiente para la próxima vuelta.
@@ -388,6 +445,7 @@ function TableroEditor({ id, project, user, isAdmin, vistaInicial = null, onCerr
           base.current = { config: suyo, version: d.version };
           lienzo.aplicar(fusion);
           ponerVistas(limpiarVistas(fusion.vistas));
+          ponerComentarios(fusion.notas);
           if (vistaAbiertaRef.current) setContenidoVista(lienzo.contenido());
           toast('Otra persona guardó este tablero: se juntaron sus cambios con los tuyos.', { id: 'tablero-fusion' });
           continue;
@@ -409,13 +467,14 @@ function TableroEditor({ id, project, user, isAdmin, vistaInicial = null, onCerr
   useEffect(() => { if (datos) mirarVigentes(datos.config); }, [datos ? 1 : 0, mirarVigentes]);   // eslint-disable-line react-hooks/exhaustive-deps
   const alCambiar = useCallback((contenido) => {
     mirarVigentes(contenido);
+    ponerComentarios(contenido?.notas);
     if (vistaAbiertaRef.current) setContenidoVista(contenido);
     if (estado === 'archivado') return;
     pendiente.current = true;
     setEstado(e => (e === 'guardando' ? e : 'pendiente'));
     clearTimeout(temporizador.current);
     temporizador.current = setTimeout(() => { guardar(); }, ESPERA_GUARDAR_MS);
-  }, [guardar, estado, mirarVigentes]);
+  }, [guardar, estado, mirarVigentes, ponerComentarios]);
 
   // Ver lo que guardan los demás sin tener que guardar uno: cada 10 s, con la pestaña a la vista, se pregunta solo
   // la versión. Si hay otra y aquí no hay nada pendiente ni a medio gesto, se trae y se pone; si hay algo
@@ -423,10 +482,13 @@ function TableroEditor({ id, project, user, isAdmin, vistaInicial = null, onCerr
   useEffect(() => {
     if (!datos) return undefined;
     let vivo = true;
+    // Con `latido=1` el servidor anota que sigo aquí y dice quién más está (los avatares de la cabecera).
     const mirar = async () => {
-      if (!vivo || document.visibilityState !== 'visible' || enVuelo.current || estado === 'archivado' || !navigator.onLine) return;
-      const v = await llamar(`${API}/api/docs/tableros/${id}?solo_version=1`);
-      if (!vivo || !v.ok || !(v.version > base.current.version)) return;
+      if (!vivo || document.visibilityState !== 'visible' || !navigator.onLine) return;
+      const v = await llamar(`${API}/api/docs/tableros/${id}?solo_version=1&latido=1`);
+      if (!vivo || !v.ok) return;
+      if (Array.isArray(v.presentes)) setPresentes(v.presentes);
+      if (enVuelo.current || estado === 'archivado' || !(v.version > base.current.version)) return;
       if (pendiente.current) { guardar(); return; }
       const lienzo = lienzoRef.current;
       if (!lienzo || lienzo.ocupado()) return;           // a mitad de un gesto o escribiendo: en la siguiente vuelta
@@ -435,6 +497,7 @@ function TableroEditor({ id, project, user, isAdmin, vistaInicial = null, onCerr
       base.current = { config: d.config || {}, version: d.version };
       lienzo.aplicar(d.config || {});
       ponerVistas(limpiarVistas(d.config?.vistas));
+      ponerComentarios(d.config?.notas);
       if (vistaAbiertaRef.current) setContenidoVista(lienzo.contenido());
       mirarVigentes(d.config);
       if (d.nombre && d.nombre !== nombreRef.current) { setNombre(d.nombre); setDatos(x => ({ ...x, nombre: d.nombre })); }
@@ -442,8 +505,12 @@ function TableroEditor({ id, project, user, isAdmin, vistaInicial = null, onCerr
       clearTimeout(avisoT.current);
       avisoT.current = setTimeout(() => setAviso(''), 4000);
     };
+    // Al volver a la pestaña se mira al momento: quién está y si otra persona guardó, sin esperar al siguiente turno.
+    const alVolver = () => { if (document.visibilityState === 'visible') mirar(); };
+    mirar();
     const t = setInterval(mirar, VIGILAR_MS);
-    return () => { vivo = false; clearInterval(t); };
+    document.addEventListener('visibilitychange', alVolver);
+    return () => { vivo = false; clearInterval(t); document.removeEventListener('visibilitychange', alVolver); };
   }, [datos ? 1 : 0, id, estado, guardar]);   // eslint-disable-line react-hooks/exhaustive-deps
 
   // Sin conexión: se avisa y, al volver la red, se guarda lo pendiente.
@@ -536,6 +603,7 @@ function TableroEditor({ id, project, user, isAdmin, vistaInicial = null, onCerr
           style={{ minWidth: 120, width: `${Math.max(12, nombre.length + 2)}ch`, maxWidth: 480, height: 30, padding: '0 8px', border: '1px solid transparent', borderRadius: 6, background: 'transparent', fontSize: 14, fontWeight: 600, fontFamily: 'inherit', color: TINTA, outline: 'none' }}
           onFocus={e => { e.currentTarget.style.borderColor = LINEA; }} onBlurCapture={e => { e.currentTarget.style.borderColor = 'transparent'; }} />
         <div style={{ flex: 1 }} />
+        {presentes.length > 0 && <Presentes lista={presentes} yo={yo} />}
         {datos && (
           <div style={{ position: 'relative' }}>
             <button type="button" aria-haspopup="menu" aria-expanded={menuVistas} onClick={() => setMenuVistas(m => !m)} title="Las vistas publicadas de este tablero"
@@ -583,14 +651,29 @@ function TableroEditor({ id, project, user, isAdmin, vistaInicial = null, onCerr
         ) : (
           <DocumentosDelTablero.Provider value={{ obra, vigentes }}>
           <IncidenciasDelTablero.Provider value={{ porId, nombres, abrir: abrirIncidencia, cargando: incidencias === null }}>
+          <ComentariosDelTablero.Provider value={contextoComentarios}>
             <Lienzo key={id} ref={lienzoRef} inicial={datos.config} onCambio={alCambiar} claveCamara={`alephia-tablero-camara:${id}`} tipos={tipos}
               accionesSeleccion={estado === 'archivado' ? null : [['Publicar vista…', (ids) => ids.length && setPublicando({ ids, titulo: `Vista ${vistasRef.current.length + 1}` })]]}
+              herramientasExtra={herramientas}
               paletaExtra={estado === 'archivado' ? [] : [
-                ['documento', 'Documentos', () => { setPanelIncidencias(false); setPanelDocumentos(p => !p); }],
-                ['incidencia', 'Incidencias', () => { setPanelDocumentos(false); setPanelIncidencias(p => !p); }],
+                ['documento', 'Documentos', () => { setPanelIncidencias(false); setPanelComentarios(false); setPanelDocumentos(p => !p); }],
+                ['incidencia', 'Incidencias', () => { setPanelDocumentos(false); setPanelComentarios(false); setPanelIncidencias(p => !p); }],
+                ['comentario', 'Comentarios', () => { setPanelDocumentos(false); setPanelIncidencias(false); setPanelComentarios(p => !p); }],
               ]} />
+            {panelComentarios && (
+              <PanelComentarios comentarios={comentarios} abiertoId={hilo?.id || null} onIr={irAComentario} onCerrar={() => setPanelComentarios(false)} />
+            )}
+            {comentarioDelHilo && (
+              <HiloComentario key={comentarioDelHilo.id} comentario={comentarioDelHilo} yo={yo} isAdmin={isAdmin} soloLectura={estado === 'archivado'}
+                onEnviar={(texto) => cambiarComentario(comentarioDelHilo.id, (c) => ({ mensajes: [...(c.mensajes || []), nuevoMensaje(yo, texto)] }))}
+                onResolver={(v) => cambiarComentario(comentarioDelHilo.id, () => (v
+                  ? { resuelto: true, resueltoPor: yo.nombre, resueltoEn: new Date().toISOString() }
+                  : { resuelto: false, resueltoPor: undefined, resueltoEn: undefined }))}
+                onBorrarMensaje={(mid) => cambiarComentario(comentarioDelHilo.id, (c) => ({ mensajes: (c.mensajes || []).filter(m => m.id !== mid || !mismoAutor(m.autorId, yo.id)) }))}
+                onBorrarHilo={() => borrarHilo(comentarioDelHilo.id)} onCerrar={cerrarHilo} />
+            )}
             {vistaEnPantalla && contenidoVista && (
-              <VistaPublicada vista={vistaEnPantalla} contenido={contenidoVista} tipos={tipos} tablero={nombre || datos.nombre} obra={project?.name || project?.nombre || ''}
+              <VistaPublicada vista={vistaEnPantalla} contenido={sinComentarios(contenidoVista)} tipos={tipos} tablero={nombre || datos.nombre} obra={project?.name || project?.nombre || ''}
                 enlace={enlaceDeVista(window.location.origin, { obra: project?.id, tablero: id, vista: vistaEnPantalla.id })}
                 puedeEditar={estado !== 'archivado'} onCerrar={cerrarVista}
                 onRenombrar={(titulo) => cambiarVistas(vs => vs.map(v => (v.id === vistaEnPantalla.id ? { ...v, titulo } : v)))}
@@ -627,6 +710,7 @@ function TableroEditor({ id, project, user, isAdmin, vistaInicial = null, onCerr
                   onCerrar={() => setIncidenciaAbierta(null)} onCambio={recargarIncidencias} />
               </CapaEncima>
             )}
+          </ComentariosDelTablero.Provider>
           </IncidenciasDelTablero.Provider>
           </DocumentosDelTablero.Provider>
         )}
@@ -665,5 +749,25 @@ function DialogoPublicar({ inicial, onPublicar, onCerrar }) {
         </div>
       </form>
     </CapaEncima>
+  );
+}
+
+// Quién tiene el tablero abierto ahora (docs/visor/64): hasta cuatro avatares y «+n». Con el ratón, el nombre.
+function Presentes({ lista, yo }) {
+  const orden = [...lista].sort((a, b) => (mismoAutor(a.id, yo.id) ? 1 : 0) - (mismoAutor(b.id, yo.id) ? 1 : 0));
+  const vistos = orden.slice(0, 4), resto = orden.length - vistos.length;
+  const nombre = (p) => `${p.nombre || 'Alguien'}${mismoAutor(p.id, yo.id) ? ' (tú)' : ''}`;
+  return (
+    <div role="group" aria-label={`En este tablero: ${orden.map(nombre).join(', ')}`} style={{ display: 'flex', alignItems: 'center', marginRight: 4 }}>
+      {vistos.map((p, i) => (
+        <span key={p.id} title={nombre(p)} data-presente={p.id}
+          style={{ width: 28, height: 28, marginLeft: i ? -6 : 0, borderRadius: '50%', border: '2px solid #fff', boxSizing: 'border-box', background: colorDe(p.id), color: '#fff',
+            fontSize: 11, fontWeight: 600, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>{iniciales(p.nombre)}</span>
+      ))}
+      {resto > 0 && (
+        <span title={orden.slice(4).map(nombre).join(', ')} style={{ width: 28, height: 28, marginLeft: -6, borderRadius: '50%', border: '2px solid #fff', boxSizing: 'border-box',
+          background: '#e8e6dc', color: TINTA, fontSize: 11, fontWeight: 600, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>+{resto}</span>
+      )}
+    </div>
   );
 }

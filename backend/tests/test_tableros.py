@@ -204,6 +204,23 @@ def test_abrir_solo_la_version_no_lee_ni_anota(app, monkeypatch):
     assert len(cur.queries) == 1 and not conn.committed            # solo la guardia; nada de tableros_abiertos
 
 
+def test_latido_anota_que_sigo_y_dice_quien_esta(app, monkeypatch):
+    cur, conn = _conectar(monkeypatch, [_fila(version=9), [(7, 'Ana'), (8, '')]])
+    r = app.test_client().get('/api/docs/tableros/%s?solo_version=1&latido=1' % TAB)
+    d = r.get_json()
+    assert r.status_code == 200 and d['version'] == 9 and 'config' not in d
+    assert d['presentes'] == [{'id': 7, 'nombre': 'Ana'}, {'id': 8, 'nombre': ''}]
+    anotar, quien = cur.queries[1], cur.queries[2]
+    assert 'tableros_abiertos' in anotar[0] and anotar[1] == (TAB, 7) and conn.committed
+    assert 'make_interval' in quien[0] and quien[1] == (TAB, tb.PRESENTE_SEGUNDOS)
+
+
+def test_latido_pasa_por_la_guardia(app, monkeypatch):
+    cur, conn = _conectar(monkeypatch, [_fila(obra='otra')])
+    r = app.test_client().get('/api/docs/tableros/%s?solo_version=1&latido=1' % TAB)
+    assert r.status_code == 403 and len(cur.queries) == 1 and not conn.committed
+
+
 def test_abrir_sin_apertura_no_anota(app, monkeypatch):
     cur, conn = _conectar(monkeypatch, [_fila(), ({'notas': []}, 3, 'Reunión', False)])
     r = app.test_client().get('/api/docs/tableros/%s?sin_apertura=1' % TAB)
