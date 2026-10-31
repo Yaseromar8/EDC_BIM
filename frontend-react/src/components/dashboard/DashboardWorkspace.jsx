@@ -491,6 +491,16 @@ export default function DashboardWorkspace({ project, backendUrl, onClose, proye
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp);
   };
+  // Sección de un tamaño fijo (16:9, A4…), centrada en lo que se ve: una «página» lista para fijar como vista.
+  const crearSeccionDeTamano = (nombre, [w, h]) => {
+    const r = canvasRef.current.getBoundingClientRect(), v = viewRef.current;
+    const cx = (r.width / 2 - v.tx) / v.s, cy = (r.height / 2 - v.ty) / v.s;
+    const nueva = { id: uid(), title: nombre, color: framesRef.current.length % FRAME_COLORS.length, x: snap(cx - w / 2), y: snap(cy - h / 2), w, h };
+    setFrames(fs => [...fs, nueva]);
+    setSeleccion(new Set([nueva.id]));
+    setHerramienta('seleccionar');
+    encuadrar([nueva], 1);
+  };
   const alPulsarLienzo = (e) => {
     setMenuZoom(false);
     if (e.button === 1 || e.button === 2 || (e.button === 0 && (espacioRef.current || herramienta === 'mano'))) { panear(e); return; }
@@ -916,9 +926,22 @@ export default function DashboardWorkspace({ project, backendUrl, onClose, proye
     else hecho = false;
     if (hecho) { e.preventDefault(); e.stopPropagation(); }
   };
+  // Los atajos se escuchan en la ventana mientras el tablero está abierto, si el foco está en el tablero o
+  // en ninguna parte: al cerrarse un menú, el botón pulsado desaparece y el foco cae al documento (antes
+  // Ctrl+Z dejaba de responder justo después de usar un menú).
+  const teclado = useRef(null);
+  useEffect(() => {
+    const aqui = () => { const a = document.activeElement; return !a || a === document.body || !!panelRef.current?.contains(a); };
+    const abajo = (e) => { if (aqui()) teclado.current?.alTeclear(e); };
+    const arriba = (e) => { if (aqui()) teclado.current?.alSoltarTecla(e); };
+    window.addEventListener('keydown', abajo);
+    window.addEventListener('keyup', arriba);
+    return () => { window.removeEventListener('keydown', abajo); window.removeEventListener('keyup', arriba); };
+  }, []);
   const alSoltarTecla = (e) => {
     if (e.key === ' ') { espacioRef.current = false; if (canvasRef.current) canvasRef.current.style.cursor = ''; }
   };
+  teclado.current = { alTeclear, alSoltarTecla };
 
   // Flujo Vyssuals: clic en un parámetro de la fuente → gráfico pre-armado.
   const createFromField = (f) => {
@@ -931,7 +954,7 @@ export default function DashboardWorkspace({ project, backendUrl, onClose, proye
 
   return (
     <div ref={panelRef} tabIndex={-1} data-escape-propio data-compacta={compactaDe(width)}
-      onKeyDown={alTeclear} onKeyUp={alSoltarTecla} onPointerDownCapture={enfocarPanel} style={{
+      onPointerDownCapture={enfocarPanel} style={{
       // top:48 → bajo el TopBar del visor (48px, z-index 2000); a la izquierda, la barra lateral del visor
       position: 'fixed', top: 48, left: ANCHO_RIEL, right: 0, bottom: 0, zIndex: 1400, outline: 'none',
       // Tema claro de la paleta oficial: página Light, tarjetas blancas, borde Light Gray
@@ -1166,7 +1189,8 @@ export default function DashboardWorkspace({ project, backendUrl, onClose, proye
         {/* Barras flotantes, como Forma Board: datos a la izquierda, herramientas abajo, zoom abajo a la derecha */}
         <PaletaIzquierda onGrafico={() => setEditing('new')} onParametros={addParamsNode} parametrosApagado={loading}
           onDeshacer={deshacer} onRehacer={rehacer} />
-        <BarraInferior herramienta={herramienta} onHerramienta={setHerramienta} colorNota={colorNota} onColorNota={setColorNota} />
+        <BarraInferior herramienta={herramienta} onHerramienta={setHerramienta} colorNota={colorNota} onColorNota={setColorNota}
+          onSeccionTamano={crearSeccionDeTamano} />
         <PildoraZoom textoRef={zoomTextoRef} porcentaje={`${Math.round(view.s * 100)} %`}
           onMenos={() => zoomPaso(-1)} onMas={() => zoomPaso(1)} onMenu={() => setMenuZoom(m => !m)} />
         {menuZoom && (

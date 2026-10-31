@@ -179,3 +179,42 @@ Además sugirió revisar tldraw, Excalidraw y dos clones de Miro:
 
 **Fallo encontrado y arreglado:** al crear una nota con un clic, el navegador movía el foco al panel justo después y la nota dejaba de editarse; quedaba vacía. Se arregló con `preventDefault` al crear.
 
+## 7 · Segunda visita a Forma Board, usándolo (30-oct, noche)
+
+**El dueño:** «navega y utiliza, no tengas miedo». En su tablero «Sin título» se pudo **mirar, pasar el ratón, abrir menús y seleccionar**. **Crear** una nota volvió a bloquearlo el guardián del entorno (proyecto real, compartido), aun con su permiso. Al terminar, el tablero tenía 15 elementos, los mismos que al empezar; la vista del dueño se restauró.
+
+**La barra de abajo, medida:**
+- caja de **663 × 48 px**, blanca, radio 8, **sin borde**, sombra `0 0 16px rgba(0,0,0,.12)`, relleno 0 12 px y **12 px entre botones**;
+- botones de **32 × 32**, radio 6, **iconos de 24 px a trazo 1**; el activo, fondo `#006EAF` con el icono en blanco;
+- el **taco de notas** es una ilustración de 121 × 115 px que sobresale y **se levanta** al pasar el ratón; la plumilla también;
+- **Sticker** es una imagen («+1» en pastilla morada); los desplegables son botones de 12 × 32 con ▾;
+- al pasar el ratón, **etiqueta oscura con el atajo**: «Nota N», «Plumilla P», «Sticker I», «Añadir vista Kanban K».
+
+**Desplegables:**
+- **Formas:** 20, en rejilla de 7 (nube, rectángulo, elipse, triángulo, rombo, pentágono, hexágono, octógono, estrella, romboide, trapecio, óvalo, flechas, casilla con X o con ✓, corazón).
+- **Marco:** Personalizado · 16:9 · 4:3 · 1:1 · A4 · A4 horizontal · Carta · Carta horizontal.
+
+**La tarjeta de un DWG** (`docs-autocad`):
+- guarda la **versión** (`versionId`) y el **documento** (`itemId`, el linaje), la página (`pageNumber` de `documentLength`), el nombre, el número de versión, la fecha, sus miniaturas y qué mostrar (nombre, versión, fecha, icono, datos, sombra);
+- **carga por calidades**: se ve borrosa y se afina;
+- al seleccionarla sale una **barra contextual debajo**: candado · V1 ▾ · Abrir en AutoCAD Web · Extraer modelo 3D · IA · comparar · ◀ 3/4 ▶ · pantalla completa · ⋮;
+- encima se ven las anotaciones del dueño: nube, flecha, resaltador y nota «120M2».
+
+**Otros:**
+- hay una **tarjeta de incidencia** (#132 · PAISAJISMO_VARIOS · General · Gestión de cambios · Sin fecha límite);
+- el «3D» rojo es una **imagen**, no un visor vivo.
+
+**Lo replicado en nuestra barra** (`PiezasLienzo.jsx`):
+- las mismas medidas (48 px, radio 8, sombra difusa, 12 px, botones de 32 con iconos de 24 a trazo 1, activo `#006EAF`);
+- el **taco de notas en ilustración** que sobresale y se levanta;
+- la **etiqueta oscura con el atajo**;
+- **Sección ▾ con los mismos tamaños**: crea la sección centrada, la selecciona y la encuadra (una «página» A4 lista para fijar como vista);
+- la paleta izquierda y la píldora de zoom pasan a la misma caja y a iconos de trazo 1.
+
+**Fallo encontrado y arreglado:** tras usar un menú, el botón pulsado desaparece, el foco cae al documento y Ctrl+Z dejaba de responder. Los atajos se escuchan ahora en la ventana mientras el tablero está abierto, si el foco está en el tablero o en ninguna parte.
+
+**Comprobado** con Chrome sin ventana y los guardados bloqueados:
+- la barra, la etiqueta «Nota N» y el menú de tamaños;
+- A4 crea la sección y **Ctrl+Z la deshace**;
+- notas con sus puntos laterales, texto, Ctrl+Z × 3 y Ctrl+Y, y zoom al 1 %.
+

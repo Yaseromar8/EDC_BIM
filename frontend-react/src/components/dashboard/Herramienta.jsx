@@ -28,9 +28,9 @@ const TRAZOS = {
   abajo: <><path d="M6 9l6 6 6-6" /></>,
 };
 
-export function Icono({ nombre, tam = 15 }) {
+export function Icono({ nombre, tam = 15, grosor = 1.5 }) {
   return (
-    <svg width={tam} height={tam} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"
+    <svg width={tam} height={tam} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={grosor}
       strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{TRAZOS[nombre]}</svg>
   );
 }
