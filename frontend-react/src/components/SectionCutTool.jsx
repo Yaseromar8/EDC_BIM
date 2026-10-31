@@ -292,7 +292,7 @@ export default function SectionCutTool() {
           background: mode ? '#7c3aed' : 'transparent',
           color: mode ? '#fff' : '#e8e6dc',
           border: `1px solid ${mode ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.22)'}`,
-          borderRadius: 6, fontSize: 11.5, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap',
+          borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap',
         }}
       >
         {/* Cubo con el PLANO de corte rebanándolo: mismo lenguaje visual que
@@ -303,7 +303,7 @@ export default function SectionCutTool() {
           <path d={ISO_EDGES} stroke="currentColor" strokeWidth="1.1" opacity="0.55" />
           <path d={ISO_PLANES.left} fill="currentColor" fillOpacity="0.85" stroke="currentColor" strokeWidth="1.2" />
         </svg>
-        Corte{applied && <span style={{ fontSize: 10, opacity: 0.9 }}> ✓</span>}
+        Corte{applied && <span style={{ fontSize: 12, opacity: 0.9 }}> ✓</span>}
       </button>
 
       {mode && (
@@ -315,7 +315,7 @@ export default function SectionCutTool() {
         }}>
           {/* Estado: qué corte está puesto y dónde se apoya */}
           <div style={{
-            fontSize: 8.5, lineHeight: 1.25, textAlign: 'center', padding: '2px 1px 3px',
+            fontSize: 12, lineHeight: 1.25, textAlign: 'center', padding: '2px 1px 3px',
             color: activeCut ? '#c9b7ff' : '#918f88', borderBottom: '1px solid #333330', marginBottom: 1,
           }}>
             {!hit ? 'toca una cara'

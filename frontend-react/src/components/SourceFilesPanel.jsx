@@ -144,12 +144,12 @@ const SourceFilesPanel = ({
 
             {/* Barra de acciones globales: actualizar todos + estado de extracción */}
             {(pendingCount > 0 || extractingCount > 0) && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', borderBottom: '1px solid #e8e6dc', fontSize: 12 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', borderBottom: '1px solid #e8e6dc', fontSize: 13 }}>
                     {pendingCount > 0 && (
                         <button
                             onClick={() => onUpdateAll && onUpdateAll()}
                             disabled={updateAllBusy}
-                            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', background: updateAllBusy ? '#e8e6dc' : '#507294', color: '#ffffff', border: 'none', borderRadius: 6, fontWeight: 600, fontSize: 12, cursor: updateAllBusy ? 'default' : 'pointer' }}
+                            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', background: updateAllBusy ? '#e8e6dc' : '#507294', color: '#ffffff', border: 'none', borderRadius: 6, fontWeight: 600, fontSize: 13, cursor: updateAllBusy ? 'default' : 'pointer' }}
                         >
                             {updateAllBusy ? 'Actualizando…' : `Actualizar todos (${pendingCount})`}
                         </button>
@@ -343,7 +343,7 @@ const SourceFilesPanel = ({
                                         if (!modelSheets.length) return null;
                                         return (
                                             <div style={{ marginTop: 6 }}>
-                                                <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.6, color: '#72706b', padding: '4px 0 2px 26px' }}>
+                                                <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: 0.6, color: '#72706b', padding: '4px 0 2px 26px' }}>
                                                     LÁMINAS ({modelSheets.length})
                                                 </div>
                                                 {modelSheets.map(s => (

@@ -37,7 +37,7 @@ const rejilla = COLUMNAS.map(c => c.ancho).join(' ');
 const ALTO = 24;   // alto de cada fila de la plantilla (se dibujan solo las que se ven); 24 = más pegadas, como un Excel
 // Formato de la plantilla, con la paleta oficial (D-24): el código en gris con cifras alineadas, como en
 // un presupuesto; los títulos de nivel 1 en Light 50, los demás solo en negrita; lo vacío en Mid Gray.
-const codigoCelda = { fontVariantNumeric: 'tabular-nums', fontSize: '11.5px' };
+const codigoCelda = { fontVariantNumeric: 'tabular-nums', fontSize: '12px' };
 const GRIS_600 = '#72706b', GRIS_700 = '#52524d', MID_GRAY = '#b0aea5', AVISO = '#734500';
 // Bandas de la EDT por nivel, como Primavera (pedido del dueño, 27-oct-2026: «bandas más suaves»): cada
 // nivel de título con su color, de más marcado (capítulo) a más claro; todos de la lista cerrada de la
@@ -58,12 +58,12 @@ function ComoSeLeyo({ roles, itemizado, cruce, onCerrar }) {
     const n = x => x.toLocaleString('es-PE');
     const linea = { paddingLeft: '12px' };
     return (
-        <div style={{ borderBottom: '1px solid #e8e6dc', background: '#faf9f5', padding: '8px 12px', maxHeight: '180px', overflowY: 'auto', fontSize: '11.5px', color: '#52524d', flexShrink: 0 }}>
+        <div style={{ borderBottom: '1px solid #e8e6dc', background: '#faf9f5', padding: '8px 12px', maxHeight: '180px', overflowY: 'auto', fontSize: '12px', color: '#52524d', flexShrink: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
                 <strong style={{ color: '#141413', fontWeight: 600 }}>Cómo se leyó</strong>
                 <span>· a partir de tu itemizado «{itemizado.archivo}» y de los valores del modelo (no de los nombres de los parámetros); los códigos se comparan sin ceros a la izquierda («02.01.01.04» = «2.1.1.4»)</span>
                 <span style={{ flex: 1 }} />
-                <button className="v-enlace" style={{ fontSize: '11px' }} onClick={onCerrar}>cerrar</button>
+                <button className="v-enlace" style={{ fontSize: '12px' }} onClick={onCerrar}>cerrar</button>
             </div>
             {!roles.lineas.length && <div>Ningún parámetro del modelo contiene los ítems del itemizado.</div>}
             {roles.lineas.map(l => (
@@ -114,12 +114,12 @@ function QueFalta({ cobertura, dif, ambito, activa, onAlternar, onCerrar }) {
     });
     const MAX = 100;
     return (
-        <div style={{ borderBottom: '1px solid #e8e6dc', background: '#faf9f5', padding: '8px 12px', maxHeight: '220px', overflowY: 'auto', fontSize: '11.5px', color: '#52524d', flexShrink: 0 }}>
+        <div style={{ borderBottom: '1px solid #e8e6dc', background: '#faf9f5', padding: '8px 12px', maxHeight: '220px', overflowY: 'auto', fontSize: '12px', color: '#52524d', flexShrink: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <strong style={{ color: '#141413', fontWeight: 600 }}>Qué falta</strong>
                 <span>· en los {miles(cobertura.total)} elementos {ambito}: lo que el total de Partidas no incluye o no cuadra con el itemizado. Clic en una línea: aislar en el 3D.</span>
                 <span style={{ flex: 1 }} />
-                <button className="v-enlace" style={{ fontSize: '11px' }} onClick={onCerrar}>cerrar</button>
+                <button className="v-enlace" style={{ fontSize: '12px' }} onClick={onCerrar}>cerrar</button>
             </div>
 
             <div style={titulo}><Cuadro color={ESTADOS[3].color} />{miles(cobertura.porEstado.sin.length)} elementos sin partida, por categoría</div>
@@ -198,7 +198,7 @@ function AccionesDelItemizado({ estado, hay, onArchivo, onQuitar }) {
 }
 
 
-const estiloBoton = { display: 'inline-flex', alignItems: 'center', border: '1px solid #cccac0', borderRadius: '3px', background: '#ffffff', color: '#52524d', font: 'inherit', fontSize: '11px', padding: '0 6px', height: '20px', cursor: 'pointer' };
+const estiloBoton = { display: 'inline-flex', alignItems: 'center', border: '1px solid #cccac0', borderRadius: '3px', background: '#ffffff', color: '#52524d', font: 'inherit', fontSize: '12px', padding: '0 6px', height: '20px', cursor: 'pointer' };
 
 function BotonCargar({ onArchivo, texto = 'Cargar itemizado…', ocupado = false, estado = null }) {
     return (
@@ -214,9 +214,9 @@ function BotonCargar({ onArchivo, texto = 'Cargar itemizado…', ocupado = false
 }
 
 // ── Criterios de medida de la obra («Medir con…», docs/visor/32) ──────────────────────────────
-const panel = { borderBottom: '1px solid #e8e6dc', background: '#faf9f5', padding: '8px 12px', maxHeight: '260px', overflowY: 'auto', fontSize: '11.5px', color: '#52524d', flexShrink: 0 };
+const panel = { borderBottom: '1px solid #e8e6dc', background: '#faf9f5', padding: '8px 12px', maxHeight: '260px', overflowY: 'auto', fontSize: '12px', color: '#52524d', flexShrink: 0 };
 const fmt = (n, u) => `${formatearNumero(n)} ${u}`;
-const campoForm = { font: 'inherit', fontSize: '11.5px', height: '22px', border: '1px solid #cccac0', borderRadius: '3px', background: '#ffffff', color: '#333330', padding: '0 4px' };
+const campoForm = { font: 'inherit', fontSize: '12px', height: '22px', border: '1px solid #cccac0', borderRadius: '3px', background: '#ffffff', color: '#333330', padding: '0 4px' };
 const etiquetaRadio = { display: 'inline-flex', gap: '4px', alignItems: 'center', cursor: 'pointer' };
 
 // Para una partida con elementos sin medida nativa: elegir con qué parámetro se miden (sin preselección),
@@ -305,7 +305,7 @@ function MedirCon({ partida, codigoOficial, sinNativa, obra, claveNativa, juego,
                 <strong style={{ color: '#141413', fontWeight: 600 }}>Medir con…</strong>
                 <span>· {codigoOficial} {partida.nombre} ({unidad}) · {miles(sinNativa.length)} elementos de la obra sin medida nativa. Solo se rellenan esos: la medida nativa manda siempre.</span>
                 <span style={{ flex: 1 }} />
-                <button className="v-enlace" style={{ fontSize: '11px' }} onClick={onCerrar}>cerrar</button>
+                <button className="v-enlace" style={{ fontSize: '12px' }} onClick={onCerrar}>cerrar</button>
             </div>
             {deEstaPartida.map((c, i) => (
                 <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '8px', minHeight: '22px', marginBottom: '4px', color: '#141413' }}>
@@ -323,7 +323,7 @@ function MedirCon({ partida, codigoOficial, sinNativa, obra, claveNativa, juego,
                     {elegidos.map((k, i) => (
                         <div key={k} style={{ display: 'flex', alignItems: 'center', gap: '8px', height: '22px', paddingLeft: '6px' }}>
                             <span style={{ color: '#141413' }}>{i + 1}. {etiqueta(k)}</span>
-                            <button className="v-enlace" style={{ fontSize: '11px' }} onClick={() => setElegidos(elegidos.filter(x => x !== k))}>quitar</button>
+                            <button className="v-enlace" style={{ fontSize: '12px' }} onClick={() => setElegidos(elegidos.filter(x => x !== k))}>quitar</button>
                         </div>
                     ))}
                     {elegidos.length < MAX_MEDIR_CON && (
@@ -342,7 +342,7 @@ function MedirCon({ partida, codigoOficial, sinNativa, obra, claveNativa, juego,
                                 elementos, con buscador; lo que no se puede usar sale en gris con su motivo. */}
                             {todos.some(t => !recomendados.has(t.clave)) && (
                                 <div style={{ marginTop: '6px' }}>
-                                    <button className="v-enlace" style={{ fontSize: '11px' }} onClick={() => setVerOtro(v => !v)} aria-expanded={verOtro}>
+                                    <button className="v-enlace" style={{ fontSize: '12px' }} onClick={() => setVerOtro(v => !v)} aria-expanded={verOtro}>
                                         {verOtro ? 'ocultar los demás parámetros' : `elegir otro parámetro… (${todos.filter(t => !recomendados.has(t.clave)).length})`}
                                     </button>
                                     {verOtro && (
@@ -433,7 +433,7 @@ function ListaDeCriterios({ juego, uso, estado, onGuardar, onCerrar }) {
                     {juego?.local ? ' · solo en este navegador' : ''}
                 </span>
                 <span style={{ flex: 1 }} />
-                <button className="v-enlace" style={{ fontSize: '11px' }} onClick={onCerrar}>cerrar</button>
+                <button className="v-enlace" style={{ fontSize: '12px' }} onClick={onCerrar}>cerrar</button>
             </div>
             {!juego?.criterios.length && <div>No hay criterios. En una partida con elementos «sin medida», «medir con…» los crea.</div>}
             {(juego?.criterios || []).map((c, i) => {
@@ -447,7 +447,7 @@ function ListaDeCriterios({ juego, uso, estado, onGuardar, onCerrar }) {
                         {u?.sinValor > 0 && <span style={{ color: ROJO }}>· {miles(u.sinValor)} sin valor</span>}
                         {u?.unidadDistinta > 0 && <span style={{ color: ROJO }}>· {miles(u.unidadDistinta)} en otra unidad</span>}
                         {u?.conflictos > 0 && <span style={{ color: ROJO }} title="Otro criterio del mismo nivel aplica a los mismos elementos: no se elige uno en silencio">· {miles(u.conflictos)} en conflicto</span>}
-                        {estado.puedeEditar && <button className="v-enlace" style={{ fontSize: '11px' }} disabled={estado.guardando} onClick={() => quitar(c)}>quitar</button>}
+                        {estado.puedeEditar && <button className="v-enlace" style={{ fontSize: '12px' }} disabled={estado.guardando} onClick={() => quitar(c)}>quitar</button>}
                     </div>
                 );
             })}
@@ -579,7 +579,7 @@ export default function TablaDePartidas({ filas, filasObra, dic, roles, claveDeF
     // Sin itemizado no hay criterio: se pide, no se supone.
     if (!dic) {
         return (
-            <div style={{ padding: '24px', color: '#52524d', fontSize: '13px', display: 'flex', flexDirection: 'column', gap: '10px', alignItems: 'flex-start' }}>
+            <div style={{ padding: '24px', color: '#52524d', fontSize: '14px', display: 'flex', flexDirection: 'column', gap: '10px', alignItems: 'flex-start' }}>
                 {itemizado && estadoObra.heredado && delFrente(estadoObra)
                     ? <span>El frente {estadoObra.frente} aún no tiene itemizado propio: usa el de la obra, «{itemizado.archivo}»{itemizado.version ? ` (versión ${itemizado.version})` : ''},
                         y ningún parámetro del modelo contiene sus ítems. Carga el del frente.</span>
@@ -594,7 +594,7 @@ export default function TablaDePartidas({ filas, filasObra, dic, roles, claveDeF
                     <AccionesDelItemizado estado={estadoObra} hay={!!itemizado} onArchivo={cargarItemizado} onQuitar={quitarItemizado} />
                     {error && <span style={{ color: ROJO }}>{error}</span>}
                 </span>
-                {estadoObra.aviso && <span style={{ color: '#72706b', fontSize: '12px' }}>{estadoObra.aviso}</span>}
+                {estadoObra.aviso && <span style={{ color: '#72706b', fontSize: '13px' }}>{estadoObra.aviso}</span>}
             </div>
         );
     }
@@ -656,7 +656,7 @@ export default function TablaDePartidas({ filas, filasObra, dic, roles, claveDeF
                     {p.conflictos > 0 && <span title={`${miles(p.conflictos)} con dos criterios de medida del mismo nivel: no se elige uno en silencio (ver «criterios de medida»)`}>⚠</span>}
                     {p.sinMedida ? p.sinMedida.toLocaleString('es-PE') : ''}
                     {(p.sinMedida > 0 || conCriterio || aManoP) && medible(p) && (
-                        <button className="v-enlace" style={{ fontSize: '11px' }}
+                        <button className="v-enlace" style={{ fontSize: '12px' }}
                             title="Elegir con qué parámetro se miden los elementos de esta partida que no traen medida nativa"
                             onClick={ev => { ev.stopPropagation(); const k = String(p.clave).split('+')[0]; setMedirCon(medirCon === k ? null : k); }}>
                             medir con…
@@ -696,7 +696,7 @@ export default function TablaDePartidas({ filas, filasObra, dic, roles, claveDeF
                 <div />
                 <div />
                 {/* «x de y con dato» en la columna de elementos: se lee de un vistazo, alineado. */}
-                <div style={{ ...num, fontWeight: 400, fontSize: '11px', color: banda.apoyo }}
+                <div style={{ ...num, fontWeight: 400, fontSize: '12px', color: banda.apoyo }}
                     title={`${f.conDato} de ${f.total} partidas de este título tienen elementos en el modelo`}>
                     {f.total > 0 ? `${miles(f.conDato)}/${miles(f.total)}` : ''}
                 </div>
@@ -710,8 +710,8 @@ export default function TablaDePartidas({ filas, filasObra, dic, roles, claveDeF
         return filaConDato(r.p, { nivel: r.f.nivel + 1 });   // 'sub'
     };
     return (
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, background: '#ffffff', fontSize: '12px', color: '#333330' }}>
-            <div style={{ padding: '0 12px', height: '28px', flexShrink: 0, fontSize: '11px', color: '#72706b', borderBottom: '1px solid #e8e6dc', display: 'flex', gap: '8px', alignItems: 'center', whiteSpace: 'nowrap', overflow: 'hidden' }}>
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, background: '#ffffff', fontSize: '13px', color: '#333330' }}>
+            <div style={{ padding: '0 12px', height: '28px', flexShrink: 0, fontSize: '12px', color: '#72706b', borderBottom: '1px solid #e8e6dc', display: 'flex', gap: '8px', alignItems: 'center', whiteSpace: 'nowrap', overflow: 'hidden' }}>
                 <span title="Partidas del itemizado (filas con unidad) que tienen elementos en el modelo, sobre todas las del itemizado">
                     <strong style={{ color: '#141413', fontWeight: 600 }}>{miles(plantilla.resumen.conDato)}</strong> de {miles(plantilla.resumen.partidas)} partidas del itemizado con dato
                     {' · '}{lineas.toLocaleString('es-PE')} líneas de {filas.length.toLocaleString('es-PE')} elementos {ambito}
@@ -719,19 +719,19 @@ export default function TablaDePartidas({ filas, filasObra, dic, roles, claveDeF
                 <label style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }} title="Oculta las partidas sin elementos en el modelo y los títulos sin ninguna">
                     <input type="checkbox" checked={soloConDato} onChange={e => setSoloConDato(e.target.checked)} />solo con dato
                 </label>
-                {plegados.size > 0 && <button className="v-enlace" style={{ fontSize: '11px' }} onClick={() => setPlegados(new Set())}>desplegar todo</button>}
-                {onUsarTodo && <button className="v-enlace" style={{ fontSize: '11px' }} onClick={onUsarTodo}>usar toda la tabla</button>}
+                {plegados.size > 0 && <button className="v-enlace" style={{ fontSize: '12px' }} onClick={() => setPlegados(new Set())}>desplegar todo</button>}
+                {onUsarTodo && <button className="v-enlace" style={{ fontSize: '12px' }} onClick={onUsarTodo}>usar toda la tabla</button>}
                 {porCriterio > 0 && <span title="Líneas sin medida nativa medidas con un criterio de medida de la obra">· {porCriterio.toLocaleString('es-PE')} medidas con criterio</span>}
                 {sinMedida > 0 && <span style={{ color: ROJO }}>· {sinMedida.toLocaleString('es-PE')} sin medida</span>}
                 {(onCriterios || criterios?.criterios.length > 0) && (
-                    <button className="v-enlace" style={{ fontSize: '11px' }} onClick={() => setVerCriterios(v => !v)} aria-expanded={verCriterios}
+                    <button className="v-enlace" style={{ fontSize: '12px' }} onClick={() => setVerCriterios(v => !v)} aria-expanded={verCriterios}
                         title="Con qué parámetro se mide lo que no trae medida nativa, para toda la obra">
                         criterios de medida ({criterios?.criterios.length || 0})
                     </button>
                 )}
                 {calidad.repetidas > 0 && <span title="La misma partida en varias líneas del mismo elemento (p. ej. línea sin número y línea 2): se cuenta una vez">· {calidad.repetidas.toLocaleString('es-PE')} repetidas contadas una vez</span>}
                 {calidad.intercambiadas > 0 && <span style={{ color: ROJO }} title="En Revit, la descripción está en CodigoDePartida y el código en NombreDePartida: se leen al derecho">· {calidad.intercambiadas} con código y nombre intercambiados</span>}
-                <button className="v-enlace" style={{ fontSize: '11px' }} onClick={() => setVerComo(v => !v)} aria-expanded={verComo}
+                <button className="v-enlace" style={{ fontSize: '12px' }} onClick={() => setVerComo(v => !v)} aria-expanded={verComo}
                     title="Qué parámetros se leyeron como código, descripción y unidad, y por qué">
                     cómo se leyó
                 </button>
@@ -753,7 +753,7 @@ export default function TablaDePartidas({ filas, filasObra, dic, roles, claveDeF
                 <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }} title="m → Longitud · m² → Área · m³ → Volumen de Revit; kg → longitud total de barra × kg/m del diámetro de barra; und → 1 por elemento. Si el elemento no la trae: el criterio de medida de la obra (·crit.)">Cantidad = medida nativa; si falta, criterio de la obra</span>
             </div>
             {cobertura && (
-                <div style={{ padding: '0 12px', height: '28px', flexShrink: 0, fontSize: '11px', color: '#52524d', borderBottom: '1px solid #e8e6dc', display: 'flex', gap: '10px', alignItems: 'center', whiteSpace: 'nowrap', overflow: 'hidden' }}>
+                <div style={{ padding: '0 12px', height: '28px', flexShrink: 0, fontSize: '12px', color: '#52524d', borderBottom: '1px solid #e8e6dc', display: 'flex', gap: '10px', alignItems: 'center', whiteSpace: 'nowrap', overflow: 'hidden' }}>
                     <span title="Elementos con alguna línea cuyo código es un ítem del itemizado o sub-partida de uno, sobre los elementos de la tabla">
                         Cobertura del itemizado <strong style={{ color: '#141413', fontWeight: 600 }}>{cobertura.porcentaje.toLocaleString('es-PE')} %</strong>
                     </span>
@@ -763,13 +763,13 @@ export default function TablaDePartidas({ filas, filasObra, dic, roles, claveDeF
                         return (
                             <button key={e.id} disabled={!claves.length} onClick={() => alternar(clave, claves)}
                                 title={activa === clave ? 'clic: mostrar todo' : `clic: aislar los ${miles(claves.length)} elementos ${e.etiqueta}`}
-                                style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', border: 'none', borderRadius: '3px', padding: '0 5px', height: '20px', font: 'inherit', fontSize: '11px',
+                                style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', border: 'none', borderRadius: '3px', padding: '0 5px', height: '20px', font: 'inherit', fontSize: '12px',
                                     background: activa === clave ? 'var(--alephia-selected-bg, #ECF0F1)' : 'transparent', color: claves.length ? '#52524d' : '#b0aea5', cursor: claves.length ? 'pointer' : 'default' }}>
                                 <Cuadro color={e.color} />{miles(claves.length)} {e.etiqueta}
                             </button>
                         );
                     })}
-                    <button className="v-enlace" style={{ fontSize: '11px' }} onClick={() => setVerFalta(v => !v)} aria-expanded={verFalta}
+                    <button className="v-enlace" style={{ fontSize: '12px' }} onClick={() => setVerFalta(v => !v)} aria-expanded={verFalta}
                         title="Lo que el total no incluye: elementos sin partida, partidas fuera del itemizado, unidades distintas y partidas sin elementos">
                         qué falta
                     </button>
@@ -796,7 +796,7 @@ export default function TablaDePartidas({ filas, filasObra, dic, roles, claveDeF
             )}
             {verComo && roles && <ComoSeLeyo roles={roles} itemizado={itemizado} cruce={cruce} onCerrar={() => setVerComo(false)} />}
             <div ref={cuerpoRef} role="table" aria-label="Partidas" onScroll={e => setScroll(e.currentTarget.scrollTop)} style={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
-                <div role="row" style={{ display: 'grid', gridTemplateColumns: rejilla, position: 'sticky', top: 0, zIndex: 1, background: '#f5f4ef', borderBottom: '1px solid #cccac0', height: `${ALTO}px`, alignItems: 'center', fontWeight: 600, fontSize: '11.5px', color: '#52524d' }}>
+                <div role="row" style={{ display: 'grid', gridTemplateColumns: rejilla, position: 'sticky', top: 0, zIndex: 1, background: '#f5f4ef', borderBottom: '1px solid #cccac0', height: `${ALTO}px`, alignItems: 'center', fontWeight: 600, fontSize: '12px', color: '#52524d' }}>
                     {COLUMNAS.map(c => <div key={c.titulo} role="columnheader" style={c.derecha ? num : celda}>{c.titulo}</div>)}
                 </div>
                 {/* Solo se dibujan las filas que se ven (una plantilla puede tener miles). */}

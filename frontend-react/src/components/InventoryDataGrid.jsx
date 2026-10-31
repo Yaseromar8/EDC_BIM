@@ -123,7 +123,7 @@ const ToolBtn = ({ icon, onClick, active, title, badge }) => (
         }}
     >
         {icon}
-        {badge ? <span style={{ marginLeft: '3px', fontSize: '11px', fontWeight: 600 }}>({badge})</span> : null}
+        {badge ? <span style={{ marginLeft: '3px', fontSize: '12px', fontWeight: 600 }}>({badge})</span> : null}
     </button>
 );
 
@@ -131,7 +131,7 @@ const ToolBtn = ({ icon, onClick, active, title, badge }) => (
 const { NOMBRE_OPERADOR, NOMBRE_CALCULO_LARGO } = Tabla;
 const GRUPO_NO_AGRUPABLE = ['Name'];
 // Campos compactos con los tokens de la ventana (tema-claude.css: --v-*).
-const campoInput = { font: 'inherit', fontSize: '12px', height: '28px', border: '1px solid var(--v-linea-campo)', borderRadius: 'var(--v-radio-control)', padding: '0 6px', background: 'var(--v-superficie)', color: 'var(--v-texto)', minWidth: 0 };
+const campoInput = { font: 'inherit', fontSize: '13px', height: '28px', border: '1px solid var(--v-linea-campo)', borderRadius: 'var(--v-radio-control)', padding: '0 6px', background: 'var(--v-superficie)', color: 'var(--v-texto)', minWidth: 0 };
 
 const FiltroAvanzado = ({ filtro, setFiltro, catalogo, muestra, onClose }) => {
     const tipoDe = useCallback((campo) => campo ? Tabla.tipoDeColumna(muestra, campo).tipo : 'texto', [muestra]);
@@ -141,10 +141,10 @@ const FiltroAvanzado = ({ filtro, setFiltro, catalogo, muestra, onClose }) => {
     const reglas = filtro.reglas.length ? filtro.reglas : [{ campo: '', op: 'contiene', valor: '' }];
     const textoFecha = '(AAAAMMDD)';
     return (
-        <div role="dialog" aria-label="Filtros de la tabla" className="v-menu" style={{ position: 'absolute', top: '34px', left: 0, zIndex: 61, width: '660px', maxWidth: '90vw', padding: '12px', display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '12px', color: 'var(--v-texto-2)' }}
+        <div role="dialog" aria-label="Filtros de la tabla" className="v-menu" style={{ position: 'absolute', top: '34px', left: 0, zIndex: 61, width: '660px', maxWidth: '90vw', padding: '12px', display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '13px', color: 'var(--v-texto-2)' }}
             onKeyDown={e => { if (e.key === 'Escape') { e.stopPropagation(); onClose(); } }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <strong style={{ fontSize: '13px', color: 'var(--v-texto)' }}>Filtros de la tabla</strong>
+                <strong style={{ fontSize: '14px', color: 'var(--v-texto)' }}>Filtros de la tabla</strong>
                 <span className="v-menu__nota">Cumplir</span>
                 <select aria-label="Cómo se combinan las condiciones" className="v-campo" value={filtro.modo} onChange={e => setFiltro(f => ({ ...f, modo: e.target.value }))} style={{ width: 'auto', height: '28px' }}>
                     <option value="y">todas (Y)</option>
@@ -176,8 +176,8 @@ const FiltroAvanzado = ({ filtro, setFiltro, catalogo, muestra, onClose }) => {
                 );
             })}
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <button onClick={añadir} className="v-enlace" style={{ fontSize: '12px' }}>+ Condición</button>
-                <button onClick={() => setFiltro({ modo: 'y', reglas: [] })} className="v-enlace" style={{ fontSize: '12px' }}>Quitar filtros</button>
+                <button onClick={añadir} className="v-enlace" style={{ fontSize: '13px' }}>+ Condición</button>
+                <button onClick={() => setFiltro({ modo: 'y', reglas: [] })} className="v-enlace" style={{ fontSize: '13px' }}>Quitar filtros</button>
                 <span style={{ flex: 1 }} />
                 <span className="v-menu__nota">Sin tildes ni mayúsculas · números con su unidad · fechas {textoFecha}</span>
             </div>
@@ -199,7 +199,7 @@ function dbIdEnVisor(extId, urn) {
 
 // Barra del modo búsqueda: dónde se busca (todo o lo seleccionado), qué se
 // encontró y dónde, los parecidos para confirmar y las medidas que se suman.
-const chipBusqueda = { border: '1px solid var(--v-linea-campo, #cccac0)', borderRadius: '3px', padding: '1px 7px', background: '#ffffff', font: 'inherit', fontSize: '11px', cursor: 'pointer', color: '#52524d', whiteSpace: 'nowrap' };
+const chipBusqueda = { border: '1px solid var(--v-linea-campo, #cccac0)', borderRadius: '3px', padding: '1px 7px', background: '#ffffff', font: 'inherit', fontSize: '12px', cursor: 'pointer', color: '#52524d', whiteSpace: 'nowrap' };
 const chipActivo = { ...chipBusqueda, borderColor: 'var(--v-accion, #507294)', background: 'var(--alephia-selected-bg, #ECF0F1)', color: 'var(--v-accion, #507294)' };
 
 // «Datos › 03_05_DSI_CodigoDePartida» → «03_05_DSI_CodigoDePartida»: el grupo va en el título.
@@ -213,7 +213,7 @@ const BarraDeBusqueda = ({ resultado, campo, onCampo, seleccion, seleccionCongel
     const alternarMedida = (clave) => onMedidas(activas.includes(clave) ? activas.filter(k => k !== clave) : [...activas, clave]);
     const alternarConfirmado = (clave) => onConfirmados(confirmados.includes(clave) ? confirmados.filter(k => k !== clave) : [...confirmados, clave]);
     return (
-        <div style={{ background: '#ffffff', borderBottom: '1px solid #e8e6dc', padding: '0 12px', display: 'flex', flexDirection: 'column', flexShrink: 0, fontSize: '11.5px', color: '#52524d' }}>
+        <div style={{ background: '#ffffff', borderBottom: '1px solid #e8e6dc', padding: '0 12px', display: 'flex', flexDirection: 'column', flexShrink: 0, fontSize: '12px', color: '#52524d' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px', height: '30px', whiteSpace: 'nowrap' }}>
             {/* Izquierda: dónde y qué se encontró; si no cabe, se desvanece en el borde (nada se sale). */}
             <div style={{ flex: '1 1 auto', minWidth: 0, display: 'flex', alignItems: 'center', gap: '8px', overflow: 'hidden',
@@ -297,7 +297,7 @@ const InventoryRow = memo(({ row, columns, index, onRowClick, isHighlighted, top
                 position: 'absolute', top, left: 0, display: 'inline-flex', 
                 minWidth: '100%',
                 borderBottom: '1px solid #e8e6dc', alignItems: 'center',
-                fontSize: '12px', height: `${ROW_HEIGHT}px`,
+                fontSize: '13px', height: `${ROW_HEIGHT}px`,
                 // El fondo NO va aquí: un estilo en línea gana siempre a una
                 // hoja, y sin hoja no hay `:hover`. Vive en App.css, por clases,
                 // para que pasar el ratón sombree la fila y se sepa dónde estás.
@@ -309,7 +309,7 @@ const InventoryRow = memo(({ row, columns, index, onRowClick, isHighlighted, top
         >
             <div style={{ width: '40px', flexShrink: 0, padding: '0 4px', color: '#72706b', borderRight: '1px solid #e8e6dc', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '2px' }}>
                 <input type="checkbox" checked={!!isChecked} onChange={() => {}} onClick={e => { e.stopPropagation(); onToggleCheck(inventoryRowKey(row), { shift: e.shiftKey }); }} style={{ accentColor: '#6a9bcc', cursor: 'pointer', width: '13px', height: '13px', margin: 0 }} />
-                <span style={{ fontSize: '10px', minWidth: '18px', textAlign: 'right' }}>{index + 1}</span>
+                <span style={{ fontSize: '12px', minWidth: '18px', textAlign: 'right' }}>{index + 1}</span>
             </div>
             {columns.map(col => {
                 let cellVal = row[col.key];
@@ -337,7 +337,7 @@ const InventoryRow = memo(({ row, columns, index, onRowClick, isHighlighted, top
                         }}
                     >
                         {isEditing ? (
-                            <input ref={inputRef} type="text" style={{ width: '100%', height: '100%', background: '#507294', color: '#ffffff', border: 'none', padding: '0 12px', outline: 'none', fontSize: '12.5px' }}
+                            <input ref={inputRef} type="text" style={{ width: '100%', height: '100%', background: '#507294', color: '#ffffff', border: 'none', padding: '0 12px', outline: 'none', fontSize: '13px' }}
                                 value={editValue} onChange={(e) => setEditValue(e.target.value)}
                                 onBlur={() => { if(editValue !== displayText) onCellEdit(row, col.key, editValue); setEditingCol(null); }}
                                 onKeyDown={(e) => {
@@ -1270,10 +1270,10 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
             
             {/* Header / Tabs - Top Level (Como Tandem) */}
             <div style={{ display: 'flex', background: '#ffffff', height: '30px', flexShrink: 0, alignItems: 'center', padding: '0 12px 0 16px', borderBottom: '1px solid #e8e6dc', gap: '16px' }}>
-                <div style={{ fontSize: '11px', textTransform: 'uppercase', color: '#52524d', fontWeight: 600, letterSpacing: '0.8px', flexShrink: 0 }}>
+                <div style={{ fontSize: '12px', textTransform: 'uppercase', color: '#52524d', fontWeight: 600, letterSpacing: '0.8px', flexShrink: 0 }}>
                     Planilla
                 </div>
-                <div role="status" style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '11px', color: '#72706b' }}>
+                <div role="status" style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '12px', color: '#72706b' }}>
                     {!filterResult || filterResult.scopeId !== activeModelUrn || filterResult.status === 'pending'
                         ? 'Filtros: esperando datos o cálculo'
                         : filterResult.status !== 'ready'
@@ -1285,7 +1285,7 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
                 {/* Window Controls (Undock / Close) */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
                     {enVentanaAparte ? (
-                        <button className="v-enlace" style={{ fontSize: '12px' }} onClick={() => onVolverAlVisor?.()}
+                        <button className="v-enlace" style={{ fontSize: '13px' }} onClick={() => onVolverAlVisor?.()}
                             title="Devolver la Planilla a la parte inferior del visor">Volver al visor</button>
                     ) : (
                         <button style={{ background:'none', border:'none', color:'#72706b', cursor:'pointer' }} title="Abrir en otra ventana" onClick={() => {
@@ -1300,14 +1300,14 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
                 </div>
             </div>
 
-            {inventoryError && <div role="alert" style={{ color: '#fecaca', background: '#4c1d24', padding: '8px 12px', fontSize: '12px' }}>{inventoryError}</div>}
+            {inventoryError && <div role="alert" style={{ color: '#fecaca', background: '#4c1d24', padding: '8px 12px', fontSize: '13px' }}>{inventoryError}</div>}
             {/* Toolbar (Filters, Columns, Group rows...) */}
             <div style={{ display: 'flex', background: '#ffffff', minHeight: '36px', flexShrink: 0, minWidth: 0, alignItems: 'center', padding: '0 12px', borderBottom: '1px solid #e8e6dc', gap: '12px' }}>
                 <div role="radiogroup" aria-label="Vista de la planilla" style={{ display: 'flex', border: '1px solid var(--v-linea-campo, #cccac0)', borderRadius: 'var(--v-radio-control, 4px)', overflow: 'hidden', marginRight: '10px' }}>
                     {[['elementos', 'Elementos'], ['partidas', 'Partidas']].map(([v, t]) => (
                         <button key={v} role="radio" aria-checked={vista === v} onClick={() => setVista(v)}
                             title={v === 'partidas' ? 'Una fila por partida, con la cantidad nativa de Revit en su unidad' : 'Una fila por elemento'}
-                            style={{ border: 'none', padding: '0 10px', height: '26px', font: 'inherit', fontSize: '12px', cursor: 'pointer',
+                            style={{ border: 'none', padding: '0 10px', height: '26px', font: 'inherit', fontSize: '13px', cursor: 'pointer',
                                 background: vista === v ? 'var(--alephia-selected-bg, #ECF0F1)' : '#ffffff', color: vista === v ? 'var(--v-accion, #507294)' : '#52524d', fontWeight: vista === v ? 600 : 400 }}>{t}</button>
                     ))}
                 </div>
@@ -1345,7 +1345,7 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
                                     position: 'absolute', ...(groupMenuOpen.arriba ? { bottom: '30px' } : { top: '30px' }), left: 0, zIndex: 61, minWidth: '260px', maxHeight: `${groupMenuOpen.alto}px`, overflowY: 'auto'
                                 }}>
                                     {groupByKey && (
-                                        <div style={{ padding: '4px 6px 8px', borderBottom: '1px solid var(--v-linea)', marginBottom: '4px', display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '12px', color: 'var(--v-texto-2)' }}>
+                                        <div style={{ padding: '4px 6px 8px', borderBottom: '1px solid var(--v-linea)', marginBottom: '4px', display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '13px', color: 'var(--v-texto-2)' }}>
                                             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', alignItems: 'center' }}>
                                                 {niveles.map((k, i) => (
                                                     <span key={k} style={{ display: 'flex', alignItems: 'center', gap: '2px', padding: '0 2px 0 8px', height: '24px', border: '1px solid var(--v-linea)', borderRadius: 'var(--v-radio-control)', background: 'var(--v-superficie-2)', color: 'var(--v-texto)' }}>
@@ -1408,7 +1408,7 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
                         }}
                         onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) e.preventDefault(); if (e.key === 'Escape' && textoBusqueda) { e.stopPropagation(); setTextoBusqueda(''); setCampoBusqueda(null); setSeleccionCongelada(null); } }}
                         title={textoBusqueda || 'Sin tildes, mayúsculas, comas ni espacios de más. Varias líneas = cualquiera de ellas. De una fila de Excel se busca la descripción.'}
-                        style={{ width: textoBusqueda ? 'min(560px, 34vw)' : '280px', transition: 'width .15s ease', height: '28px', resize: 'none', overflow: 'hidden', padding: '5px 26px 5px 8px', fontSize: '12px', lineHeight: '16px' }} />
+                        style={{ width: textoBusqueda ? 'min(560px, 34vw)' : '280px', transition: 'width .15s ease', height: '28px', resize: 'none', overflow: 'hidden', padding: '5px 26px 5px 8px', fontSize: '13px', lineHeight: '16px' }} />
                     {textoBusqueda && (
                         <button aria-label="Quitar la búsqueda" className="v-cerrar" onClick={() => { setTextoBusqueda(''); setCampoBusqueda(null); setSeleccionCongelada(null); }}
                             style={{ position: 'absolute', right: '2px', width: '24px', height: '24px' }}><Icons.Close /></button>
@@ -1418,7 +1418,7 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
                 <div style={{ width: '1px', height: '16px', background: '#cccac0' }} />
 
                 {/* View Options */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '16px', fontSize: '12.5px', color: '#52524d' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '16px', fontSize: '13px', color: '#52524d' }}>
                     {showAssetsOnly && (
                         <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
                             <input type="checkbox" checked={showAssetsOnly} onChange={(e) => setShowAssetsOnly(e.target.checked)} style={{ accentColor: '#6a9bcc' }} />
@@ -1440,7 +1440,7 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
                 </div>
 
                 {/* Cuántas filas y por qué: en la barra, no en una franja propia. */}
-                <span title={textoDeFilas} style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '11px', color: '#72706b' }}>
+                <span title={textoDeFilas} style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '12px', color: '#72706b' }}>
                     {vista === 'elementos' ? textoDeFilas : ''}
                 </span>
 
@@ -1475,7 +1475,7 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
                                             color: '#72706b',
                                             padding: '4px 8px',
                                             borderRadius: '4px',
-                                            fontSize: '11.5px',
+                                            fontSize: '12px',
                                             cursor: 'pointer',
                                             display: 'flex',
                                             alignItems: 'center',
@@ -1501,7 +1501,7 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
                                                 color: (!mergedSyncIds || isSyncDisabled) ? '#507294' : '#72706b',
                                                 padding: '4px 8px',
                                                 borderRadius: '4px',
-                                                fontSize: '11.5px',
+                                                fontSize: '12px',
                                                 cursor: (!mergedSyncIds || isSyncDisabled) ? 'default' : 'pointer',
                                                 display: 'flex',
                                                 alignItems: 'center',
@@ -1543,13 +1543,13 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
                     {objetivoEdicion && vista === 'elementos' && (
                         <button onClick={() => setEditarAbierto(o => !o)} aria-expanded={editarAbierto}
                             title="Asignar un valor a un parámetro en los elementos seleccionados"
-                            style={{ background: editarAbierto ? 'var(--alephia-selected-bg, #ECF0F1)' : 'none', border: '1px solid #cccac0', color: editarAbierto ? '#507294' : '#52524d', padding: '4px 10px', fontSize: '11.5px', borderRadius: '4px', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                            style={{ background: editarAbierto ? 'var(--alephia-selected-bg, #ECF0F1)' : 'none', border: '1px solid #cccac0', color: editarAbierto ? '#507294' : '#52524d', padding: '4px 10px', fontSize: '12px', borderRadius: '4px', cursor: 'pointer', whiteSpace: 'nowrap' }}>
                             Editar ({objetivoEdicion.size}{checkedIds.size ? '' : ' en 3D'})
                         </button>
                     )}
                     <button 
                         onClick={handleExportExcel}
-                        style={{ background: 'none', border: '1px solid #cccac0', color: '#52524d', padding: '4px 10px', fontSize: '11.5px', borderRadius: '4px', cursor: 'pointer', transition: 'all 0.2s', display: 'flex', alignItems: 'center', gap: '6px' }}
+                        style={{ background: 'none', border: '1px solid #cccac0', color: '#52524d', padding: '4px 10px', fontSize: '12px', borderRadius: '4px', cursor: 'pointer', transition: 'all 0.2s', display: 'flex', alignItems: 'center', gap: '6px' }}
                         onMouseEnter={e => { e.currentTarget.style.color = '#141413'; e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.08)'; }}
                         onMouseLeave={e => { e.currentTarget.style.color = '#52524d'; e.currentTarget.style.backgroundColor = 'transparent'; }}
                     >
@@ -1557,7 +1557,7 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
                     </button>
                     <button 
                         onClick={() => setTotalsPickerOpen(true)}
-                        style={{ background: 'none', border: '1px solid #cccac0', color: totalColumns.size > 0 ? '#507294' : '#52524d', padding: '4px 10px', fontSize: '11.5px', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', transition: 'all 0.2s' }}
+                        style={{ background: 'none', border: '1px solid #cccac0', color: totalColumns.size > 0 ? '#507294' : '#52524d', padding: '4px 10px', fontSize: '12px', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', transition: 'all 0.2s' }}
                         onMouseEnter={e => { e.currentTarget.style.color = '#141413'; e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.08)'; }}
                         onMouseLeave={e => { e.currentTarget.style.color = totalColumns.size > 0 ? '#6a9bcc' : '#cccac0'; e.currentTarget.style.backgroundColor = 'transparent'; }}
                         title="Elegir las columnas que se suman"
@@ -1591,14 +1591,14 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
                     padding: '0 12px', borderBottom: '1px solid #e8e6dc', gap: '8px',
                     animation: 'fadeIn 0.15s ease-out'
                 }}>
-                    <span style={{ fontSize: '11px', color: '#507294', fontWeight: 600, whiteSpace: 'nowrap' }}>{bulkTargetIds.size} sel.{checkedIds.size === 0 ? ' (3D)' : ''}</span>
+                    <span style={{ fontSize: '12px', color: '#507294', fontWeight: 600, whiteSpace: 'nowrap' }}>{bulkTargetIds.size} sel.{checkedIds.size === 0 ? ' (3D)' : ''}</span>
                     <div style={{ width: '1px', height: '16px', background: '#e8e6dc' }} />
                     <select
                         value={bulkField}
                         onChange={e => setBulkField(e.target.value)}
                         style={{
                             background: '#f1f0e8', border: '1px solid #cccac0', color: '#333330',
-                            padding: '3px 6px', fontSize: '11px', borderRadius: '3px', outline: 'none',
+                            padding: '3px 6px', fontSize: '12px', borderRadius: '3px', outline: 'none',
                             maxWidth: '120px', cursor: 'pointer'
                         }}
                     >
@@ -1617,7 +1617,7 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
                             title="Crea tu propio parámetro (ej. Responsable, Frente, Prioridad)"
                             style={{
                                 background: '#ffffff', border: '1px solid #6a9bcc', color: '#141413',
-                                padding: '3px 8px', fontSize: '11px', borderRadius: '3px', outline: 'none',
+                                padding: '3px 8px', fontSize: '12px', borderRadius: '3px', outline: 'none',
                                 width: '120px'
                             }}
                         />
@@ -1630,7 +1630,7 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
                         onKeyDown={e => { if (e.key === 'Enter' && bulkValue.trim()) e.currentTarget.ownerDocument.getElementById('bulk-apply-btn')?.click(); }}
                         style={{
                             background: '#ffffff', border: '1px solid #cccac0', color: '#141413',
-                            padding: '3px 8px', fontSize: '11px', borderRadius: '3px', outline: 'none',
+                            padding: '3px 8px', fontSize: '12px', borderRadius: '3px', outline: 'none',
                             width: '120px'
                         }}
                     />
@@ -1684,7 +1684,7 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
                         }}
                         style={{
                             background: (bulkAssigning || !bulkValue.trim()) ? '#444' : 'linear-gradient(135deg, #7e9bbd, #2d8fa5)',
-                            border: 'none', color: '#fff', padding: '3px 10px', fontSize: '11px', borderRadius: '3px',
+                            border: 'none', color: '#fff', padding: '3px 10px', fontSize: '12px', borderRadius: '3px',
                             cursor: (bulkAssigning || !bulkValue.trim()) ? 'not-allowed' : 'pointer',
                             display: 'flex', alignItems: 'center', gap: '4px',
                             fontWeight: 600, transition: 'all 0.2s', whiteSpace: 'nowrap',
@@ -1748,7 +1748,7 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
                             // Estaba en #918f88 con las celdas en #cccac0, o sea al revés que
                             // en Tandem (cabecera #e8e6dc sobre celdas #918f88).
                             display: 'flex', background: '#ffffff', height: '34px', alignItems: 'center',
-                            fontSize: '12px', fontWeight: 600, color: '#333330', flexShrink: 0,
+                            fontSize: '13px', fontWeight: 600, color: '#333330', flexShrink: 0,
                             borderBottom: '1px solid #e8e6dc',
                             position: 'sticky', top: 0, zIndex: 2
                         }}
@@ -1812,10 +1812,10 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
                                 </svg>
                                 <style>{`@keyframes inv-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
                             </div>
-                            <span style={{ color: '#72706b', fontSize: '12px', letterSpacing: '0.5px' }}>Loading inventory data...</span>
+                            <span style={{ color: '#72706b', fontSize: '13px', letterSpacing: '0.5px' }}>Loading inventory data...</span>
                         </div>
                     ) : flattenedData.length > 0 && displayList.length === 0 ? (
-                        <div style={{ padding: '40px 20px', color: '#52524d', textAlign: 'center', fontSize: '13px' }}>
+                        <div style={{ padding: '40px 20px', color: '#52524d', textAlign: 'center', fontSize: '14px' }}>
                             Ninguna fila cumple los filtros de la tabla. <button onClick={() => setFiltroTabla({ modo: 'y', reglas: [] })} style={{ background: 'none', border: 'none', color: '#507294', cursor: 'pointer', font: 'inherit' }}>Quitar filtros</button>
                         </div>
                     ) : flattenedData.length > 0 ? (
@@ -1833,7 +1833,7 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
                                         width: `${totalContentWidth}px`, display: 'flex', alignItems: 'center', gap: '8px',
                                         padding: `0 12px 0 ${12 + item.grupo.nivel * 18}px`, boxSizing: 'border-box', cursor: 'pointer',
                                         background: item.grupo.seleccion ? 'var(--alephia-selected-bg, #ECF0F1)' : item.grupo.nivel ? '#fdfdfb' : '#ffffff', borderBottom: '1px solid #e8e6dc', borderTop: '1px solid #e8e6dc',
-                                        color: '#52524d', fontSize: '12px', fontWeight: 700, zIndex: 1
+                                        color: '#52524d', fontSize: '13px', fontWeight: 700, zIndex: 1
                                     }}
                                     title={`${item.grupo.campo}: ${item.grupo.valor}`}
                                 >
@@ -1845,7 +1845,7 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
                                 <div key={`tot-${item.grupo.clave}`} style={{
                                     position: 'absolute', top: `${top}px`, left: 0, height: `${ROW_HEIGHT}px`, width: `${totalContentWidth}px`,
                                     display: 'flex', alignItems: 'center', boxSizing: 'border-box', background: item.grupo.seleccion ? 'var(--alephia-selected-bg, #ECF0F1)' : '#f5f4ef',
-                                    borderBottom: item.grupo.seleccion ? '2px solid #cccac0' : '1px solid #e8e6dc', fontSize: '11.5px', fontWeight: 600, color: '#333330'
+                                    borderBottom: item.grupo.seleccion ? '2px solid #cccac0' : '1px solid #e8e6dc', fontSize: '12px', fontWeight: 600, color: '#333330'
                                 }}>
                                     <div style={{ width: '40px', flexShrink: 0, boxSizing: 'border-box', borderRight: '1px solid #e8e6dc', textAlign: 'center', color: '#72706b' }}>{item.grupo.n}</div>
                                     {columnasVista.map(col => (
@@ -1880,10 +1880,10 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
                     {filasSeleccionadas.length > 0 && (
                         <div style={{
                             display: 'flex', background: 'var(--alephia-selected-bg, #ECF0F1)', borderTop: '1px solid #cccac0',
-                            alignItems: 'center', fontSize: '12px', fontWeight: 600, color: '#141413', flexShrink: 0, height: '28px',
+                            alignItems: 'center', fontSize: '13px', fontWeight: 600, color: '#141413', flexShrink: 0, height: '28px',
                             position: 'sticky', bottom: '30px', zIndex: 2
                         }}>
-                            <div title={`${filasSeleccionadas.length} elementos seleccionados en la tabla`} style={{ width: '40px', flexShrink: 0, borderRight: '1px solid #e8e6dc', textAlign: 'center', fontSize: '11px', color: 'var(--v-accion, #507294)' }}>
+                            <div title={`${filasSeleccionadas.length} elementos seleccionados en la tabla`} style={{ width: '40px', flexShrink: 0, borderRight: '1px solid #e8e6dc', textAlign: 'center', fontSize: '12px', color: 'var(--v-accion, #507294)' }}>
                                 {filasSeleccionadas.length}
                             </div>
                             {columnasVista.map((col, i) => {
@@ -1912,10 +1912,10 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
                     {flattenedData.length > 0 && (
                         <div style={{
                             display: 'flex', background: '#f5f4ef', borderTop: '1px solid #cccac0',
-                            alignItems: 'center', fontSize: '12px', fontWeight: 600, color: '#333330', flexShrink: 0, height: '30px',
+                            alignItems: 'center', fontSize: '13px', fontWeight: 600, color: '#333330', flexShrink: 0, height: '30px',
                             position: 'sticky', bottom: 0, zIndex: 2
                         }}>
-                            <div title="Filas en la tabla" style={{ width: '40px', flexShrink: 0, borderRight: '1px solid #e8e6dc', textAlign: 'center', fontSize: '11px' }}>
+                            <div title="Filas en la tabla" style={{ width: '40px', flexShrink: 0, borderRight: '1px solid #e8e6dc', textAlign: 'center', fontSize: '12px' }}>
                                 {filasTabla.length.toLocaleString('es-PE')}
                             </div>
                             {columnasVista.map(col => {
@@ -2018,7 +2018,7 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
                         <div className="v-cabecera">
                             <div>
                                 <h2 className="v-titulo">Totales por columna</h2>
-                                <div style={{ fontSize: '12px', color: '#72706b', marginTop: '2px' }}>Elige las columnas que se suman al pie</div>
+                                <div style={{ fontSize: '13px', color: '#72706b', marginTop: '2px' }}>Elige las columnas que se suman al pie</div>
                             </div>
                             <button className="v-cerrar" aria-label="Cerrar"
                                 onClick={() => setTotalsPickerOpen(false)}
@@ -2070,18 +2070,18 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
                                             )}
                                         </div>
                                         <div style={{ flex: 1, minWidth: 0 }}>
-                                            <div style={{ fontSize: '13px', color: '#141413', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{col.header}</div>
+                                            <div style={{ fontSize: '14px', color: '#141413', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{col.header}</div>
                                             {hasNumericData && (
-                                                <div style={{ fontSize: '10px', color: '#72706b', marginTop: '1px' }}>
+                                                <div style={{ fontSize: '12px', color: '#72706b', marginTop: '1px' }}>
                                                     {sampleValues.length} {sampleValues.length !== 1 ? 'valores numéricos' : 'valor numérico'}
                                                 </div>
                                             )}
                                             {!hasNumericData && (
-                                                <div style={{ fontSize: '10px', color: '#52524d', marginTop: '1px' }}>Columna no numérica</div>
+                                                <div style={{ fontSize: '12px', color: '#52524d', marginTop: '1px' }}>Columna no numérica</div>
                                             )}
                                         </div>
                                         {isSelected && (
-                                            <div style={{ fontSize: '11px', color: '#507294', fontWeight: 600 }}>Σ</div>
+                                            <div style={{ fontSize: '12px', color: '#507294', fontWeight: 600 }}>Σ</div>
                                         )}
                                     </div>
                                 );
@@ -2090,7 +2090,7 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', filterResult, filterProg
 
                         {/* Footer */}
                         <div className="v-pie" style={{ justifyContent: 'space-between' }}>
-                            <span style={{ fontSize: '12px', color: '#72706b' }}>
+                            <span style={{ fontSize: '13px', color: '#72706b' }}>
                                 {totalColumns.size} {totalColumns.size !== 1 ? 'columnas elegidas' : 'columna elegida'}
                             </span>
                             <button className="v-boton v-boton--principal"

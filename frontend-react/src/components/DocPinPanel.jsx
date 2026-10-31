@@ -816,7 +816,7 @@ const DocPinPanel = ({
                         }}>
                             <span style={{ fontSize: '20px' }}>📢</span>
                             <div>
-                                <div style={{ fontSize: '11px', fontWeight: 'bold', color: '#c2a878', textTransform: 'uppercase', marginBottom: '2px' }}>Descripción</div>
+                                <div style={{ fontSize: '12px', fontWeight: 'bold', color: '#c2a878', textTransform: 'uppercase', marginBottom: '2px' }}>Descripción</div>
                                 <div style={{ fontSize: '14px', color: '#141413', fontWeight: 500 }}>{pin.val}</div>
                             </div>
                         </div>
@@ -927,7 +927,7 @@ const DocPinPanel = ({
                                                             color: '#141413',
                                                             padding: '4px 8px',
                                                             width: '100%',
-                                                            fontSize: '12px'
+                                                            fontSize: '13px'
                                                         }}
                                                     />
                                                 ) : (

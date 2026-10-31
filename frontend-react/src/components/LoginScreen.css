@@ -371,7 +371,7 @@
   align-items: center;
   gap: 8px;
   margin: 4px 0 12px;
-  font-size: 13px;
+  font-size: 14px;
   color: var(--text-secondary, #b0aea5);
   cursor: pointer;
   user-select: none;

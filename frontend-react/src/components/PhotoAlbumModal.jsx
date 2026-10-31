@@ -525,7 +525,7 @@ const PhotoAlbumModal = ({ isOpen, onClose, pinId, title = "Album de Fotos", pho
             {/* Folder Configuration Label */}
             <div style={{ 
                 padding: '4px 14px', 
-                fontSize: '10px', 
+                fontSize: '12px', 
                 color: 'rgba(20, 20, 19,0.3)', 
                 background: 'rgba(20, 20, 19,0.02)',
                 borderBottom: '1px solid rgba(20, 20, 19,0.04)',
@@ -541,7 +541,7 @@ const PhotoAlbumModal = ({ isOpen, onClose, pinId, title = "Album de Fotos", pho
                 </div>
                 <button 
                     onClick={() => handleOpenBrowser('folder')}
-                    style={{ background: 'none', border: 'none', color: 'rgba(20, 20, 19,0.35)', cursor: 'pointer', fontSize: '10px', fontWeight: 500 }}
+                    style={{ background: 'none', border: 'none', color: 'rgba(20, 20, 19,0.35)', cursor: 'pointer', fontSize: '12px', fontWeight: 500 }}
                 >
                     Cambiar
                 </button>
@@ -609,9 +609,9 @@ const PhotoAlbumModal = ({ isOpen, onClose, pinId, title = "Album de Fotos", pho
                 <div className="album-browser-overlay" style={{ flex: 1, display: 'flex', flexDirection: 'column', background: '#ffffff' }}>
                     <div className="browser-header" style={{ padding: '10px 15px', borderBottom: '1px solid #e8e6dc', display: 'flex', alignItems: 'center', gap: '10px' }}>
                         <button onClick={() => setBrowsing(false)} className="text-btn" style={{ color: '#52524d' }}>✕ Cancelar</button>
-                        <div style={{ flex: 1, fontSize: '13px', color: '#333330', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        <div style={{ flex: 1, fontSize: '14px', color: '#333330', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                             {browseMode === 'link' ? 'Selecciona fotos para vincular' : 'Selecciona carpeta de destino'}
-                            <div style={{ fontSize: '10px', opacity: 0.7 }}>{browsePath}</div>
+                            <div style={{ fontSize: '12px', opacity: 0.7 }}>{browsePath}</div>
                         </div>
                     </div>
                     
@@ -646,7 +646,7 @@ const PhotoAlbumModal = ({ isOpen, onClose, pinId, title = "Album de Fotos", pho
                                         {browseMode === 'folder' && (
                                             <button 
                                                 onClick={(e) => { e.stopPropagation(); handleSelectFromECD(f); }}
-                                                style={{ background: '#507294', border: 'none', color: '#ffffff', borderRadius: '4px', padding: '4px 8px', fontSize: '10px' }}
+                                                style={{ background: '#507294', border: 'none', color: '#ffffff', borderRadius: '4px', padding: '4px 8px', fontSize: '12px' }}
                                             >
                                                 SELECCIONAR
                                             </button>
@@ -669,7 +669,7 @@ const PhotoAlbumModal = ({ isOpen, onClose, pinId, title = "Album de Fotos", pho
                                         >
                                             <span style={{ color: '#333330' }}>{isImg ? '🖼️' : isVid ? '🎬' : '📄'} {f.name}</span>
                                             {browseMode === 'link' && (
-                                                <span style={{ fontSize: '10px', color: '#507294' }}>VINCULAR</span>
+                                                <span style={{ fontSize: '12px', color: '#507294' }}>VINCULAR</span>
                                             )}
                                         </div>
                                     );
@@ -740,7 +740,7 @@ const PhotoAlbumModal = ({ isOpen, onClose, pinId, title = "Album de Fotos", pho
                                                         justifyContent: 'center',
                                                         cursor: 'pointer',
                                                         zIndex: 5,
-                                                        fontSize: '12px',
+                                                        fontSize: '13px',
                                                         lineHeight: 1
                                                     }}
                                                 >
@@ -813,7 +813,7 @@ const PhotoAlbumModal = ({ isOpen, onClose, pinId, title = "Album de Fotos", pho
                     }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 2, background: 'rgba(20, 20, 19,0.08)', border: '1px solid rgba(20, 20, 19,0.15)', borderRadius: 18, padding: '2px' }}>
                             <button title="Alejar (-)" onClick={() => setLbZoom(z => Math.max(z / 1.3, 1))} style={lbBtn}>−</button>
-                            <span style={{ color: 'rgba(20, 20, 19,0.7)', fontSize: 11, minWidth: 38, textAlign: 'center', fontVariantNumeric: 'tabular-nums' }}>{Math.round(lbZoom * 100)}%</span>
+                            <span style={{ color: 'rgba(20, 20, 19,0.7)', fontSize: 12, minWidth: 38, textAlign: 'center', fontVariantNumeric: 'tabular-nums' }}>{Math.round(lbZoom * 100)}%</span>
                             <button title="Acercar (+)" onClick={() => setLbZoom(z => Math.min(z * 1.3, 6))} style={lbBtn}>+</button>
                         </div>
                         {lbZoom > 1 && (
@@ -834,7 +834,7 @@ const PhotoAlbumModal = ({ isOpen, onClose, pinId, title = "Album de Fotos", pho
                     {/* Counter — top center */}
                     <div style={{
                         position: 'absolute', top: '16px', left: '50%', transform: 'translateX(-50%)',
-                        color: 'rgba(20, 20, 19,0.6)', fontSize: '13px', fontWeight: 500, zIndex: 99991
+                        color: 'rgba(20, 20, 19,0.6)', fontSize: '14px', fontWeight: 500, zIndex: 99991
                     }}>
                         {(() => {
                             const idx = filteredPhotos.findIndex(p => String(p.id) === String(selectedPhoto.id));
@@ -918,7 +918,7 @@ const PhotoAlbumModal = ({ isOpen, onClose, pinId, title = "Album de Fotos", pho
                         {/* Caption — minimal */}
                         <div style={{
                             marginTop: '10px', color: 'rgba(20, 20, 19,0.8)',
-                            fontSize: '13px', textAlign: 'center', maxWidth: '90vw',
+                            fontSize: '14px', textAlign: 'center', maxWidth: '90vw',
                             display: 'flex', flexDirection: 'column', alignItems: 'center'
                         }}>
                             {editingDesc ? (
@@ -938,7 +938,7 @@ const PhotoAlbumModal = ({ isOpen, onClose, pinId, title = "Album de Fotos", pho
                                         }}
                                         style={{
                                             background: '#ffffff', border: '1px solid #cccac0', 
-                                            color: '#141413', borderRadius: '4px', padding: '4px 8px', fontSize: '13px', width: '250px'
+                                            color: '#141413', borderRadius: '4px', padding: '4px 8px', fontSize: '14px', width: '250px'
                                         }}
                                     />
                                     <button onClick={(e) => {

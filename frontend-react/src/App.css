@@ -105,6 +105,8 @@ body,
   }
 
   .app-left-rail .rail-label {
+    /* En el teléfono el rail es la barra inferior y ya no cabe ni a este tamaño (pendiente de su propio diseño):
+       se queda fuera de la escala de letra para no empeorarla. */
     font-size: 9px;
     white-space: nowrap;
     text-align: center;
@@ -264,10 +266,14 @@ body,
   height: 20px;
 }
 
+/* Pie del icono del rail: 11 px, la única excepción a la escala de letra (14 · 13 · 12). El rail mide 64 px y
+   «Seguimiento» a 12 px mide 69–72: no cabe. A 11 px seminegrita y sin espaciado mide 62–64 (como los pies de
+   icono de la paleta de Forma). */
 .rail-label {
-  font-size: 9.5px;
+  font-size: 11px;
   font-weight: 600;
-  letter-spacing: 0.02em;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
 }
 
 .app-sidebar {
@@ -687,7 +693,7 @@ body,
 }
 
 .source-count {
-  font-size: 12px;
+  font-size: 13px;
   color: #72706b;
 }
 
@@ -698,7 +704,7 @@ body,
   padding: 4px 10px;
   border-radius: 999px;
   cursor: pointer;
-  font-size: 12px;
+  font-size: 13px;
   transition: background 0.2s ease, color 0.2s ease;
 }
 
@@ -739,12 +745,12 @@ body,
 .source-name {
   display: block;
   font-weight: 600;
-  font-size: 13px;
+  font-size: 14px;
 }
 
 .source-sub {
   display: block;
-  font-size: 11px;
+  font-size: 12px;
   color: #72706b;
 }
 
@@ -757,7 +763,7 @@ body,
 }
 
 .source-empty {
-  font-size: 12px;
+  font-size: 13px;
   color: #72706b;
   padding: 8px;
 }
@@ -771,13 +777,13 @@ body,
 
 .tree-title {
   margin: 0;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
 }
 
 .tree-hint {
   margin: 2px 0 10px;
-  font-size: 11px;
+  font-size: 12px;
   color: #72706b;
 }
 
@@ -786,7 +792,7 @@ body,
   border: 1px dashed rgba(20, 20, 19, 0.2);
   border-radius: 10px;
   padding: 16px;
-  font-size: 13px;
+  font-size: 14px;
   color: #52524d;
   display: flex;
   flex-direction: column;
@@ -823,7 +829,7 @@ body,
 }
 
 .filters-shell-subtitle {
-  font-size: 12px;
+  font-size: 13px;
   color: #72706b;
 }
 
@@ -900,20 +906,20 @@ body,
 
 .filters-block-title {
   margin: 0;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
   color: #333330;
 }
 
 .filters-block-path {
-  font-size: 11px;
+  font-size: 12px;
   color: #72706b;
   display: none;
   /* Hide path to match Tandem's cleaner look */
 }
 
 .filters-block-subcount {
-  font-size: 11px;
+  font-size: 12px;
   color: #72706b;
 }
 
@@ -928,16 +934,16 @@ body,
   color: #141413;
   min-width: 24px;
   text-align: right;
-  font-size: 13px;
+  font-size: 14px;
 }
 
 .filters-block-count {
-  font-size: 12px;
+  font-size: 13px;
   color: #52524d;
 }
 
 .filters-block-empty {
-  font-size: 12px;
+  font-size: 13px;
   color: #72706b;
   background: var(--v-superficie-2);
   border-radius: 8px;
@@ -975,7 +981,7 @@ body,
   display: flex;
   align-items: center;
   gap: 10px;
-  font-size: 13px;
+  font-size: 14px;
   color: #52524d;
   flex: 1;
   min-width: 0;
@@ -1003,7 +1009,7 @@ body,
 }
 
 .filters-value-count {
-  font-size: 12px;
+  font-size: 13px;
   color: #72706b;
   min-width: 30px;
   text-align: right;
@@ -1013,7 +1019,7 @@ body,
   border: none;
   background: transparent;
   color: var(--alephia-interactive);
-  font-size: 11px;
+  font-size: 12px;
   cursor: pointer;
   align-self: flex-start;
   padding: 4px 8px;
@@ -1133,7 +1139,7 @@ body,
 .filters-config-header p {
   margin: 4px 0 0;
   color: #72706b;
-  font-size: 13px;
+  font-size: 14px;
 }
 
 .filters-config-actions {
@@ -1153,7 +1159,7 @@ body,
 
 .filters-config-label {
   margin: 0 0 10px;
-  font-size: 12px;
+  font-size: 13px;
   letter-spacing: 0.04em;
   color: #72706b;
   text-transform: uppercase;
@@ -1188,7 +1194,7 @@ body,
 }
 
 .filters-config-count {
-  font-size: 12px;
+  font-size: 13px;
   color: #72706b;
 }
 
@@ -1205,7 +1211,7 @@ body,
   display: flex;
   gap: 10px;
   align-items: flex-start;
-  font-size: 12px;
+  font-size: 13px;
   background: var(--v-superficie-2);
   padding: 6px 8px;
   border-radius: 8px;
@@ -1214,7 +1220,7 @@ body,
 
 .filters-config-body label strong {
   display: block;
-  font-size: 13px;
+  font-size: 14px;
 }
 
 .filters-config-body label small {
@@ -1225,7 +1231,7 @@ body,
   background: rgba(20, 20, 19, 0.05);
   border-radius: 8px;
   padding: 10px;
-  font-size: 12px;
+  font-size: 13px;
   color: #72706b;
 }
 
@@ -1262,7 +1268,7 @@ body,
   display: flex;
   flex-direction: column;
   gap: 8px;
-  font-size: 12px;
+  font-size: 13px;
   color: #52524d;
 }
 
@@ -1307,7 +1313,7 @@ body,
 }
 
 .modal-form label {
-  font-size: 12px;
+  font-size: 13px;
   text-transform: uppercase;
   display: block;
   color: #72706b;
@@ -1324,7 +1330,7 @@ body,
 }
 
 .modal-hint {
-  font-size: 12px;
+  font-size: 13px;
   color: #72706b;
 }
 
@@ -1424,7 +1430,7 @@ body,
 }
 
 .docs-header .badge {
-  font-size: 12px;
+  font-size: 13px;
   color: #72706b;
 }
 
@@ -1472,7 +1478,7 @@ body,
   background: transparent;
   color: #52524d;
   cursor: pointer;
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .sprite-list button.active {
@@ -1552,7 +1558,7 @@ body,
 
 .accordion-trigger small {
   color: #72706b;
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .accordion-body {
@@ -1659,7 +1665,7 @@ body,
 
 .error-text {
   color: #b93535;
-  font-size: 12px;
+  font-size: 13px;
 }
 
 /* Filter Colors */
@@ -1902,7 +1908,7 @@ input[type='checkbox']:hover {
   border-radius: 2px;
   color: #333330;
   /* Lighter text for clarity */
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .tandem-item:hover {
@@ -1935,7 +1941,7 @@ input[type='checkbox']:hover {
 
 .tandem-count-badge {
   color: #507294;
-  font-size: 12px;
+  font-size: 13px;
   min-width: 16px;
   text-align: right;
   font-feature-settings: "tnum";
@@ -1985,7 +1991,7 @@ input[type='checkbox']:hover {
 
 .tracking-toolbar .secondary-btn {
   padding: 8px 16px;
-  font-size: 11px;
+  font-size: 12px;
 }
 
 @media (max-width: 1024px) {
@@ -2003,7 +2009,7 @@ input[type='checkbox']:hover {
 
   .tracking-toolbar .secondary-btn {
     padding: 6px 8px !important;
-    font-size: 10px !important;
+    font-size: 12px !important;
     gap: 4px !important;
     flex: 1;
     justify-content: center;
@@ -2079,7 +2085,7 @@ input[type='checkbox']:hover {
 .panel-subtitle,
 .progress-dashboard-header p,
 .source-count {
-  font-size: 12px !important;
+  font-size: 13px !important;
   font-weight: 400 !important;
   color: #72706b !important;
   text-transform: none !important;
@@ -2100,7 +2106,7 @@ input[type='checkbox']:hover {
 .gemelo-property-name,
 .progress-section-title,
 .dm-tree-header {
-  font-size: 13px !important;
+  font-size: 14px !important;
   font-weight: 600 !important;
   color: #333330 !important;
   text-transform: none !important;

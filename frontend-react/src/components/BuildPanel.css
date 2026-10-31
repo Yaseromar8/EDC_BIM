@@ -37,7 +37,7 @@
 .pin-index-badge {
     background: var(--alephia-interactive);
     color: var(--alephia-on-interactive, #141413);
-    font-size: 10px;
+    font-size: 12px;
     font-weight: 700;
     width: 18px;
     height: 18px;
@@ -49,7 +49,7 @@
 }
 
 .pin-doc-badge {
-    font-size: 10px;
+    font-size: 12px;
     background: rgba(20, 20, 19, 0.05);
     padding: 2px 6px;
     border-radius: 4px;
@@ -74,7 +74,7 @@
     color: #333330;
     padding: 4px 8px;
     border-radius: 4px;
-    font-size: 11px;
+    font-size: 12px;
     cursor: pointer;
     display: flex;
     align-items: center;
@@ -101,7 +101,7 @@
     /* Blue to match accent */
     color: var(--alephia-on-interactive, #141413);
     border-radius: 6px;
-    font-size: 13px;
+    font-size: 14px;
     font-weight: 600;
     cursor: pointer;
     transition: all 0.2s;
@@ -134,7 +134,7 @@
     display: flex;
     align-items: center;
     gap: 6px;
-    font-size: 12px;
+    font-size: 13px;
     color: #52524d;
     padding: 4px;
     background: rgba(20, 20, 19, 0.03);
@@ -172,7 +172,7 @@
     background: transparent;
     border: 1px solid transparent;
     color: #72706b;
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 600;
     padding: 6px 4px;
     border-radius: 4px;

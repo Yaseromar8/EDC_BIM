@@ -249,7 +249,7 @@ const FilterCategory = React.memo(({
                     <li style={{ padding: '8px 16px 8px 36px', background: '#ffffff', borderTop: '1px solid #e8e6dc', borderBottom: '1px solid #e8e6dc' }}>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <span style={{ fontSize: '11px', color: '#72706b', fontWeight: 600 }}>
+                                <span style={{ fontSize: '12px', color: '#72706b', fontWeight: 600 }}>
                                     Color: {colorPickerTarget.value}
                                 </span>
                                 <button 
@@ -270,7 +270,7 @@ const FilterCategory = React.memo(({
                                         border: customValueColors[`${prop.id}::${colorPickerTarget.value}`] === 'none' ? '2px solid #fff' : '1px solid rgba(255,255,255,0.3)',
                                         background: 'repeating-linear-gradient(45deg,#e8e6dc 0 3px,#ffffff 3px 6px)',
                                         display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                        color: '#b93535', fontWeight: 900, fontSize: '11px', lineHeight: 1,
+                                        color: '#b93535', fontWeight: 900, fontSize: '12px', lineHeight: 1,
                                     }}
                                 >✕</div>
                                 {PRESET_COLORS.map(c => {
@@ -703,7 +703,7 @@ const TandemFilterPanel = ({
     return (
         <div className="filters-shell" style={{
             display: 'flex', flexDirection: 'column', position: 'absolute', inset: 0,
-            height: '100%', background: 'transparent', color: '#72706b', fontSize: '12px',
+            height: '100%', background: 'transparent', color: '#72706b', fontSize: '13px',
             zIndex: 20, overflow: 'hidden'
         }}>
             <style>
@@ -716,7 +716,7 @@ const TandemFilterPanel = ({
           @keyframes sk-bouncedelay { 0%, 80%, 100% { transform: scale(0); } 40% { transform: scale(1); } }
           
           .tandem-header { padding: 12px 16px; border-bottom: 1px solid rgba(20, 20, 19, 0.05); display: flex; justify-content: space-between; align-items: center; background: transparent; }
-          .tandem-title { font-weight: 600; font-size: 13px; letter-spacing: 0.5px; text-transform: uppercase; color: #141413; }
+          .tandem-title { font-weight: 600; font-size: 14px; letter-spacing: 0.5px; text-transform: uppercase; color: #141413; }
           .tandem-scroll { flex: 1; overflow-y: auto; padding-bottom: 20px; }
           .tandem-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
           .tandem-scroll::-webkit-scrollbar-track { background: transparent; }
@@ -736,10 +736,10 @@ const TandemFilterPanel = ({
           .tandem-cb-container:hover .tandem-cb-box.checked.active { background: #507294; border-color: #141413; }
           .tandem-cb-container:hover input:disabled ~ .tandem-cb-wrap .tandem-cb-box { border-color: #cccac0; background: #f1f0e8; }
           .tandem-cb-icon { width: 18px; height: 18px; }
-          .facet-search-input { width: 100%; background: #ffffff; border: 1px solid #cccac0; color: #333330; padding: 5px 8px; font-size: 12px; border-radius: 2px; outline: none; }
+          .facet-search-input { width: 100%; background: #ffffff; border: 1px solid #cccac0; color: #333330; padding: 5px 8px; font-size: 13px; border-radius: 2px; outline: none; }
           .tandem-group-info { flex: 1; display: flex; align-items: baseline; gap: 8px; overflow: hidden; }
-          .tandem-group-title { font-weight: 600; color: #141413; white-space: nowrap; font-size: 13px; }
-          .tandem-group-count { color: #52524d; font-size: 12px; }
+          .tandem-group-title { font-weight: 600; color: #141413; white-space: nowrap; font-size: 14px; }
+          .tandem-group-count { color: #52524d; font-size: 13px; }
           .tandem-actions { display: flex; gap: 2px; opacity: 0.8; transition: opacity 0.2s; }
           .tandem-group-header:hover .tandem-actions { opacity: 1; }
           .tandem-action-btn { background: none; border: none; color: #72706b; cursor: pointer; padding: 4px; display: flex; align-items: center; justify-content: center; border-radius: 4px; }
@@ -752,8 +752,8 @@ const TandemFilterPanel = ({
           .tandem-item-label { flex: 1; cursor: pointer; display: flex; align-items: center; overflow: hidden; }
           .tandem-item-text { margin-left: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #141413; font-weight: 400; }
           .tandem-item-right { display: flex; align-items: center; gap: 8px; margin-left: auto; }
-          .tandem-count-badge { color: #52524d; font-size: 11px; min-width: 20px; text-align: right; margin-right: 8px; }
-          .tandem-count-total { color: #72706b; font-size: 10px; }
+          .tandem-count-badge { color: #52524d; font-size: 12px; min-width: 20px; text-align: right; margin-right: 8px; }
+          .tandem-count-total { color: #72706b; font-size: 12px; }
           .tandem-color-box { width: 10px; height: 10px; border-radius: 50%; box-shadow: 0 0 0 1px rgba(20, 20, 19,0.15); cursor: pointer; }
           .tandem-color-box.default { background: #e8e6dc; }
         `}
@@ -868,7 +868,7 @@ const TandemFilterPanel = ({
                                                 <span className="tandem-item-text" title={model.label}>{model.label.replace(' (Gemelo)', '')}</span>
                                                 {model.source === 'GEMELO' && (
                                                     <span style={{
-                                                        fontSize: '9px', fontWeight: 'bold', background: '#e67e22', color: '#fff',
+                                                        fontSize: '12px', fontWeight: 'bold', background: '#e67e22', color: '#fff',
                                                         padding: '2px 4px', borderRadius: '4px', marginLeft: '6px', whiteSpace: 'nowrap'
                                                     }}>
                                                         GEMELO
@@ -893,7 +893,7 @@ const TandemFilterPanel = ({
                                             <li style={{ padding: '8px 16px 8px 36px', background: '#ffffff', borderTop: '1px solid #e8e6dc', borderBottom: '1px solid #e8e6dc' }}>
                                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                                        <span style={{ fontSize: '11px', color: '#72706b', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                        <span style={{ fontSize: '12px', color: '#72706b', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                                             Color: {model.label.replace(' (Gemelo)', '')}
                                                         </span>
                                                         <button
@@ -910,7 +910,7 @@ const TandemFilterPanel = ({
                                                                 border: isNone ? '2px solid #fff' : '1px solid rgba(20, 20, 19,0.3)',
                                                                 background: 'repeating-linear-gradient(45deg,#e8e6dc 0 3px,#ffffff 3px 6px)',
                                                                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                                                color: '#b93535', fontWeight: 900, fontSize: '11px', lineHeight: 1,
+                                                                color: '#b93535', fontWeight: 900, fontSize: '12px', lineHeight: 1,
                                                             }}
                                                         >✕</div>
                                                         {SOURCE_PRESET_COLORS.map(c => (

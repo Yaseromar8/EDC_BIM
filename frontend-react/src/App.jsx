@@ -507,14 +507,14 @@ function FilterConfigurator({
                 placeholder="Search properties..."
                 value={availableQuery}
                 onChange={e => setAvailableQuery(e.target.value)}
-                style={{ width: '100%', background: '#ffffff', border: '1px solid #cccac0', color: '#141413', padding: '8px', borderRadius: '4px', fontSize: '13px' }}
+                style={{ width: '100%', background: '#ffffff', border: '1px solid #cccac0', color: '#141413', padding: '8px', borderRadius: '4px', fontSize: '14px' }}
               />
             </div>
 
             <div style={{ flex: 1, overflowY: 'auto', padding: '0' }}>
               {availableGroups.map(group => (
                 <details key={group.id} open style={{ borderBottom: '1px solid rgba(20, 20, 19,0.05)' }}>
-                  <summary style={{ padding: '10px 12px', cursor: 'pointer', background: 'rgba(20, 20, 19,0.02)', fontWeight: 600, fontSize: '12px', color: '#52524d' }}>
+                  <summary style={{ padding: '10px 12px', cursor: 'pointer', background: 'rgba(20, 20, 19,0.02)', fontWeight: 600, fontSize: '13px', color: '#52524d' }}>
                     {group.label}
                   </summary>
                   <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
@@ -523,8 +523,8 @@ function FilterConfigurator({
                       return (
                         <li key={prop.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', borderBottom: '1px solid rgba(20, 20, 19,0.02)', opacity: isSelected ? 0.5 : 1 }}>
                           <div style={{ overflow: 'hidden', marginRight: '8px' }}>
-                            <div style={{ fontSize: '13px', color: '#141413', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={prop.name}>{prop.name}</div>
-                            <div style={{ fontSize: '11px', color: '#72706b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={prop.path}>{prop.path}</div>
+                            <div style={{ fontSize: '14px', color: '#141413', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={prop.name}>{prop.name}</div>
+                            <div style={{ fontSize: '12px', color: '#72706b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={prop.path}>{prop.path}</div>
                           </div>
                           {!isSelected && (
                             <button
@@ -535,7 +535,7 @@ function FilterConfigurator({
                               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
                             </button>
                           )}
-                          {isSelected && <span style={{ fontSize: '11px', color: '#72706b' }}>Added</span>}
+                          {isSelected && <span style={{ fontSize: '12px', color: '#72706b' }}>Added</span>}
                         </li>
                       );
                     })}
@@ -558,7 +558,7 @@ function FilterConfigurator({
                 placeholder="Filter selected..."
                 value={selectedQuery}
                 onChange={e => setSelectedQuery(e.target.value)}
-                style={{ width: '100%', background: '#ffffff', border: '1px solid #cccac0', color: '#141413', padding: '8px', borderRadius: '4px', fontSize: '13px' }}
+                style={{ width: '100%', background: '#ffffff', border: '1px solid #cccac0', color: '#141413', padding: '8px', borderRadius: '4px', fontSize: '14px' }}
               />
             </div>
 
@@ -567,8 +567,8 @@ function FilterConfigurator({
                 {selectedDetails.map(prop => (
                   <li key={prop.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px', borderBottom: '1px solid rgba(20, 20, 19,0.05)', background: 'rgba(106, 155, 204, 0.05)' }}>
                     <div style={{ flex: 1, overflow: 'hidden', marginRight: '10px' }}>
-                      <div style={{ fontSize: '13px', color: '#141413' }}>{prop.name}</div>
-                      <div style={{ fontSize: '11px', color: '#72706b' }}>{prop.category} &rsaquo; {prop.group}</div>
+                      <div style={{ fontSize: '14px', color: '#141413' }}>{prop.name}</div>
+                      <div style={{ fontSize: '12px', color: '#72706b' }}>{prop.category} &rsaquo; {prop.group}</div>
                     </div>
                     <button
                       onClick={() => removeProp(prop.id)}
@@ -579,7 +579,7 @@ function FilterConfigurator({
                     </button>
                   </li>
                 ))}
-                {!selectedDetails.length && <div style={{ padding: '30px', textAlign: 'center', color: '#72706b', fontSize: '13px' }}>No properties selected.<br />Add properties from the left panel.</div>}
+                {!selectedDetails.length && <div style={{ padding: '30px', textAlign: 'center', color: '#72706b', fontSize: '14px' }}>No properties selected.<br />Add properties from the left panel.</div>}
               </ul>
             </div>
           </section>
@@ -4571,7 +4571,7 @@ function App() {
                       background: active ? 'rgba(20, 20, 19,0.06)' : 'transparent',
                       color: active ? '#141413' : '#72706b',
                       border: 'none', borderBottom: active ? `2px solid ${t.color}` : '2px solid transparent',
-                      borderRadius: '6px 6px 0 0', fontWeight: 600, fontSize: 12, cursor: 'pointer',
+                      borderRadius: '6px 6px 0 0', fontWeight: 600, fontSize: 13, cursor: 'pointer',
                       transition: 'all 0.15s ease', whiteSpace: 'nowrap'
                     }}
                     onMouseEnter={e => { if (!active) e.currentTarget.style.color = '#52524d'; }}
@@ -4583,7 +4583,7 @@ function App() {
                     {t.label}
                     {count > 0 && (
                       <span style={{
-                        fontSize: 10, fontWeight: 700, lineHeight: '14px', minWidth: 16, textAlign: 'center',
+                        fontSize: 12, fontWeight: 700, lineHeight: '14px', minWidth: 16, textAlign: 'center',
                         padding: '0 5px', borderRadius: 9,
                         background: active ? t.color : 'rgba(20, 20, 19,0.1)',
                         color: active ? '#141413' : '#72706b'
@@ -4601,7 +4601,7 @@ function App() {
                     style={{
                       display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px',
                       background: trackingPlacementMode ? '#bd8585' : 'var(--alephia-interactive)', color: '#fff',
-                      border: 'none', borderRadius: 6, fontWeight: 600, fontSize: 12, cursor: 'pointer',
+                      border: 'none', borderRadius: 6, fontWeight: 600, fontSize: 13, cursor: 'pointer',
                       transition: 'all 0.15s ease'
                     }}
                   >
@@ -4675,7 +4675,7 @@ function App() {
                 )}
 
                 {!compareMode && models.length > 0 && (
-                  <div role="status" style={{position:'absolute',top:8,left:8,zIndex:5,background:'#20242ddd',color:'#fff',padding:'5px 9px',fontSize:12,pointerEvents:'none'}}>
+                  <div role="status" style={{position:'absolute',top:8,left:8,zIndex:5,background:'#20242ddd',color:'#fff',padding:'5px 9px',fontSize:13,pointerEvents:'none'}}>
                     {!filterResult || filterResult.scopeId !== filterState.scopeId || filterResult.status === 'pending'
                       ? 'Filtros: esperando datos/cálculo. La vista anterior aún no representa la nueva consulta.'
                       : filterResult.status !== 'ready'
@@ -4824,7 +4824,7 @@ function App() {
                       style={{
                         display: 'flex', alignItems: 'center', gap: 6, padding: '4px 12px', height: 26,
                         background: 'var(--alephia-interactive)', color: '#141413', border: 'none', borderRadius: 6,
-                        fontWeight: 700, fontSize: 11.5, cursor: 'pointer', whiteSpace: 'nowrap',
+                        fontWeight: 700, fontSize: 12, cursor: 'pointer', whiteSpace: 'nowrap',
                       }}
                     >
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

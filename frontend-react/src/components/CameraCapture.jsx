@@ -153,7 +153,7 @@ const CameraCapture = ({ isOpen, onClose, onCapture }) => {
                             background: 'rgba(255,255,255,0.1)',
                             border: '1px solid rgba(255,255,255,0.2)',
                             color: '#fff', padding: '6px 10px',
-                            borderRadius: '4px', fontSize: '12px',
+                            borderRadius: '4px', fontSize: '13px',
                             maxWidth: '200px', outline: 'none'
                         }}
                     >

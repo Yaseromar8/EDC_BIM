@@ -129,12 +129,12 @@ const FilterConfiguratorModal = ({ open, onClose, availableProperties = [], sele
                                                 onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleCategory(cat); } }}
                                                 onClick={() => toggleCategory(cat)}
                                                 style={{
-                                                    padding: '10px 12px', fontSize: '13px', cursor: 'pointer', display: 'flex',
+                                                    padding: '10px 12px', fontSize: '14px', cursor: 'pointer', display: 'flex',
                                                     justifyContent: 'space-between', background: '#f1f0e8', alignItems: 'center'
                                                 }}
                                             >
                                                 <span style={{ fontWeight: 600, color: '#141413' }}>{cat}</span>
-                                                <span style={{ color: '#72706b', fontSize: '11px' }}>{props.length}</span>
+                                                <span style={{ color: '#72706b', fontSize: '12px' }}>{props.length}</span>
                                             </div>
                                             {isExpanded && (
                                                 <div style={{ background: '#ffffff' }}>
@@ -146,7 +146,7 @@ const FilterConfiguratorModal = ({ open, onClose, availableProperties = [], sele
                                                                 key={prop.id}
                                                                 onClick={() => !isAdded && handleAdd(prop.id)}
                                                                 style={{
-                                                                    padding: '6px 12px 6px 24px', fontSize: '12px',
+                                                                    padding: '6px 12px 6px 24px', fontSize: '13px',
                                                                     color: isAdded ? '#52524d' : '#52524d',
                                                                     cursor: isAdded ? 'default' : 'pointer',
                                                                     display: 'flex', alignItems: 'center', transition: 'background 0.1s'
@@ -165,7 +165,7 @@ const FilterConfiguratorModal = ({ open, onClose, availableProperties = [], sele
                                     );
                                 })}
                                 {Object.keys(filteredGroups).length > availableLimit && <button className="v-enlace" style={{ padding: '8px 12px' }} onClick={() => setAvailableLimit(n => n + 100)}>Mostrar más grupos ({Object.keys(filteredGroups).length})</button>}
-                                {!Object.keys(filteredGroups).length && <p role="status" style={{ padding: '20px', margin: 0, textAlign: 'center', color: '#72706b', fontSize: '12px' }}>Sin propiedades que coincidan con la búsqueda.</p>}
+                                {!Object.keys(filteredGroups).length && <p role="status" style={{ padding: '20px', margin: 0, textAlign: 'center', color: '#72706b', fontSize: '13px' }}>Sin propiedades que coincidan con la búsqueda.</p>}
                             </div>
                         </div>
 
@@ -206,7 +206,7 @@ const FilterConfiguratorModal = ({ open, onClose, availableProperties = [], sele
                                         onDrop={e => { e.preventDefault(); dragOverItem.current = item.id; handleSort(); }}
                                         onDragOver={(e) => e.preventDefault()}
                                         style={{
-                                            padding: '8px 8px 8px 12px', borderBottom: '1px solid #e8e6dc', fontSize: '13px',
+                                            padding: '8px 8px 8px 12px', borderBottom: '1px solid #e8e6dc', fontSize: '14px',
                                             display: 'flex', alignItems: 'center', background: '#ffffff', gap: '6px',
                                             cursor: 'move'
                                         }}
@@ -217,7 +217,7 @@ const FilterConfiguratorModal = ({ open, onClose, availableProperties = [], sele
                                         </svg>
                                         <div style={{ flex: 1 }}>
                                             <div style={{ color: '#141413', fontWeight: 500 }}>{item.name}</div>
-                                            <div style={{ fontSize: '11px', color: '#72706b' }}>{item.id}{item.unavailable ? ' · no disponible' : ''}{filterSelections[item.id]?.length ? ' · filtro activo' : ''}</div>
+                                            <div style={{ fontSize: '12px', color: '#72706b' }}>{item.id}{item.unavailable ? ' · no disponible' : ''}{filterSelections[item.id]?.length ? ' · filtro activo' : ''}</div>
                                         </div>
                                         <button className="v-icono" aria-label={`Subir ${item.id}`} disabled={item.originalIndex === 0}
                                             onClick={() => setCurrentSelection(prev => reorderProperty(prev, item.id, prev[prev.indexOf(item.id) - 1]))}>↑</button>
@@ -232,7 +232,7 @@ const FilterConfiguratorModal = ({ open, onClose, availableProperties = [], sele
                                     </div>
                                 ))}
                                 {selectedObjects.length === 0 && (
-                                    <div style={{ padding: '20px', textAlign: 'center', color: '#72706b', fontStyle: 'italic', fontSize: '12px' }}>
+                                    <div style={{ padding: '20px', textAlign: 'center', color: '#72706b', fontStyle: 'italic', fontSize: '13px' }}>
                                         {currentSelection.length ? 'Sin coincidencias. La búsqueda no elimina propiedades.' : 'Ninguna propiedad seleccionada'}
                                     </div>
                                 )}

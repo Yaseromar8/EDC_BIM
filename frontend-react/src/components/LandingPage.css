@@ -154,7 +154,7 @@
     border: none;
     outline: none;
     color: var(--acc-cab-activo);
-    font-size: 13px;
+    font-size: 14px;
     width: 200px;
 }
 
@@ -170,7 +170,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 11.5px;
+    font-size: 12px;
     font-weight: 600;
     color: #141413;
     cursor: pointer;
@@ -199,7 +199,7 @@
 }
 
 .acc-sidebar-title {
-    font-size: 12px;
+    font-size: 13px;
     font-weight: 600;
     color: var(--acc-muted);
     padding: 0 8px 10px 8px;
@@ -231,7 +231,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 12px;
+    font-size: 13px;
     font-weight: 800;
     flex-shrink: 0;
 }
@@ -260,7 +260,7 @@
 }
 
 .acc-hub-name {
-    font-size: 13.5px;
+    font-size: 14px;
     font-weight: 500;
     color: var(--acc-text);
     white-space: nowrap;
@@ -274,12 +274,12 @@
 }
 
 .acc-hub-count {
-    font-size: 12px;
+    font-size: 13px;
     color: var(--acc-muted);
 }
 
 .acc-hub-region {
-    font-size: 11px;
+    font-size: 12px;
     color: var(--acc-muted);
     opacity: 0.7;
 }
@@ -294,7 +294,7 @@
     border: none;
     border-radius: 4px;
     color: var(--acc-enlace);
-    font-size: 13px;
+    font-size: 14px;
     font-weight: 500;
     font-family: inherit;
     cursor: pointer;
@@ -397,7 +397,7 @@
 }
 
 .acc-card-hub {
-    font-size: 12px;
+    font-size: 13px;
     font-weight: 400;
     color: var(--acc-muted);
     margin-bottom: 6px;
@@ -416,7 +416,7 @@
 }
 
 .acc-card-desc {
-    font-size: 12px;
+    font-size: 13px;
     color: var(--acc-muted);
     margin: 0;
     line-height: 1.4;
@@ -438,7 +438,7 @@
 }
 
 .acc-card-tag {
-    font-size: 12.5px;
+    font-size: 13px;
     font-weight: 500;
     color: var(--acc-text-2);
     padding: 0;
@@ -447,7 +447,7 @@
 }
 
 .acc-card-date {
-    font-size: 12.5px;
+    font-size: 13px;
     color: var(--acc-muted);
     margin-left: auto;
 }
@@ -503,7 +503,7 @@
 }
 
 .acc-empty p {
-    font-size: 13px;
+    font-size: 14px;
     max-width: 320px;
     line-height: 1.5;
 }
@@ -540,7 +540,7 @@
 }
 
 .acc-modal label {
-    font-size: 12.5px;
+    font-size: 13px;
     font-weight: 600;
     color: var(--acc-text-2);
 }
@@ -553,7 +553,7 @@
     border-radius: 4px;
     padding: 9px 12px;
     color: var(--acc-text);
-    font-size: 13px;
+    font-size: 14px;
     outline: none;
     width: 100%;
     box-sizing: border-box;
@@ -579,7 +579,7 @@
 }
 
 .acc-modal-hint {
-    font-size: 12px;
+    font-size: 13px;
     color: var(--acc-text-2);
     background: var(--acc-chip);
     padding: 8px 12px;
@@ -594,7 +594,7 @@
     border: none;
     border-radius: 4px;
     padding: 8px 20px;
-    font-size: 13px;
+    font-size: 14px;
     font-weight: 600;
     font-family: inherit;
     cursor: pointer;
@@ -616,7 +616,7 @@
     border: 1px solid var(--acc-border-fuerte);
     border-radius: 4px;
     padding: 8px 16px;
-    font-size: 13px;
+    font-size: 14px;
     font-family: inherit;
     cursor: pointer;
     transition: color 0.15s, border-color 0.15s;
@@ -697,7 +697,7 @@
     border: none;
     background: none;
     color: var(--acc-enlace);
-    font-size: 13px;
+    font-size: 14px;
     font-weight: 500;
     font-family: inherit;
     cursor: pointer;
@@ -785,7 +785,7 @@
 
 .frente-card-content p {
     margin: 3px 0 0;
-    font-size: 12.5px;
+    font-size: 13px;
     color: var(--acc-muted);
     line-height: 1.4;
     white-space: nowrap;
@@ -817,7 +817,7 @@
     background: transparent;
     color: var(--acc-muted);
     cursor: pointer;
-    font-size: 12px;
+    font-size: 13px;
     line-height: 1;
     padding: 0;
     opacity: 0;
@@ -876,7 +876,7 @@
     border-radius: 4px;
     color: var(--acc-text);
     padding: 8px 12px;
-    font-size: 13px;
+    font-size: 14px;
     font-family: inherit;
     outline: none;
     transition: border-color 0.15s;
@@ -892,7 +892,7 @@
 
 .frente-error {
     color: var(--acc-peligro);
-    font-size: 12px;
+    font-size: 13px;
 }
 
 /* Grupos por tipo de componente (Aportantes, Canales...). */
@@ -902,7 +902,7 @@
     align-items: center;
     gap: 10px;
     margin-top: 6px;
-    font-size: 12px;
+    font-size: 13px;
     font-weight: 600;
     color: var(--acc-text-2);
 }
@@ -928,7 +928,7 @@
     justify-content: center;
     gap: 10px;
     color: var(--acc-muted);
-    font-size: 12.5px;
+    font-size: 13px;
     margin-top: 16px;
 }
 

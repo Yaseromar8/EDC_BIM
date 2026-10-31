@@ -32,29 +32,29 @@ const T = {
 };
 
 const S = {
-    overlay: { position: 'fixed', inset: 0, zIndex: 9000, background: T.bg, display: 'flex', flexDirection: 'column', color: T.text, fontFamily: 'inherit', fontSize: 13 },
+    overlay: { position: 'fixed', inset: 0, zIndex: 9000, background: T.bg, display: 'flex', flexDirection: 'column', color: T.text, fontFamily: 'inherit', fontSize: 14 },
     // setup
     setupWrap: { flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 },
     setupCard: { width: 'min(980px, 94vw)', background: T.panel, border: T.border, borderRadius: 12, padding: '26px 30px' },
     sideCard: { flex: 1, background: T.panelSoft, border: T.borderSoft, borderRadius: T.radius, padding: '16px 18px', minWidth: 0 },
-    label: { fontSize: 11, letterSpacing: '0.08em', textTransform: 'uppercase', color: T.muted, marginBottom: 10, fontWeight: 600 },
-    select: { width: '100%', background: T.bg, color: T.text, border: T.border, borderRadius: 6, padding: '8px 10px', fontSize: 13, outline: 'none', marginBottom: 10 },
-    btnPrimary: { background: T.accent, color: '#141413', border: 'none', borderRadius: 6, padding: '9px 22px', fontSize: 13, cursor: 'pointer', fontWeight: 600 },
-    btnGhost: { background: 'transparent', color: T.muted, border: T.border, borderRadius: 6, padding: '8px 16px', fontSize: 13, cursor: 'pointer' },
+    label: { fontSize: 12, letterSpacing: '0.08em', textTransform: 'uppercase', color: T.muted, marginBottom: 10, fontWeight: 600 },
+    select: { width: '100%', background: T.bg, color: T.text, border: T.border, borderRadius: 6, padding: '8px 10px', fontSize: 14, outline: 'none', marginBottom: 10 },
+    btnPrimary: { background: T.accent, color: '#141413', border: 'none', borderRadius: 6, padding: '9px 22px', fontSize: 14, cursor: 'pointer', fontWeight: 600 },
+    btnGhost: { background: 'transparent', color: T.muted, border: T.border, borderRadius: 6, padding: '8px 16px', fontSize: 14, cursor: 'pointer' },
     btnIcon: { background: 'transparent', color: T.muted, border: T.border, borderRadius: '50%', width: 34, height: 34, cursor: 'pointer', fontSize: 15, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
     // view
     topBar: { display: 'flex', alignItems: 'center', gap: 10, padding: '7px 14px', borderBottom: T.border, background: T.panel },
-    chipSide: { fontSize: 12, padding: '4px 10px', borderRadius: 6, background: T.panelSoft, border: T.borderSoft, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 300 },
+    chipSide: { fontSize: 13, padding: '4px 10px', borderRadius: 6, background: T.panelSoft, border: T.borderSoft, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 300 },
     viewers: { flex: 1, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1, minHeight: 0, background: 'rgba(20, 20, 19,0.06)' },
     pane: { position: 'relative', background: '#faf9f5', overflow: 'hidden' },
-    paneTag: { position: 'absolute', top: 10, left: 12, zIndex: 5, fontSize: 11, fontWeight: 600, letterSpacing: '0.05em', padding: '3px 10px', borderRadius: 4, background: '#ffffff', border: T.borderSoft },
-    statusBar: { padding: '5px 14px', fontSize: 12, color: T.muted, borderTop: T.borderSoft, background: T.panel },
+    paneTag: { position: 'absolute', top: 10, left: 12, zIndex: 5, fontSize: 12, fontWeight: 600, letterSpacing: '0.05em', padding: '3px 10px', borderRadius: 4, background: '#ffffff', border: T.borderSoft },
+    statusBar: { padding: '5px 14px', fontSize: 13, color: T.muted, borderTop: T.borderSoft, background: T.panel },
     bottom: { borderTop: T.border, padding: '10px 14px', display: 'flex', gap: 16, alignItems: 'flex-start', maxHeight: 230, background: T.panel },
-    pill: (color, active) => ({ display: 'flex', alignItems: 'center', gap: 7, cursor: 'pointer', fontSize: 12.5, padding: '6px 12px', borderRadius: 6, border: active ? `1px solid ${color}` : T.border, color: T.text, background: active ? 'rgba(20, 20, 19,0.04)' : 'transparent', whiteSpace: 'nowrap' }),
+    pill: (color, active) => ({ display: 'flex', alignItems: 'center', gap: 7, cursor: 'pointer', fontSize: 13, padding: '6px 12px', borderRadius: 6, border: active ? `1px solid ${color}` : T.border, color: T.text, background: active ? 'rgba(20, 20, 19,0.04)' : 'transparent', whiteSpace: 'nowrap' }),
     dot: (color) => ({ width: 8, height: 8, borderRadius: 2, background: color, flexShrink: 0 }),
-    list: { flex: 1, overflowY: 'auto', maxHeight: 180, fontSize: 12.5 },
+    list: { flex: 1, overflowY: 'auto', maxHeight: 180, fontSize: 13 },
     listItem: { padding: '4px 8px', borderBottom: T.borderSoft, cursor: 'pointer', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: T.muted },
-    detail: { flex: 1.2, overflowY: 'auto', maxHeight: 180, fontSize: 12.5, background: T.panelSoft, borderRadius: T.radius, padding: '10px 12px', border: T.borderSoft },
+    detail: { flex: 1.2, overflowY: 'auto', maxHeight: 180, fontSize: 13, background: T.panelSoft, borderRadius: T.radius, padding: '10px 12px', border: T.borderSoft },
 };
 
 const createEmptySide = () => ({
@@ -883,11 +883,11 @@ export default function CompareView({ BACKEND_URL, projectId, onExit }) {
             <div style={S.sideCard}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
                     <div style={S.label}>{title}</div>
-                    <span style={{ fontSize: 10.5, color: T.accent, border: '1px solid rgba(106,155,204,0.35)', borderRadius: 999, padding: '2px 8px', marginBottom: 10 }}>
+                    <span style={{ fontSize: 12, color: T.accent, border: '1px solid rgba(106,155,204,0.35)', borderRadius: 999, padding: '2px 8px', marginBottom: 10 }}>
                         MULTI-MODELO
                     </span>
                 </div>
-                <div style={{ fontSize: 11.5, color: T.faint, margin: '-3px 0 10px' }}>
+                <div style={{ fontSize: 12, color: T.faint, margin: '-3px 0 10px' }}>
                     Selecciona un modelo, agregalo a la lista y repite para sumar mas vinculos.
                 </div>
                 <select style={S.select} value={s.pickerSel} onChange={e => pickModel(key, e.target.value)}>
@@ -916,7 +916,7 @@ export default function CompareView({ BACKEND_URL, projectId, onExit }) {
                         </option>
                     ))}
                 </select>
-                <div style={{ fontSize: 11.5, color: T.faint, minHeight: 16 }}>
+                <div style={{ fontSize: 12, color: T.faint, minHeight: 16 }}>
                     {s.pickerVersions.length > 1 && 'Las versiones historicas se extraen automaticamente al comparar.'}
                 </div>
                 <div style={{ ...S.label, marginTop: 4 }}>Vista 3D</div>
@@ -931,7 +931,7 @@ export default function CompareView({ BACKEND_URL, projectId, onExit }) {
                         <option key={v.guid} value={v.guid}>{v.name}</option>
                     ))}
                 </select>
-                <div style={{ fontSize: 11.5, color: T.faint, minHeight: 16 }}>
+                <div style={{ fontSize: 12, color: T.faint, minHeight: 16 }}>
                     {s.pickerLoadingViews && 'Leyendo las vistas de esta version...'}
                     {!s.pickerLoadingViews && !!s.pickerVUrn && !s.pickerViews.length && 'Esta version no declara vistas 3D: se usara la de por defecto.'}
                 </div>
@@ -956,13 +956,13 @@ export default function CompareView({ BACKEND_URL, projectId, onExit }) {
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 10, maxHeight: 118, overflowY: 'auto' }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                        <div style={{ fontSize: 11, color: T.faint, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                        <div style={{ fontSize: 12, color: T.faint, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
                             {s.links.length} vinculo{s.links.length === 1 ? '' : 's'} agregado{s.links.length === 1 ? '' : 's'}
                         </div>
                         {s.links.length > 0 && (
                             <button
                                 type="button"
-                                style={{ ...S.btnGhost, padding: '2px 7px', fontSize: 11 }}
+                                style={{ ...S.btnGhost, padding: '2px 7px', fontSize: 12 }}
                                 onClick={() => clearLinks(key)}
                             >
                                 Limpiar
@@ -993,7 +993,7 @@ export default function CompareView({ BACKEND_URL, projectId, onExit }) {
                             </span>
                             <button
                                 type="button"
-                                style={{ ...S.btnGhost, padding: '2px 7px', fontSize: 12 }}
+                                style={{ ...S.btnGhost, padding: '2px 7px', fontSize: 13 }}
                                 onClick={() => removeLink(key, idx)}
                                 title="Quitar vínculo"
                             >
@@ -1024,7 +1024,7 @@ export default function CompareView({ BACKEND_URL, projectId, onExit }) {
                             <span style={{ fontSize: 17, fontWeight: 600 }}>Comparar</span>
                             <button style={{ ...S.btnGhost, border: 'none', fontSize: 16, padding: 4 }} onClick={doExit} title="Cerrar">✕</button>
                         </div>
-                        <div style={{ fontSize: 12.5, color: T.muted, marginBottom: 22 }}>
+                        <div style={{ fontSize: 13, color: T.muted, marginBottom: 22 }}>
                             Elige el modelo o documento y la versión de cada lado. A es la base (contractual); B el avance actual.
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
@@ -1049,15 +1049,15 @@ export default function CompareView({ BACKEND_URL, projectId, onExit }) {
             {phase === 'view' && (
                 <>
                     <div style={S.topBar}>
-                        <span style={{ fontWeight: 600, fontSize: 13.5 }}>Comparador</span>
+                        <span style={{ fontWeight: 600, fontSize: 14 }}>Comparador</span>
                         <span style={{ ...S.chipSide, color: T.red }} title={labelOf(side.a)}>A · {labelOf(side.a)}</span>
                         <span style={{ color: T.faint }}>→</span>
                         <span style={{ ...S.chipSide, color: T.green }} title={labelOf(side.b)}>B · {labelOf(side.b)}</span>
                         {diff && (
                             <div style={{ display: 'flex', gap: 14, marginLeft: 16, alignItems: 'center' }}>
-                                <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11.5, color: T.muted }}><span style={S.dot(T.green)} />Agregado</span>
-                                <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11.5, color: T.muted }}><span style={S.dot(T.red)} />Eliminado</span>
-                                <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11.5, color: T.muted }}><span style={S.dot(T.magenta)} />Modificado</span>
+                                <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: T.muted }}><span style={S.dot(T.green)} />Agregado</span>
+                                <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: T.muted }}><span style={S.dot(T.red)} />Eliminado</span>
+                                <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: T.muted }}><span style={S.dot(T.magenta)} />Modificado</span>
                             </div>
                         )}
                         <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
@@ -1092,7 +1092,7 @@ export default function CompareView({ BACKEND_URL, projectId, onExit }) {
                                 <button style={S.pill(T.magenta, activeList === 'modified')} onClick={() => { setActiveList('modified'); isolate('a', diff.modified); isolate('b', diff.modified); }}>
                                     <span style={S.dot(T.magenta)} />{diff.summary.modified.toLocaleString()} modificados
                                 </button>
-                                <span style={{ fontSize: 11, color: T.faint, paddingLeft: 2 }}>{diff.summary.unchanged.toLocaleString()} sin cambio</span>
+                                <span style={{ fontSize: 12, color: T.faint, paddingLeft: 2 }}>{diff.summary.unchanged.toLocaleString()} sin cambio</span>
                             </div>
 
                             <div style={S.list}>
@@ -1111,7 +1111,7 @@ export default function CompareView({ BACKEND_URL, projectId, onExit }) {
                                         {detail.changes.length === 0 && <div style={{ color: T.faint }}>Sin cambios de propiedades (puede ser cambio geométrico).</div>}
                                         {detail.changes.slice(0, 60).map((c, i) => (
                                             <div key={i} style={{ marginBottom: 4, borderBottom: T.borderSoft, paddingBottom: 3 }}>
-                                                <div style={{ color: T.muted, fontSize: 11.5 }}>{c.prop}</div>
+                                                <div style={{ color: T.muted, fontSize: 12 }}>{c.prop}</div>
                                                 <div><span style={{ color: T.red }}>{c.a}</span> <span style={{ color: T.faint }}>→</span> <span style={{ color: T.green }}>{c.b}</span></div>
                                             </div>
                                         ))}
@@ -1129,7 +1129,7 @@ export default function CompareView({ BACKEND_URL, projectId, onExit }) {
                 style={{
                     position: 'fixed', zIndex: 9500, pointerEvents: 'none', display: tip ? 'block' : 'none',
                     background: '#ffffff', border: T.border, borderRadius: T.radius, boxShadow: 'var(--v-sombra-flotante)',
-                    padding: '7px 11px', maxWidth: 280, fontSize: 12,
+                    padding: '7px 11px', maxWidth: 280, fontSize: 13,
                 }}
             >
                 {tip && (

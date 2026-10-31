@@ -156,7 +156,7 @@ const ColumnConfiguratorModal = ({ open, onClose, availableColumns = [], selecte
 
                     {/* Top Row */}
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}>
-                        <span style={{ fontSize: '12px', color: '#72706b' }}>
+                        <span style={{ fontSize: '13px', color: '#72706b' }}>
                             {currentSelection.length} de {availableColumns.length} columnas visibles
                         </span>
                         <span style={{ display: 'flex', gap: '16px' }}>
@@ -198,7 +198,7 @@ const ColumnConfiguratorModal = ({ open, onClose, availableColumns = [], selecte
                                             <div
                                                 onClick={() => toggleCategory(cat)}
                                                 style={{
-                                                    padding: '10px 12px', fontSize: '13px', cursor: 'pointer', display: 'flex',
+                                                    padding: '10px 12px', fontSize: '14px', cursor: 'pointer', display: 'flex',
                                                     justifyContent: 'space-between', background: '#f1f0e8', alignItems: 'center'
                                                 }}
                                             >
@@ -206,7 +206,7 @@ const ColumnConfiguratorModal = ({ open, onClose, availableColumns = [], selecte
                                                     {isExpanded ? '▾' : '▸'} {cat}
                                                 </span>
                                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                                    <span style={{ color: '#72706b', fontSize: '11px' }}>
+                                                    <span style={{ color: '#72706b', fontSize: '12px' }}>
                                                         {selectedCount} de {props.length}
                                                     </span>
                                                     <input 
@@ -230,7 +230,7 @@ const ColumnConfiguratorModal = ({ open, onClose, availableColumns = [], selecte
                                                                 key={prop.id}
                                                                 onClick={() => !isAdded && handleAdd(prop.id)}
                                                                 style={{
-                                                                    padding: '5px 12px 5px 24px', fontSize: '12px',
+                                                                    padding: '5px 12px 5px 24px', fontSize: '13px',
                                                                     color: isAdded ? '#52524d' : '#52524d',
                                                                     cursor: isAdded ? 'default' : 'pointer',
                                                                     display: 'flex', alignItems: 'center', gap: '8px', transition: 'background 0.1s',
@@ -240,7 +240,7 @@ const ColumnConfiguratorModal = ({ open, onClose, availableColumns = [], selecte
                                                                 onMouseLeave={e => !isAdded && (e.currentTarget.style.background = 'transparent')}
                                                             >
                                                                 <span style={{ flex: 1, minWidth: 0 }}>{isAdded ? '✓ ' : '+ '} {prop.name}{prop.ficha.unidad ? <span style={{ color: '#72706b' }}> ({prop.ficha.unidad})</span> : null}</span>
-                                                                {catalogo && <span style={{ fontSize: '11px', color: '#72706b', whiteSpace: 'nowrap' }}>{notaDeCampo(prop.ficha)}</span>}
+                                                                {catalogo && <span style={{ fontSize: '12px', color: '#72706b', whiteSpace: 'nowrap' }}>{notaDeCampo(prop.ficha)}</span>}
                                                             </div>
                                                         );
                                                     })}
@@ -286,7 +286,7 @@ const ColumnConfiguratorModal = ({ open, onClose, availableColumns = [], selecte
                                         }}
                                         onDragOver={(e) => e.preventDefault()}
                                         style={{
-                                            padding: '8px 8px 8px 12px', borderBottom: '1px solid #e8e6dc', fontSize: '13px',
+                                            padding: '8px 8px 8px 12px', borderBottom: '1px solid #e8e6dc', fontSize: '14px',
                                             display: 'flex', alignItems: 'center', background: '#ffffff', gap: '8px',
                                             cursor: 'move'
                                         }}
@@ -297,7 +297,7 @@ const ColumnConfiguratorModal = ({ open, onClose, availableColumns = [], selecte
                                         </svg>
                                         <div style={{ flex: 1 }}>
                                             <div style={{ color: '#141413', fontWeight: 500 }}>{item.name}</div>
-                                            <div style={{ fontSize: '11px', color: '#72706b' }}>{item.category}</div>
+                                            <div style={{ fontSize: '12px', color: '#72706b' }}>{item.category}</div>
                                         </div>
                                         <button className="v-icono"
                                             onClick={(e) => { e.stopPropagation(); handleRemove(item.id); }}
@@ -308,7 +308,7 @@ const ColumnConfiguratorModal = ({ open, onClose, availableColumns = [], selecte
                                     </div>
                                 ))}
                                 {selectedObjects.length === 0 && (
-                                    <div style={{ padding: '20px', textAlign: 'center', color: '#72706b', fontStyle: 'italic', fontSize: '12px' }}>
+                                    <div style={{ padding: '20px', textAlign: 'center', color: '#72706b', fontStyle: 'italic', fontSize: '13px' }}>
                                         Ninguna columna seleccionada
                                     </div>
                                 )}

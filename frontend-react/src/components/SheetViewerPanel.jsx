@@ -64,8 +64,8 @@ export default function SheetViewerPanel({ sheet, onClose }) {
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#6a9bcc" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <rect x="3" y="3" width="18" height="18" rx="2" /><line x1="3" y1="9" x2="21" y2="9" /><line x1="9" y1="21" x2="9" y2="9" />
         </svg>
-        <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: 0.6, color: '#507294' }}>LÁMINA</span>
-        <span style={{ flex: 1, fontSize: 13, color: '#333330', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={`${sheet.name} — ${sheet.modelName}`}>
+        <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: 0.6, color: '#507294' }}>LÁMINA</span>
+        <span style={{ flex: 1, fontSize: 14, color: '#333330', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={`${sheet.name} — ${sheet.modelName}`}>
           {sheet.name}
         </span>
         <button onClick={onClose} title="Cerrar lámina"
@@ -76,12 +76,12 @@ export default function SheetViewerPanel({ sheet, onClose }) {
       <div style={{ position: 'relative', flex: 1, minHeight: 0 }}>
         <div ref={divRef} style={{ position: 'absolute', inset: 0 }} />
         {status === 'loading' && (
-          <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#72706b', fontSize: 13, pointerEvents: 'none' }}>
+          <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#72706b', fontSize: 14, pointerEvents: 'none' }}>
             Cargando lámina…
           </div>
         )}
         {status === 'error' && (
-          <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#b93535', fontSize: 13 }}>
+          <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#b93535', fontSize: 14 }}>
             No se pudo cargar la lámina (¿la traducción del RVT incluye vistas 2D?)
           </div>
         )}

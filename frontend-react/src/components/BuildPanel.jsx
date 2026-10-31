@@ -253,7 +253,7 @@ const BuildPanel = ({
                                         activeTab === 'FOTOS' ? 'Fotos' :
                                             activeTab === 'AVANCE' ? 'Avance' :
                                                 activeTab === 'RFIS' ? 'RFIs' : 'Restricciones'}
-                                <span style={{ marginLeft: '6px', fontSize: '10px', opacity: 0.55 }}>({filteredPins.length})</span>
+                                <span style={{ marginLeft: '6px', fontSize: '12px', opacity: 0.55 }}>({filteredPins.length})</span>
                             </span>
                             <div style={{ display: 'flex', gap: '8px', marginLeft: 'auto' }}>
                                 {/* Crear solo en pestañas con categoría concreta (en TODOS no se sabe qué tipo crear) */}
@@ -335,7 +335,7 @@ const BuildPanel = ({
                                                         style={{
                                                             flex: 1, minWidth: 0, background: '#faf9f5',
                                                             border: '1px solid #507294', borderRadius: '4px',
-                                                            color: '#141413', padding: '3px 6px', fontSize: '12px', outline: 'none'
+                                                            color: '#141413', padding: '3px 6px', fontSize: '13px', outline: 'none'
                                                         }}
                                                     />
                                                 ) : (
@@ -346,7 +346,7 @@ const BuildPanel = ({
 
                                                 {/* Indicador de categoría en la pestaña TODOS */}
                                                 {activeTab === 'DATA' && pin._trackingType && (
-                                                    <span style={{ fontSize: '10px', marginRight: '6px', opacity: 0.7 }} title={pin._trackingType}>
+                                                    <span style={{ fontSize: '12px', marginRight: '6px', opacity: 0.7 }} title={pin._trackingType}>
                                                         {{
                                                             avance: '✅', fotos: '📷', docs: '📄',
                                                             rfis: '❓', restricciones: '⚠️', maquinaria: '🚜'
@@ -385,7 +385,7 @@ const BuildPanel = ({
                                                                     setEditingValue(pin.name || pin.val || '');
                                                                     setActiveMenu(null);
                                                                 }}>
-                                                                    <span className="sfp-menu-icon" style={{ fontSize: '12px' }}>✏️</span> Renombrar
+                                                                    <span className="sfp-menu-icon" style={{ fontSize: '13px' }}>✏️</span> Renombrar
                                                                 </button>
                                                                 {onPinMoveRequest && (
                                                                     <button onClick={(e) => {
@@ -393,7 +393,7 @@ const BuildPanel = ({
                                                                         onPinMoveRequest(pin.id);
                                                                         setActiveMenu(null);
                                                                     }}>
-                                                                        <span className="sfp-menu-icon" style={{ fontSize: '12px' }}>↔</span> Mover
+                                                                        <span className="sfp-menu-icon" style={{ fontSize: '13px' }}>↔</span> Mover
                                                                     </button>
                                                                 )}
                                                                 {/* Eliminado mover panel de maquinaria */}

@@ -17,7 +17,7 @@
 
 .sfp-header h3 {
     margin: 0;
-    font-size: 13px;
+    font-size: 14px;
     font-weight: 600;
     color: #141413;
     text-transform: uppercase;
@@ -28,7 +28,7 @@
     background: transparent;
     border: none;
     color: #507294;
-    font-size: 12px;
+    font-size: 13px;
     font-weight: 500;
     cursor: pointer;
     display: flex;
@@ -53,7 +53,7 @@
 .sfp-empty {
     padding: 20px;
     text-align: center;
-    font-size: 13px;
+    font-size: 14px;
     color: #72706b;
 }
 
@@ -107,7 +107,7 @@
 }
 
 .sfp-label-text {
-    font-size: 13px;
+    font-size: 14px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -192,7 +192,7 @@
     color: #333330;
     padding: 8px 16px;
     text-align: left;
-    font-size: 13px;
+    font-size: 14px;
     cursor: pointer;
     display: flex;
     align-items: center;
@@ -231,7 +231,7 @@
 
 /* === VERSION BADGE === */
 .sfp-version-badge {
-    font-size: 10px;
+    font-size: 12px;
     font-weight: 600;
     color: var(--alephia-interactive);
     background: rgba(106, 155, 204, 0.12);
@@ -244,7 +244,7 @@
 }
 
 .sfp-version-badge-detail {
-    font-size: 10px;
+    font-size: 12px;
     font-weight: 600;
     color: var(--alephia-interactive);
     background: rgba(106, 155, 204, 0.12);
@@ -256,7 +256,7 @@
 
 /* === MENU BADGE === */
 .sfp-menu-badge {
-    font-size: 9px;
+    font-size: 12px;
     font-weight: 700;
     color: var(--alephia-on-interactive, #141413);
     background: var(--alephia-interactive);
@@ -278,7 +278,7 @@
 }
 
 .sfp-update-banner-text {
-    font-size: 11px;
+    font-size: 12px;
     color: #507294;
     display: flex;
     align-items: center;
@@ -295,7 +295,7 @@
     background: transparent;
     border: none;
     color: var(--alephia-interactive);
-    font-size: 12px;
+    font-size: 13px;
     font-weight: 600;
     cursor: pointer;
     padding: 2px 8px;
@@ -319,7 +319,7 @@
     display: flex;
     align-items: center;
     gap: 5px;
-    font-size: 10px;
+    font-size: 12px;
     font-weight: 500;
     margin-right: 6px;
     flex-shrink: 0;
@@ -363,7 +363,7 @@
     align-items: center;
     gap: 8px;
     padding: 3px 12px 3px 40px;
-    font-size: 10px;
+    font-size: 12px;
     color: #507294;
     background: rgba(106, 155, 204, 0.04);
 }
@@ -383,7 +383,7 @@
     display: flex;
     align-items: center;
     gap: 12px;
-    font-size: 11px;
+    font-size: 12px;
     color: #72706b;
     min-height: 20px;
 }
@@ -404,7 +404,7 @@
 
 .detail-text.main {
     color: #141413;
-    font-size: 12px;
+    font-size: 13px;
     font-weight: 500;
     overflow: hidden;
     text-overflow: ellipsis;

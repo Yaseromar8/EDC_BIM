@@ -222,7 +222,7 @@ const LandingPage = ({ onSelectProject, user }) => {
                 <div className="acc-logo">
                     <img src="/brand/ALEPHIA_Logo_Horizontal_Light.svg" alt="ALEPHIA"
                          style={{ height: 22, width: 'auto', display: 'block' }} />
-                    <span style={{ fontSize: 13, fontWeight: 600, color: 'rgba(255,255,255,0.85)', letterSpacing: '0.4px', paddingLeft: 10, borderLeft: '1px solid rgba(255,255,255,0.25)' }}>View</span>
+                    <span style={{ fontSize: 14, fontWeight: 600, color: 'rgba(255,255,255,0.85)', letterSpacing: '0.4px', paddingLeft: 10, borderLeft: '1px solid rgba(255,255,255,0.25)' }}>View</span>
                 </div>
                 <nav className="acc-topnav">
                     {/* "Inicio" = volver al Hub (elegir producto). El atajo

@@ -661,7 +661,7 @@ export default function NativeARView({ onExit }) {
         {esSimulado() && (
           <span style={{
             marginRight: 8, padding: '2px 8px', borderRadius: 999,
-            background: '#7a5b12', color: '#ffe08a', fontSize: 11.5, fontWeight: 700,
+            background: '#7a5b12', color: '#ffe08a', fontSize: 12, fontWeight: 700,
           }}>
             ENSAYO · sin cámara real
           </span>
@@ -712,13 +712,13 @@ export default function NativeARView({ onExit }) {
               setDiagLog(l || '(vacio)');
               console.log('[AR][LOG NATIVO] ' + l);
             }}
-            style={{ marginTop: 4, padding: '3px 10px', borderRadius: 6, border: '1px solid #333330', background: '#1d1d1c', color: '#6a9bcc', fontSize: 11, pointerEvents: 'auto' }}
+            style={{ marginTop: 4, padding: '3px 10px', borderRadius: 6, border: '1px solid #333330', background: '#1d1d1c', color: '#6a9bcc', fontSize: 12, pointerEvents: 'auto' }}
           >
             Ver log nativo
           </button>
         </div>
         {diagLog && (
-          <pre style={{ maxHeight: 180, maxWidth: 300, overflow: 'auto', fontSize: 9, whiteSpace: 'pre-wrap', background: '#0008', padding: 6, borderRadius: 6, pointerEvents: 'auto' }}>
+          <pre style={{ maxHeight: 180, maxWidth: 300, overflow: 'auto', fontSize: 12, whiteSpace: 'pre-wrap', background: '#0008', padding: 6, borderRadius: 6, pointerEvents: 'auto' }}>
             {diagLog}
           </pre>
         )}
@@ -856,16 +856,16 @@ export default function NativeARView({ onExit }) {
               }}
             >
               <div style={{ fontSize: 14.5, fontWeight: 700 }}>{m.titulo}</div>
-              <div style={{ fontSize: 12.5, color: '#b0aea5', marginTop: 2 }}>{m.texto}</div>
+              <div style={{ fontSize: 13, color: '#b0aea5', marginTop: 2 }}>{m.texto}</div>
             </button>
           ))}
-          <div style={{ color: '#918f88', fontSize: 11, maxWidth: 420, textAlign: 'center' }}>
+          <div style={{ color: '#918f88', fontSize: 12, maxWidth: 420, textAlign: 'center' }}>
             El AR es una ayuda visual. Para medir o replantear, usa los métodos de siempre.
           </div>
           <button onClick={onExit} style={{
             pointerEvents: 'auto',
             marginTop: 2, background: 'none', border: 'none', color: '#b0aea5',
-            fontSize: 13, cursor: 'pointer',
+            fontSize: 14, cursor: 'pointer',
           }}>Salir</button>
         </div>
       )}

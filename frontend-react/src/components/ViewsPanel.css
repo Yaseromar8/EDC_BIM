@@ -44,7 +44,7 @@
 }
 
 .views-popover-subtext {
-    font-size: 11px;
+    font-size: 12px;
     color: #72706b;
     margin-bottom: 12px;
     text-transform: uppercase;
@@ -70,7 +70,7 @@
     color: #141413;
     padding: 4px 8px;
     border-radius: 4px;
-    font-size: 13px;
+    font-size: 14px;
     outline: none;
 }
 
@@ -81,7 +81,7 @@
     padding: 6px 12px;
     border-radius: 4px;
     cursor: pointer;
-    font-size: 13px;
+    font-size: 14px;
     font-weight: 500;
     display: flex;
     align-items: center;
@@ -105,7 +105,7 @@
     padding: 6px 12px;
     border-radius: 4px;
     cursor: pointer;
-    font-size: 13px;
+    font-size: 14px;
 }
 
 .secondary-btn:hover {
@@ -126,7 +126,7 @@
     color: #72706b;
     padding: 8px 0;
     cursor: pointer;
-    font-size: 13px;
+    font-size: 14px;
     font-weight: 500;
     position: relative;
 }
@@ -169,7 +169,7 @@
     color: #141413;
     width: 100%;
     margin: 0 8px;
-    font-size: 13px;
+    font-size: 14px;
     outline: none;
 }
 
@@ -203,7 +203,7 @@
 
 .view-name-text {
     color: #507294;
-    font-size: 13px;
+    font-size: 14px;
     flex: 1;
     min-width: 0;
     margin-right: 8px;
@@ -260,7 +260,7 @@
     padding: 20px;
     text-align: center;
     color: #72706b;
-    font-size: 13px;
+    font-size: 14px;
 }
 
 .btn-icon {
@@ -292,7 +292,7 @@
   border-radius: 8px;
   background: rgba(20, 20, 19, 0.06);
   border: 1px solid rgba(20, 20, 19, 0.09);
-  font-size: 12px;
+  font-size: 13px;
   color: #333330;
 }
 
@@ -315,7 +315,7 @@
   border: 1px solid rgba(20, 20, 19, 0.16);
   background: transparent;
   color: #333330;
-  font-size: 12px;
+  font-size: 13px;
   cursor: pointer;
   transition: background 0.14s ease, border-color 0.14s ease;
 }
@@ -336,7 +336,7 @@
   align-items: center;
   justify-content: space-between;
   color: #72706b;
-  font-size: 11px;
+  font-size: 12px;
   letter-spacing: 0.02em;
 }
 
@@ -368,7 +368,7 @@
   border: 1px solid var(--v-linea-campo);
   background: var(--v-superficie-2);
   color: #52524d;
-  font-size: 11px;
+  font-size: 12px;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   /* El enlace es largo: se corta con puntos en vez de desbordar el panel. */
   text-overflow: ellipsis;

@@ -7,11 +7,11 @@ import { C, FUENTE } from './tema';
 
 const pestaña = (activa) => ({
   background: 'none', border: 'none', borderBottom: `2px solid ${activa ? C.dark : 'transparent'}`,
-  color: activa ? C.dark : C.gris600, fontWeight: activa ? 600 : 500, fontSize: 12.5, fontFamily: FUENTE,
+  color: activa ? C.dark : C.gris600, fontWeight: activa ? 600 : 500, fontSize: 13, fontFamily: FUENTE,
   padding: '9px 10px 7px', cursor: 'pointer', maxWidth: 240, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
 });
 const boton = (principal = false, apagado = false) => ({
-  padding: '5px 12px', borderRadius: 6, fontSize: 12, fontFamily: FUENTE, cursor: apagado ? 'default' : 'pointer',
+  padding: '5px 12px', borderRadius: 6, fontSize: 13, fontFamily: FUENTE, cursor: apagado ? 'default' : 'pointer',
   border: `1px solid ${principal && !apagado ? C.dark : C.gris300}`,
   background: apagado ? C.light50 : principal ? C.dark : C.blanco, color: apagado ? C.midGray : principal ? C.light : C.dark,
 });
@@ -45,11 +45,11 @@ function Menu({ onCerrar, grupos }) {
     }}>
       {grupos.map((g, i) => (
         <div key={g.titulo} style={{ borderTop: i ? `1px solid ${C.light50}` : 'none', paddingTop: i ? 4 : 0, marginTop: i ? 4 : 0 }}>
-          <div style={{ fontSize: 10.5, fontWeight: 600, color: C.gris600, textTransform: 'uppercase', letterSpacing: 0.4, padding: '4px 14px 2px' }}>{g.titulo}</div>
+          <div style={{ fontSize: 12, fontWeight: 600, color: C.gris600, textTransform: 'uppercase', letterSpacing: 0.4, padding: '4px 14px 2px' }}>{g.titulo}</div>
           {g.items.map(it => (
             <button key={it.texto} role="menuitem" onClick={() => { onCerrar(); it.accion(); }} title={it.ayuda || ''}
               style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '7px 14px', background: 'none', border: 'none',
-                cursor: 'pointer', fontSize: 12.5, fontFamily: FUENTE, color: it.peligro ? C.error : C.dark, textAlign: 'left' }}
+                cursor: 'pointer', fontSize: 13, fontFamily: FUENTE, color: it.peligro ? C.error : C.dark, textAlign: 'left' }}
               onMouseEnter={e => { e.currentTarget.style.background = C.light50; }}
               onMouseLeave={e => { e.currentTarget.style.background = 'none'; }}>
               <span style={{ color: it.peligro ? C.error : C.gris600, display: 'flex' }}><Icono d={ICONOS[it.icono]} /></span>
@@ -78,11 +78,11 @@ export default function BarraDeVistas({
   if (eligiendo) {
     return (
       <div data-escape-propio style={{ ...barra, gap: 8, flexWrap: 'wrap', padding: '6px 14px' }}>
-        <span style={{ fontSize: 12.5, fontWeight: 600, color: C.dark }}>Nueva vista</span>
-        <span style={{ fontSize: 12, color: C.gris600 }}>{nElegidas ? `${nElegidas} ${nElegidas === 1 ? 'gráfica elegida' : 'gráficas elegidas'}` : 'Haz clic en las gráficas que quieres mostrar'}</span>
+        <span style={{ fontSize: 13, fontWeight: 600, color: C.dark }}>Nueva vista</span>
+        <span style={{ fontSize: 13, color: C.gris600 }}>{nElegidas ? `${nElegidas} ${nElegidas === 1 ? 'gráfica elegida' : 'gráficas elegidas'}` : 'Haz clic en las gráficas que quieres mostrar'}</span>
         <input autoFocus value={nombreVista} onChange={e => onNombre(e.target.value)} placeholder="Título de la vista"
           onKeyDown={e => { if (e.key === 'Enter' && nElegidas) onFijar(); if (e.key === 'Escape') onCancelar(); }}
-          style={{ flex: '1 1 200px', minWidth: 160, padding: '5px 9px', borderRadius: 6, border: `1px solid ${C.gris300}`, fontFamily: FUENTE, fontSize: 12.5, outline: 'none' }} />
+          style={{ flex: '1 1 200px', minWidth: 160, padding: '5px 9px', borderRadius: 6, border: `1px solid ${C.gris300}`, fontFamily: FUENTE, fontSize: 13, outline: 'none' }} />
         <button onClick={onCancelar} style={boton()}>Cancelar</button>
         <button onClick={onFijar} disabled={!nElegidas} style={boton(true, !nElegidas)}>Fijar como vista</button>
       </div>
@@ -95,7 +95,7 @@ export default function BarraDeVistas({
       {vistas.map(v => (renombrando === v.id ? (
         <input key={v.id} autoFocus value={texto} onChange={e => setTexto(e.target.value)} onBlur={terminarRenombrar}
           onKeyDown={e => { if (e.key === 'Enter') terminarRenombrar(); if (e.key === 'Escape') setRenombrando(null); }}
-          style={{ fontSize: 12.5, fontWeight: 600, fontFamily: FUENTE, border: `1px solid ${C.blue}`, borderRadius: 4, padding: '3px 6px', outline: 'none', width: 220, margin: '0 4px' }} />
+          style={{ fontSize: 13, fontWeight: 600, fontFamily: FUENTE, border: `1px solid ${C.blue}`, borderRadius: 4, padding: '3px 6px', outline: 'none', width: 220, margin: '0 4px' }} />
       ) : (
         <button key={v.id} onClick={() => onIr(v.id)} onDoubleClick={() => empezarRenombrar(v)}
           title={`${v.titulo} · ${v.cards.length} gráficas · doble clic: cambiar el nombre`} style={pestaña(vistaActiva === v.id)}>{v.titulo}</button>
@@ -103,20 +103,20 @@ export default function BarraDeVistas({
       <button onClick={onNuevaVista} disabled={!puedeNueva} title="Elige en el lienzo las gráficas que quieres mostrar juntas y fíjalas con un nombre"
         style={{ ...pestaña(false), color: puedeNueva ? C.blue30D : C.midGray, cursor: puedeNueva ? 'pointer' : 'default' }}>+ Nueva vista</button>
       <span style={{ flex: 1 }} />
-      {aviso && <span style={{ fontSize: 11.5, color: C.blue30D, marginRight: 8 }}>{aviso}</span>}
+      {aviso && <span style={{ fontSize: 12, color: C.blue30D, marginRight: 8 }}>{aviso}</span>}
       {listo && (
         // El archivo ya está hecho, pero el navegador no lo dejó bajar solo (el clic caducó mientras se
         // creaba): «Guardar» lo baja con un clic nuevo.
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginRight: 8, fontSize: 11.5, color: C.gris600 }}>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginRight: 8, fontSize: 12, color: C.gris600 }}>
           {listo.tipo === 'pdf' ? 'PDF listo' : 'Imagen lista'}
-          <button onClick={onGuardar} style={{ ...boton(true), padding: '3px 10px', fontSize: 11.5 }}>Guardar</button>
+          <button onClick={onGuardar} style={{ ...boton(true), padding: '3px 10px', fontSize: 12 }}>Guardar</button>
           <button onClick={onDescartar} aria-label="Descartar" title="Descartar"
             style={{ background: 'none', border: 'none', color: C.gris600, cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: '0 2px' }}>×</button>
         </span>
       )}
       {vistaVisible && (
         <>
-          <span style={{ fontSize: 11.5, color: C.gris600, marginRight: 6 }}>{ocupado || `${nGraficas} ${nGraficas === 1 ? 'gráfica' : 'gráficas'}`}</span>
+          <span style={{ fontSize: 12, color: C.gris600, marginRight: 6 }}>{ocupado || `${nGraficas} ${nGraficas === 1 ? 'gráfica' : 'gráficas'}`}</span>
           <div style={{ position: 'relative' }}>
             <button onClick={() => setMenu(m => !m)} aria-label="Más acciones de la vista" aria-haspopup="menu" aria-expanded={menu}
               title="Compartir y gestionar la vista"

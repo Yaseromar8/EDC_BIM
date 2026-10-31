@@ -45,7 +45,7 @@ export default function GraficoAuditoria({ analisis, res, onIds }) {
       try { P?.purge(el); } catch { /* */ }
     };
   }, [def, res, onIds]);
-  if (!def) return <div style={{ padding: 12, fontSize: 12, color: C.gris600 }}>Análisis desconocido.</div>;
-  if (error) return <div style={{ padding: 12, fontSize: 12, color: C.error }}>No se pudo dibujar: {error}</div>;
+  if (!def) return <div style={{ padding: 12, fontSize: 13, color: C.gris600 }}>Análisis desconocido.</div>;
+  if (error) return <div style={{ padding: 12, fontSize: 13, color: C.error }}>No se pudo dibujar: {error}</div>;
   return <div ref={ref} style={{ width: '100%', height: '100%', minHeight: 160 }} />;
 }

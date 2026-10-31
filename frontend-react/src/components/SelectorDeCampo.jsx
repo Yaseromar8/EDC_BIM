@@ -19,10 +19,10 @@ function Ficha({ f, activa, elegida, onElegir, onEncima }) {
         <button type="button" role="option" aria-selected={elegida} className="v-menu__item"
             onMouseDown={e => e.preventDefault()} onClick={() => onElegir(f.clave)} onMouseEnter={onEncima}
             style={{ ...fila, opacity: tenue ? 0.6 : 1, ...(activa ? { background: 'var(--v-superficie-2)' } : {}), ...(elegida ? { color: 'var(--v-accion)' } : {}) }}>
-            <span style={{ display: 'block', fontSize: '12.5px', color: elegida ? 'var(--v-accion)' : 'var(--v-texto)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <span style={{ display: 'block', fontSize: '13px', color: elegida ? 'var(--v-accion)' : 'var(--v-texto)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {f.nombre}{f.unidad ? <span style={{ color: 'var(--v-texto-3)' }}> ({f.unidad})</span> : null}
             </span>
-            <span style={{ display: 'block', fontSize: '11px', color: 'var(--v-texto-3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <span style={{ display: 'block', fontSize: '12px', color: 'var(--v-texto-3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {f.grupo} · {notaDeCampo(f)}
             </span>
         </button>
@@ -58,13 +58,13 @@ export function ListaDeCampos({ catalogo, valor, onElegir, excluir = SIN_EXCLUIR
             <input ref={caja} className="v-campo" placeholder={`Buscar entre ${fichas.length} campos…`} aria-label="Buscar campo"
                 value={texto} onChange={e => setTexto(e.target.value)} onKeyDown={alPulsar}
                 role="combobox" aria-expanded="true" aria-controls="lista-de-campos"
-                style={{ height: '30px', fontSize: '12.5px', margin: '0 0 6px' }} />
+                style={{ height: '30px', fontSize: '13px', margin: '0 0 6px' }} />
             <div ref={lista} id="lista-de-campos" role="listbox" style={{ maxHeight: `${alto}px`, overflowY: 'auto' }}>
                 {planas.length === 0 && <div className="v-menu__nota" style={{ padding: '8px 10px' }}>Ningún campo coincide.</div>}
                 {secciones.map((s, si) => (
                     <div key={s.titulo ?? si} role="group" aria-label={s.titulo || 'Resultados'}>
                         {s.titulo && (
-                            <div className="v-menu__nota" style={{ textTransform: 'uppercase', letterSpacing: '.5px', padding: '8px 10px 2px', fontSize: '10.5px' }}>
+                            <div className="v-menu__nota" style={{ textTransform: 'uppercase', letterSpacing: '.5px', padding: '8px 10px 2px', fontSize: '12px' }}>
                                 {s.titulo} <span style={{ textTransform: 'none', letterSpacing: 0 }}>· {s.fichas.length}</span>
                             </div>
                         )}
@@ -101,11 +101,11 @@ export default function SelectorDeCampo({ catalogo, valor, onElegir, excluir, pl
         <div style={{ position: 'relative', minWidth: 0 }}>
             <button ref={boton} type="button" className="v-campo" aria-label={etiqueta} aria-haspopup="listbox" aria-expanded={abierto} disabled={disabled}
                 onClick={() => (abierto ? setAbierto(false) : abrir())}
-                style={{ width: '100%', height: '28px', fontSize: '12px', textAlign: 'left', display: 'flex', alignItems: 'center', gap: '6px', overflow: 'hidden', cursor: disabled ? 'default' : 'pointer' }}>
+                style={{ width: '100%', height: '28px', fontSize: '13px', textAlign: 'left', display: 'flex', alignItems: 'center', gap: '6px', overflow: 'hidden', cursor: disabled ? 'default' : 'pointer' }}>
                 <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: f || valor ? 'var(--v-texto)' : 'var(--v-texto-3)' }}>
                     {f ? <>{f.nombre} <span style={{ color: 'var(--v-texto-3)' }}>· {f.grupo}</span></> : (valor || placeholder)}
                 </span>
-                <span aria-hidden="true" style={{ color: 'var(--v-texto-3)', fontSize: '10px' }}>▾</span>
+                <span aria-hidden="true" style={{ color: 'var(--v-texto-3)', fontSize: '12px' }}>▾</span>
             </button>
             {abierto && (
                 <>

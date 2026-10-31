@@ -227,13 +227,13 @@ export default function LinkRevitBadge({ project, backendUrl, variant = 'floatin
         background: !active ? 'transparent' : bg,
         color: !active ? '#e8e6dc' : '#fff',
         border: `1px solid ${!active ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.25)'}`,
-        borderRadius: 6, fontSize: 11.5, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap',
+        borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap',
       }
     : {
         position: 'fixed', right: 18, bottom: 118, zIndex: 1200,
         display: 'flex', alignItems: 'center', gap: 7, padding: '9px 14px',
         background: bg, color: '#fff', border: '1px solid rgba(255,255,255,0.18)',
-        borderRadius: 22, fontSize: 12, fontWeight: 700, cursor: 'pointer',
+        borderRadius: 22, fontSize: 13, fontWeight: 700, cursor: 'pointer',
         boxShadow: '0 4px 16px rgba(0,0,0,0.35)',
       };
 

@@ -32,10 +32,10 @@ const SIZES = [
 
 const inputStyle = {
   width: '100%', boxSizing: 'border-box', padding: '7px 10px', borderRadius: 6, border: `1px solid ${C.gris300}`,
-  background: C.blanco, color: C.dark, fontSize: 12.5, outline: 'none', fontFamily: FUENTE,
+  background: C.blanco, color: C.dark, fontSize: 13, outline: 'none', fontFamily: FUENTE,
 };
-const labelStyle = { fontSize: 12, fontWeight: 600, color: C.dark, marginBottom: 6 };
-const ayudaStyle = { fontSize: 11, color: C.gris600, marginTop: 5, lineHeight: 1.45 };
+const labelStyle = { fontSize: 13, fontWeight: 600, color: C.dark, marginBottom: 6 };
+const ayudaStyle = { fontSize: 12, color: C.gris600, marginTop: 5, lineHeight: 1.45 };
 const colorCompletitud = (pct) => (pct >= 90 ? C.green : pct >= 50 ? C.orange : C.error);
 
 function Segmented({ options, value, onChange }) {
@@ -45,7 +45,7 @@ function Segmented({ options, value, onChange }) {
         <button key={o.id} onClick={() => onChange(o.id)} style={{
           flex: '1 1 22%', minWidth: 76, padding: '6px 4px', borderRadius: 6, border: 'none', cursor: 'pointer', fontFamily: FUENTE,
           background: value === o.id ? C.dark : 'transparent',
-          color: value === o.id ? C.light : C.texto2, fontSize: 12, fontWeight: value === o.id ? 600 : 500,
+          color: value === o.id ? C.light : C.texto2, fontSize: 13, fontWeight: value === o.id ? 600 : 500,
         }}>{o.label}</button>
       ))}
     </div>
@@ -67,9 +67,9 @@ function MultiFieldPicker({ fields, value = [], onChange }) {
     <div>
       <input style={inputStyle} value={q} placeholder="Buscar parámetro…" onChange={e => setQ(e.target.value)} />
       <div style={{ marginTop: 6, maxHeight: 200, overflowY: 'auto', border: `1px solid ${C.lightGray}`, borderRadius: 6 }}>
-        {!list.length && <div style={{ padding: 10, fontSize: 12, color: C.gris600 }}>Sin coincidencias.</div>}
+        {!list.length && <div style={{ padding: 10, fontSize: 13, color: C.gris600 }}>Sin coincidencias.</div>}
         {list.map(f => (
-          <label key={f.key} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 8px', cursor: 'pointer', borderBottom: `1px solid ${C.light50}`, fontSize: 12 }}>
+          <label key={f.key} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 8px', cursor: 'pointer', borderBottom: `1px solid ${C.light50}`, fontSize: 13 }}>
             <input type="checkbox" checked={elegidos.has(f.key)} onChange={() => alternar(f.key)} style={{ accentColor: C.dark }} />
             <span style={{ flex: 1, minWidth: 0, color: C.dark, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{nombreCampo(f.key)}</span>
             <span style={{ color: colorCompletitud(f.fillPct), flexShrink: 0, fontVariantNumeric: 'tabular-nums' }}>{f.fillPct} %</span>
@@ -81,7 +81,7 @@ function MultiFieldPicker({ fields, value = [], onChange }) {
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 6 }}>
           {value.map(k => (
             <button key={k} onClick={() => alternar(k)} title="Quitar" style={{
-              padding: '2px 8px', borderRadius: 4, fontSize: 11, cursor: 'pointer', fontFamily: FUENTE,
+              padding: '2px 8px', borderRadius: 4, fontSize: 12, cursor: 'pointer', fontFamily: FUENTE,
               border: `1px solid ${C.blue}`, background: C.blueTinte, color: C.blue30D,
             }}>{nombreCampo(k)} ×</button>
           ))}
@@ -116,7 +116,7 @@ function FieldPicker({ fields, value, onChange, numericOnly, placeholder }) {
           background: C.blanco, border: `1px solid ${C.lightGray}`, borderRadius: RADIO,
           maxHeight: 260, overflowY: 'auto',
         }}>
-          {!list.length && <div style={{ padding: 12, fontSize: 12, color: C.gris600 }}>Sin coincidencias.</div>}
+          {!list.length && <div style={{ padding: 12, fontSize: 13, color: C.gris600 }}>Sin coincidencias.</div>}
           {list.map(f => (
             <div key={f.key}
               onMouseDown={() => { onChange(f.key); setOpen(false); }}
@@ -124,7 +124,7 @@ function FieldPicker({ fields, value, onChange, numericOnly, placeholder }) {
               onMouseEnter={e => { e.currentTarget.style.background = C.light50; }}
               onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
             >
-              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 12 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 13 }}>
                 <span style={{ color: C.dark, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{nombreCampo(f.key)}</span>
                 <span style={{ color: colorCompletitud(f.fillPct), flexShrink: 0, fontVariantNumeric: 'tabular-nums' }}>{f.fillPct} %</span>
               </div>
@@ -132,7 +132,7 @@ function FieldPicker({ fields, value, onChange, numericOnly, placeholder }) {
               <div style={{ height: 3, background: C.light50, borderRadius: 2, marginTop: 4 }}>
                 <div style={{ width: `${f.fillPct}%`, height: '100%', borderRadius: 2, background: colorCompletitud(f.fillPct) }} />
               </div>
-              <div style={{ fontSize: 10.5, color: C.gris600, marginTop: 3 }}>
+              <div style={{ fontSize: 12, color: C.gris600, marginTop: 3 }}>
                 {f.isNumeric ? 'número' : 'texto'} · {f.distinct >= 60 ? '60+' : f.distinct} valores
               </div>
             </div>
@@ -186,7 +186,7 @@ export default function ChartEditor({ initial, fields, rows, onSave, onCancel })
   };
 
   const boton = (principal, activo = true) => ({
-    padding: '7px 16px', borderRadius: 6, fontSize: 12.5, fontWeight: principal ? 600 : 500, fontFamily: FUENTE,
+    padding: '7px 16px', borderRadius: 6, fontSize: 13, fontWeight: principal ? 600 : 500, fontFamily: FUENTE,
     border: `1px solid ${principal && activo ? C.dark : C.gris300}`,
     background: !activo ? C.light50 : principal ? C.dark : C.blanco,
     color: !activo ? C.midGray : principal ? C.light : C.dark,
@@ -287,14 +287,14 @@ export default function ChartEditor({ initial, fields, rows, onSave, onCancel })
                   const on = cfg.filter?.values?.includes(o.value);
                   return (
                     <button key={o.value} onClick={() => toggleFilterValue(o.value)} style={{
-                      padding: '3px 9px', borderRadius: 4, fontSize: 11, cursor: 'pointer', fontFamily: FUENTE,
+                      padding: '3px 9px', borderRadius: 4, fontSize: 12, cursor: 'pointer', fontFamily: FUENTE,
                       border: `1px solid ${on ? C.blue : C.gris300}`,
                       background: on ? C.blueTinte : C.blanco, color: on ? C.blue30D : C.texto2,
                     }}>{nombreValor(o.value)} · {o.count}</button>
                   );
                 })}
               </div>
-              <button onClick={() => set({ filter: null })} style={{ marginTop: 6, background: 'none', border: 'none', color: C.blue30D, fontSize: 11.5, cursor: 'pointer', padding: 0, fontFamily: FUENTE }}>Quitar filtro</button>
+              <button onClick={() => set({ filter: null })} style={{ marginTop: 6, background: 'none', border: 'none', color: C.blue30D, fontSize: 12, cursor: 'pointer', padding: 0, fontFamily: FUENTE }}>Quitar filtro</button>
             </>
           )}
         </div>

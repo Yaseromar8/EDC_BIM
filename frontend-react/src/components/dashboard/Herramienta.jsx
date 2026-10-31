@@ -29,7 +29,7 @@ export default function Herramienta({ icono, texto, ayuda, onClick, apagada = fa
         display: 'inline-flex', alignItems: 'center', gap: 6, height: 28, padding: '0 9px',
         border: 'none', borderRadius: 6, background: fondo, flexShrink: 0, whiteSpace: 'nowrap',
         color: principal ? C.light : apagada ? C.midGray : C.gris700,
-        fontFamily: FUENTE, fontSize: 12.5, fontWeight: principal ? 600 : 500,
+        fontFamily: FUENTE, fontSize: 13, fontWeight: principal ? 600 : 500,
         cursor: apagada ? 'default' : 'pointer', opacity: principal && apagada ? 0.45 : 1,
         transition: 'background-color 120ms ease',
       }}>

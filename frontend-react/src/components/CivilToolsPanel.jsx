@@ -18,7 +18,7 @@ const BACKEND_URL = VITE_API_URL || (
 // — mismo flujo de workitem que las secciones.
 const zonaBtnMini = {
     height: 20, padding: '0 8px', background: '#ffffff', color: '#507294',
-    border: '1px solid #507294', borderRadius: 4, fontSize: 10.5, fontWeight: 700, cursor: 'pointer',
+    border: '1px solid #507294', borderRadius: 4, fontSize: 12, fontWeight: 700, cursor: 'pointer',
 };
 
 function ZonasFrente({ scopeUrn, resolveProjectId }) {
@@ -108,7 +108,7 @@ function ZonasFrente({ scopeUrn, resolveProjectId }) {
             marginTop: 14, border: '1px solid #e8e6dc', borderRadius: 6,
             background: '#faf9f5', padding: '10px 12px',
         }}>
-            <div style={{ fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#72706b', fontWeight: 700, marginBottom: 4 }}>
+            <div style={{ fontSize: 12, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#72706b', fontWeight: 700, marginBottom: 4 }}>
                 Zonas del frente ({zonas.length})
             </div>
             {zonas.map(z => {
@@ -118,12 +118,12 @@ function ZonasFrente({ scopeUrn, resolveProjectId }) {
                 return (
                     <div key={z.urn} style={{ padding: '6px 0', borderTop: '1px solid #e8e6dc' }}>
                         <div
-                            style={{ fontSize: 11.5, color: '#333330', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                            style={{ fontSize: 12, color: '#333330', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
                             title={z.display_name || z.urn}
                         >
                             {(z.display_name || `…${z.urn.slice(-10)}`).replace(/\.dwg$/i, '')}
                         </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 3, fontSize: 10.5, flexWrap: 'wrap' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 3, fontSize: 12, flexWrap: 'wrap' }}>
                             <span style={{ color: '#667650' }}>✓ Secciones {String(z.updated_at || '').slice(0, 10)}</span>
                             {b ? (
                                 <span style={{ color: b.startsWith('Error') ? '#b93535' : '#507294' }}>{b}</span>
@@ -368,7 +368,7 @@ const PropertyRow = ({ label, value }) => (
         minHeight: 38,
         padding: '0 12px 0 28px',
         borderBottom: '1px solid #e8e6dc',
-        fontSize: 12
+        fontSize: 13
     }}>
         <span style={{ color: '#333330', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
         <span style={{ color: '#141413', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{value}</span>
@@ -393,7 +393,7 @@ const Section = ({ title, children, defaultOpen = true }) => {
                     alignItems: 'center',
                     gap: 8,
                     cursor: 'pointer',
-                    fontSize: 12,
+                    fontSize: 13,
                     fontWeight: 600,
                     textAlign: 'left'
                 }}
@@ -1528,7 +1528,7 @@ const CivilToolsPanel = ({ activeModelUrn, models = [], docs = [], onClose }) =>
                             width: '100%',
                             height: 34,
                             padding: '0 10px',
-                            fontSize: 12
+                            fontSize: 13
                         }}
                     >
                         {availableCivilFiles.map(model => (
@@ -1539,7 +1539,7 @@ const CivilToolsPanel = ({ activeModelUrn, models = [], docs = [], onClose }) =>
 
                 {/* Estado del archivo: qué hay extraído y qué falta (guía del flujo) */}
                 {(hasEjes || activeSectionsMeta) && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 10.5, margin: '-6px 2px -4px', color: '#72706b' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12, margin: '-6px 2px -4px', color: '#72706b' }}>
                         <span style={{ color: hasEjes ? '#667650' : '#72706b' }}>
                             {hasEjes ? `✓ Ejes (${alignmentData.length})` : 'Ejes: sin extraer'}
                         </span>
@@ -1566,7 +1566,7 @@ const CivilToolsPanel = ({ activeModelUrn, models = [], docs = [], onClose }) =>
                             alignItems: 'center',
                             justifyContent: 'space-between',
                             cursor: 'pointer',
-                            fontSize: 12
+                            fontSize: 13
                         }}
                     >
                         <span style={{ overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
@@ -1593,7 +1593,7 @@ const CivilToolsPanel = ({ activeModelUrn, models = [], docs = [], onClose }) =>
                             alignItems: 'center',
                             gap: 7,
                             cursor: isExtracting ? 'wait' : 'pointer',
-                            fontSize: 11,
+                            fontSize: 12,
                             fontWeight: 700,
                             whiteSpace: 'nowrap'
                         }}
@@ -1620,7 +1620,7 @@ const CivilToolsPanel = ({ activeModelUrn, models = [], docs = [], onClose }) =>
                             alignItems: 'center',
                             gap: 7,
                             cursor: isExtractingSections ? 'wait' : 'pointer',
-                            fontSize: 11,
+                            fontSize: 12,
                             fontWeight: 700,
                             whiteSpace: 'nowrap'
                         }}
@@ -1641,7 +1641,7 @@ const CivilToolsPanel = ({ activeModelUrn, models = [], docs = [], onClose }) =>
                             borderRadius: 4,
                             padding: '0 9px',
                             cursor: 'pointer',
-                            fontSize: 12,
+                            fontSize: 13,
                             whiteSpace: 'nowrap'
                         }}
                     >
@@ -1693,7 +1693,7 @@ const CivilToolsPanel = ({ activeModelUrn, models = [], docs = [], onClose }) =>
                             borderRadius: 4,
                             padding: '0 9px',
                             cursor: 'pointer',
-                            fontSize: 12,
+                            fontSize: 13,
                             whiteSpace: 'nowrap'
                         }}
                     >
@@ -1720,12 +1720,12 @@ const CivilToolsPanel = ({ activeModelUrn, models = [], docs = [], onClose }) =>
                                     onChange={(e) => setQuery(e.target.value)}
                                     placeholder="Buscar..."
                                     autoFocus
-                                    style={{ border: 0, outline: 0, flex: 1, fontSize: 12, background: 'transparent', color: '#141413' }}
+                                    style={{ border: 0, outline: 0, flex: 1, fontSize: 13, background: 'transparent', color: '#141413' }}
                                 />
                             </div>
                             <div style={{ maxHeight: 300, overflowY: 'auto' }}>
                                 {alignmentTree.length === 0 ? (
-                                    <div style={{ padding: 16, color: '#72706b', fontSize: 12 }}>{emptyText}</div>
+                                    <div style={{ padding: 16, color: '#72706b', fontSize: 13 }}>{emptyText}</div>
                                 ) : alignmentTree.map(({ alignment, profiles }) => {
                                     const alignmentActive = activeAlignmentIds.includes(alignment.alignmentId);
                                     const primaryProfile = getPrimaryProfile(alignment);
@@ -1741,7 +1741,7 @@ const CivilToolsPanel = ({ activeModelUrn, models = [], docs = [], onClose }) =>
                                                     alignItems: 'center',
                                                     gap: 9,
                                                     color: '#141413',
-                                                    fontSize: 12,
+                                                    fontSize: 13,
                                                     textAlign: 'left'
                                                 }}
                                             >
@@ -1783,13 +1783,13 @@ const CivilToolsPanel = ({ activeModelUrn, models = [], docs = [], onClose }) =>
                                                     <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'left' }}>{alignment.alignmentId}</span>
                                                     {/* señales de curación: nº de secciones + tipo del eje */}
                                                     {(alignment.sampleLines?.length || 0) > 0 && (
-                                                        <span style={{ color: '#667650', fontSize: 10, flexShrink: 0 }}>{alignment.sampleLines.length} sec</span>
+                                                        <span style={{ color: '#667650', fontSize: 12, flexShrink: 0 }}>{alignment.sampleLines.length} sec</span>
                                                     )}
                                                     {alignment.alignmentType && alignment.alignmentType !== 'Centerline' && (
-                                                        <span style={{ color: '#734500', fontSize: 10, flexShrink: 0 }}>{alignment.alignmentType}</span>
+                                                        <span style={{ color: '#734500', fontSize: 12, flexShrink: 0 }}>{alignment.alignmentType}</span>
                                                     )}
                                                     {primaryProfile && (
-                                                        <span style={{ color: '#507294', fontSize: 10 }}>{getProfileRole(primaryProfile) || 'Perfil'}</span>
+                                                        <span style={{ color: '#507294', fontSize: 12 }}>{getProfileRole(primaryProfile) || 'Perfil'}</span>
                                                     )}
                                                 </button>
                                             </div>
@@ -1813,13 +1813,13 @@ const CivilToolsPanel = ({ activeModelUrn, models = [], docs = [], onClose }) =>
                                                             gap: 9,
                                                             cursor: 'pointer',
                                                             color: profileActive ? '#141413' : '#333330',
-                                                            fontSize: 12,
+                                                            fontSize: 13,
                                                             textAlign: 'left'
                                                         }}
                                                     >
                                                         <ProfileIcon muted={!profileActive} />
                                                         <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{profile.name}</span>
-                                                        <span style={{ color: '#72706b', fontSize: 10 }}>{getProfileRole(profile)}</span>
+                                                        <span style={{ color: '#72706b', fontSize: 12 }}>{getProfileRole(profile)}</span>
                                                     </button>
                                                 );
                                             })}
@@ -1840,7 +1840,7 @@ const CivilToolsPanel = ({ activeModelUrn, models = [], docs = [], onClose }) =>
                                         padding: '9px 12px',
                                         textAlign: 'right',
                                         cursor: 'pointer',
-                                        fontSize: 12
+                                        fontSize: 13
                                     }}
                                 >
                                     Borrar
@@ -1873,7 +1873,7 @@ const CivilToolsPanel = ({ activeModelUrn, models = [], docs = [], onClose }) =>
                         <RoadIconSmall muted={!stationLabelsVisible} />
                     </button>
                     <div style={{ flex: 1, height: 1, background: '#e8e6dc' }} />
-                    <span style={{ color: '#72706b', fontSize: 11 }}>
+                    <span style={{ color: '#72706b', fontSize: 12 }}>
                         {alignmentData.length > 0 ? `${alignmentData.length} ejes / ${countVisibleProfiles(alignmentData)} perfiles utiles` : 'Sin datos civil cargados'}
                     </span>
                 </div>
@@ -1885,7 +1885,7 @@ const CivilToolsPanel = ({ activeModelUrn, models = [], docs = [], onClose }) =>
                         borderRadius: 6,
                         padding: 10
                     }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: extractError ? '#b93535' : '#507294', fontSize: 11 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: extractError ? '#b93535' : '#507294', fontSize: 12 }}>
                             {isExtracting && <span className="sfp-check-spinner" />}
                             <span style={{ flex: 1 }}>{extractMessage}</span>
                             <strong>{extractProgress}%</strong>
@@ -1910,7 +1910,7 @@ const CivilToolsPanel = ({ activeModelUrn, models = [], docs = [], onClose }) =>
                                     borderRadius: 4,
                                     padding: '5px 8px',
                                     cursor: 'pointer',
-                                    fontSize: 11,
+                                    fontSize: 12,
                                     fontWeight: 700
                                 }}
                             >
@@ -1921,7 +1921,7 @@ const CivilToolsPanel = ({ activeModelUrn, models = [], docs = [], onClose }) =>
                 )}
 
                 <div style={{ borderTop: '1px solid #e8e6dc', paddingTop: 10 }}>
-                    <div style={{ color: '#141413', fontSize: 13, fontWeight: 700, marginBottom: 10 }}>P.K. actual</div>
+                    <div style={{ color: '#141413', fontSize: 14, fontWeight: 700, marginBottom: 10 }}>P.K. actual</div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                         <button type="button" disabled={!selectedAlignment} onClick={() => handleStep(-10)} style={navButtonStyle}>{'<<'}</button>
                         <button type="button" disabled={!selectedAlignment} onClick={() => handleStep(-1)} style={navButtonStyle}>{'<'}</button>
@@ -1939,7 +1939,7 @@ const CivilToolsPanel = ({ activeModelUrn, models = [], docs = [], onClose }) =>
                                 minWidth: 0,
                                 height: 38,
                                 padding: '0 10px',
-                                fontSize: 13,
+                                fontSize: 14,
                                 textAlign: 'center',
                                 opacity: selectedAlignment ? 1 : 0.6
                             }}
@@ -1965,7 +1965,7 @@ const CivilToolsPanel = ({ activeModelUrn, models = [], docs = [], onClose }) =>
                     />
 
                     {selectedAlignment && (
-                        <div style={{ display: 'flex', justifyContent: 'space-between', color: '#72706b', fontSize: 10, marginTop: 2 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', color: '#72706b', fontSize: 12, marginTop: 2 }}>
                             <span>{formatStation(stationRange.min)}</span>
                             <span>{formatStation(stationRange.max)}</span>
                         </div>
@@ -2033,7 +2033,7 @@ const CivilToolsPanel = ({ activeModelUrn, models = [], docs = [], onClose }) =>
                                 background: isExtractingSections ? '#507294' : sectionJSON ? '#667650' : '#72706b'
                             }} />
                             <span style={{
-                                fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase',
+                                fontSize: 12, letterSpacing: '0.1em', textTransform: 'uppercase',
                                 color: '#72706b', fontWeight: 700
                             }}>
                                 Secciones transversales
@@ -2047,7 +2047,7 @@ const CivilToolsPanel = ({ activeModelUrn, models = [], docs = [], onClose }) =>
                         )}
 
                         {sectionMessage && (
-                            <div style={{ marginTop: 7, fontSize: 11.5, color: '#333330', lineHeight: 1.4 }}>
+                            <div style={{ marginTop: 7, fontSize: 12, color: '#333330', lineHeight: 1.4 }}>
                                 {sectionMessage}
                             </div>
                         )}
@@ -2064,7 +2064,7 @@ const CivilToolsPanel = ({ activeModelUrn, models = [], docs = [], onClose }) =>
                                     border: '1px solid #3aa0ff',
                                     borderRadius: 5,
                                     fontWeight: 700,
-                                    fontSize: 12,
+                                    fontSize: 13,
                                     cursor: 'pointer',
                                     display: 'flex',
                                     justifyContent: 'center',

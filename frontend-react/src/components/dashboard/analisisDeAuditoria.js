@@ -19,9 +19,9 @@ export const ANALISIS = {
           type: 'gauge', min: 0, max: 100, startAngle: 200, endAngle: -20, radius: '95%', center: ['50%', '62%'],
           progress: { show: true, width: 16, itemStyle: { color: colorPct(pctConPartida(res)) } },
           axisLine: { lineStyle: { width: 16, color: [[1, C.light50]] } },
-          axisTick: { show: false }, splitLine: { length: 7, lineStyle: { color: C.gris300 } }, axisLabel: { distance: 20, fontSize: 10, color: C.gris600 },
+          axisTick: { show: false }, splitLine: { length: 7, lineStyle: { color: C.gris300 } }, axisLabel: { distance: 20, fontSize: 12, color: C.gris600 },
           pointer: { show: false }, anchor: { show: false },
-          title: { offsetCenter: [0, '30%'], fontSize: 11, color: C.gris600 },
+          title: { offsetCenter: [0, '30%'], fontSize: 12, color: C.gris600 },
           detail: { offsetCenter: [0, '-5%'], fontSize: 28, fontWeight: 600, formatter: '{value} %', color: C.dark },
           data: [{ value: pctConPartida(res), name: `${fmt(res.conPartida)} de ${fmt(res.total)}` }],
         }],
@@ -50,7 +50,7 @@ export const ANALISIS = {
         option: {
           tooltip: { formatter: (p) => `${p.name}<br/><b>${fmt(p.value)}</b> (${Math.round((p.value / (res.total || 1)) * 100)} % del total)` },
           series: [{ type: 'funnel', sort: 'none', left: 6, right: 6, top: 4, bottom: 4, gap: 3, minSize: '24%',
-            label: { position: 'inside', formatter: (p) => `${fmt(p.value)} · ${Math.round((p.value / (res.total || 1)) * 100)} %`, fontSize: 10.5, color: C.blanco },
+            label: { position: 'inside', formatter: (p) => `${fmt(p.value)} · ${Math.round((p.value / (res.total || 1)) * 100)} %`, fontSize: 12, color: C.blanco },
             data: pe.map((x, i) => ({ name: x.paso, value: x.n, itemStyle: { color: [C.gris700, C.blue30D, C.blue, C.green20D, C.green][i] } })) }],
         },
         click: (p) => { const x = pe.find(k => k.paso === p.name); if (x?.ids) onIds(x.ids, x.paso); },
@@ -62,7 +62,7 @@ export const ANALISIS = {
     echarts: (res, onIds) => ({
       option: {
         tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
-        legend: { bottom: 0, textStyle: { fontSize: 10 }, itemWidth: 10, itemHeight: 10 },
+        legend: { bottom: 0, textStyle: { fontSize: 12 }, itemWidth: 10, itemHeight: 10 },
         grid: { left: 130, right: 16, top: 6, bottom: 56 },
         xAxis: { type: 'value' }, yAxis: { type: 'category', inverse: true, data: res.cats.map(c => c.cat) },
         series: CLASES.map(c => ({ name: c.nombre, type: 'bar', stack: 't', itemStyle: { color: c.color }, data: res.cats.map(x => x.cl[c.id].length) })),
@@ -77,7 +77,7 @@ export const ANALISIS = {
       return {
         option: {
           tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, valueFormatter: (v) => `${v} %` },
-          legend: { bottom: 0, textStyle: { fontSize: 10 }, itemWidth: 10, itemHeight: 10 },
+          legend: { bottom: 0, textStyle: { fontSize: 12 }, itemWidth: 10, itemHeight: 10 },
           grid: { left: 84, right: 12, top: 6, bottom: 40 },
           xAxis: { type: 'value', max: 100, axisLabel: { formatter: '{value} %' } }, yAxis: { type: 'category', inverse: true, data: nombres },
           series: Object.keys(PRUEBAS_COLOR).map(e => ({ name: e, type: 'bar', stack: 'p', itemStyle: { color: PRUEBAS_COLOR[e] },
@@ -92,8 +92,8 @@ export const ANALISIS = {
       option: {
         tooltip: { trigger: 'axis', formatter: (ps) => { const d = res.pareto[ps[0].dataIndex]; return d ? `${d.codigo} ${corta(d.nombre, 50)}<br/>${fmt(d.n)} elementos · ${d.tipos}<br/>acumulado ${d.acum} %` : ''; } },
         grid: { left: 40, right: 40, top: 16, bottom: 70 },
-        xAxis: { type: 'category', data: res.pareto.map(p => p.codigo), axisLabel: { rotate: 45, fontSize: 9.5 } },
-        yAxis: [{ type: 'value', name: 'elementos', nameTextStyle: { fontSize: 10 } }, { type: 'value', max: 100, axisLabel: { formatter: '{value} %' }, splitLine: { show: false } }],
+        xAxis: { type: 'category', data: res.pareto.map(p => p.codigo), axisLabel: { rotate: 45, fontSize: 12 } },
+        yAxis: [{ type: 'value', name: 'elementos', nameTextStyle: { fontSize: 12 } }, { type: 'value', max: 100, axisLabel: { formatter: '{value} %' }, splitLine: { show: false } }],
         series: [
           { type: 'bar', data: res.pareto.map(p => p.n), itemStyle: { color: C.error }, barMaxWidth: 22 },
           { type: 'line', yAxisIndex: 1, data: res.pareto.map(p => p.acum), symbolSize: 5, lineStyle: { color: C.dark }, itemStyle: { color: C.dark },
@@ -108,7 +108,7 @@ export const ANALISIS = {
       option: {
         tooltip: { formatter: (p) => `${p.data.full}<br/>${p.data.con} de ${p.value} partidas con elementos (${p.data.pct} %)` },
         series: [{ type: 'treemap', roam: false, nodeClick: false, breadcrumb: { show: false }, width: '100%', height: '100%',
-          label: { formatter: (p) => `${corta(p.data.full, 26)}\n${p.data.pct} %`, fontSize: 10.5 },
+          label: { formatter: (p) => `${corta(p.data.full, 26)}\n${p.data.pct} %`, fontSize: 12 },
           data: res.capitulos.map(k => ({ name: k.cap, full: `${k.cap} ${k.nombre}`, value: k.partidas, con: k.conElementos, pct: k.pct,
             itemStyle: { color: k.pct >= 60 ? C.green : k.pct >= 25 ? C.orange : C.error, borderColor: C.blanco, borderWidth: 2 } })) }],
       },
@@ -121,7 +121,7 @@ export const ANALISIS = {
         color: PALETA_ARBOL,
         tooltip: { formatter: (p) => `${p.data.full || p.name}<br/><b>${fmt(p.value)}</b> elementos asignados` },
         series: [{ type: 'sunburst', data: res.arbol, radius: ['10%', '95%'], sort: 'desc', itemStyle: { borderColor: C.blanco, borderWidth: 1 },
-          levels: [{}, { label: { fontSize: 10, rotate: 'tangential' } }, { label: { fontSize: 9 } }, { label: { show: false } }] }],
+          levels: [{}, { label: { fontSize: 12, rotate: 'tangential' } }, { label: { fontSize: 12 } }, { label: { show: false } }] }],
       },
     }),
   },
@@ -131,7 +131,7 @@ export const ANALISIS = {
       const nodos = [...res.cats.map(c => ({ name: c.cat, itemStyle: { color: C.gris700 } })), ...CLASES.map(c => ({ name: c.nombre, itemStyle: { color: c.color } }))];
       const enlaces = res.cats.flatMap(c => CLASES.map(k => ({ source: c.cat, target: k.nombre, value: c.cl[k.id].length })).filter(l => l.value));
       return { option: { tooltip: { trigger: 'item' },
-        series: [{ type: 'sankey', left: 8, right: 220, nodeGap: 8, data: nodos, links: enlaces, lineStyle: { color: 'gradient', opacity: 0.35 }, label: { fontSize: 10.5 } }] } };
+        series: [{ type: 'sankey', left: 8, right: 220, nodeGap: 8, data: nodos, links: enlaces, lineStyle: { color: 'gradient', opacity: 0.35 }, label: { fontSize: 12 } }] } };
     },
   },
   recorrido: {

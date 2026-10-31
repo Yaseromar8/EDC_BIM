@@ -52,7 +52,7 @@
     border: none;
     color: #72706b;
     padding: 8px 16px;
-    font-size: 13px;
+    font-size: 14px;
     font-weight: 600;
     cursor: pointer;
     border-bottom: 2px solid transparent;
@@ -75,7 +75,7 @@
 }
 
 .section-title {
-    font-size: 12px;
+    font-size: 13px;
     text-transform: uppercase;
     color: #72706b;
     font-weight: 700;
@@ -99,7 +99,7 @@
 }
 
 .prop-name {
-    font-size: 12px;
+    font-size: 13px;
     color: #72706b;
     margin-bottom: 6px;
 }
@@ -154,7 +154,7 @@
 .placeholder {
     color: #72706b;
     font-style: italic;
-    font-size: 13px;
+    font-size: 14px;
 }
 
 .add-custom-param-btn {
@@ -164,7 +164,7 @@
     color: #72706b;
     padding: 12px;
     border-radius: 8px;
-    font-size: 13px;
+    font-size: 14px;
     font-weight: 600;
     cursor: pointer;
     transition: all 0.2s;
@@ -180,6 +180,6 @@
 .empty-state {
     text-align: center;
     color: #72706b;
-    font-size: 13px;
+    font-size: 14px;
     padding: 20px 0;
 }

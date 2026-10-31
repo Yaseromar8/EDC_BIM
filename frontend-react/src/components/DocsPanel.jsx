@@ -85,18 +85,18 @@ const DocsPanel = ({ selectedElement }) => {
     return (
         <div className="docs-panel" style={{ padding: '20px', color: '#141413', background: 'transparent', height: '100%', overflowY: 'auto' }}>
             <h3 style={{ borderBottom: '1px solid rgba(20, 20, 19,0.1)', paddingBottom: '10px', marginTop: 0 }}>Documentos del elemento</h3>
-            <p style={{ fontSize: '13px', color: '#72706b', marginBottom: '18px', lineHeight: '1.4' }}>
+            <p style={{ fontSize: '14px', color: '#72706b', marginBottom: '18px', lineHeight: '1.4' }}>
                 Vincula URLs o documentos (ACC, planos, fotos) al elemento seleccionado. Se guardan en PostgreSQL por su ID estable, así sobreviven a las actualizaciones del modelo.
             </p>
 
             <div style={{ marginBottom: '16px' }}>
-                <label style={{ display: 'block', fontSize: '11px', fontWeight: 'bold', marginBottom: '8px', color: '#72706b', textTransform: 'uppercase' }}>Elemento destino</label>
-                <div style={{ background: '#faf9f5', padding: '12px', borderRadius: '4px', fontSize: '13px', border: '1px solid #e8e6dc' }}>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', marginBottom: '8px', color: '#72706b', textTransform: 'uppercase' }}>Elemento destino</label>
+                <div style={{ background: '#faf9f5', padding: '12px', borderRadius: '4px', fontSize: '14px', border: '1px solid #e8e6dc' }}>
                     {selectedElement ? (
                         extId ? (
                             <>
                                 <span style={{ color: '#507294', fontWeight: 'bold' }}>ID …{String(extId).slice(-12)}</span><br />
-                                <span style={{ color: '#72706b', fontSize: '10px' }}>{selectedElement.urn?.split('/').pop()}</span>
+                                <span style={{ color: '#72706b', fontSize: '12px' }}>{selectedElement.urn?.split('/').pop()}</span>
                             </>
                         ) : (
                             <span style={{ color: '#e0a23d' }}>Elemento sin ID estable (no se puede vincular).</span>
@@ -108,12 +108,12 @@ const DocsPanel = ({ selectedElement }) => {
             {/* Lista de documentos ya vinculados */}
             {docs.length > 0 && (
                 <div style={{ marginBottom: '18px' }}>
-                    <label style={{ display: 'block', fontSize: '11px', fontWeight: 'bold', marginBottom: '8px', color: '#72706b', textTransform: 'uppercase' }}>Vinculados ({docs.length})</label>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', marginBottom: '8px', color: '#72706b', textTransform: 'uppercase' }}>Vinculados ({docs.length})</label>
                     {docs.map(doc => (
                         <div key={doc.id} style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#faf9f5', border: '1px solid #e8e6dc', borderRadius: 4, padding: '8px 10px', marginBottom: 6 }}>
                             <span>{TYPE_ICON[doc.doc_type] || '🔗'}</span>
                             <a href={doc.url} target="_blank" rel="noopener noreferrer" title={doc.url}
-                                style={{ flex: 1, color: '#507294', fontSize: 12, textDecoration: 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                style={{ flex: 1, color: '#507294', fontSize: 13, textDecoration: 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                 {doc.title || doc.url}
                             </a>
                             <button onClick={() => handleRemove(doc.id)} title="Quitar"
@@ -124,7 +124,7 @@ const DocsPanel = ({ selectedElement }) => {
             )}
 
             <div style={{ marginBottom: '12px' }}>
-                <label style={{ display: 'block', fontSize: '11px', fontWeight: 'bold', marginBottom: '8px', color: '#72706b', textTransform: 'uppercase' }}>Tipo</label>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', marginBottom: '8px', color: '#72706b', textTransform: 'uppercase' }}>Tipo</label>
                 <select value={docType} onChange={e => setDocType(e.target.value)}
                     style={{ width: '100%', padding: '10px', background: '#faf9f5', border: '1px solid #e8e6dc', color: '#141413', outline: 'none', borderRadius: '4px' }}>
                     <option value="url">URL / Enlace web (ACC)</option>
@@ -146,7 +146,7 @@ const DocsPanel = ({ selectedElement }) => {
             </div>
 
             {status && (
-                <div style={{ marginBottom: 12, fontSize: 12, padding: '8px 10px', borderRadius: 4, background: status.type === 'ok' ? 'rgba(34,197,94,0.12)' : 'rgba(239,68,68,0.12)', color: status.type === 'ok' ? '#5fbf67' : '#e06a6a', border: `1px solid ${status.type === 'ok' ? 'rgba(34,197,94,0.3)' : 'rgba(239,68,68,0.3)'}` }}>
+                <div style={{ marginBottom: 12, fontSize: 13, padding: '8px 10px', borderRadius: 4, background: status.type === 'ok' ? 'rgba(34,197,94,0.12)' : 'rgba(239,68,68,0.12)', color: status.type === 'ok' ? '#5fbf67' : '#e06a6a', border: `1px solid ${status.type === 'ok' ? 'rgba(34,197,94,0.3)' : 'rgba(239,68,68,0.3)'}` }}>
                     {status.msg}
                 </div>
             )}

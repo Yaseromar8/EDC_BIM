@@ -85,7 +85,7 @@
 }
 
 .project-title {
-    font-size: 13px;
+    font-size: 14px;
     color: #E8E6DC;
     font-weight: 500;
     letter-spacing: 0.02em;
@@ -97,7 +97,7 @@
     background: transparent;
     border: none;
     color: #CCCAC0;
-    font-size: 12px;
+    font-size: 13px;
     font-weight: 600;
     cursor: pointer;
     padding: 6px 10px;
@@ -147,7 +147,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 600;
     border: 2px solid #1d1d1c;
     cursor: pointer;
@@ -165,7 +165,7 @@
 
 .breadcrumb-project {
     color: #918f88;
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.5px;
@@ -178,7 +178,7 @@
 
 .breadcrumb-view {
     color: #fff;
-    font-size: 13px;
+    font-size: 14px;
     font-weight: 500;
 }
 

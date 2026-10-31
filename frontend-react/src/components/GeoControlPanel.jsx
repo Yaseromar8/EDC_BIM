@@ -20,19 +20,19 @@ const S = {
     position: 'fixed', top: 60, right: 12, width: 400, maxHeight: 'calc(100vh - 140px)',
     background: 'var(--v-superficie)', color: '#333330', borderRadius: 'var(--v-radio)',
     border: '1px solid var(--v-linea)', zIndex: 60, display: 'flex', flexDirection: 'column',
-    fontSize: 13, boxShadow: 'var(--v-sombra-flotante)', pointerEvents: 'auto',
+    fontSize: 14, boxShadow: 'var(--v-sombra-flotante)', pointerEvents: 'auto',
   },
   cab: { display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', borderBottom: '1px solid #e8e6dc' },
   cuerpo: { padding: 12, overflowY: 'auto' },
   boton: {
     background: '#507294', border: 'none', color: '#ffffff', padding: '8px 12px',
-    borderRadius: 8, cursor: 'pointer', fontWeight: 700, fontSize: 12.5,
+    borderRadius: 8, cursor: 'pointer', fontWeight: 700, fontSize: 13,
   },
   botonGris: {
     background: '#e8e6dc', border: 'none', color: '#333330', padding: '8px 12px',
-    borderRadius: 8, cursor: 'pointer', fontWeight: 600, fontSize: 12.5,
+    borderRadius: 8, cursor: 'pointer', fontWeight: 600, fontSize: 13,
   },
-  tabla: { width: '100%', borderCollapse: 'collapse', fontSize: 12 },
+  tabla: { width: '100%', borderCollapse: 'collapse', fontSize: 13 },
   celda: { padding: '4px 6px', borderBottom: '1px solid #e8e6dc', textAlign: 'right', fontVariantNumeric: 'tabular-nums' },
   aviso: { background: '#f1f0e8', borderRadius: 8, padding: 10, margin: '10px 0', lineHeight: 1.5 },
 };

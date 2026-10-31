@@ -70,7 +70,7 @@ const VistaDePagina = forwardRef(function VistaDePagina({
   return (
     <div style={{ position: 'absolute', inset: 0, zIndex: 5, background: C.light, display: 'flex', flexDirection: 'column' }}>
       {!tarjetas.length ? (
-        <div style={{ padding: 24, color: C.gris600, fontSize: 13 }}>Las gráficas de esta vista ya no están en el lienzo.</div>
+        <div style={{ padding: 24, color: C.gris600, fontSize: 14 }}>Las gráficas de esta vista ya no están en el lienzo.</div>
       ) : (
         <div ref={rejilla} style={{
           flex: 1, minHeight: 0, overflowY: 'auto', padding: 14, boxSizing: 'border-box', background: C.light,

@@ -144,27 +144,27 @@ function generatePopoutHTML(flatRows, engineResults) {
 <html><head><title>BIM 5D - Presupuesto</title>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
-  body { font-family: 'IBM Plex Sans', 'Segoe UI', Arial, sans-serif; background:#ffffff; color:#141413; font-size:12px; }
+  body { font-family: 'IBM Plex Sans', 'Segoe UI', Arial, sans-serif; background:#ffffff; color:#141413; font-size:13px; }
   .header { background:#ffffff; padding:8px 16px; display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #e8e6dc; }
   .header h3 { margin:0; font-size:14px; color:#507294; }
-  .dock-btn { background:#507294; color:#fff; border:none; padding:5px 14px; border-radius:4px; cursor:pointer; font-size:12px; }
+  .dock-btn { background:#507294; color:#fff; border:none; padding:5px 14px; border-radius:4px; cursor:pointer; font-size:13px; }
   .dock-btn:hover { background:#141413; }
   table { width:100%; border-collapse:collapse; }
-  th { background:#f1f0e8; color:#52524d; padding:6px 8px; text-align:left; font-size:11px; font-weight:600; position:sticky; top:0; z-index:2; border-bottom:1px solid #e8e6dc; }
+  th { background:#f1f0e8; color:#52524d; padding:6px 8px; text-align:left; font-size:12px; font-weight:600; position:sticky; top:0; z-index:2; border-bottom:1px solid #e8e6dc; }
   th.num { text-align:right; }
   .row { border-bottom:1px solid #e8e6dc; cursor:pointer; transition:background 0.15s; }
   .row:hover { background:#f1f0e8; }
   .row.selected { background:#ecf0f1; }
   .row.titulo { font-weight:600; background:#faf9f5; }
   .row.titulo td { color:#141413; }
-  .row.n1 { font-size:13px; }
+  .row.n1 { font-size:14px; }
   .row.n1 td { padding:8px; }
   td { padding:4px 8px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .cell-item { color:#507294; min-width:140px; }
   .cell-desc { max-width:400px; }
   .cell-und { text-align:center; color:#72706b; min-width:50px; }
   .cell-num { text-align:right; min-width:100px; font-variant-numeric:tabular-nums; }
-  .arrow { font-size:10px; margin-right:4px; }
+  .arrow { font-size:12px; margin-right:4px; }
   .table-wrap { overflow:auto; height:calc(100vh - 40px); }
   ${hatchCSS}
 </style>
@@ -938,7 +938,7 @@ const BudgetTree = ({ activeModelUrn = 'global', onClose, onPoppedOut }) => {
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: '#ffffff', color: '#141413', fontFamily: 'inherit', fontSize: '12px', userSelect: 'none' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: '#ffffff', color: '#141413', fontFamily: 'inherit', fontSize: '13px', userSelect: 'none' }}>
       {/* ─── HEADER ─── */}
       <div style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -947,23 +947,23 @@ const BudgetTree = ({ activeModelUrn = 'global', onClose, onPoppedOut }) => {
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <span style={{ fontSize: '14px', fontWeight: 700, color: '#507294' }}>5D</span>
-          <span style={{ color: '#72706b', fontSize: '10px' }}>{engineLabel}</span>
+          <span style={{ color: '#72706b', fontSize: '12px' }}>{engineLabel}</span>
         </div>
         <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
           <button onClick={expandAll} title="Expandir Todo"
-            style={{ background: 'none', border: '1px solid #cccac0', color: '#52524d', padding: '3px 8px', borderRadius: '3px', cursor: 'pointer', fontSize: '11px' }}>
+            style={{ background: 'none', border: '1px solid #cccac0', color: '#52524d', padding: '3px 8px', borderRadius: '3px', cursor: 'pointer', fontSize: '12px' }}>
             ▼ Expandir
           </button>
           <button onClick={collapseAll} title="Contraer Todo"
-            style={{ background: 'none', border: '1px solid #cccac0', color: '#52524d', padding: '3px 8px', borderRadius: '3px', cursor: 'pointer', fontSize: '11px' }}>
+            style={{ background: 'none', border: '1px solid #cccac0', color: '#52524d', padding: '3px 8px', borderRadius: '3px', cursor: 'pointer', fontSize: '12px' }}>
             ▶ Contraer
           </button>
           <button onClick={openPopout} title="Open in a new window"
-            style={{ background: 'none', border: '1px solid #cccac0', color: '#52524d', padding: '3px 8px', borderRadius: '3px', cursor: 'pointer', fontSize: '11px' }}>
+            style={{ background: 'none', border: '1px solid #cccac0', color: '#52524d', padding: '3px 8px', borderRadius: '3px', cursor: 'pointer', fontSize: '12px' }}>
             ↗ New Window
           </button>
           <button onClick={exportToExcel} title="Exportar a Excel con agrupaciones"
-            style={{ background: 'none', border: '1px solid #cccac0', color: '#52524d', padding: '3px 8px', borderRadius: '3px', cursor: 'pointer', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+            style={{ background: 'none', border: '1px solid #cccac0', color: '#52524d', padding: '3px 8px', borderRadius: '3px', cursor: 'pointer', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px' }}>
             📊 Exportar
           </button>
           {onClose && (
@@ -984,7 +984,7 @@ const BudgetTree = ({ activeModelUrn = 'global', onClose, onPoppedOut }) => {
       }}>
         {['ÍTEM', 'DESCRIPCIÓN', 'UND.', 'METRADO\nCONTRACTUAL', 'METRADO\nREAL', 'P.U (S/)', 'P. PARCIAL (S)\nCONTRACTUAL', 'P. PARCIAL (S)\nREAL'].map((h, i) => (
           <div key={i} style={{
-            padding: '6px 8px', fontSize: '10.5px', fontWeight: 600, color: '#52524d',
+            padding: '6px 8px', fontSize: '12px', fontWeight: 600, color: '#52524d',
             textAlign: i >= 3 ? 'right' : 'left',
             whiteSpace: 'pre-line', lineHeight: '1.3',
             borderRight: i < 7 ? '1px solid #e8e6dc' : 'none'
@@ -1060,7 +1060,7 @@ const BudgetTree = ({ activeModelUrn = 'global', onClose, onPoppedOut }) => {
                     {hasChildren ? (
                       <span
                         style={{
-                          fontSize: '11px', color: '#333330', display: 'inline-flex', alignItems: 'center',
+                          fontSize: '12px', color: '#333330', display: 'inline-flex', alignItems: 'center',
                           justifyContent: 'center', width: '16px', height: '16px', flexShrink: 0,
                           cursor: 'pointer', borderRadius: '3px',
                           transition: 'transform 0.2s ease, background 0.15s',
@@ -1071,7 +1071,7 @@ const BudgetTree = ({ activeModelUrn = 'global', onClose, onPoppedOut }) => {
                         title={isExpanded ? 'Contraer' : 'Expandir'}
                       >▶</span>
                     ) : (
-                      <span style={{ width: '16px', flexShrink: 0, fontSize: '12px', display: 'flex', justifyContent: 'center' }}>
+                      <span style={{ width: '16px', flexShrink: 0, fontSize: '13px', display: 'flex', justifyContent: 'center' }}>
                         {isElement ? '🧊' : ''}
                       </span>
                     )}
@@ -1086,7 +1086,7 @@ const BudgetTree = ({ activeModelUrn = 'global', onClose, onPoppedOut }) => {
                         gridTemplateColumns: 'minmax(90px, 1fr) minmax(120px, 1.2fr) minmax(130px, 1.5fr) max-content max-content minmax(150px, 2fr) 40px 80px',
                         height: '100%',
                         cursor: 'pointer',
-                        fontSize: '10.5px',
+                        fontSize: '12px',
                         color: '#52524d'
                       }}
                       onClick={(e) => { e.stopPropagation(); handleRowSelect(node); }}
@@ -1180,7 +1180,7 @@ const BudgetTree = ({ activeModelUrn = 'global', onClose, onPoppedOut }) => {
                             borderRadius: '3px',
                             background: '#507294',
                             color: '#fff',
-                            fontSize: '7.5px',
+                            fontSize: '12px',
                             fontWeight: 800,
                             fontStyle: 'normal',
                             letterSpacing: '0.3px',

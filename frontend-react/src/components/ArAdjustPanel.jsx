@@ -55,7 +55,7 @@ export default function ArAdjustPanel({ bridge, onClose }) {
       {/* Cuánto llevas movido: si es mucho, el problema no es el afinado. */}
       <div style={{
         background: 'rgba(20,20,19,0.86)', color: '#f1f0e8', borderRadius: 12,
-        padding: '6px 14px', fontSize: 12.5, display: 'flex', gap: 14,
+        padding: '6px 14px', fontSize: 13, display: 'flex', gap: 14,
       }}>
         <span>movido {desplazado.toFixed(2)} m</span>
         <span>alto {d.z >= 0 ? '+' : ''}{d.z.toFixed(2)} m</span>
@@ -70,7 +70,7 @@ export default function ArAdjustPanel({ bridge, onClose }) {
           <button style={btn} onClick={() => mover(0, 1, 0)} aria-label="alejar">▲</button>
           <span />
           <button style={btn} onClick={() => mover(-1, 0, 0)} aria-label="izquierda">◀</button>
-          <button style={{ ...btn, fontSize: 11, fontWeight: 600 }}
+          <button style={{ ...btn, fontSize: 12, fontWeight: 600 }}
                   onClick={() => { bridge?.resetAdjust?.(); forzar((n) => n + 1); }}>
             deshacer
           </button>
@@ -96,7 +96,7 @@ export default function ArAdjustPanel({ bridge, onClose }) {
             onClick={() => setPaso(i)}
             style={{
               minHeight: 36, padding: '0 16px', borderRadius: 18, cursor: 'pointer',
-              border: '1px solid rgba(255,255,255,0.22)', fontSize: 13, fontWeight: 700,
+              border: '1px solid rgba(255,255,255,0.22)', fontSize: 14, fontWeight: 700,
               background: i === paso ? '#507294' : 'rgba(20,20,19,0.82)', color: '#fff',
             }}
           >
@@ -107,7 +107,7 @@ export default function ArAdjustPanel({ bridge, onClose }) {
           onClick={onClose}
           style={{
             minHeight: 36, padding: '0 18px', borderRadius: 18, cursor: 'pointer',
-            border: '1px solid rgba(255,255,255,0.35)', fontSize: 13, fontWeight: 700,
+            border: '1px solid rgba(255,255,255,0.35)', fontSize: 14, fontWeight: 700,
             background: 'rgba(20,20,19,0.82)', color: '#fff', marginLeft: 6,
           }}
         >

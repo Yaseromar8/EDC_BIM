@@ -163,7 +163,7 @@ const TreeNode = ({ node, selectedFiles, onFileSelect, hubId, projectId: context
                 style={{ padding: '6px 4px', borderRadius: '4px', display: 'flex', alignItems: 'center', transition: 'background 0.2s', cursor: 'pointer', background: isChecked ? 'rgba(106,155,204,0.12)' : undefined }}>
                 <span style={{ display: 'flex', alignItems: 'center', flex: 1, minWidth: 0 }}>
                     {isFolder ? (
-                        <i className={`fas fa-caret-${isOpen ? 'down' : 'right'}`} style={{ width: '16px', fontSize: '12px', opacity: 0.5, flexShrink: 0 }}></i>
+                        <i className={`fas fa-caret-${isOpen ? 'down' : 'right'}`} style={{ width: '16px', fontSize: '13px', opacity: 0.5, flexShrink: 0 }}></i>
                     ) : (
                         <span style={{ width: '4px', flexShrink: 0 }}></span>
                     )}
@@ -194,16 +194,16 @@ const TreeNode = ({ node, selectedFiles, onFileSelect, hubId, projectId: context
                     <i className={getIcon()} style={{ marginRight: '8px', flexShrink: 0, color: isFolder ? '#FFC107' : (isChecked ? '#507294' : '#72706b'), fontSize: '14px' }}></i>
                     {/* Una sola línea + truncado al medio: se conserva el sufijo que
                         distingue el archivo (…-ENCOFRADOS.rvt). Nombre completo en tooltip. */}
-                    <span style={{ fontSize: '13px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'clip', lineHeight: 1.3, opacity: isFolder ? 0.9 : 0.85, minWidth: 0 }}>
+                    <span style={{ fontSize: '14px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'clip', lineHeight: 1.3, opacity: isFolder ? 0.9 : 0.85, minWidth: 0 }}>
                         {middleTruncate(node.attributes.displayName || node.attributes.name)}
                     </span>
                 </span>
             </div>
             {isOpen && (
                 <ul style={{ paddingLeft: '10px', borderLeft: '1px solid rgba(20, 20, 19,0.05)', marginLeft: '7px' }}>
-                    {loading && <li style={{ padding: '4px 0', fontSize: '11px', color: '#72706b' }}><i className="fas fa-spinner fa-spin"></i> Cargando...</li>}
+                    {loading && <li style={{ padding: '4px 0', fontSize: '12px', color: '#72706b' }}><i className="fas fa-spinner fa-spin"></i> Cargando...</li>}
                     {!loading && children && children.length === 0 && (
-                        <li style={{ padding: '4px 8px', fontSize: '11px', color: '#52524d' }}>Vacio</li>
+                        <li style={{ padding: '4px 8px', fontSize: '12px', color: '#52524d' }}>Vacio</li>
                     )}
                     {children && children.map(child => (
                         <TreeNode
@@ -255,8 +255,8 @@ const NativeFileTree = ({ onSelectionChange, forcedHubId, forcedProjectId, onFil
         onSelectionChange?.(selectedFiles);
     }, [selectedFiles, onSelectionChange]);
 
-    if (loading) return <div style={{ padding: '20px', color: '#72706b', fontSize: '13px' }}><i className="fas fa-spinner fa-spin"></i> Cargando navegador...</div>;
-    if (error) return <div style={{ padding: '20px', color: '#e74c3c', fontSize: '13px' }}>Error al cargar datos de Autodesk.</div>;
+    if (loading) return <div style={{ padding: '20px', color: '#72706b', fontSize: '14px' }}><i className="fas fa-spinner fa-spin"></i> Cargando navegador...</div>;
+    if (error) return <div style={{ padding: '20px', color: '#e74c3c', fontSize: '14px' }}>Error al cargar datos de Autodesk.</div>;
 
     return (
         <div className="native-file-tree-container" style={{ color: '#52524d' }}>

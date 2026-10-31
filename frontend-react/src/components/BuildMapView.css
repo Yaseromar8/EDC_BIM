@@ -47,7 +47,7 @@
 
 .ctx-btn-primary small {
     font-weight: 400;
-    font-size: 11px;
+    font-size: 12px;
     opacity: 0.9;
     margin-top: 2px;
 }
@@ -298,7 +298,7 @@
 
 .thumbnail-overlay span {
     color: white;
-    font-size: 10px;
+    font-size: 12px;
     font-weight: bold;
     text-transform: uppercase;
 }
@@ -319,7 +319,7 @@
 }
 
 .doc-info strong {
-    font-size: 13px;
+    font-size: 14px;
     color: #334155;
     white-space: nowrap;
     overflow: hidden;
@@ -327,7 +327,7 @@
 }
 
 .doc-info small {
-    font-size: 11px;
+    font-size: 12px;
     color: #94a3b8;
 }
 

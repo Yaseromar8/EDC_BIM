@@ -394,7 +394,7 @@ export default function ProfilePanel() {
                 <div style={{ width: 54, height: 3.5, borderRadius: 2, background: '#3b4553' }} />
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
-                <span style={{ color: '#8ecbff', fontWeight: 800, fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ color: '#8ecbff', fontWeight: 800, fontSize: 13, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                     <ProfileIcon /> Perfil longitudinal
                 </span>
                 {/* escala vertical: auto (llena el panel) o exageración V:H real */}
@@ -402,7 +402,7 @@ export default function ProfilePanel() {
                     value={vExag}
                     onChange={(e) => setVExag(e.target.value)}
                     title="Escala vertical: auto ajusta al panel; 1x = escala verdadera; 10x = exagerada 10 veces"
-                    style={{ background: '#0f1216', border: '1px solid #2a323d', color: '#dce3ee', borderRadius: 4, padding: '3px 6px', fontSize: 11 }}
+                    style={{ background: '#0f1216', border: '1px solid #2a323d', color: '#dce3ee', borderRadius: 4, padding: '3px 6px', fontSize: 12 }}
                 >
                     <option value="auto">Escala V: auto{effectiveExag ? ` (≈${effectiveExag.toFixed(1)}x)` : ''}</option>
                     <option value="1">1x (verdadera)</option>
@@ -416,7 +416,7 @@ export default function ProfilePanel() {
                         type="button"
                         onClick={() => setView(null)}
                         title="Ver todo el eje (o doble clic en el gráfico)"
-                        style={{ background: 'rgba(50,151,255,.16)', border: '1px solid #2d5a8a', color: '#7cbcff', borderRadius: 4, padding: '2px 8px', fontSize: 10.5, cursor: 'pointer', fontWeight: 700 }}
+                        style={{ background: 'rgba(50,151,255,.16)', border: '1px solid #2d5a8a', color: '#7cbcff', borderRadius: 4, padding: '2px 8px', fontSize: 12, cursor: 'pointer', fontWeight: 700 }}
                     >
                         🔍 {fmtPk(viewS0)}–{fmtPk(viewS1)} · ver todo
                     </button>
@@ -427,7 +427,7 @@ export default function ProfilePanel() {
                         type="button"
                         onClick={() => setShowFill(v => !v)}
                         title="Sombrear corte (excavación) y relleno entre terreno y rasante"
-                        style={{ background: showFill ? 'rgba(16,185,129,.16)' : '#0f1216', border: `1px solid ${showFill ? '#0f9d58' : '#2a323d'}`, color: showFill ? '#34d399' : '#8d98a8', borderRadius: 4, padding: '2px 8px', fontSize: 10.5, cursor: 'pointer', fontWeight: 700 }}
+                        style={{ background: showFill ? 'rgba(16,185,129,.16)' : '#0f1216', border: `1px solid ${showFill ? '#0f9d58' : '#2a323d'}`, color: showFill ? '#34d399' : '#8d98a8', borderRadius: 4, padding: '2px 8px', fontSize: 12, cursor: 'pointer', fontWeight: 700 }}
                     >▨ Corte/Relleno</button>
                 )}
                 {gradeSeries && (
@@ -435,17 +435,17 @@ export default function ProfilePanel() {
                         type="button"
                         onClick={() => setShowSlopes(v => !v)}
                         title="Etiquetar pendientes (%) de la rasante"
-                        style={{ background: showSlopes ? 'rgba(245,158,11,.16)' : '#0f1216', border: `1px solid ${showSlopes ? '#f59e0b' : '#2a323d'}`, color: showSlopes ? '#fbbf24' : '#8d98a8', borderRadius: 4, padding: '2px 8px', fontSize: 10.5, cursor: 'pointer', fontWeight: 700 }}
+                        style={{ background: showSlopes ? 'rgba(245,158,11,.16)' : '#0f1216', border: `1px solid ${showSlopes ? '#f59e0b' : '#2a323d'}`, color: showSlopes ? '#fbbf24' : '#8d98a8', borderRadius: 4, padding: '2px 8px', fontSize: 12, cursor: 'pointer', fontWeight: 700 }}
                     >∠ Pendientes</button>
                 )}
-                <span style={{ color: '#5b6570', fontSize: 10 }}>
+                <span style={{ color: '#5b6570', fontSize: 12 }}>
                     rueda: zoom · Shift+arrastrar: pan · doble clic: todo
                 </span>
                 {alignments.length > 1 && (
                     <select
                         value={activeId || ''}
                         onChange={(e) => setActiveId(e.target.value)}
-                        style={{ background: '#0f1216', border: '1px solid #2a323d', color: '#dce3ee', borderRadius: 4, padding: '3px 8px', fontSize: 11 }}
+                        style={{ background: '#0f1216', border: '1px solid #2a323d', color: '#dce3ee', borderRadius: 4, padding: '3px 8px', fontSize: 12 }}
                     >
                         {alignments.map((a) => {
                             const id = a.alignmentId || a.name;
@@ -456,7 +456,7 @@ export default function ProfilePanel() {
                 {/* leyenda de perfiles */}
                 <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                     {series.map((sr) => (
-                        <span key={sr.name} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 10.5, color: '#c7d0dc' }}>
+                        <span key={sr.name} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, color: '#c7d0dc' }}>
                             <span style={{ width: 14, height: 2.5, background: sr.color, display: 'inline-block' }} />
                             {sr.name.slice(0, 24)}
                             {cursor != null && (
@@ -468,7 +468,7 @@ export default function ProfilePanel() {
                     ))}
                 </div>
                 {cursor != null && (
-                    <span className="lob4d-mono" style={{ marginLeft: 'auto', color: '#fbbf24', fontSize: 12, fontWeight: 800, fontFamily: 'Consolas, monospace' }}>
+                    <span className="lob4d-mono" style={{ marginLeft: 'auto', color: '#fbbf24', fontSize: 13, fontWeight: 800, fontFamily: 'Consolas, monospace' }}>
                         PK {fmtPk(cursor)}
                     </span>
                 )}
@@ -480,7 +480,7 @@ export default function ProfilePanel() {
             </div>
 
             {(!alignment || !series.length) ? (
-                <div style={{ color: '#8d98a8', fontSize: 12, padding: '14px 4px' }}>
+                <div style={{ color: '#8d98a8', fontSize: 13, padding: '14px 4px' }}>
                     Sin perfiles: selecciona un eje en el panel Civil (o fija un eje base 📌 con perfiles extraídos).
                 </div>
             ) : (

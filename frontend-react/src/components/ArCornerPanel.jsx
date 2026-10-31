@@ -452,7 +452,7 @@ export default function ArCornerPanel({
             key={q.id}
             style={{
               flex: 1, textAlign: 'center', padding: '5px 4px', borderRadius: 8,
-              fontSize: 11.5, fontWeight: actual ? 700 : 500,
+              fontSize: 12, fontWeight: actual ? 700 : 500,
               background: actual ? '#507294' : hecho ? '#14532d' : '#1d1d1c',
               color: actual ? '#fff' : hecho ? '#86efac' : '#72706b',
               border: '1px solid ' + (actual ? '#507294' : hecho ? '#14532d' : '#302f2e'),
@@ -491,7 +491,7 @@ export default function ArCornerPanel({
             y el piso. Primero escaneas las tres caras aquí, con la cámara, y
             después las señalas en el modelo.
           </p>
-          <p style={{ margin: '0 0 12px', color: '#918f88', fontSize: 12.5 }}>
+          <p style={{ margin: '0 0 12px', color: '#918f88', fontSize: 13 }}>
             Aún no empieza nada: la cámara se enciende al pulsar Empezar.
           </p>
           <div style={{ display: 'flex', gap: 8 }}>
@@ -541,7 +541,7 @@ export default function ArCornerPanel({
               ¡Esquina detectada!
             </div>
           )}
-          <div style={{ marginBottom: 4, color: '#6a9bcc', fontSize: 12.5 }}>
+          <div style={{ marginBottom: 4, color: '#6a9bcc', fontSize: 13 }}>
             relieve reconocido: {nubePuntos} puntos
             {profundidad != null && profundidad >= 0 && ` (+${profundidad} de profundidad)`}
             {profundidad === -1 && ' (profundidad apagada: no validó)'}
@@ -553,7 +553,7 @@ export default function ArCornerPanel({
           </div>
           {/* El medidor por cara: el panel de color crece en pantalla y aqui
               se ve cuanto mide. Es la respuesta a "¿esta detectando o no?". */}
-          <div style={{ marginBottom: 6, fontSize: 13 }}>
+          <div style={{ marginBottom: 6, fontSize: 14 }}>
             <span style={{ color: '#33e5f2', fontWeight: areas[0] > 0.3 ? 700 : 400 }}>
               piso {areas[0] > 0.05 ? areas[0].toFixed(1) + ' m²' : '—'}{areas[0] > 0.3 ? ' ✓' : ''}
             </span>
@@ -571,7 +571,7 @@ export default function ArCornerPanel({
             {mira === 'inclinada' && ' (no sirve para la esquina)'}
           </div>
           {!mira && muros < 2 && (
-            <div style={{ marginBottom: 8, color: '#6a9bcc', fontSize: 12.5 }}>
+            <div style={{ marginBottom: 8, color: '#6a9bcc', fontSize: 13 }}>
               Muro liso: apunta al zócalo, a una esquina o a un borde con
               detalle, acércate a 1–2 m, y usa el botón manteniendo firme.
             </div>
@@ -588,7 +588,7 @@ export default function ArCornerPanel({
             </div>
           )}
           {esSimulado() && (
-            <div style={{ marginBottom: 10, color: '#6a9bcc', fontSize: 13 }}>
+            <div style={{ marginBottom: 10, color: '#6a9bcc', fontSize: 14 }}>
               Ensayo: teclas <b>1</b>, <b>2</b> y <b>3</b> para mirar al piso y a
               cada muro (mantén un segundo). <b>4</b>/<b>5</b>: rincón abierto
               (135°) / recto. <b>0</b> vuelve a la órbita.

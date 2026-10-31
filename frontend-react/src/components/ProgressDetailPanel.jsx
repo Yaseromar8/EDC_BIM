@@ -379,7 +379,7 @@ const ProgressDetailPanel = ({ isOpen, onClose, pin, elementProps, onDelete, isD
                     gap: '8px',
                     borderBottom: '1px solid #e8e6dc'
                 }}>
-                    <span style={{ fontSize: '11px', color: '#52524d', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    <span style={{ fontSize: '12px', color: '#52524d', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                         AVANCE · {pin.id?.substring(0, 8)}
                     </span>
                     <div style={{ display: 'flex', gap: '4px', flexShrink: 0 }}>
@@ -433,7 +433,7 @@ const ProgressDetailPanel = ({ isOpen, onClose, pin, elementProps, onDelete, isD
                     </div>
                     <div>
                         <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 600 }}>Detalle de Avance</h3>
-                        <span style={{ fontSize: '12px', color: '#72706b' }}>ID: {pin.id}</span>
+                        <span style={{ fontSize: '13px', color: '#72706b' }}>ID: {pin.id}</span>
                     </div>
                 </div>
                 <div style={{ display: 'flex', gap: '8px' }}>
@@ -453,19 +453,19 @@ const ProgressDetailPanel = ({ isOpen, onClose, pin, elementProps, onDelete, isD
 
                 {/* ═══════ PARTIDA ASOCIADA (Excel-like 2-cell Row) ═══════ */}
                 <div style={{ width: '100%', marginBottom: '24px', position: 'relative' }} ref={dropdownRef}>
-                    <div style={{ marginBottom: '6px', fontSize: '11px', color: '#72706b', fontWeight: 600, paddingLeft: '2px', textTransform: 'uppercase' }}>
+                    <div style={{ marginBottom: '6px', fontSize: '12px', color: '#72706b', fontWeight: 600, paddingLeft: '2px', textTransform: 'uppercase' }}>
                         Partida Asociada
                     </div>
 
                     <div style={{ display: 'flex', border: '1px solid #cccac0', borderRadius: '4px', background: '#f1f0e8', overflow: 'hidden' }}>
                         {/* CELL 1: Code */}
                         <div onClick={() => setPartidaDropdownOpen(prev => !prev)} style={{ width: '130px', flexShrink: 0, borderRight: '1px solid #cccac0', padding: '8px 10px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: partidaDropdownOpen ? '#f1f0e8' : '#ffffff', transition: 'background 0.2s' }} title="Click para seleccionar partida">
-                            <span style={{ fontFamily: 'monospace', fontSize: '11px', color: pin.codigoPartida ? '#141413' : '#72706b', fontWeight: pin.codigoPartida ? 600 : 400 }}>{pin.codigoPartida || 'Seleccionar...'}</span>
+                            <span style={{ fontFamily: 'monospace', fontSize: '12px', color: pin.codigoPartida ? '#141413' : '#72706b', fontWeight: pin.codigoPartida ? 600 : 400 }}>{pin.codigoPartida || 'Seleccionar...'}</span>
                             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ opacity: 0.6 }}><polyline points="6 9 12 15 18 9"></polyline></svg>
                         </div>
                         {/* CELL 2: Name */}
                         <div style={{ flex: 1, padding: '8px 12px', display: 'flex', alignItems: 'center', overflow: 'hidden', background: '#faf9f5' }}>
-                            <span style={{ fontSize: '10px', color: pin.partidaNombre ? '#333330' : '#72706b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontStyle: pin.partidaNombre ? 'normal' : 'italic', lineHeight: '1.2' }} title={pin.partidaNombre || ''}>{pin.partidaNombre || 'Sin descripción'}</span>
+                            <span style={{ fontSize: '12px', color: pin.partidaNombre ? '#333330' : '#72706b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontStyle: pin.partidaNombre ? 'normal' : 'italic', lineHeight: '1.2' }} title={pin.partidaNombre || ''}>{pin.partidaNombre || 'Sin descripción'}</span>
                         </div>
                     </div>
 
@@ -480,11 +480,11 @@ const ProgressDetailPanel = ({ isOpen, onClose, pin, elementProps, onDelete, isD
                                     value={partidaSearch}
                                     onChange={(e) => setPartidaSearch(e.target.value)}
                                     onKeyDown={handlePartidaKeyDown}
-                                    style={{ width: '100%', padding: '6px 8px', background: '#ffffff', border: '1px solid #cccac0', borderRadius: '3px', color: '#141413', fontSize: '12px', outline: 'none', fontFamily: 'var(--a-font-sans)', boxSizing: 'border-box' }}
+                                    style={{ width: '100%', padding: '6px 8px', background: '#ffffff', border: '1px solid #cccac0', borderRadius: '3px', color: '#141413', fontSize: '13px', outline: 'none', fontFamily: 'var(--a-font-sans)', boxSizing: 'border-box' }}
                                 />
                             </div>
                             <div ref={optionsContainerRef} style={{ overflowY: 'auto', flex: 1 }}>
-                                {filteredPartidas.length === 0 ? <div style={{ padding: '12px', textAlign: 'center', color: '#72706b', fontSize: '11px' }}>Sin resultados</div> : filteredPartidas.map((partida, idx) => (
+                                {filteredPartidas.length === 0 ? <div style={{ padding: '12px', textAlign: 'center', color: '#72706b', fontSize: '12px' }}>Sin resultados</div> : filteredPartidas.map((partida, idx) => (
                                     <div
                                         key={partida.code}
                                         onClick={() => handleSelectPartida(partida)}
@@ -501,8 +501,8 @@ const ProgressDetailPanel = ({ isOpen, onClose, pin, elementProps, onDelete, isD
                                         }}
                                     >
                                         <div style={{ flex: 1, minWidth: 0 }}>
-                                            <div style={{ fontFamily: 'monospace', fontSize: '12px', fontWeight: 600, color: (highlightedIndex === idx || pin.codigoPartida === partida.code) ? '#507294' : '#333330' }}>{partida.code}</div>
-                                            {partida.name && <div style={{ fontSize: '10px', color: '#72706b', marginTop: '1px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{partida.name}</div>}
+                                            <div style={{ fontFamily: 'monospace', fontSize: '13px', fontWeight: 600, color: (highlightedIndex === idx || pin.codigoPartida === partida.code) ? '#507294' : '#333330' }}>{partida.code}</div>
+                                            {partida.name && <div style={{ fontSize: '12px', color: '#72706b', marginTop: '1px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{partida.name}</div>}
                                         </div>
                                     </div>
                                 ))}
@@ -514,7 +514,7 @@ const ProgressDetailPanel = ({ isOpen, onClose, pin, elementProps, onDelete, isD
                 {/* ═══════ TABLA DE METRADO (Dynamic) ═══════ */}
                 {pin.codigoPartida && (
                     <div style={{ width: '100%', marginBottom: '24px' }} ref={headerDropdownRef}>
-                        <div style={{ marginBottom: '6px', fontSize: '11px', color: '#72706b', fontWeight: 600, paddingLeft: '2px', textTransform: 'uppercase' }}>
+                        <div style={{ marginBottom: '6px', fontSize: '12px', color: '#72706b', fontWeight: 600, paddingLeft: '2px', textTransform: 'uppercase' }}>
                             Planilla de Metrado
                         </div>
 
@@ -528,12 +528,12 @@ const ProgressDetailPanel = ({ isOpen, onClose, pin, elementProps, onDelete, isD
                                         onClick={() => setParametroBaseOpen(!parametroBaseOpen)}
                                         tabIndex={0}
                                         onKeyDown={handleHeaderKeyDown}
-                                        style={{ fontSize: '10px', fontWeight: 700, color: '#52524d', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', outline: 'none' }}
+                                        style={{ fontSize: '12px', fontWeight: 700, color: '#52524d', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', outline: 'none' }}
                                     >
                                         <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '180px' }}>
                                             {parametroBase || 'SELECCIONAR PARAMETRO'}
                                         </span>
-                                        <span style={{ fontSize: '8px' }}>▼</span>
+                                        <span style={{ fontSize: '12px' }}>▼</span>
                                     </div>
                                     {/* Header Dropdown List - Enhanced zIndex */}
                                     {parametroBaseOpen && (
@@ -546,7 +546,7 @@ const ProgressDetailPanel = ({ isOpen, onClose, pin, elementProps, onDelete, isD
                                                         onMouseEnter={() => setHeaderHighlightIndex(idx)}
                                                         style={{
                                                             padding: '8px 10px',
-                                                            fontSize: '11px',
+                                                            fontSize: '12px',
                                                             color: '#333330',
                                                             cursor: 'pointer',
                                                             borderBottom: '1px solid #e8e6dc',
@@ -556,13 +556,13 @@ const ProgressDetailPanel = ({ isOpen, onClose, pin, elementProps, onDelete, isD
                                                     >
                                                         {p}
                                                     </div>
-                                                )) : <div style={{ padding: '8px', color: '#72706b', fontSize: '10px' }}>Sin parámetros</div>}
+                                                )) : <div style={{ padding: '8px', color: '#72706b', fontSize: '12px' }}>Sin parámetros</div>}
                                             </div>
                                         </div>
                                     )}
                                 </div>
-                                <div style={{ padding: '6px 4px', fontSize: '10px', fontWeight: 700, color: '#52524d', textAlign: 'center', borderRight: '1px solid #e8e6dc', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>UND.</div>
-                                <div style={{ padding: '6px 4px', fontSize: '10px', fontWeight: 700, color: '#52524d', textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>METRADO</div>
+                                <div style={{ padding: '6px 4px', fontSize: '12px', fontWeight: 700, color: '#52524d', textAlign: 'center', borderRight: '1px solid #e8e6dc', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>UND.</div>
+                                <div style={{ padding: '6px 4px', fontSize: '12px', fontWeight: 700, color: '#52524d', textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>METRADO</div>
                             </div>
 
                             {/* TABLE BODY: Rows */}
@@ -579,7 +579,7 @@ const ProgressDetailPanel = ({ isOpen, onClose, pin, elementProps, onDelete, isD
                                                 background: 'transparent',
                                                 color: row.selectedVal ? '#141413' : '#72706b',
                                                 padding: '6px 8px',
-                                                fontSize: '10px',
+                                                fontSize: '12px',
                                                 cursor: parametroBase ? 'pointer' : 'default',
                                                 display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                                                 outline: 'none'
@@ -588,7 +588,7 @@ const ProgressDetailPanel = ({ isOpen, onClose, pin, elementProps, onDelete, isD
                                             <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                                 {row.selectedVal || (parametroBase ? 'Seleccionar...' : 'Configurar encabezado')}
                                             </span>
-                                            {parametroBase && <span style={{ fontSize: '8px', opacity: 0.5 }}>▼</span>}
+                                            {parametroBase && <span style={{ fontSize: '12px', opacity: 0.5 }}>▼</span>}
                                         </div>
 
                                         {/* Dropdown Options List */}
@@ -605,7 +605,7 @@ const ProgressDetailPanel = ({ isOpen, onClose, pin, elementProps, onDelete, isD
                                                             onMouseEnter={() => setRowHighlightIndex(idx)}
                                                             style={{
                                                                 padding: '6px 8px',
-                                                                fontSize: '10px',
+                                                                fontSize: '12px',
                                                                 color: '#333330',
                                                                 cursor: 'pointer',
                                                                 borderBottom: '1px solid #e8e6dc',
@@ -615,18 +615,18 @@ const ProgressDetailPanel = ({ isOpen, onClose, pin, elementProps, onDelete, isD
                                                         >
                                                             {opt.label}
                                                         </div>
-                                                    )) : <div style={{ padding: '8px', color: '#72706b', fontSize: '10px' }}>Sin opciones</div>}
+                                                    )) : <div style={{ padding: '8px', color: '#72706b', fontSize: '12px' }}>Sin opciones</div>}
                                                 </div>
                                             </div>
                                         )}
                                     </div>
 
                                     {/* Cell 2: Unit */}
-                                    <div style={{ borderRight: '1px solid #e8e6dc', padding: '6px 4px', fontSize: '10px', color: '#52524d', textAlign: 'center', background: '#faf9f5', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                    <div style={{ borderRight: '1px solid #e8e6dc', padding: '6px 4px', fontSize: '12px', color: '#52524d', textAlign: 'center', background: '#faf9f5', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                                         {row.unit}
                                     </div>
                                     {/* Cell 3: Metrado */}
-                                    <div style={{ padding: '6px 4px', fontSize: '10px', color: '#141413', textAlign: 'center', fontWeight: 600, background: '#faf9f5', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
+                                    <div style={{ padding: '6px 4px', fontSize: '12px', color: '#141413', textAlign: 'center', fontWeight: 600, background: '#faf9f5', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
                                         {row.metrado}
                                         {metradoRows.length > 1 && (
                                             <div onClick={() => removeRow(row.id)} style={{ cursor: 'pointer', color: '#bd8585', marginLeft: 'auto', opacity: 0.5, fontSize: '14px', fontWeight: 'bold' }}>&times;</div>
@@ -637,7 +637,7 @@ const ProgressDetailPanel = ({ isOpen, onClose, pin, elementProps, onDelete, isD
 
                             {/* ADD ROW BUTTON */}
                             {parametroBase && (
-                                <div onClick={addRow} style={{ padding: '6px', textAlign: 'center', cursor: 'pointer', background: '#f1f0e8', fontSize: '10px', color: '#507294', fontWeight: 600, borderTop: '1px solid rgba(59,130,246,0.2)' }}>
+                                <div onClick={addRow} style={{ padding: '6px', textAlign: 'center', cursor: 'pointer', background: '#f1f0e8', fontSize: '12px', color: '#507294', fontWeight: 600, borderTop: '1px solid rgba(59,130,246,0.2)' }}>
                                     + Agregar Item
                                 </div>
                             )}
@@ -655,14 +655,14 @@ const ProgressDetailPanel = ({ isOpen, onClose, pin, elementProps, onDelete, isD
 
                 {/* Coordinates & Metadata */}
                 <div style={{ marginTop: '30px', padding: '16px', background: '#faf9f5', borderRadius: '8px', width: '100%', maxWidth: '350px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '12px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '13px' }}>
                         <span style={{ color: '#72706b' }}>Coordenadas:</span>
                         <span style={{ color: '#141413', fontFamily: 'monospace' }}>
                             {pin.x?.toFixed(2)}, {pin.y?.toFixed(2)}, {pin.z?.toFixed(2)}
                         </span>
                     </div>
                     {pin.dbId && (
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '12px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '13px' }}>
                             <span style={{ color: '#72706b' }}>Element ID:</span>
                             <span style={{ color: '#141413', fontFamily: 'monospace' }}>{pin.dbId}</span>
                         </div>

@@ -974,7 +974,7 @@ export default function DashboardWorkspace({ project, backendUrl, onClose, proye
           title="Nombre del tablero (clic para cambiarlo)"
           style={{ background: 'transparent', border: 'none', outline: 'none', color: C.dark, fontSize: 14, fontWeight: 600, flex: '0 1 150px', minWidth: 60, fontFamily: FUENTE }}
         />
-        <span className="tablero-guardado" style={{ fontSize: 11, color: C.gris600, minWidth: 62 }}>
+        <span className="tablero-guardado" style={{ fontSize: 12, color: C.gris600, minWidth: 62 }}>
           {saveState === 'saving' ? 'Guardando…' : saveState === 'saved' ? 'Guardado' : ''}
         </span>
         {/* Organizar (las herramientas de añadir están en las barras flotantes del lienzo, como en Forma Board) */}
@@ -992,9 +992,9 @@ export default function DashboardWorkspace({ project, backendUrl, onClose, proye
 
       {/* Sin línea de datos (el dueño la quitó): solo aparece un aviso cuando lo hay. */}
       {aviso && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 14px', fontSize: 11, color: C.orange30D, borderBottom: `1px solid ${C.lightGray}`, background: C.blanco, flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 14px', fontSize: 12, color: C.orange30D, borderBottom: `1px solid ${C.lightGray}`, background: C.blanco, flexShrink: 0 }}>
           {aviso}
-          <button onClick={() => setAviso('')} title="Cerrar el aviso" style={{ marginLeft: 'auto', background: 'none', border: 'none', color: C.gris600, cursor: 'pointer', padding: 0, fontSize: 13, lineHeight: 1 }}>×</button>
+          <button onClick={() => setAviso('')} title="Cerrar el aviso" style={{ marginLeft: 'auto', background: 'none', border: 'none', color: C.gris600, cursor: 'pointer', padding: 0, fontSize: 14, lineHeight: 1 }}>×</button>
         </div>
       )}
 
@@ -1170,7 +1170,7 @@ export default function DashboardWorkspace({ project, backendUrl, onClose, proye
 
         {/* Estados vacíos (fuera del transform) */}
         {loading && (
-          <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12, color: C.gris600, fontSize: 13, pointerEvents: 'none' }}>
+          <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12, color: C.gris600, fontSize: 14, pointerEvents: 'none' }}>
             <div className="adsk-spinner" style={{ width: 26, height: 26 }} />
             Preparando datos…
           </div>
@@ -1181,7 +1181,7 @@ export default function DashboardWorkspace({ project, backendUrl, onClose, proye
               <line x1="6" y1="20" x2="6" y2="10" /><line x1="12" y1="20" x2="12" y2="4" /><line x1="18" y1="20" x2="18" y2="14" />
             </svg>
             <div style={{ fontSize: 14, fontWeight: 600, color: C.dark, marginBottom: 6 }}>Empieza tu tablero</div>
-            <div style={{ fontSize: 12.5, lineHeight: 1.6, maxWidth: 320, textAlign: 'center', marginBottom: 16 }}>
+            <div style={{ fontSize: 13, lineHeight: 1.6, maxWidth: 320, textAlign: 'center', marginBottom: 16 }}>
               Crea una gráfica con «Gráfico» o añade la lista de «Parámetros» (a la izquierda). Abajo están las notas, el texto y las secciones.
             </div>
           </div>
@@ -1208,12 +1208,12 @@ export default function DashboardWorkspace({ project, backendUrl, onClose, proye
             ].map(([texto, atajo, accion, apagado]) => (
               <button key={texto} role="menuitem" disabled={apagado} onClick={() => { setMenuZoom(false); accion(); }}
                 style={{ display: 'flex', justifyContent: 'space-between', gap: 16, width: '100%', padding: '7px 14px', background: 'none', border: 'none',
-                  cursor: apagado ? 'default' : 'pointer', fontSize: 12.5, fontFamily: FUENTE, color: apagado ? C.midGray : C.dark }}
+                  cursor: apagado ? 'default' : 'pointer', fontSize: 13, fontFamily: FUENTE, color: apagado ? C.midGray : C.dark }}
                 onMouseEnter={e => { if (!apagado) e.currentTarget.style.background = C.light50; }} onMouseLeave={e => { e.currentTarget.style.background = 'none'; }}>
-                <span>{texto}</span><span style={{ color: C.gris600, fontSize: 11.5 }}>{atajo}</span>
+                <span>{texto}</span><span style={{ color: C.gris600, fontSize: 12 }}>{atajo}</span>
               </button>
             ))}
-            <div style={{ borderTop: `1px solid ${C.light50}`, margin: '4px 0 0', padding: '8px 14px 4px', fontSize: 11, lineHeight: 1.6, color: C.gris600 }}>
+            <div style={{ borderTop: `1px solid ${C.light50}`, margin: '4px 0 0', padding: '8px 14px 4px', fontSize: 12, lineHeight: 1.6, color: C.gris600 }}>
               Arrastrar el fondo: seleccionar · Doble clic: texto<br />Espacio o clic derecho + arrastrar: mover<br />Rueda: zoom · Supr: borrar · Ctrl+Z: deshacer<br />V seleccionar · H mano · N nota · T texto · F sección
             </div>
           </div>

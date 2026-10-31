@@ -61,7 +61,7 @@ const TopBar = ({
                         <path d="M5.5 9.5V20a1 1 0 0 0 1 1h11a1 1 0 0 0 1-1V9.5" />
                         <path d="M9.5 21v-6h5v6" />
                     </svg>
-                    <span style={{ fontSize: '11px', fontWeight: 700, marginLeft: '4px' }}>INICIO</span>
+                    <span style={{ fontSize: '12px', fontWeight: 700, marginLeft: '4px' }}>INICIO</span>
                 </button>
 
                 <button
@@ -75,8 +75,8 @@ const TopBar = ({
                 {user && (
                     <div className="user-profile-section" style={{ display: 'flex', alignItems: 'center', gap: '12px', marginLeft: '12px', borderLeft: '1px solid #52524d', paddingLeft: '12px' }}>
                         <div className="user-info" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
-                            <span style={{ color: '#fff', fontSize: '13px', fontWeight: 500 }}>{user.name}</span>
-                            <span style={{ color: '#918f88', fontSize: '11px' }}>{user.role === 'admin' ? 'Administrador' : 'Usuario'}</span>
+                            <span style={{ color: '#fff', fontSize: '14px', fontWeight: 500 }}>{user.name}</span>
+                            <span style={{ color: '#918f88', fontSize: '12px' }}>{user.role === 'admin' ? 'Administrador' : 'Usuario'}</span>
                         </div>
                         {onLogout && (
                         <button

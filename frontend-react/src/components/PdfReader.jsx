@@ -36,7 +36,7 @@ function Thumb({ pdf, pageNum, active, onClick }) {
             <div style={{ boxShadow: active ? '0 0 0 2px #6a9bcc' : '0 1px 4px rgba(0,0,0,0.4)', background: '#fff', borderRadius: 2 }}>
                 <canvas ref={ref} />
             </div>
-            <span style={{ fontSize: 11, color: active ? '#52524d' : '#72706b', marginTop: 6, fontWeight: active ? 600 : 400 }}>{pageNum}</span>
+            <span style={{ fontSize: 12, color: active ? '#52524d' : '#72706b', marginTop: 6, fontWeight: active ? 600 : 400 }}>{pageNum}</span>
         </div>
     );
 }
@@ -173,11 +173,11 @@ export default function PdfReader({ url: urlPedida, fileName = 'documento.pdf' }
     const onMove = (e) => { if (!drag.current) return; containerRef.current.scrollLeft = drag.current.sl - (e.clientX - drag.current.x); containerRef.current.scrollTop = drag.current.st - (e.clientY - drag.current.y); };
     const onUp = () => { drag.current = null; };
 
-    if (loading) return <div style={S.center}><div style={S.spin} /><div style={{ color: '#72706b', marginTop: 14, fontSize: 13 }}>Cargando documento…</div></div>;
+    if (loading) return <div style={S.center}><div style={S.spin} /><div style={{ color: '#72706b', marginTop: 14, fontSize: 14 }}>Cargando documento…</div></div>;
     if (error) return (
         <div style={S.center}>
             <div style={{ color: '#bd8585', fontSize: 14 }}>No se pudo cargar el PDF</div>
-            <div style={{ color: '#72706b', fontSize: 12, marginTop: 4 }}>{error}</div>
+            <div style={{ color: '#72706b', fontSize: 13, marginTop: 4 }}>{error}</div>
             <a href={url} target="_blank" rel="noopener noreferrer" style={S.dl}>Descargar archivo</a>
         </div>
     );
@@ -191,7 +191,7 @@ export default function PdfReader({ url: urlPedida, fileName = 'documento.pdf' }
                 </button>
                 <div style={{ flex: 1 }} />
                 <button onClick={() => setScale(s => Math.max(s / 1.2, 0.2))} style={S.btn} title="Alejar">−</button>
-                <span style={{ fontSize: 12, color: '#72706b', minWidth: 42, textAlign: 'center' }}>{Math.round(scale * 100)}%</span>
+                <span style={{ fontSize: 13, color: '#72706b', minWidth: 42, textAlign: 'center' }}>{Math.round(scale * 100)}%</span>
                 <button onClick={() => setScale(s => Math.min(s * 1.2, 8))} style={S.btn} title="Acercar">+</button>
                 <button onClick={() => fitTo('page')} style={S.btn} title="Ajustar página">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="4" y="3" width="16" height="18" rx="1" /><path d="M9 8l-2 2 2 2M15 8l2 2-2 2" /></svg>
@@ -202,7 +202,7 @@ export default function PdfReader({ url: urlPedida, fileName = 'documento.pdf' }
                 <div style={S.sep} />
                 <button onClick={() => goTo(page - 1)} disabled={page <= 1} style={S.btn}>‹</button>
                 <input type="number" value={page} onChange={e => goTo(parseInt(e.target.value) || 1)} style={S.pageInput} min={1} max={numPages} />
-                <span style={{ fontSize: 12, color: '#72706b' }}>/ {numPages}</span>
+                <span style={{ fontSize: 13, color: '#72706b' }}>/ {numPages}</span>
                 <button onClick={() => goTo(page + 1)} disabled={page >= numPages} style={S.btn}>›</button>
                 <div style={S.sep} />
                 <button onClick={() => setRotation(r => (r + 90) % 360)} style={S.btn} title="Rotar">
@@ -236,9 +236,9 @@ export default function PdfReader({ url: urlPedida, fileName = 'documento.pdf' }
 const S = {
     center: { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', width: '100%', background: '#faf9f5' },
     spin: { width: 34, height: 34, border: '3px solid #e8e6dc', borderTop: '3px solid #6a9bcc', borderRadius: '50%', animation: 'spin-acc 1s linear infinite' },
-    dl: { marginTop: 14, padding: '8px 18px', background: '#507294', color: '#ffffff', borderRadius: 6, textDecoration: 'none', fontSize: 13, fontWeight: 600 },
+    dl: { marginTop: 14, padding: '8px 18px', background: '#507294', color: '#ffffff', borderRadius: 6, textDecoration: 'none', fontSize: 14, fontWeight: 600 },
     bar: { display: 'flex', alignItems: 'center', gap: 3, padding: '0 10px', height: 44, background: '#ffffff', borderBottom: '1px solid #e8e6dc', flexShrink: 0 },
     btn: { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', minWidth: 30, height: 30, border: 'none', background: 'transparent', borderRadius: 5, cursor: 'pointer', color: '#52524d', fontSize: 16, padding: '0 6px' },
     sep: { width: 1, height: 22, background: '#f1f0e8', margin: '0 6px' },
-    pageInput: { width: 40, textAlign: 'center', border: '1px solid #e8e6dc', borderRadius: 4, padding: '4px', fontSize: 12, background: '#faf9f5', color: '#141413', outline: 'none' },
+    pageInput: { width: 40, textAlign: 'center', border: '1px solid #e8e6dc', borderRadius: 4, padding: '4px', fontSize: 13, background: '#faf9f5', color: '#141413', outline: 'none' },
 };

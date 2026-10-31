@@ -42,10 +42,10 @@ export default class ErrorBoundary extends React.Component {
         if (compact) {
             return (
                 <div style={S.compactWrap}>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: '#e06a6a', marginBottom: 6 }}>
+                    <div style={{ fontSize: 14, fontWeight: 600, color: '#e06a6a', marginBottom: 6 }}>
                         {title || 'Esta sección falló'}
                     </div>
-                    <div style={{ fontSize: 12, color: '#72706b', marginBottom: 12 }}>
+                    <div style={{ fontSize: 13, color: '#72706b', marginBottom: 12 }}>
                         {message || 'Algo se rompió aquí, pero el resto de la app sigue funcionando.'}
                     </div>
                     <button style={S.btn} onClick={this.handleReset}>Reintentar</button>
@@ -60,10 +60,10 @@ export default class ErrorBoundary extends React.Component {
                     <div style={{ fontSize: 18, fontWeight: 700, color: '#141413', marginBottom: 8 }}>
                         {title || 'Algo salió mal'}
                     </div>
-                    <div style={{ fontSize: 13, color: '#72706b', marginBottom: 4, lineHeight: 1.5 }}>
+                    <div style={{ fontSize: 14, color: '#72706b', marginBottom: 4, lineHeight: 1.5 }}>
                         {message || 'La aplicación encontró un error inesperado. Tus datos están a salvo en el servidor.'}
                     </div>
-                    <div style={{ fontSize: 11, color: '#72706b', marginBottom: 20, fontFamily: 'monospace', maxWidth: 420, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    <div style={{ fontSize: 12, color: '#72706b', marginBottom: 20, fontFamily: 'monospace', maxWidth: 420, overflow: 'hidden', textOverflow: 'ellipsis' }}>
                         {errMsg}
                     </div>
                     <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
@@ -80,6 +80,6 @@ const S = {
     fullWrap: { position: 'fixed', inset: 0, zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#faf9f5', padding: 24 },
     card: { background: '#ffffff', border: '1px solid rgba(20, 20, 19,0.08)', borderRadius: 12, padding: '32px 40px', textAlign: 'center', maxWidth: 520 },
     compactWrap: { padding: 20, background: '#ffffff', border: '1px solid rgba(224,106,106,0.3)', borderRadius: 8, textAlign: 'center', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' },
-    btn: { background: 'transparent', color: '#52524d', border: '1px solid rgba(20, 20, 19,0.15)', borderRadius: 6, padding: '8px 18px', fontSize: 13, cursor: 'pointer', fontWeight: 600 },
+    btn: { background: 'transparent', color: '#52524d', border: '1px solid rgba(20, 20, 19,0.15)', borderRadius: 6, padding: '8px 18px', fontSize: 14, cursor: 'pointer', fontWeight: 600 },
     btnPrimary: { background: '#507294', color: '#ffffff', border: 'none' },
 };

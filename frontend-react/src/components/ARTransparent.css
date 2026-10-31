@@ -51,7 +51,7 @@ body.ar-active .adsk-viewing-viewer canvas {
     gap: 10px;
     padding: 12px 14px;
     color: #fff;
-    font-size: 12px;
+    font-size: 13px;
     text-shadow: 0 1px 3px rgba(0, 0, 0, 0.85);
     pointer-events: auto;
 }
@@ -61,7 +61,7 @@ body.ar-active .adsk-viewing-viewer canvas {
     padding: 4px 8px;
     border-radius: 12px;
     color: #141413;
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 800;
     text-shadow: none;
 }
@@ -153,7 +153,7 @@ body.ar-active .adsk-viewing-viewer canvas {
     border-radius: 22px;
     background: rgba(20, 20, 19, 0.78);
     color: #fff;
-    font-size: 12px;
+    font-size: 13px;
 }
 
 .native-ar-yaw button {
@@ -180,6 +180,6 @@ body.ar-active .adsk-viewing-viewer canvas {
     bottom: 200px; z-index: 9; pointer-events: none;
     background: rgba(20,20,19,.78); color: #f1f0e8;
     padding: 6px 12px; border-radius: 14px;
-    font-size: 12.5px; font-weight: 600; letter-spacing: .2px;
+    font-size: 13px; font-weight: 600; letter-spacing: .2px;
     box-shadow: 0 4px 14px rgba(0,0,0,.4);
 }

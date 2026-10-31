@@ -192,7 +192,7 @@
 }
 
 .agent-thinking summary {
-    font-size: 12px;
+    font-size: 13px;
     color: #fbbf24;
     cursor: pointer;
     font-weight: bold;
@@ -202,7 +202,7 @@
 .reasoning-list {
     margin: 8px 0 0 15px;
     padding: 0;
-    font-size: 11px;
+    font-size: 12px;
     color: #b0aea5;
 }
 
@@ -214,7 +214,7 @@
     background: transparent;
     border: 1px solid #52524d;
     color: #918f88;
-    font-size: 10px;
+    font-size: 12px;
     margin-top: 8px;
     padding: 4px 8px;
     border-radius: 4px;

@@ -760,7 +760,7 @@ const SectionViewer = ({ sectionsData, onClose, onSync, getModelSlice, alignment
     if (!station) {
         return createPortal(
             <div style={dockStyle}>
-                <div style={{ padding: 20, color: '#8a919c', fontSize: 12 }}>No hay datos de secciones disponibles.</div>
+                <div style={{ padding: 20, color: '#8a919c', fontSize: 13 }}>No hay datos de secciones disponibles.</div>
                 <button onClick={onClose} style={btn(true)}>Cerrar</button>
             </div>,
             document.body
@@ -811,11 +811,11 @@ const SectionViewer = ({ sectionsData, onClose, onSync, getModelSlice, alignment
             {/* Título */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderBottom: '1px solid #e8e6dc', background: '#ffffff', flexShrink: 0 }}>
                 <span style={{ fontSize: 15, fontWeight: 600, color: '#141413' }}>Sección transversal</span>
-                <span style={{ fontSize: 11, color: '#72706b' }}>{station.alignmentId}</span>
+                <span style={{ fontSize: 12, color: '#72706b' }}>{station.alignmentId}</span>
                 <div style={{ flex: 1 }} />
                 {/* Spinner de progresiva (estilo InfraWorks) */}
                 <div style={{ display: 'flex', alignItems: 'center', background: '#ffffff', border: '1px solid #cccac0', borderRadius: 6, overflow: 'hidden' }}>
-                    <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 13, fontWeight: 700, color: '#141413', padding: '5px 10px' }}>
+                    <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 14, fontWeight: 700, color: '#141413', padding: '5px 10px' }}>
                         {formatStation(station.station)}
                     </span>
                     <div style={{ display: 'flex', flexDirection: 'column', borderLeft: '1px solid #cccac0' }}>
@@ -828,11 +828,11 @@ const SectionViewer = ({ sectionsData, onClose, onSync, getModelSlice, alignment
 
             {/* Áreas + controles */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '7px 14px', borderBottom: '1px solid #e8e6dc', background: '#f1f0e8', flexShrink: 0, flexWrap: 'wrap' }}>
-                <span style={{ fontSize: 11.5 }}>
+                <span style={{ fontSize: 12 }}>
                     <span style={{ color: '#b93535', fontWeight: 600 }}>Área de desmonte:</span>{' '}
                     <span style={{ fontFamily: 'IBM Plex Mono, monospace', color: '#141413' }}>{cutFill.cut.toFixed(3)} m²</span>
                 </span>
-                <span style={{ fontSize: 11.5 }}>
+                <span style={{ fontSize: 12 }}>
                     <span style={{ color: '#667650', fontWeight: 600 }}>Área de terraplén:</span>{' '}
                     <span style={{ fontFamily: 'IBM Plex Mono, monospace', color: '#141413' }}>{cutFill.fill.toFixed(3)} m²</span>
                 </span>
@@ -1028,7 +1028,7 @@ const SectionViewer = ({ sectionsData, onClose, onSync, getModelSlice, alignment
                     )}
 
                     {/* Cabina de datos: todo lo necesario, fijo y quieto */}
-                    <div style={{ position: 'absolute', left: 10, bottom: 10, background: light ? 'rgba(255,255,255,0.92)' : 'rgba(18,20,24,0.92)', border: `1px solid ${light ? '#c9ced6' : '#2e3540'}`, borderRadius: 6, padding: '7px 10px', fontFamily: 'IBM Plex Mono, monospace', fontSize: 11, lineHeight: 1.6, color: light ? '#26303c' : '#c6ccd4', pointerEvents: 'none', minWidth: 148 }}>
+                    <div style={{ position: 'absolute', left: 10, bottom: 10, background: light ? 'rgba(255,255,255,0.92)' : 'rgba(18,20,24,0.92)', border: `1px solid ${light ? '#c9ced6' : '#2e3540'}`, borderRadius: 6, padding: '7px 10px', fontFamily: 'IBM Plex Mono, monospace', fontSize: 12, lineHeight: 1.6, color: light ? '#26303c' : '#c6ccd4', pointerEvents: 'none', minWidth: 148 }}>
                         <div><span style={{ opacity: 0.65 }}>PK </span>{formatStation(station.station)}</div>
                         <div>
                             <span style={{ opacity: 0.65 }}>Off </span>{probe ? `${probe.off.toFixed(2)}m` : '—'}
@@ -1042,12 +1042,12 @@ const SectionViewer = ({ sectionsData, onClose, onSync, getModelSlice, alignment
                             </div>
                         )}
                         {fromBand && ctcc.cc != null && (
-                            <div style={{ opacity: 0.6, fontSize: 10 }}>
+                            <div style={{ opacity: 0.6, fontSize: 12 }}>
                                 diseño: {ctcc.ct != null ? `CT ${ctcc.ct.toFixed(2)} · ` : ''}CC {ctcc.cc.toFixed(2)}
                             </div>
                         )}
                     </div>
-                    <div style={{ position: 'absolute', right: 10, bottom: 8, fontSize: 10, color: '#43506b', pointerEvents: 'none' }}>
+                    <div style={{ position: 'absolute', right: 10, bottom: 8, fontSize: 12, color: '#43506b', pointerEvents: 'none' }}>
                         rueda = zoom · arrastre = mover · doble clic = encuadrar · clic en material = área
                     </div>
 
@@ -1056,8 +1056,8 @@ const SectionViewer = ({ sectionsData, onClose, onSync, getModelSlice, alignment
                         <div style={{ position: 'absolute', left: 10, top: 10, background: 'rgba(23,26,31,0.94)', border: '1px solid #33507a', borderRadius: 6, padding: '9px 12px', display: 'flex', alignItems: 'center', gap: 10, boxShadow: '0 3px 10px rgba(0,0,0,0.45)' }}>
                             <span style={{ width: 12, height: 12, borderRadius: 3, background: selInfo.color, border: '1px solid rgba(255,255,255,0.35)', flexShrink: 0 }} />
                             <div style={{ lineHeight: 1.35 }}>
-                                <div style={{ fontSize: 12, fontWeight: 700, color: '#dfe6ee' }}>{selInfo.label}</div>
-                                <div style={{ fontSize: 12, color: '#8ecbff', fontFamily: 'IBM Plex Mono, monospace' }}>
+                                <div style={{ fontSize: 13, fontWeight: 700, color: '#dfe6ee' }}>{selInfo.label}</div>
+                                <div style={{ fontSize: 13, color: '#8ecbff', fontFamily: 'IBM Plex Mono, monospace' }}>
                                     Área: {selInfo.total.toFixed(3)} m²{selInfo.loops > 1 ? ` · ${selInfo.loops} contornos` : ''}
                                 </div>
                             </div>
@@ -1072,11 +1072,11 @@ const SectionViewer = ({ sectionsData, onClose, onSync, getModelSlice, alignment
                         <div style={{ fontSize: 14, fontWeight: 600, color: '#141413', marginBottom: 3 }}>
                             Auditor de cantidades — PK {formatStation(station.station)}
                         </div>
-                        <div style={{ fontSize: 11, color: '#72706b', lineHeight: 1.55 }}>
+                        <div style={{ fontSize: 12, color: '#72706b', lineHeight: 1.55 }}>
                             <span style={{ color: '#507294' }}>Dibujo</span> = área del hatch (shoelace del contorno). <span style={{ color: '#667650' }}>Oficial</span> = MaterialSection.area del cadista (Civil). <span style={{ color: '#734500' }}>Δ</span> = divergencia %.
                         </div>
                     </div>
-                    <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: 'IBM Plex Mono, monospace', fontSize: 12 }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: 'IBM Plex Mono, monospace', fontSize: 13 }}>
                         <thead>
                             <tr style={{ background: '#f1f0e8', borderBottom: '1px solid #e8e6dc' }}>
                                 <th style={{ padding: '10px 12px', textAlign: 'left', fontWeight: 700, color: '#72706b' }}>Material</th>
@@ -1121,7 +1121,7 @@ const SectionViewer = ({ sectionsData, onClose, onSync, getModelSlice, alignment
                             })}
                         </tbody>
                     </table>
-                    <div style={{ padding: '10px 18px', fontSize: 11, color: '#72706b', borderTop: '1px solid #e8e6dc', display: 'flex', gap: 16 }}>
+                    <div style={{ padding: '10px 18px', fontSize: 12, color: '#72706b', borderTop: '1px solid #e8e6dc', display: 'flex', gap: 16 }}>
                         <span><span style={{ color: '#667650' }}>●</span> ≤ 0.5%</span>
                         <span><span style={{ color: '#734500' }}>●</span> ≤ 2%</span>
                         <span><span style={{ color: '#b93535' }}>●</span> &gt; 2%</span>
@@ -1134,8 +1134,8 @@ const SectionViewer = ({ sectionsData, onClose, onSync, getModelSlice, alignment
                         {volumes.map((m, i) => (
                             <button key={`${m.alignmentId}:${m.material}`} onClick={() => setVolMaterial(i)}
                                 style={{ display: 'block', width: '100%', textAlign: 'left', padding: '7px 8px', borderRadius: 6, marginBottom: 5, cursor: 'pointer', border: volMaterial === i ? '1px solid #507294' : '1px solid #e8e6dc', background: volMaterial === i ? '#ecf0f1' : 'transparent' }}>
-                                <div style={{ fontSize: 11.5, fontWeight: 700, color: '#333330' }}>{m.material}</div>
-                                <div style={{ fontSize: 10, color: '#72706b', marginTop: 2, fontFamily: 'IBM Plex Mono, monospace' }}>
+                                <div style={{ fontSize: 12, fontWeight: 700, color: '#333330' }}>{m.material}</div>
+                                <div style={{ fontSize: 12, color: '#72706b', marginTop: 2, fontFamily: 'IBM Plex Mono, monospace' }}>
                                     {m.total.toLocaleString('es-PE', { maximumFractionDigits: 1 })} m³
                                 </div>
                             </button>
@@ -1145,9 +1145,9 @@ const SectionViewer = ({ sectionsData, onClose, onSync, getModelSlice, alignment
                         {volumes[Math.min(volMaterial, volumes.length - 1)] && (() => {
                             const m = volumes[Math.min(volMaterial, volumes.length - 1)];
                             return (
-                                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11.5 }}>
+                                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                                     <thead>
-                                        <tr style={{ position: 'sticky', top: 0, background: '#ffffff', color: '#72706b', textTransform: 'uppercase', fontSize: 9.5, letterSpacing: '0.08em' }}>
+                                        <tr style={{ position: 'sticky', top: 0, background: '#ffffff', color: '#72706b', textTransform: 'uppercase', fontSize: 12, letterSpacing: '0.08em' }}>
                                             <th style={{ padding: '8px 12px', textAlign: 'left' }}>Progresiva</th>
                                             <th style={{ padding: '8px 12px', textAlign: 'right' }}>Área m²</th>
                                             <th style={{ padding: '8px 12px', textAlign: 'right' }}>Parcial m³</th>
@@ -1206,22 +1206,22 @@ const SectionViewer = ({ sectionsData, onClose, onSync, getModelSlice, alignment
                             );
                         })()}
                     </svg>
-                    <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 10.5, color: '#72706b', flexShrink: 0 }}>
+                    <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 12, color: '#72706b', flexShrink: 0 }}>
                         {currentIndex + 1}/{stations.length}
                     </span>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 7, flexWrap: 'wrap' }}>
-                    <span style={{ fontSize: 10.5, color: '#72706b' }}>Relación</span>
+                    <span style={{ fontSize: 12, color: '#72706b' }}>Relación</span>
                     {[1, 2, 4].map((a) => (
-                        <button key={a} onClick={() => setAspect(a)} style={{ ...btn(aspect === a), padding: '3px 8px', fontSize: 11 }}>{a.toFixed(1)}</button>
+                        <button key={a} onClick={() => setAspect(a)} style={{ ...btn(aspect === a), padding: '3px 8px', fontSize: 12 }}>{a.toFixed(1)}</button>
                     ))}
                     <span style={{ width: 1, height: 16, background: '#e8e6dc' }} />
-                    <button onClick={() => setMode('seccion')} style={{ ...btn(mode === 'seccion'), padding: '3px 10px', fontSize: 11 }}>Sección</button>
+                    <button onClick={() => setMode('seccion')} style={{ ...btn(mode === 'seccion'), padding: '3px 10px', fontSize: 12 }}>Sección</button>
                     {volumes.length > 0 && (
-                        <button onClick={() => setMode('volumenes')} style={{ ...btn(mode === 'volumenes'), padding: '3px 10px', fontSize: 11 }}>Volúmenes</button>
+                        <button onClick={() => setMode('volumenes')} style={{ ...btn(mode === 'volumenes'), padding: '3px 10px', fontSize: 12 }}>Volúmenes</button>
                     )}
                     {auditor.length > 0 && (
-                        <button onClick={() => setMode('auditor')} title="Comparar cantidades: dibujo vs oficial de Civil" style={{ ...btn(mode === 'auditor'), padding: '3px 10px', fontSize: 11 }}>
+                        <button onClick={() => setMode('auditor')} title="Comparar cantidades: dibujo vs oficial de Civil" style={{ ...btn(mode === 'auditor'), padding: '3px 10px', fontSize: 12 }}>
                             Auditor
                         </button>
                     )}
@@ -1229,7 +1229,7 @@ const SectionViewer = ({ sectionsData, onClose, onSync, getModelSlice, alignment
                         <button
                             onClick={() => setShowModel((p) => !p)}
                             title="Superponer el corte de los modelos 3D cargados en el visor (referencia visual)"
-                            style={{ ...btn(showModel), padding: '3px 10px', fontSize: 11 }}
+                            style={{ ...btn(showModel), padding: '3px 10px', fontSize: 12 }}
                         >
                             Modelo 3D
                         </button>
@@ -1238,11 +1238,11 @@ const SectionViewer = ({ sectionsData, onClose, onSync, getModelSlice, alignment
                     <button
                         onClick={() => setLight((p) => !p)}
                         title="Modo Plano: fondo blanco como la lámina impresa (los revisores comparan 1:1 contra el PDF)"
-                        style={{ ...btn(light), padding: '3px 10px', fontSize: 11 }}
+                        style={{ ...btn(light), padding: '3px 10px', fontSize: 12 }}
                     >
                         {light ? '◑ Oscuro' : '◐ Plano'}
                     </button>
-                    <button onClick={() => setLegendOpen((p) => !p)} style={{ ...btn(legendOpen), padding: '3px 10px', fontSize: 11 }}>
+                    <button onClick={() => setLegendOpen((p) => !p)} style={{ ...btn(legendOpen), padding: '3px 10px', fontSize: 12 }}>
                         Capas ({legend.length})
                     </button>
                 </div>
@@ -1254,7 +1254,7 @@ const SectionViewer = ({ sectionsData, onClose, onSync, getModelSlice, alignment
                                 <button key={t.key} onClick={() => toggle(t.key)}
                                     style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '3px 8px', borderRadius: 5, border: '1px solid #e8e6dc', background: 'transparent', cursor: 'pointer', opacity: off ? 0.38 : 1 }}>
                                     <span style={{ width: 10, height: 10, borderRadius: 2, background: t.color }} />
-                                    <span style={{ fontSize: 10.5, color: '#333330' }}>{t.label}</span>
+                                    <span style={{ fontSize: 12, color: '#333330' }}>{t.label}</span>
                                 </button>
                             );
                         })}
@@ -1287,11 +1287,11 @@ const dockStyle = {
 
 const spinBtn = {
     border: 'none', background: 'transparent', color: '#72706b', cursor: 'pointer',
-    fontSize: 8, lineHeight: '11px', padding: '1px 7px',
+    fontSize: 12, lineHeight: '11px', padding: '1px 7px',
 };
 
 const btn = (primary, disabled) => ({
-    padding: '5px 12px', borderRadius: 4, fontSize: 12, fontWeight: 600, cursor: disabled ? 'default' : 'pointer',
+    padding: '5px 12px', borderRadius: 4, fontSize: 13, fontWeight: 600, cursor: disabled ? 'default' : 'pointer',
     border: primary ? '1px solid #507294' : '1px solid #cccac0',
     background: primary ? '#ecf0f1' : '#ffffff',
     color: primary ? '#507294' : '#333330',

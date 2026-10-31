@@ -342,7 +342,7 @@ function Kpi({ total, totalCount, config }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', height: '100%', gap: 8 }}>
       <div style={{ fontSize: 34, fontWeight: 600, color: C.dark, letterSpacing: -0.5, fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>{fmt(total)}</div>
-      <div style={{ fontSize: 11.5, color: C.gris600 }}>
+      <div style={{ fontSize: 12, color: C.gris600 }}>
         {METRIC_LABEL[config.metric || 'count']}{config.metric !== 'count' && config.valueField ? ` de ${nombreCampo(config.valueField)}` : ''} · {fmt(totalCount)} elementos
       </div>
       {/* Barra contra la referencia (bullet graph de Few): cuánto falta para la meta */}
@@ -351,7 +351,7 @@ function Kpi({ total, totalCount, config }) {
           <div style={{ position: 'relative', height: 8, background: C.light50, borderRadius: 2 }}>
             <div style={{ width: `${pct * 100}%`, height: '100%', background: C.gris700, borderRadius: 2 }} />
           </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: C.gris600, marginTop: 4 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: C.gris600, marginTop: 4 }}>
             <span>{Math.round((total / ref) * 100)} % de {config.refLabel || 'la referencia'}</span>
             <span style={{ color: C.orange30D }}>{fmt(ref)}</span>
           </div>
@@ -368,7 +368,7 @@ function LeyendaDona({ config, groups, total, activeKey, onSegment }) {
         <button key={g.key} onClick={() => onSegment(g)} title={`${nombreValor(g.key)} · clic: aislar en el 3D`}
           style={{
             display: 'grid', gridTemplateColumns: '10px 1fr auto', alignItems: 'center', gap: 8, padding: '3px 6px',
-            border: 'none', borderRadius: 4, cursor: 'pointer', textAlign: 'left', font: 'inherit', fontSize: 11.5,
+            border: 'none', borderRadius: 4, cursor: 'pointer', textAlign: 'left', font: 'inherit', fontSize: 12,
             background: activeKey === g.key ? C.blueTinte : 'transparent', color: C.dark,
           }}>
           <span style={{ width: 9, height: 9, borderRadius: 2, background: colorDeGrupo(config, g, i) }} />
@@ -385,7 +385,7 @@ function LeyendaDona({ config, groups, total, activeKey, onSegment }) {
 function TableView({ config, groups, total, metricLabel, onSegment, activeKey }) {
   const conColor = tieneColoresPropios(config.groupBy);
   return (
-    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11.5 }}>
+    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
       <thead>
         <tr>
           {['Grupo', metricLabel, '%'].map(h => (
@@ -428,7 +428,7 @@ function AuditView({ res, onSegment, activeKey }) {
   const boton = (g, color) => (
     <button onClick={() => onSegment(g)} title={`${g.key} · clic: aislar en el 3D`}
       style={{
-        display: 'flex', alignItems: 'center', gap: 6, padding: '4px 8px', borderRadius: 4, cursor: 'pointer', font: 'inherit', fontSize: 11.5,
+        display: 'flex', alignItems: 'center', gap: 6, padding: '4px 8px', borderRadius: 4, cursor: 'pointer', font: 'inherit', fontSize: 12,
         border: `1px solid ${activeKey === g.key ? C.blue : C.lightGray}`, background: activeKey === g.key ? C.blueTinte : C.blanco, color: C.dark,
       }}>
       <span style={{ width: 9, height: 9, borderRadius: 2, background: color }} />
@@ -441,7 +441,7 @@ function AuditView({ res, onSegment, activeKey }) {
       <div>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
           <span style={{ fontSize: 28, fontWeight: 600, color: colorCompletitud(res.pct), fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>{res.pct} %</span>
-          <span style={{ fontSize: 11.5, color: C.gris600 }}>{fmt(res.completos.count)} de {fmt(res.total)} elementos con todos los datos</span>
+          <span style={{ fontSize: 12, color: C.gris600 }}>{fmt(res.completos.count)} de {fmt(res.total)} elementos con todos los datos</span>
         </div>
         <div style={{ display: 'flex', height: 8, borderRadius: 2, overflow: 'hidden', background: C.light50, marginTop: 8 }}>
           <div style={{ width: `${parte(res.completos.count)}%`, background: C.green }} />
@@ -453,7 +453,7 @@ function AuditView({ res, onSegment, activeKey }) {
         </div>
       </div>
       <div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10.5, color: C.gris600, padding: '0 2px 4px', borderBottom: `1px solid ${C.light50}` }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: C.gris600, padding: '0 2px 4px', borderBottom: `1px solid ${C.light50}` }}>
           <span>Parámetro (lo que más falta, primero)</span><span>Con dato · Sin dato</span>
         </div>
         {res.porCampo.map(f => {
@@ -461,7 +461,7 @@ function AuditView({ res, onSegment, activeKey }) {
           const gSin = { key: `${f.key} · sin dato`, count: f.sin, externalIds: f.idsSin };
           return (
             <div key={f.key} style={{ padding: '6px 2px', borderBottom: `1px solid ${C.light50}` }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 11.5 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 12 }}>
                 <span title={nombreCampo(f.key)} style={{ color: C.dark, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{nombreCampo(f.key)}</span>
                 <span style={{ flexShrink: 0, fontVariantNumeric: 'tabular-nums', color: colorCompletitud(f.pct) }}>{f.pct} %</span>
               </div>
@@ -470,7 +470,7 @@ function AuditView({ res, onSegment, activeKey }) {
                   <div style={{ width: `${parte(f.con)}%`, background: C.green }} />
                   <div style={{ width: `${parte(f.sin)}%`, background: C.error }} />
                 </div>
-                <span style={{ flexShrink: 0, fontSize: 11, fontVariantNumeric: 'tabular-nums', display: 'flex', gap: 4 }}>
+                <span style={{ flexShrink: 0, fontSize: 12, fontVariantNumeric: 'tabular-nums', display: 'flex', gap: 4 }}>
                   <button onClick={() => onSegment(gCon)} disabled={!f.con} title="Aislar en el 3D los que tienen el dato"
                     style={{ border: 'none', background: activeKey === gCon.key ? C.blueTinte : 'transparent', padding: '1px 4px', borderRadius: 3, cursor: f.con ? 'pointer' : 'default', font: 'inherit', color: C.green20D }}>{fmt(f.con)}</button>
                   <span style={{ color: C.gris300 }}>·</span>
@@ -513,15 +513,15 @@ function ParamsSource({ fields, onCreateFromField }) {
       <input
         value={q} onChange={e => setQ(e.target.value)} placeholder="Buscar parámetro…"
         onPointerDown={e => e.stopPropagation()}
-        style={{ padding: '6px 10px', borderRadius: 6, border: `1px solid ${C.gris300}`, background: C.blanco, color: C.dark, fontSize: 12, outline: 'none', flexShrink: 0, fontFamily: FUENTE }}
+        style={{ padding: '6px 10px', borderRadius: 6, border: `1px solid ${C.gris300}`, background: C.blanco, color: C.dark, fontSize: 13, outline: 'none', flexShrink: 0, fontFamily: FUENTE }}
       />
-      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10.5, color: C.gris600, padding: '0 2px', flexShrink: 0 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: C.gris600, padding: '0 2px', flexShrink: 0 }}>
         <span>Clic en un parámetro para graficarlo</span><span>Con dato</span>
       </div>
       <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
         {grupos.map(({ grupo, lista }) => (
           <div key={grupo}>
-            <div style={{ position: 'sticky', top: 0, background: C.blanco, fontSize: 10.5, fontWeight: 600, color: C.gris600, padding: '6px 8px 3px', borderBottom: `1px solid ${C.light50}` }}>
+            <div style={{ position: 'sticky', top: 0, background: C.blanco, fontSize: 12, fontWeight: 600, color: C.gris600, padding: '6px 8px 3px', borderBottom: `1px solid ${C.light50}` }}>
               {grupo} <span style={{ fontWeight: 400 }}>· {lista.length}</span>
             </div>
             {lista.map(f => (
@@ -531,7 +531,7 @@ function ParamsSource({ fields, onCreateFromField }) {
                 onMouseEnter={e => { e.currentTarget.style.background = C.light50; }}
                 onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
               >
-                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 11.5 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 12 }}>
                   <span style={{ color: C.dark, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.nombre}</span>
                   <span style={{ flexShrink: 0, fontVariantNumeric: 'tabular-nums', color: colorCompletitud(f.fillPct) }}>{f.fillPct} %</span>
                 </div>
@@ -539,7 +539,7 @@ function ParamsSource({ fields, onCreateFromField }) {
                   <div style={{ flex: 1, height: 3, background: C.light50, borderRadius: 2 }}>
                     <div style={{ width: `${f.fillPct}%`, height: '100%', borderRadius: 2, background: colorCompletitud(f.fillPct) }} />
                   </div>
-                  <span style={{ fontSize: 10, color: C.gris600, flexShrink: 0 }}>{f.isNumeric ? 'número' : 'texto'} · {f.distinct >= 60 ? '60+' : f.distinct}</span>
+                  <span style={{ fontSize: 12, color: C.gris600, flexShrink: 0 }}>{f.isNumeric ? 'número' : 'texto'} · {f.distinct >= 60 ? '60+' : f.distinct}</span>
                 </div>
               </div>
             ))}
@@ -558,7 +558,9 @@ function TituloEditable({ titulo, onCambiar }) {
   if (!editando) {
     return (
       <div onDoubleClick={(e) => { if (onCambiar) { e.stopPropagation(); setTexto(titulo); setEditando(true); } }}
-        style={{ fontSize: 13, fontWeight: 600, color: C.dark, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+        // Hasta dos líneas antes de cortar (como las tarjetas de ACC): con 14 px, en una tarjeta pequeña el título
+        // entero cabe en dos líneas y no queda «…».
+        style={{ fontSize: 14, fontWeight: 600, color: C.dark, lineHeight: 1.3, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflowWrap: 'anywhere' }}
         title={onCambiar ? `${titulo} · doble clic: cambiar el título` : titulo}>{titulo}</div>
     );
   }
@@ -567,7 +569,7 @@ function TituloEditable({ titulo, onCambiar }) {
     <input autoFocus value={texto} onChange={e => setTexto(e.target.value)} onBlur={guardar}
       onKeyDown={e => { if (e.key === 'Enter') guardar(); if (e.key === 'Escape') setEditando(false); }}
       onPointerDown={e => e.stopPropagation()}
-      style={{ width: '100%', boxSizing: 'border-box', fontSize: 13, fontWeight: 600, color: C.dark, fontFamily: FUENTE,
+      style={{ width: '100%', boxSizing: 'border-box', fontSize: 14, fontWeight: 600, color: C.dark, fontFamily: FUENTE,
         border: `1px solid ${C.blue}`, borderRadius: 4, padding: '1px 4px', outline: 'none' }} />
   );
 }
@@ -681,7 +683,7 @@ export default function ChartCard({ config, rows, fields = [], meta = null, item
       meta?.hora || null,
     ].filter(Boolean).join(' · ');
 
-  const vacio = (texto) => <div style={{ padding: 18, color: C.gris600, fontSize: 12 }}>{texto}</div>;
+  const vacio = (texto) => <div style={{ padding: 18, color: C.gris600, fontSize: 13 }}>{texto}</div>;
   const body = isPresupuesto
     ? (!items ? vacio('Carga el itemizado del frente en la Planilla (ítem, descripción y unidad): la auditoría se hace contra él.')
       : !presupuesto?.total ? vacio('Ningún elemento cumple el filtro.')
@@ -729,7 +731,7 @@ export default function ChartCard({ config, rows, fields = [], meta = null, item
         <div style={{ flex: 1, minWidth: 0 }}>
           <TituloEditable titulo={titulo} onCambiar={onUpdate ? (t) => onUpdate({ ...config, title: t }) : null} />
           {/* La PREGUNTA que responde el gráfico (patrón editorial); si no hay, de qué es */}
-          <div style={{ fontSize: 11, color: C.gris600, marginTop: 2, lineHeight: 1.45, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: config.question ? 'normal' : 'nowrap' }}>
+          <div style={{ fontSize: 12, color: C.gris600, marginTop: 2, lineHeight: 1.45, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: config.question ? 'normal' : 'nowrap' }}>
             {config.question || subtitle}
           </div>
         </div>
@@ -759,14 +761,14 @@ export default function ChartCard({ config, rows, fields = [], meta = null, item
       {filterOpts.length > 0 && (
         <div onPointerDown={e => e.stopPropagation()}
           style={{ display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center', flexShrink: 0, maxHeight: 46, overflow: 'hidden' }}>
-          <span style={{ fontSize: 10.5, color: C.gris600, flexShrink: 0 }}>{nombreCampo(config.filter.field)}:</span>
+          <span style={{ fontSize: 12, color: C.gris600, flexShrink: 0 }}>{nombreCampo(config.filter.field)}:</span>
           {filterOpts.map(o => {
             const on = config.filter?.values?.includes(o.value);
             return (
               <button key={o.value} onClick={() => toggleFilterValue(o.value)}
                 title={`${nombreValor(o.value)} · ${fmt(o.count)} elem.`}
                 style={{
-                  flexShrink: 0, padding: '2px 8px', borderRadius: 4, fontSize: 10.5, cursor: 'pointer', fontFamily: FUENTE,
+                  flexShrink: 0, padding: '2px 8px', borderRadius: 4, fontSize: 12, cursor: 'pointer', fontFamily: FUENTE,
                   border: `1px solid ${on ? C.blue : C.gris300}`,
                   background: on ? C.blueTinte : C.blanco, color: on ? C.blue30D : C.texto2,
                   maxWidth: 130, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
@@ -782,7 +784,7 @@ export default function ChartCard({ config, rows, fields = [], meta = null, item
       </div>
 
       {/* Pie: de dónde sale el dato */}
-      <div style={{ flexShrink: 0, borderTop: `1px solid ${C.light50}`, padding: '6px 0 8px', fontSize: 10.5, color: C.gris600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={pie}>
+      <div style={{ flexShrink: 0, borderTop: `1px solid ${C.light50}`, padding: '6px 0 8px', fontSize: 12, color: C.gris600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={pie}>
         {pie}
       </div>
     </div>
