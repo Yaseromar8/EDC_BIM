@@ -25,7 +25,7 @@
 // paso de deshacer.
 import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
-import { C, FUENTE, RADIO } from './tema';
+import { C, FUENTE, RADIO, COLORES_SECCION } from './tema';
 import { Nota, TextoLibre, Forma, Flecha, Trazo, BarraInferior, PaletaIzquierda, PildoraZoom, BarraContextual } from './PiezasLienzo';
 import { MenuContextual, PanelBuscar, VentanaAtajos } from './MenusLienzo';
 import { NOTA_LADO, NOTA_HUECO, medidaTexto, COLORES_NOTA, COLORES_TINTA, FUENTES, TAMANOS } from './notas';
@@ -41,7 +41,6 @@ const BORDE = 32, VELOCIDAD_BORDE = 16;        // desplazamiento automático: fr
 const SECCION_MIN = [160, 120];
 const NOTA_MIN = 80;                            // una nota se reduce hasta 80 × 80 (ACC: notas que se escalan)
 const AZUL_SEL = '#0D66B4';
-const COLORES_SECCION = [C.orange, C.blue, C.green, C.gris700];
 const MARCA = 'data-alephia-lienzo';            // marca del portapapeles: contenido de un lienzo de ALEPHIA
 const linea = (px) => `calc(${px}px / var(--s, 1))`;
 const CSS_LIENZO = `.tablero-nodo:hover { outline: ${linea(1.5)} solid rgba(13, 102, 180, 0.45); }
@@ -114,7 +113,9 @@ function leerHtml(html, tipos) {
   try { return limpiarPegado(JSON.parse(decodeURIComponent(m[1])), tipos); } catch { return null; }
 }
 
-const Lienzo = forwardRef(function Lienzo({ inicial = null, onCambio, claveCamara = '', paletaExtra = null, tipos = SIN_TIPOS }, ref) {
+// `accionesSeleccion`: [[texto, (ids) => …]] que quien usa el lienzo añade al menú de lo elegido (el ⋮ de su barra y
+// el clic derecho), p. ej. «Publicar vista…» en Docs (docs/visor/63).
+const Lienzo = forwardRef(function Lienzo({ inicial = null, onCambio, claveCamara = '', paletaExtra = null, tipos = SIN_TIPOS, accionesSeleccion = null }, ref) {
   const tiposRef = useRef(tipos);
   tiposRef.current = tipos;
   const [notas, setNotas] = useState(() => inicial?.notas || []);
@@ -901,6 +902,7 @@ const Lienzo = forwardRef(function Lienzo({ inicial = null, onCambio, claveCamar
         { texto: 'Apilar en vertical', accion: () => repartir('v', true) },
       ] }] : []),
       { texto: 'Enmarcar en una sección', accion: enmarcar },
+      ...(accionesSeleccion || []).map(([texto, fn]) => ({ texto, accion: () => fn(elegidosAhora.map(x => x.id)) })),
       null,
       { texto: todoBloqueado ? 'Desbloquear' : 'Bloquear', atajo: '⇧ L', accion: alternarBloqueo },
       null,
@@ -1100,6 +1102,7 @@ const Lienzo = forwardRef(function Lienzo({ inicial = null, onCambio, claveCamar
                     onEstilo={aplicarEstilo} onBloquear={alternarBloqueo}
                     colores={{ nota: COLORES_NOTA, tinta: COLORES_TINTA }} fuentes={FUENTES} tamanos={TAMANOS}
                     acciones={[['Duplicar', 'Ctrl D', duplicar], null, ['Traer al frente', '⇧ ]', () => reordenar('frente')], ['Enviar al fondo', '⇧ [', () => reordenar('fondo')], null,
+                      ...(accionesSeleccion?.length ? [...accionesSeleccion.map(([texto, fn]) => [texto, '', () => fn([...selRef.current])]), null] : []),
                       [todoBloqueado ? 'Desbloquear' : 'Bloquear', '⇧ L', alternarBloqueo], null, ['Eliminar', 'Supr', borrarSeleccion, true]]} />
                 </div>
               )}

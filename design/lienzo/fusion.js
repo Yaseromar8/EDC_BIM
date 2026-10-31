@@ -5,7 +5,7 @@
 //   mio    = lo que tengo ahora en pantalla
 //   suyo   = lo que hay ahora en el servidor
 //
-// Por cada elemento (nota, texto, sección), por su id:
+// Por cada elemento (nota, texto, sección, vista), por su id:
 //   - solo lo cambié yo           → el mío
 //   - solo lo cambió el otro      → el suyo
 //   - lo cambiamos los dos        → el mío (soy quien guarda ahora; el suyo queda en su versión anterior)
@@ -14,7 +14,8 @@
 //   - nuevo de cualquiera         → se queda
 // El orden (que es el orden de dibujo) es el del servidor; lo que él ya no tiene y se queda (lo nuevo mío, o
 // lo que él borró y yo cambié) va detrás, encima de todo.
-export const LISTAS = ['notas', 'secciones'];
+// `vistas` (docs/visor/63): las vistas publicadas del tablero, que también llevan id.
+export const LISTAS = ['notas', 'secciones', 'vistas'];
 
 const igual = (a, b) => a === b || JSON.stringify(a) === JSON.stringify(b);
 const porId = (lista) => new Map((lista || []).map(x => [x.id, x]));

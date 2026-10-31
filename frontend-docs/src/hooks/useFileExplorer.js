@@ -141,9 +141,11 @@ export function useFileExplorer(project, user) {
   // ── Misc UI State ──
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   // Un enlace a una revisión (`?revision=<id>`) abre directamente Revisiones;
-  // `ReviewsView` lee el mismo parámetro para mostrar su detalle.
+  // `ReviewsView` lee el mismo parámetro para mostrar su detalle. Uno a un tablero
+  // (`?tablero=<id>`, docs/visor/63) abre Tableros, y `TablerosModule` abre ese tablero.
   const [sidebarView, fijarVista] = useState(() => (
-    /[?&]revision=\d+(&|$)/.test(window.location.search) ? 'reviews' : 'files'));
+    /[?&]revision=\d+(&|$)/.test(window.location.search) ? 'reviews'
+      : /[?&]tablero=[0-9a-f-]{36}(&|$)/i.test(window.location.search) ? 'tableros' : 'files'));
   const vistaActual = useRef(sidebarView);
   useEffect(() => { vistaActual.current = sidebarView; }, [sidebarView]);
 
