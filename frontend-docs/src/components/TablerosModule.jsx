@@ -220,6 +220,8 @@ export default function TablerosModule({ projectPrefix, user, isAdmin }) {
 }
 
 // ── Editor: el tablero en pantalla completa ──────────────────────────────────────────────────────────
+const MAX_HOJAS_EXTRAIDAS = 50;
+
 function TableroEditor({ id, onCerrar }) {
   const [datos, setDatos] = useState(null);       // { nombre, archivado, config, version } al abrir
   const [fallo, setFallo] = useState('');
@@ -250,7 +252,15 @@ function TableroEditor({ id, onCerrar }) {
   const abrirEnArchivos = useCallback((el, version) => {
     window.open(enlaceDeArchivos(window.location.origin, { obra, carpeta: el.parentId, documento: el.nodeId, version: version?.id || el.versionId }), '_blank', 'noopener');
   }, [obra]);
-  const tipos = useMemo(() => ({ documento: tipoDocumento({ abrir }) }), [abrir]);
+  // «Extraer páginas»: una tarjeta por cada otra hoja, a la derecha de la original. Son REFERENCIAS al mismo documento
+  // (otra `pagina`), nada se copia. Hasta 50 de una vez: cada hoja se dibuja en el navegador.
+  const extraerPaginas = useCallback((el, total) => {
+    const { id: _id, x: _x, y: _y, ...resto } = el;
+    const hoja = el.pagina || 1;
+    const otras = Array.from({ length: Math.min(total, MAX_HOJAS_EXTRAIDAS + 1) }, (_, i) => i + 1).filter(n => n !== hoja).slice(0, MAX_HOJAS_EXTRAIDAS);
+    lienzoRef.current?.insertar(otras.map(n => ({ ...resto, pagina: n, ar: null })), { junto: el.id });
+  }, []);
+  const tipos = useMemo(() => ({ documento: tipoDocumento({ abrir, extraer: extraerPaginas }) }), [abrir, extraerPaginas]);
   // `en`: el punto donde se soltó al jalarlo desde «Visualizados recientemente» (fuera del tablero no se añade).
   const zonaRef = useRef(null);
   const anadirDocumentos = async (filas, en = null) => {

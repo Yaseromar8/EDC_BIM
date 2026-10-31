@@ -195,3 +195,23 @@ la haya). Jalar el mismo plano cien veces da cien tarjetas del MISMO documento; 
 3. **3D**: «Extraer modelo 3D» desde el visor de un DWG de Civil o un RVT (una tarjeta con la vista del modelo,
    «Configurando miniatura…» mientras se prepara) y **«Cambiar miniatura»** solo en esas tarjetas.
 
+## 11 · Hojas de un PDF (2C) hecho (31-oct-2026, noche)
+
+- La tarjeta guarda la **hoja** que enseña (`pagina`; sin ella, la 1). Sigue siendo una referencia: el mismo
+  documento, otra hoja.
+- **Cuántas hojas tiene** lo averigua el navegador abriendo solo el índice del PDF (pdf.js por rangos), una vez por
+  versión. El servidor no lo guarda.
+- **La hoja 1** es la vista previa del servidor; **las demás** las dibuja el navegador a 2.000 px, de una en una, con
+  «Preparando la vista previa…» mientras tanto.
+- **Barra** (solo si hay más de una hoja): **◀ 2/3 ▶** (cada cambio, un paso de deshacer) y **«Extraer páginas»**:
+  una tarjeta por cada otra hoja, en fila a la derecha de la original y alineadas arriba (si no caben, debajo),
+  hasta 50 de una vez. Quedan elegidas.
+- Al cambiar de hoja la tarjeta toma la proporción de la nueva **conservando su lado mayor**: una hoja vertical junto
+  a apaisadas mide de alto lo que ellas de ancho.
+- Buscar encuentra «nombre · hoja 3»; con «Mostrar metadatos», la franja dice «Hoja 3».
+
+**Evidencia** (banco, con un PDF real de tres hojas, la tercera vertical): `prueba_paginas.py` **12/12** — 1/3 con ◀
+apagado, «Extraer páginas», hoja 1 del servidor, ▶ dibujada en el navegador, Ctrl+Z de una vez, 3/3 con ▶ apagado,
+proporción vertical, dos tarjetas extraídas a la derecha y alineadas, elegidas, guardadas como el MISMO documento
+con hojas 1, 2 y 3, y un PDF de una hoja sin nada de esto. Regresión: documentos, formas y fase 1 otra vez.
+

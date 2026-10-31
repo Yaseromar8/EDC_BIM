@@ -16,7 +16,7 @@ import React, { useContext, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { renderFileIconSop } from '../../utils/fileIcons';
 import { DocumentosDelTablero, EXTENSIONES_CON_IMAGEN, hayVersionNueva, metaDe, fechaHora, versionesDe } from './documentos';
-import { imagenDe } from './imagenDocumento';
+import { imagenDe, hojaDe, hojasDe } from './imagenDocumento';
 
 const GRIS = '#72706B', TINTA = '#141413', BORDE = '#D9D7CD';
 const SOMBRA = '0 1px 2px rgba(20,20,19,0.08), 0 6px 18px rgba(20,20,19,0.10)';
@@ -28,6 +28,9 @@ const ICONOS = {
   abrir: icono(<><path d="M14 4h6v6" /><path d="M20 4 11 13" /><path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5" /></>),
   mostrar: icono(<><rect x="3.5" y="4.5" width="17" height="15" rx="1.5" /><path d="M3.5 9h17M9 9v10.5" /></>),
   completa: icono(<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" />),
+  extraer: icono(<><rect x="8" y="8" width="12" height="12" rx="1.5" /><path d="M16 8V5.5A1.5 1.5 0 0 0 14.5 4h-9A1.5 1.5 0 0 0 4 5.5v9A1.5 1.5 0 0 0 5.5 16H8" /></>),
+  antes: icono(<path d="m14.5 6-6 6 6 6" />),
+  despues: icono(<path d="m9.5 6 6 6-6 6" />),
   hoja: <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M7 3h7l5 5v13H7z" /><path d="M14 3v5h5" /></svg>,
 };
 
@@ -54,6 +57,7 @@ const aviso = (texto, sub, hijo = null) => (
 function Metadatos({ el, meta, hayNueva, vigente }) {
   const partes = [];
   if (meta.version && el.version) partes.push(`V${el.version}${hayNueva ? ` · hay V${vigente.version}` : ''}`);
+  if (hojaDe(el) > 1) partes.push(`Hoja ${hojaDe(el)}`);
   if (meta.fecha && el.fecha) partes.push(`Última actualización: ${fechaHora(el.fecha)}`);
   return (
     <div style={{ position: 'absolute', left: 0, right: 0, bottom: '100%', paddingBottom: 6, display: 'flex', alignItems: 'center', gap: 6,
@@ -82,7 +86,7 @@ export function TarjetaDocumento({ elemento: el, elegido, ajustar }) {
     setImagen({ estado: 'cargando' }); setCargada(false); setAvance(null);
     imagenDe(el, (f) => { if (vivo) setAvance(f); }).then(r => { if (vivo) setImagen(r); });
     return () => { vivo = false; };
-  }, [el.nodeId, el.versionId, el.ext]);   // eslint-disable-line react-hooks/exhaustive-deps
+  }, [el.nodeId, el.versionId, el.ext, el.pagina]);   // eslint-disable-line react-hooks/exhaustive-deps
 
   // La lámina toma su proporción real la primera vez que se ve (y si otra versión trae otra hoja).
   const alCargar = (e) => {
@@ -90,7 +94,12 @@ export function TarjetaDocumento({ elemento: el, elegido, ajustar }) {
     const { naturalWidth: w, naturalHeight: h } = e.currentTarget;
     if (!w || !h || !ajustar) return;
     const ar = w / h;
-    if (!el.ar || Math.abs(el.ar - ar) > 0.01) ajustar({ ar: Math.round(ar * 10000) / 10000, h: Math.round(el.w / ar) });
+    if (el.ar && Math.abs(el.ar - ar) <= 0.01) return;
+    // Se conserva el lado mayor: una hoja vertical junto a otras apaisadas mide lo mismo de alto que ellas de ancho,
+    // en vez de alargarse hacia abajo.
+    const lado = Math.max(el.w, el.h);
+    ajustar(ar >= 1 ? { ar: Math.round(ar * 10000) / 10000, w: lado, h: Math.round(lado / ar) }
+      : { ar: Math.round(ar * 10000) / 10000, w: Math.round(lado * ar), h: lado });
   };
 
   let cuerpo;
@@ -276,7 +285,36 @@ function PantallaCompleta({ el, onCerrar }) {
   );
 }
 
-export function BarraDocumento({ el, actualizar, abrir }) {
+// ◀ 2/3 ▶ y «Extraer páginas» (como ACC), solo si el documento tiene más de una hoja. Cambiar de hoja es un paso de
+// deshacer; extraer pone una tarjeta por cada otra hoja, a la derecha: el MISMO documento, otra hoja (nada se copia).
+function Hojas({ el, actualizar, extraer }) {
+  const [total, setTotal] = useState(null);
+  useEffect(() => {
+    let vivo = true;
+    hojasDe(el).then(n => { if (vivo) setTotal(n); });
+    return () => { vivo = false; };
+  }, [el.nodeId, el.versionId, el.ext]);   // eslint-disable-line react-hooks/exhaustive-deps
+  if (!total || total < 2) return null;
+  const hoja = Math.min(hojaDe(el), total);
+  const ir = (n) => actualizar({ pagina: n, ar: null });
+  return (
+    <>
+      <span role="group" aria-label="Hojas" style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>
+        <button type="button" aria-label="Hoja anterior" title="Hoja anterior" disabled={hoja <= 1} onClick={() => ir(hoja - 1)}
+          style={{ ...ICONO, opacity: hoja <= 1 ? 0.35 : 1, cursor: hoja <= 1 ? 'default' : 'pointer' }}>{ICONOS.antes}</button>
+        <span style={{ minWidth: 34, textAlign: 'center', fontSize: 13, color: '#3C3C3C', fontVariantNumeric: 'tabular-nums' }}>{hoja}/{total}</span>
+        <button type="button" aria-label="Hoja siguiente" title="Hoja siguiente" disabled={hoja >= total} onClick={() => ir(hoja + 1)}
+          style={{ ...ICONO, opacity: hoja >= total ? 0.35 : 1, cursor: hoja >= total ? 'default' : 'pointer' }}>{ICONOS.despues}</button>
+      </span>
+      {extraer && (
+        <button type="button" aria-label="Extraer páginas" title={`Extraer páginas (una tarjeta por hoja: ${total})`} style={ICONO}
+          onClick={() => extraer(el, total)}>{ICONOS.extraer}</button>
+      )}
+    </>
+  );
+}
+
+export function BarraDocumento({ el, actualizar, abrir, extraer }) {
   const { vigentes } = useContext(DocumentosDelTablero);
   const vigente = vigentes[el.nodeId];
   const hayNueva = hayVersionNueva(el, vigente);
@@ -286,6 +324,7 @@ export function BarraDocumento({ el, actualizar, abrir }) {
   return (
     <>
       <MenuVersiones el={el} vigente={vigente} hayNueva={hayNueva} actualizar={actualizar} />
+      <Hojas el={el} actualizar={actualizar} extraer={extraer} />
       <button type="button" style={BOTON} title="Abrir el documento aquí, encima del tablero (doble clic también)" onClick={() => abrir(el)}>
         {ICONOS.abrir}
         Abrir

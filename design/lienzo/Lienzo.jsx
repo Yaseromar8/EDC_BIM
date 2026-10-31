@@ -21,7 +21,8 @@
 // cualquier otro, y quien registra el tipo pone cómo se dibuja, sus botones y qué pasa al hacer doble clic.
 // La Pieza recibe `{ elemento, elegido, ajustar(patch) }`: `ajustar` corrige lo que descubre de sí misma (su
 // proporción) sin crear un paso de deshacer. `ref.insertar(elementos, { en })` los coloca en el centro de la vista
-// o donde se soltaron (`en`: punto de la pantalla), elegidos, como un paso de deshacer.
+// o donde se soltaron (`en`: punto de la pantalla) o en fila a la derecha de otro (`junto`: su id), elegidos, como un
+// paso de deshacer.
 import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { C, FUENTE, RADIO } from './tema';
@@ -662,12 +663,15 @@ const Lienzo = forwardRef(function Lienzo({ inicial = null, onCambio, claveCamar
   // `en`: el punto de la pantalla donde se soltó (arrastrar desde un panel, como en ACC): el bloque se centra ahí,
   // tal cual, sin buscar sitio ni mover la cámara. Sin él, centro de la vista y sitio libre.
   // El tamaño pedido es el de la PANTALLA cuando la vista está alejada: soltar a un 5 % no crea una tarjeta de 18 px.
-  insertarRef.current = (lista, { en } = {}) => {
-    const k = 1 / Math.min(1, viewRef.current.s);
+  // `junto`: el id de un elemento al lado del que van, en fila a su derecha (las hojas extraídas de un documento, como
+  // ACC); a su tamaño, sin escalar por la vista; si a la derecha no caben, debajo.
+  insertarRef.current = (lista, { en, junto } = {}) => {
+    const ancla = junto ? notasRef.current.find(n => n.id === junto) : null;
+    const k = ancla ? 1 : 1 / Math.min(1, viewRef.current.s);
     const elementos = (lista || []).filter(x => x && x.w > 0 && x.h > 0).map(x => ({ ...x, w: redondo(x.w * k), h: redondo(x.h * k) }));
     if (!elementos.length) return [];
     marcar();
-    const V = visible(), hueco = 32 * k, porFila = Math.min(4, elementos.length);
+    const V = visible(), hueco = ancla ? Math.max(16, Math.round(ancla.w * 0.06)) : 32 * k, porFila = Math.min(ancla ? 6 : 4, elementos.length);
     const punto = en ? puntoDelMundo(en) : null;
     const cx = punto ? punto.x : (V.x1 + V.x2) / 2, cy = punto ? punto.y : (V.y1 + V.y2) / 2;
     const anchoCol = Math.max(...elementos.map(x => x.w)), altoFila = Math.max(...elementos.map(x => x.h));
@@ -678,7 +682,10 @@ const Lienzo = forwardRef(function Lienzo({ inicial = null, onCambio, claveCamar
     const ocupado = todos();
     const choca = (x, y) => ocupado.some(o => o.x < x + anchoBloque + hueco && o.x + o.w + hueco > x && o.y < y + altoBloque + hueco && o.y + o.h + hueco > y);
     let x0 = cx - anchoBloque / 2, y0 = cy - altoBloque / 2;
-    if (!punto && choca(x0, y0)) {
+    if (ancla) {
+      [x0, y0] = [ancla.x + ancla.w + hueco, ancla.y];
+      if (choca(x0, y0) && !choca(ancla.x, ancla.y + ancla.h + hueco)) [x0, y0] = [ancla.x, ancla.y + ancla.h + hueco];
+    } else if (!punto && choca(x0, y0)) {
       const candidatos = ocupado.flatMap(o => [[o.x + o.w + hueco, y0], [o.x + o.w + hueco, o.y], [x0, o.y + o.h + hueco], [o.x, o.y + o.h + hueco]]);
       const libre = candidatos.filter(([x, y]) => !choca(x, y)).sort((a, b) => Math.hypot(a[0] - x0, a[1] - y0) - Math.hypot(b[0] - x0, b[1] - y0))[0];
       if (libre) [x0, y0] = libre;
@@ -689,7 +696,7 @@ const Lienzo = forwardRef(function Lienzo({ inicial = null, onCambio, claveCamar
     setSeleccion(new Set(nuevos.map(x => x.id)));
     // Si quedaron fuera de la vista, la cámara va a ellos (sin acercar más de lo que estaba).
     const c = cajaDe(nuevos);
-    if (!punto && (c.x1 < V.x1 || c.y1 < V.y1 || c.x2 > V.x2 || c.y2 > V.y2)) encuadrar(nuevos, Math.min(1, viewRef.current.s));
+    if (!punto && (c.x1 < V.x1 || c.y1 < V.y1 || c.x2 > V.x2 || c.y2 > V.y2)) encuadrar(ancla ? [ancla, ...nuevos] : nuevos, Math.min(1, viewRef.current.s));
     return nuevos.map(x => x.id);
   };
   const seleccionarTodo = () => setSeleccion(new Set(todos().map(x => x.id)));
