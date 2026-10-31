@@ -36,6 +36,8 @@ const TRAZOS = {
   buscar: <><circle cx="10.5" cy="10.5" r="6.5" /><path d="m15.5 15.5 5 5" /></>,
   documento: <><path d="M7 3h7l5 5v13H7z" /><path d="M14 3v5h5" /><path d="M10 13h6M10 17h4" /></>,
   incidencia: <><circle cx="12" cy="12" r="8.5" /><path d="m8.5 12.2 2.4 2.4 4.6-4.9" /></>,
+  lapiz: <><path d="M4 20l1.2-4.4L15.6 5.2a2 2 0 0 1 2.8 0l.4.4a2 2 0 0 1 0 2.8L8.4 18.8z" /><path d="M13.8 7l3.2 3.2" /></>,
+  flecha: <><path d="M5 19 19 5" /><path d="M10 5h9v9" /></>,
   derecha: <><path d="M9 6l6 6-6 6" /></>,
 };
 

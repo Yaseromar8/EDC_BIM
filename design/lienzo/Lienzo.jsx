@@ -26,11 +26,12 @@
 import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { C, FUENTE, RADIO } from './tema';
-import { Nota, TextoLibre, Forma, BarraInferior, PaletaIzquierda, PildoraZoom, BarraContextual } from './PiezasLienzo';
+import { Nota, TextoLibre, Forma, Flecha, Trazo, BarraInferior, PaletaIzquierda, PildoraZoom, BarraContextual } from './PiezasLienzo';
 import { MenuContextual, PanelBuscar, VentanaAtajos } from './MenusLienzo';
 import { NOTA_LADO, NOTA_HUECO, medidaTexto, COLORES_NOTA, COLORES_TINTA, FUENTES, TAMANOS } from './notas';
 import { prepararImanes, imantarArrastre, svgDeLineas } from './imanes';
-import { FORMA_LADO, FORMA_MIN, ESTILO_FORMA, COLORES_FORMA, limpiarForma } from './formas';
+import { FORMA_LADO, FORMA_MIN, ESTILO_FORMA, COLORES_FORMA, limpiarForma, ESTILO_FLECHA, ESTILO_TRAZO, FLECHA_LARGO, GROSORES,
+  cajaDeTrazo, limpiarFlecha, limpiarTrazo } from './formas';
 
 const ZOOM_MIN = 0.01, ZOOM_MAX = 4;
 const PASOS_ZOOM = [0.01, 0.1, 0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 4];
@@ -89,13 +90,15 @@ function limpiarPegado(d, tipos = SIN_TIPOS) {
     ...(['arriba', 'centro', 'abajo'].includes(x.vertical) ? { vertical: x.vertical } : {}),
     ...(x.bloqueado ? { bloqueado: true } : {}),
   });
-  const notas = (Array.isArray(d.notas) ? d.notas : []).slice(0, 2000).filter(n => n && (n.tipo === 'nota' || n.tipo === 'texto' || n.tipo === 'forma' || tipos[n.tipo]?.limpiar)).map(n => {
+  const notas = (Array.isArray(d.notas) ? d.notas : []).slice(0, 2000).filter(n => n && (n.tipo === 'nota' || n.tipo === 'texto' || n.tipo === 'forma' || n.tipo === 'flecha' || n.tipo === 'trazo' || tipos[n.tipo]?.limpiar)).map(n => {
     const caja = { tipo: n.tipo, x: num(n.x), y: num(n.y), w: clamp(num(n.w, NOTA_LADO), 8, 20000), h: clamp(num(n.h, NOTA_LADO), 8, 20000) };
     if (n.tipo === 'nota' || n.tipo === 'texto') return { ...caja, texto: txt(n.texto), ...estilo(n) };
     if (n.tipo === 'forma') {
       const { color: _c, ...deTexto } = estilo(n);          // el color de una forma es de su paleta, no de la de las notas
       return { ...caja, ...(n.texto ? { texto: txt(n.texto) } : {}), ...deTexto, ...limpiarForma(n) };
     }
+    if (n.tipo === 'flecha') return { ...caja, w: clamp(num(n.w, 0), 0, 20000), h: clamp(num(n.h, 0), 0, 20000), ...limpiarFlecha(n), ...(n.bloqueado ? { bloqueado: true } : {}) };
+    if (n.tipo === 'trazo') { const t = limpiarTrazo(n); return t ? { ...caja, ...t, ...(n.bloqueado ? { bloqueado: true } : {}) } : null; }
     const propio = tipos[n.tipo].limpiar(n);          // el tipo valida lo suyo; si no lo reconoce, no se pega
     return propio ? { ...caja, ...propio, ...(n.bloqueado ? { bloqueado: true } : {}) } : null;
   }).filter(Boolean);
@@ -447,6 +450,64 @@ const Lienzo = forwardRef(function Lienzo({ inicial = null, onCambio, claveCamar
       } else nuevaForma({ x: redondo(p.x - FORMA_LADO / 2), y: redondo(p.y - FORMA_LADO / 2), w: FORMA_LADO, h: FORMA_LADO });
     });
   };
+  // Cierra un gesto de dibujo con el elemento ya en su forma final. El paso de deshacer se toma de notasRef, que solo
+  // se pone al día al pintar: si se cerrara con un setNotas aún sin pintar, quedarían dos pasos (el elemento a medias
+  // y su último ajuste) y Ctrl+Z dejaría el primero.
+  const cerrarDibujo = (nueva) => {
+    const ns = notasRef.current, fin = ns.some(n => n.id === nueva.id) ? ns.map(n => (n.id === nueva.id ? nueva : n)) : [...ns, nueva];
+    notasRef.current = fin; setNotas(fin); terminarGesto();
+  };
+  // FLECHA (docs/visor/62): se arrastra del inicio al final (con Mayús, en múltiplos de 45°); un clic, 200 hacia la
+  // derecha. Un solo paso de deshacer, y queda elegida.
+  const dibujarFlecha = (e) => {
+    e.preventDefault();
+    const a = puntoDelMundo(e), ini = { x: e.clientX, y: e.clientY }, id = uid();
+    const caja = (b) => ({ x: redondo(Math.min(a.x, b.x)), y: redondo(Math.min(a.y, b.y)), w: redondo(Math.abs(b.x - a.x)), h: redondo(Math.abs(b.y - a.y)),
+      invX: b.x < a.x, invY: b.y < a.y });
+    const a45 = (b) => {
+      const ang = Math.round(Math.atan2(b.y - a.y, b.x - a.x) / (Math.PI / 4)) * (Math.PI / 4), l = Math.hypot(b.x - a.x, b.y - a.y);
+      return { x: a.x + Math.cos(ang) * l, y: a.y + Math.sin(ang) * l };
+    };
+    const base = { id, tipo: 'flecha', ...ESTILO_FLECHA };
+    iniciarGesto();
+    setNotas(ns => [...ns, { ...base, ...caja({ x: a.x + 1, y: a.y }) }]);
+    let ultima = null;
+    const onMove = (ev) => {
+      if (!ultima && Math.hypot(ev.clientX - ini.x, ev.clientY - ini.y) < ARRASTRE_MIN) return;
+      const b = puntoDelMundo(ev), c = caja(ev.shiftKey ? a45(b) : b);
+      ultima = c;
+      setNotas(ns => ns.map(n => (n.id === id ? { ...n, ...c } : n)));
+    };
+    const onUp = () => {
+      window.removeEventListener('pointermove', onMove); window.removeEventListener('pointerup', onUp);
+      cerrarDibujo({ ...base, ...(ultima || caja({ x: a.x + FLECHA_LARGO, y: a.y })) });
+      setSeleccion(new Set([id])); setHerramienta('seleccionar');
+    };
+    window.addEventListener('pointermove', onMove); window.addEventListener('pointerup', onUp);
+  };
+  // LÁPIZ: trazo a mano, con los puntos que de verdad se ven (uno cada 2 px de pantalla), un paso de deshacer por
+  // trazo. La herramienta se queda puesta para seguir dibujando (Escape la suelta), como en Forma Board.
+  const dibujarTrazo = (e) => {
+    e.preventDefault();
+    const p = puntoDelMundo(e), id = uid(), g = GROSORES[ESTILO_TRAZO.grosor], mundo = [[p.x, p.y]];
+    const base = { id, tipo: 'trazo', ...ESTILO_TRAZO };
+    iniciarGesto();
+    setNotas(ns => [...ns, { ...base, ...cajaDeTrazo(mundo, g) }]);
+    let raf = 0;
+    const poner = () => { raf = 0; const c = cajaDeTrazo(mundo, g); setNotas(ns => ns.map(n => (n.id === id ? { ...n, ...c } : n))); };
+    const onMove = (ev) => {
+      const q = puntoDelMundo(ev), u = mundo[mundo.length - 1];
+      if (Math.hypot(q.x - u[0], q.y - u[1]) * viewRef.current.s < 2) return;
+      mundo.push([q.x, q.y]);
+      if (!raf) raf = requestAnimationFrame(poner);
+    };
+    const onUp = () => {
+      window.removeEventListener('pointermove', onMove); window.removeEventListener('pointerup', onUp);
+      if (raf) cancelAnimationFrame(raf);
+      cerrarDibujo({ ...base, ...cajaDeTrazo(mundo, g) });
+    };
+    window.addEventListener('pointermove', onMove); window.addEventListener('pointerup', onUp);
+  };
   const seccionDeTamano = (nombre, [w, h]) => {
     const r = canvasRef.current.getBoundingClientRect(), v = viewRef.current;
     const cx = (r.width / 2 - v.tx) / v.s, cy = (r.height / 2 - v.ty) / v.s;
@@ -583,7 +644,8 @@ const Lienzo = forwardRef(function Lienzo({ inicial = null, onCambio, claveCamar
     const f = (esSeccion ? seccionesRef.current : notasRef.current).find(x => x.id === id);
     if (!f || f.bloqueado) return;
     const tipo = esSeccion ? null : tiposRef.current[f.tipo];
-    const [mw, mh] = esSeccion ? SECCION_MIN : f.tipo === 'nota' ? [NOTA_MIN, NOTA_MIN] : f.tipo === 'forma' ? [FORMA_MIN, FORMA_MIN] : (tipo?.minimo || [120, 90]);
+    const [mw, mh] = esSeccion ? SECCION_MIN : f.tipo === 'nota' ? [NOTA_MIN, NOTA_MIN] : f.tipo === 'forma' ? [FORMA_MIN, FORMA_MIN]
+      : f.tipo === 'flecha' ? [0, 0] : f.tipo === 'trazo' ? [8, 8] : (tipo?.minimo || [120, 90]);
     // Una nota se escala entera (sigue cuadrada; su letra va con ella); una forma, libre, y con Mayús proporcionada.
     const proporcionFija = f.tipo === 'nota' ? 1 : tipo?.proporcion ? f.w / f.h : null;
     const ini = puntoDelMundo(e);
@@ -591,7 +653,7 @@ const Lienzo = forwardRef(function Lienzo({ inicial = null, onCambio, claveCamar
     const onMove = (ev) => {
       const p = puntoDelMundo(ev), dx = p.x - ini.x, dy = p.y - ini.y;
       let x1 = f.x, y1 = f.y, x2 = f.x + f.w, y2 = f.y + f.h;
-      const proporcion = proporcionFija || (f.tipo === 'forma' && ev.shiftKey ? f.w / f.h : null);
+      const proporcion = proporcionFija || ((f.tipo === 'forma' || f.tipo === 'trazo') && ev.shiftKey ? f.w / f.h : null);
       if (proporcion) {
         // El ancho manda; el alto lo sigue. La esquina opuesta queda quieta.
         const w = Math.max(mw, f.w + (esquina.includes('o') ? -dx : dx)), h = Math.max(mh, w / proporcion), wf = h * proporcion;
@@ -864,6 +926,8 @@ const Lienzo = forwardRef(function Lienzo({ inicial = null, onCambio, claveCamar
     if (herramienta === 'texto') { e.preventDefault(); const p = puntoDelMundo(e); crearTexto(p.x, p.y); return; }
     if (herramienta === 'seccion') { dibujarSeccion(e); return; }
     if (herramienta === 'forma') { dibujarForma(e); return; }
+    if (herramienta === 'flecha') { dibujarFlecha(e); return; }
+    if (herramienta === 'lapiz') { dibujarTrazo(e); return; }
     iniciarMarco(e);
   };
   const alDobleClic = (e) => { if (e.target === canvasRef.current && herramienta === 'seleccionar') { const p = puntoDelMundo(e); crearTexto(p.x, p.y); } };
@@ -908,7 +972,7 @@ const Lienzo = forwardRef(function Lienzo({ inicial = null, onCambio, claveCamar
     else if (e.shiftKey && e.code === 'Digit1') ajustarATodo();
     else if (e.shiftKey && e.code === 'Digit2') zoomASeleccion();
     else if (k.startsWith('arrow') && !ctrl) empujar(k, e.shiftKey);
-    else if (!ctrl && !e.altKey && !e.shiftKey && { v: 1, h: 1, n: 1, t: 1, f: 1, r: 1 }[k]) setHerramienta({ v: 'seleccionar', h: 'mano', n: 'nota', t: 'texto', f: 'seccion', r: 'forma' }[k]);
+    else if (!ctrl && !e.altKey && !e.shiftKey && { v: 1, h: 1, n: 1, t: 1, f: 1, r: 1, a: 1, p: 1 }[k]) setHerramienta({ v: 'seleccionar', h: 'mano', n: 'nota', t: 'texto', f: 'seccion', r: 'forma', a: 'flecha', p: 'lapiz' }[k]);
     else if (k === 'enter' && selRef.current.size === 1 && notasRef.current.some(n => selRef.current.has(n.id))) editar([...selRef.current][0]);
     else hecho = false;
     if (hecho) { e.preventDefault(); e.stopPropagation(); }
@@ -937,14 +1001,18 @@ const Lienzo = forwardRef(function Lienzo({ inicial = null, onCambio, claveCamar
   const elegidos = [...secciones, ...notas].filter(x => sel.has(x.id));
   const caja = elegidos.length && !editandoNota ? cajaDe(elegidos) : null;
   const uno = elegidos.length === 1 ? elegidos[0] : null;
-  const unaSeccion = uno && !uno.bloqueado && (secciones.includes(uno) || uno.tipo === 'nota' || uno.tipo === 'forma' || tipos[uno.tipo]?.redimensionable) ? uno : null;
+  const unaSeccion = uno && !uno.bloqueado && (secciones.includes(uno) || uno.tipo === 'nota' || uno.tipo === 'forma' || uno.tipo === 'flecha' || uno.tipo === 'trazo' || tipos[uno.tipo]?.redimensionable) ? uno : null;
   const extraDeLaBarra = uno && tipos[uno.tipo]?.barra ? tipos[uno.tipo].barra(uno, { actualizar: (patch) => actualizarElemento(uno.id, patch) }) : null;
   const conEstilo = elegidos.filter(x => x.tipo === 'nota' || x.tipo === 'texto');
   // Las formas tienen su propia barra (línea, color, relleno y su texto); con otras cosas elegidas, solo lo común.
-  const soloFormas = elegidos.length > 0 && elegidos.every(x => x.tipo === 'forma') ? elegidos : null;
-  const estiloFormas = soloFormas && Object.fromEntries([...ESTILO, ...Object.keys(ESTILO_FORMA)].map(k => {
-    const v0 = soloFormas[0][k] ?? ESTILO_FORMA[k];
-    return [k, soloFormas.every(x => (x[k] ?? ESTILO_FORMA[k]) === v0) ? v0 : undefined];
+  // Formas, flechas y trazos comparten Línea y Color; el relleno y el texto son de las formas, las puntas de las flechas.
+  const deLinea = (x) => x.tipo === 'forma' || x.tipo === 'flecha' || x.tipo === 'trazo';
+  const soloFormas = elegidos.length > 0 && elegidos.every(deLinea) ? elegidos : null;
+  const todasFormas = !!soloFormas && soloFormas.every(x => x.tipo === 'forma');
+  const baseDe = (x) => (x.tipo === 'flecha' ? ESTILO_FLECHA : x.tipo === 'trazo' ? ESTILO_TRAZO : ESTILO_FORMA);
+  const estiloFormas = soloFormas && Object.fromEntries([...ESTILO, ...Object.keys(ESTILO_FORMA), 'puntas'].map(k => {
+    const v0 = soloFormas[0][k] ?? baseDe(soloFormas[0])[k];
+    return [k, soloFormas.every(x => (x[k] ?? baseDe(x)[k]) === v0) ? v0 : undefined];
   }));
   const primero = conEstilo[0] || {};
   const estiloElegido = Object.fromEntries(ESTILO.map(k => [k, conEstilo.every(x => x[k] === primero[k]) ? primero[k] : undefined]));
@@ -1006,7 +1074,7 @@ const Lienzo = forwardRef(function Lienzo({ inicial = null, onCambio, claveCamar
                 </div>
               );
             }
-            const Pieza = n.tipo === 'texto' ? TextoLibre : n.tipo === 'forma' ? Forma : Nota;
+            const Pieza = n.tipo === 'texto' ? TextoLibre : n.tipo === 'forma' ? Forma : n.tipo === 'flecha' ? Flecha : n.tipo === 'trazo' ? Trazo : Nota;
             return (
               <Pieza key={n.id} nota={n} editando={editandoNota === n.id} refNodo={refNodo(n.id)} onPointerDown={arrastrar(n.id)}
                 onDoubleClick={(e) => { e.stopPropagation(); editar(n.id); }}
@@ -1026,7 +1094,8 @@ const Lienzo = forwardRef(function Lienzo({ inicial = null, onCambio, claveCamar
                   transform: 'translate(-50%, -100%) scale(calc(1 / var(--s, 1))) translate(var(--bx, 0px), var(--by, -14px))', transformOrigin: '50% 100%' }}>
                   <BarraContextual estilo={estiloFormas || estiloElegido} conNotas={conEstilo.some(x => x.tipo === 'nota')} conTextos={conEstilo.some(x => x.tipo === 'texto')}
                     conEstilo={conEstilo.length > 0 && conEstilo.length === elegidos.length} bloqueado={todoBloqueado} extra={todoBloqueado ? null : extraDeLaBarra}
-                    formas={estiloFormas} coloresForma={COLORES_FORMA} formasConTexto={!!soloFormas?.some(x => x.texto)}
+                    formas={estiloFormas} coloresForma={COLORES_FORMA} formasConTexto={todasFormas && soloFormas.some(x => x.texto)}
+                    soloLinea={!!soloFormas && !todasFormas} conPuntas={!!soloFormas && soloFormas.every(x => x.tipo === 'flecha')}
                     onTextoForma={() => soloFormas && editar(soloFormas[0].id)}
                     onEstilo={aplicarEstilo} onBloquear={alternarBloqueo}
                     colores={{ nota: COLORES_NOTA, tinta: COLORES_TINTA }} fuentes={FUENTES} tamanos={TAMANOS}

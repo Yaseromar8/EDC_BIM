@@ -6,7 +6,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import { C, FUENTE, cajaFlotante } from './tema';
 import { Icono } from './Icono';
 import { COLORES_NOTA, COLORES_TINTA, NOTA_LADO, ALINEAR, VERTICAL, fuenteDe, letraDeNota, letraDeTexto } from './notas';
-import { trazadoDe, colorForma, grosorForma, discontinuo, rellenoForma, opacidadRelleno, FORMAS, NOMBRE_FORMA, GROSORES, TRAZOS, RELLENOS } from './formas';
+import { trazadoDe, colorForma, grosorForma, discontinuo, rellenoForma, opacidadRelleno, FORMAS, NOMBRE_FORMA, GROSORES, TRAZOS, RELLENOS, PUNTAS,
+  trazadoDeFlecha, trazadoDeTrazo } from './formas';
 
 // El dibujo de una forma como icono (barra inferior y su desplegable). Se dibuja a 44 y se reduce: a 20 px la nube
 // saldría con festones de un píxel y parecería un círculo.
@@ -89,6 +90,23 @@ export function Forma({ nota, editando, refNodo, onPointerDown, onDoubleClick, o
     </div>
   );
 }
+
+// Flecha y trazo de lápiz (docs/visor/62): solo línea; se cogen por ella (una franja de 14 px), nunca por su caja, para
+// que lo que haya debajo —una lámina, una nota— se siga pudiendo elegir.
+function Linea({ nota, d, refNodo, onPointerDown, clase }) {
+  const g = grosorForma(nota), color = colorForma(nota);
+  return (
+    <div ref={refNodo} className={`tablero-nodo ${clase}`} onPointerDown={onPointerDown}
+      style={{ position: 'absolute', left: nota.x, top: nota.y, width: nota.w, height: nota.h, pointerEvents: 'none', opacity: nota.opacidad ?? 1 }}>
+      <svg width={Math.max(1, nota.w)} height={Math.max(1, nota.h)} style={{ position: 'absolute', inset: 0, overflow: 'visible' }} aria-hidden="true">
+        <path d={d} fill="none" stroke={color} strokeWidth={g} strokeDasharray={discontinuo(nota)} strokeLinecap="round" strokeLinejoin="round" />
+        <path d={d} fill="none" stroke="transparent" strokeWidth={g + 14} strokeLinecap="round" strokeLinejoin="round" style={{ pointerEvents: 'stroke', cursor: 'move' }} />
+      </svg>
+    </div>
+  );
+}
+export function Flecha(props) { return <Linea {...props} d={trazadoDeFlecha(props.nota)} clase="tablero-flecha" />; }
+export function Trazo(props) { return <Linea {...props} d={trazadoDeTrazo(props.nota)} clase="tablero-trazo" />; }
 
 export function TextoLibre({ nota, editando, refNodo, onPointerDown, onDoubleClick, onCambiar, onTerminar }) {
   return (
@@ -191,6 +209,7 @@ export function BarraInferior({ herramienta, onHerramienta, colorNota, onColorNo
       <Boton activo={herramienta === 'mano'} titulo="Mano" atajo="H" onClick={() => onHerramienta('mano')}><Icono nombre="mano" tam={24} grosor={1} /></Boton>
       {separador}
       <TacoDeNotas color={color} activo={herramienta === 'nota'} onClick={() => onHerramienta('nota')} />
+      <Boton activo={herramienta === 'lapiz'} titulo="Lápiz" atajo="P" onClick={() => onHerramienta('lapiz')}><Icono nombre="lapiz" tam={24} grosor={1} /></Boton>
       {herramienta === 'nota' && (
         <div style={{ display: 'flex', gap: 5 }}>
           {Object.entries(COLORES_NOTA).map(([k, v]) => (
@@ -201,6 +220,7 @@ export function BarraInferior({ herramienta, onHerramienta, colorNota, onColorNo
         </div>
       )}
       <Boton activo={herramienta === 'texto'} titulo="Texto" atajo="T" onClick={() => onHerramienta('texto')}><Icono nombre="texto" tam={24} grosor={1} /></Boton>
+      <Boton activo={herramienta === 'flecha'} titulo="Flecha" atajo="A" onClick={() => onHerramienta('flecha')}><Icono nombre="flecha" tam={24} grosor={1} /></Boton>
       {/* Formas: la última elegida y, en el desplegable, todas (como Forma Board) */}
       {onForma && (
         <div ref={formasRef} style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 2 }}>
@@ -363,7 +383,7 @@ const casilla = (elegida) => ({ height: 36, display: 'flex', alignItems: 'center
   border: `1px solid ${elegida ? '#006EAF' : 'transparent'}`, background: elegida ? 'rgba(0,110,175,0.08)' : 'transparent' });
 
 export function BarraContextual({ estilo = {}, conNotas, conTextos, conEstilo, bloqueado, onEstilo, onBloquear, acciones, colores, fuentes, tamanos, extra = null,
-  formas = null, coloresForma = {}, formasConTexto = false, onTextoForma }) {
+  formas = null, coloresForma = {}, formasConTexto = false, onTextoForma, soloLinea = false, conPuntas = false }) {
   const [abierto, setAbierto] = useState(null);
   useEffect(() => {
     if (!abierto) return undefined;
@@ -487,7 +507,17 @@ export function BarraContextual({ estilo = {}, conNotas, conTextos, conEstilo, b
               ))}
             </div>
           ))}
-          {desplegado('relleno', (
+          {conPuntas && desplegado('puntas', (
+            <Boton titulo="Puntas" activo={abierto === 'puntas'} onClick={() => alternar('puntas')}>
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M3 10h14M13 6l4 4-4 4" />{formas.puntas === 'ambas' && <path d="M7 6l-4 4 4 4" />}</svg>
+            </Boton>
+          ), (
+            <Lista ancho={220}>{PUNTAS.map(([k, t]) => (
+              <Opcion key={k} elegida={(formas.puntas || 'fin') === k} onClick={() => elegir({ puntas: k })}>{t}</Opcion>
+            ))}</Lista>
+          ))}
+          {!soloLinea && desplegado('relleno', (
             <Boton titulo="Relleno" activo={abierto === 'relleno'} onClick={() => alternar('relleno')}>
               <span style={{ width: 16, height: 16, borderRadius: 3, boxSizing: 'border-box', border: `1.5px solid ${coloresForma[formas.color] || '#3C3C3C'}`,
                 background: formas.relleno === 'solido' ? coloresForma[formas.color] : formas.relleno === 'suave' ? `${coloresForma[formas.color]}33` : 'transparent' }} />
@@ -507,14 +537,14 @@ export function BarraContextual({ estilo = {}, conNotas, conTextos, conEstilo, b
               </div>
             </div>
           ))}
-          {separadorBarra}
+          {!soloLinea && separadorBarra}
           {/* El texto de una forma, como en ACC: «Añadir texto» y, cuando lo hay, su letra, tamaño y alineación. */}
-          {formasConTexto ? controlesDeTexto(true) : (
+          {!soloLinea && (formasConTexto ? controlesDeTexto(true) : (
             <Boton titulo="Añadir texto" onClick={onTextoForma}>
               <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" aria-hidden="true">
                 <path d="M3 4.5h9M7.5 4.5v11M13 12h5M15.5 9.5v5" /></svg>
             </Boton>
-          )}
+          ))}
         </>
       )}
       {separadorBarra}

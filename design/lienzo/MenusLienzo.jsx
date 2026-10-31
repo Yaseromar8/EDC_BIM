@@ -105,7 +105,7 @@ export function PanelBuscar({ elementos, onIr, onCerrar }) {
       <div style={{ overflowY: 'auto', padding: consulta ? 5 : 0 }}>
         {consulta && !resultados.length && <div style={{ padding: '14px 12px', fontSize: 14, color: C.gris600 }}>Nada en el tablero dice «{q.trim()}».</div>}
         {resultados.map((r, i) => {
-          const tipo = r.x.titulo !== undefined ? 'Sección' : r.x.etiqueta || (r.x.tipo === 'texto' ? 'Texto' : r.x.tipo === 'forma' ? 'Forma' : 'Nota');
+          const tipo = r.x.titulo !== undefined ? 'Sección' : r.x.etiqueta || (r.x.tipo === 'texto' ? 'Texto' : r.x.tipo === 'forma' ? 'Forma' : r.x.tipo === 'flecha' ? 'Flecha' : r.x.tipo === 'trazo' ? 'Trazo' : 'Nota');
           return (
             <button key={r.x.id} onClick={() => ir(r)} onMouseEnter={() => setActivo(i)}
               style={{ ...fila, alignItems: 'flex-start', padding: '7px 8px', cursor: 'pointer', color: C.dark, background: i === activo ? 'rgba(0,110,175,0.08)' : 'transparent' }}>
@@ -130,7 +130,7 @@ export function PanelBuscar({ elementos, onIr, onCerrar }) {
 }
 
 const ATAJOS = [
-  ['Herramientas', [['Seleccionar', 'V'], ['Mano', 'H'], ['Nota', 'N'], ['Texto', 'T'], ['Forma', 'R'], ['Sección', 'F'], ['Mover el lienzo', 'Espacio + arrastrar'], ['Mover el lienzo', 'Clic derecho + arrastrar']]],
+  ['Herramientas', [['Seleccionar', 'V'], ['Mano', 'H'], ['Nota', 'N'], ['Texto', 'T'], ['Forma', 'R'], ['Flecha', 'A'], ['Lápiz', 'P'], ['Sección', 'F'], ['Mover el lienzo', 'Espacio + arrastrar'], ['Mover el lienzo', 'Clic derecho + arrastrar']]],
   ['Edición', [['Deshacer', 'Ctrl Z'], ['Rehacer', 'Ctrl Y'], ['Cortar', 'Ctrl X'], ['Copiar', 'Ctrl C'], ['Pegar', 'Ctrl V'], ['Duplicar', 'Ctrl D'],
     ['Eliminar', 'Supr'], ['Seleccionar todo', 'Ctrl A'], ['Bloquear', '⇧ L'], ['Editar el texto', 'Doble clic · Intro'], ['Cambiar el tamaño en proporción', '⇧ + esquina'], ['Mover', 'Flechas (⇧ ×10)']]],
   ['Orden', [['Traer al frente', '⇧ ]'], ['Traer adelante', ']'], ['Enviar atrás', '['], ['Enviar al fondo', '⇧ [']]],

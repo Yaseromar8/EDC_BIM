@@ -119,3 +119,75 @@ export function limpiarForma(n) {
     ...(TRAZOS.some(t => t[0] === n.trazo) ? { trazo: n.trazo } : {}),
   };
 }
+
+// ── Flecha y lápiz (docs/visor/62) ──────────────────────────────────────────────────────────────────────────────
+// Los dos viven en una caja (x, y, w, h) como el resto, y se mueven y escalan con ella:
+// - FLECHA: va de una esquina de su caja a la opuesta; `invX` / `invY` dicen hacia dónde apunta. `puntas`: dónde
+//   lleva la punta (fin, ambas, ninguna).
+// - TRAZO (lápiz): `puntos` normalizados 0–1 dentro de su caja; al escalarla, el dibujo se escala entero.
+export const PUNTAS = Object.freeze([['fin', 'Punta al final'], ['ambas', 'Puntas en los dos extremos'], ['ninguna', 'Sin puntas']]);
+export const ESTILO_FLECHA = Object.freeze({ color: 'negro', grosor: 'm', trazo: 'continuo', puntas: 'fin' });
+export const ESTILO_TRAZO = Object.freeze({ color: 'negro', grosor: 'm', opacidad: 1 });
+export const FLECHA_LARGO = 200;                  // un clic sin arrastrar: una flecha de 200 hacia la derecha
+
+export const extremosDeFlecha = (n) => [[n.invX ? n.w : 0, n.invY ? n.h : 0], [n.invX ? 0 : n.w, n.invY ? 0 : n.h]];
+
+// La línea y sus puntas (chevrones abiertos, como un plano), en coordenadas de la caja.
+export function trazadoDeFlecha(n) {
+  const g = grosorForma(n);
+  const [a, b] = extremosDeFlecha(n);
+  const largo = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
+  const ux = (b[0] - a[0]) / largo, uy = (b[1] - a[1]) / largo;
+  const s = Math.min(Math.max(10, g * 3.4), largo / 2);
+  const punta = (p, sx, sy) => `M${f(p[0] - s * sx + s * 0.55 * -sy)} ${f(p[1] - s * sy + s * 0.55 * sx)} L${f(p[0])} ${f(p[1])} L${f(p[0] - s * sx - s * 0.55 * -sy)} ${f(p[1] - s * sy - s * 0.55 * sx)}`;
+  const puntas = n.puntas || 'fin';
+  return [
+    `M${f(a[0])} ${f(a[1])} L${f(b[0])} ${f(b[1])}`,
+    puntas !== 'ninguna' ? punta(b, ux, uy) : '',
+    puntas === 'ambas' ? punta(a, -ux, -uy) : '',
+  ].join(' ').trim();
+}
+
+// El trazo a mano, suavizado (curvas por los puntos medios), escalado a su caja.
+export function trazadoDeTrazo(n) {
+  const pts = (n.puntos || []).map(([x, y]) => [x * n.w, y * n.h]);
+  if (pts.length < 2) return pts.length ? `M${f(pts[0][0])} ${f(pts[0][1])} l0.01 0` : '';
+  let d = `M${f(pts[0][0])} ${f(pts[0][1])}`;
+  for (let i = 1; i < pts.length - 1; i++) {
+    const m = [(pts[i][0] + pts[i + 1][0]) / 2, (pts[i][1] + pts[i + 1][1]) / 2];
+    d += ` Q${f(pts[i][0])} ${f(pts[i][1])} ${f(m[0])} ${f(m[1])}`;
+  }
+  const u = pts[pts.length - 1];
+  return `${d} L${f(u[0])} ${f(u[1])}`;
+}
+
+// Puntos del mundo → caja + puntos normalizados (con margen de medio grosor para que la línea no se salga).
+export function cajaDeTrazo(mundo, grosor = GROSORES.m) {
+  const m = grosor / 2;
+  const xs = mundo.map(p => p[0]), ys = mundo.map(p => p[1]);
+  const x = Math.min(...xs) - m, y = Math.min(...ys) - m;
+  const w = Math.max(1, Math.max(...xs) + m - x), h = Math.max(1, Math.max(...ys) + m - y);
+  return { x, y, w, h, puntos: mundo.map(([px, py]) => [Math.round(((px - x) / w) * 10000) / 10000, Math.round(((py - y) / h) * 10000) / 10000]) };
+}
+
+export function limpiarFlecha(n) {
+  return {
+    invX: !!n.invX, invY: !!n.invY,
+    ...(COLORES_FORMA[n.color] ? { color: n.color } : {}),
+    ...(GROSORES[n.grosor] ? { grosor: n.grosor } : {}),
+    ...(TRAZOS.some(t => t[0] === n.trazo) ? { trazo: n.trazo } : {}),
+    ...(PUNTAS.some(t => t[0] === n.puntas) ? { puntas: n.puntas } : {}),
+  };
+}
+
+export function limpiarTrazo(n) {
+  const puntos = (Array.isArray(n.puntos) ? n.puntos : []).slice(0, 5000)
+    .filter(p => Array.isArray(p) && Number.isFinite(p[0]) && Number.isFinite(p[1]))
+    .map(([x, y]) => [Math.min(1, Math.max(0, x)), Math.min(1, Math.max(0, y))]);
+  return puntos.length ? {
+    puntos,
+    ...(COLORES_FORMA[n.color] ? { color: n.color } : {}),
+    ...(GROSORES[n.grosor] ? { grosor: n.grosor } : {}),
+    ...(Number.isFinite(n.opacidad) ? { opacidad: Math.min(1, Math.max(0.1, n.opacidad)) } : {}),
+  } : null;
+}
