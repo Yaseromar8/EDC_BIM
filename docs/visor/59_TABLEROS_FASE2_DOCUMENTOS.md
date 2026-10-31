@@ -166,3 +166,32 @@ La tarjeta del DWG usará esas hojas: la imagen de la presentación elegida (pre
 previa de un PDF, o dibujada en el navegador) y **◀ 4/6 ▶** en su barra para pasar de una a otra, como ACC. Para el
 RVT, sus láminas 2D si las tiene y, si no, la vista 3D que da Autodesk.
 
+## 9 · Doble clic: el lector encima del tablero (31-oct-2026, noche)
+
+**ACC** (medido en el panel del dueño): doble clic en una lámina abre su visor en una ventana encima del tablero
+(nombre, «V1», «Abrir en Data Management», ×), con el tablero oscurecido alrededor. En un DWG de Civil o un RVT, el
+visor ofrece además «Extraer modelo 3D».
+
+**Lo nuestro:** doble clic o «Abrir» abre **el mismo lector de Archivos** (`DocumentViewer`: PDF con sus marcas y
+herramientas, CAD con el visor de Autodesk y su 3D, imágenes, versiones) en marco encima del tablero, en la versión
+de la tarjeta, con **«Abrir en Archivos»** junto a sus acciones (otra pestaña, en la versión que se esté mirando). Se
+llega al documento como un enlace de Archivos (`/api/docs/ubicacion`: dónde está hoy y si se puede ver; movido, se
+abre igual). La × del lector, Escape (si el lector no la usa para otra cosa) o un clic fuera vuelven al tablero.
+Mientras está abierto, las teclas son del lector: Supr no borra la tarjeta de debajo.
+`DocumentViewer` gana dos props opcionales (`enMarco`, `accionExtra`) que Archivos no usa.
+
+Comprobado con las láminas reales del dueño (puente local, `localhost:5183`): el lector se abre con su cajetín
+(V2, estado, idoneidad, vigencia) y sus herramientas de marcado. Banco: `prueba_documentos2` 43/43.
+
+## 10 · Lo que sigue, en orden (pedido del dueño)
+
+Una tarjeta **nunca es un archivo nuevo**: es una referencia al documento de Archivos (id + versión, y la hoja cuando
+la haya). Jalar el mismo plano cien veces da cien tarjetas del MISMO documento; extraer páginas, igual.
+
+1. **Páginas del PDF** (2C): ◀ 2/3 ▶ en la barra de la tarjeta y **«Extraer páginas»** (una tarjeta por hoja, al
+   lado). La hoja n > 1 la dibuja el navegador con pdf.js (la vista previa del servidor es solo de la primera).
+2. **CAD por presentaciones** (2B): la imagen de cada presentación del DWG desde las hojas que ya dibuja AutoCAD en
+   la traducción (`vistas_pdf`), ◀ ▶ y «Extraer páginas» por presentación; el RVT con sus láminas.
+3. **3D**: «Extraer modelo 3D» desde el visor de un DWG de Civil o un RVT (una tarjeta con la vista del modelo,
+   «Configurando miniatura…» mientras se prepara) y **«Cambiar miniatura»** solo en esas tarjetas.
+

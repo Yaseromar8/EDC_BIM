@@ -286,7 +286,7 @@ export function BarraDocumento({ el, actualizar, abrir }) {
   return (
     <>
       <MenuVersiones el={el} vigente={vigente} hayNueva={hayNueva} actualizar={actualizar} />
-      <button type="button" style={BOTON} title="Abrir el documento en otra pestaña (doble clic también)" onClick={() => abrir(el)}>
+      <button type="button" style={BOTON} title="Abrir el documento aquí, encima del tablero (doble clic también)" onClick={() => abrir(el)}>
         {ICONOS.abrir}
         Abrir
       </button>

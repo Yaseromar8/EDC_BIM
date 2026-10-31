@@ -16,6 +16,7 @@ import Lienzo from '../../../design/lienzo/Lienzo';
 import { DocumentosDelTablero, versionesVigentes, extensionDe, tamanoPara } from './tableros/documentos';
 import { tipoDocumento } from './tableros/tipoDocumento';
 import PanelDocumentos from './tableros/PanelDocumentos';
+import VisorDelTablero from './tableros/VisorDelTablero';
 import { enlaceDeArchivos } from '../utils/enlacesDeArchivos';
 import { fusionar, mismoContenido } from '../../../design/lienzo/fusion';
 import { miniaturaSvg } from '../../../design/lienzo/miniatura';
@@ -242,8 +243,12 @@ function TableroEditor({ id, onCerrar }) {
     vigentesRef.current = { ...vigentesRef.current, ...nuevas };
     setVigentes(v => ({ ...v, ...nuevas }));
   }, [obra]);
-  const abrir = useCallback((el) => {
-    window.open(enlaceDeArchivos(window.location.origin, { obra, carpeta: el.parentId, documento: el.nodeId, version: el.versionId }), '_blank', 'noopener');
+  // Doble clic o «Abrir»: el lector de Archivos encima del tablero, en la versión de la tarjeta (como el visor de ACC).
+  // Desde el lector, «Abrir en Archivos» lo lleva a otra pestaña, en la versión que se esté mirando.
+  const [visor, setVisor] = useState(null);
+  const abrir = useCallback((el) => setVisor(el), []);
+  const abrirEnArchivos = useCallback((el, version) => {
+    window.open(enlaceDeArchivos(window.location.origin, { obra, carpeta: el.parentId, documento: el.nodeId, version: version?.id || el.versionId }), '_blank', 'noopener');
   }, [obra]);
   const tipos = useMemo(() => ({ documento: tipoDocumento({ abrir }) }), [abrir]);
   // `en`: el punto donde se soltó al jalarlo desde «Visualizados recientemente» (fuera del tablero no se añade).
@@ -433,6 +438,7 @@ function TableroEditor({ id, onCerrar }) {
           <DocumentosDelTablero.Provider value={{ obra, vigentes }}>
             <Lienzo key={id} ref={lienzoRef} inicial={datos.config} onCambio={alCambiar} claveCamara={`alephia-tablero-camara:${id}`} tipos={tipos}
               paletaExtra={estado === 'archivado' ? [] : [['documento', 'Documentos', () => setPanelDocumentos(p => !p)]]} />
+            {visor && <VisorDelTablero el={visor} obra={obra} onCerrar={() => setVisor(null)} onAbrirEnArchivos={abrirEnArchivos} />}
             {panelDocumentos && <PanelDocumentos obra={obra} onAnadir={(lista) => anadirDocumentos(lista)} onSoltar={(fila, en) => anadirDocumentos([fila], en)}
               onCerrar={() => setPanelDocumentos(false)} />}
           </DocumentosDelTablero.Provider>

@@ -65,6 +65,11 @@ export default function DocumentViewer({
   // pasa tal cual -- ni una peticion nueva por abrir un plano.
   hermanos = [],
   onAbrirHermano = null,
+  // TABLEROS (docs/visor/59 §9): el lector como ventana encima del tablero, con el tablero a la vista alrededor
+  // (como el visor de ACC al hacer doble clic en una lámina), y una acción más junto a «Copiar enlace»
+  // («Abrir en Archivos»). Archivos no los usa.
+  enMarco = false,
+  accionExtra = null,
 }) {
 
   const [officeUrl, setOfficeUrl] = useState('');
@@ -551,7 +556,9 @@ export default function DocumentViewer({
   );
 
   return (
-    <div className="file-viewer-overlay" style={isShared ? { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 9999, display: 'flex', flexDirection: 'column', background: '#fff' } : undefined}>
+    <div className="file-viewer-overlay" style={isShared ? { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 9999, display: 'flex', flexDirection: 'column', background: '#fff' }
+      : enMarco ? { top: 56, bottom: 40, left: 'max(16px, 6vw)', right: 'max(16px, 6vw)', width: 'auto', height: 'auto', borderRadius: 8, overflow: 'hidden',
+        boxShadow: '0 12px 48px rgba(20,20,19,0.35)' } : undefined}>
       {!esPdf && (
       <div className={`file-viewer-header${isShared ? '' : ' file-viewer-header--cajetin'}`} style={isShared ? { padding: '0 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #e8e6dc', flexShrink: 0 } : undefined}>
         {/* EL CAJETÍN EN TODOS LOS FORMATOS (ESTANDAR_LDA.md, capa 1): CAD, modelos, Office,
@@ -646,6 +653,7 @@ export default function DocumentViewer({
              </button>
            )}
            {!isShared && <AccionesDelCajetin onCopiarEnlace={copiarEnlaceDeLoQueSeMira} />}
+           {!isShared && accionExtra?.('cajetin__accion')}
            <button className="file-viewer-close" onClick={onClose || (() => window.close())}>✕</button>
         </div>
       </div>
@@ -884,8 +892,11 @@ export default function DocumentViewer({
                   onIrVigente={irAVigente} onIrAnterior={irAAnterior} />
               )}
               accionesDelCajetin={isShared ? null : (
-                <AccionesDelCajetin claseBoton="pdf-ico" onCopiarEnlace={copiarEnlaceDeLoQueSeMira}
-                  onComparar={puedeComparar ? () => setCompararAbierto(true) : null} />
+                <>
+                  <AccionesDelCajetin claseBoton="pdf-ico" onCopiarEnlace={copiarEnlaceDeLoQueSeMira}
+                    onComparar={puedeComparar ? () => setCompararAbierto(true) : null} />
+                  {accionExtra?.('pdf-ico')}
+                </>
               )}
               // «Metrados» en el estuche SOLO si este plano ya sustenta algo (o se llega a vincular).
               extrasDelEstuche={!isShared && sustento.disponible && (sustento.vinculos.length || intencionVigente) ? [{
