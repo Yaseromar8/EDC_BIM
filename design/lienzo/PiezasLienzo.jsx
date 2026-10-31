@@ -5,7 +5,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { C, FUENTE } from './tema';
 import { Icono } from './Icono';
-import { COLORES_NOTA, letraNota } from './notas';
+import { COLORES_NOTA, COLORES_TINTA, ALINEAR, VERTICAL, fuenteDe, letraDeNota, letraDeTexto } from './notas';
 
 // Texto editable en el sitio (contentEditable de texto plano): Escape o salir del campo termina.
 function Editable({ texto, onCambiar, onTerminar, estilo }) {
@@ -24,23 +24,26 @@ function Editable({ texto, onCambiar, onTerminar, estilo }) {
       onBlur={onTerminar}
       onKeyDown={e => { e.stopPropagation(); if (e.key === 'Escape') { e.preventDefault(); e.currentTarget.blur(); } }}
       onPointerDown={e => e.stopPropagation()}
-      style={{ outline: 'none', cursor: 'text', minWidth: 8, ...estilo }} />
+      style={{ outline: 'none', cursor: 'text', minWidth: 8, userSelect: 'text', WebkitUserSelect: 'text', ...estilo }} />
   );
 }
 
+// Nota: color, letra, tamaño (automático = tan grande como quepa) y alineación horizontal y vertical.
 export function Nota({ nota, editando, refNodo, onPointerDown, onDoubleClick, onCambiar, onTerminar }) {
-  const tam = letraNota(nota.texto, nota.w, nota.h);
+  const alinear = nota.alinear || 'centro';
+  const texto = { izquierda: 'left', centro: 'center', derecha: 'right' }[alinear] || 'center';
   return (
     <div ref={refNodo} className="tablero-nodo" onPointerDown={onPointerDown} onDoubleClick={onDoubleClick}
       style={{
         position: 'absolute', left: nota.x, top: nota.y, width: nota.w, height: nota.h, boxSizing: 'border-box',
         background: COLORES_NOTA[nota.color] || COLORES_NOTA.amarillo, borderRadius: 2, padding: 16,
         boxShadow: '0 1px 1px rgba(20,20,19,0.10), 0 6px 14px rgba(20,20,19,0.10)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center',
-        fontFamily: FUENTE, fontSize: tam, lineHeight: 1.25, color: C.dark, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', overflow: 'hidden',
+        display: 'flex', alignItems: VERTICAL[nota.vertical] || 'center', justifyContent: ALINEAR[alinear] || 'center', textAlign: texto,
+        fontFamily: fuenteDe(nota).css, fontSize: letraDeNota(nota), lineHeight: 1.25, color: C.dark,
+        whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', overflow: 'hidden',
       }}>
       {editando
-        ? <Editable texto={nota.texto} onCambiar={onCambiar} onTerminar={onTerminar} estilo={{ width: '100%', textAlign: 'center' }} />
+        ? <Editable texto={nota.texto} onCambiar={onCambiar} onTerminar={onTerminar} estilo={{ width: '100%', textAlign: texto }} />
         : nota.texto}
     </div>
   );
@@ -49,8 +52,9 @@ export function Nota({ nota, editando, refNodo, onPointerDown, onDoubleClick, on
 export function TextoLibre({ nota, editando, refNodo, onPointerDown, onDoubleClick, onCambiar, onTerminar }) {
   return (
     <div ref={refNodo} className="tablero-nodo" onPointerDown={onPointerDown} onDoubleClick={onDoubleClick}
-      style={{ position: 'absolute', left: nota.x, top: nota.y, minWidth: 40, fontFamily: FUENTE, fontSize: 20, lineHeight: '26px',
-        color: C.dark, whiteSpace: 'pre', padding: '3px 4px' }}>
+      style={{ position: 'absolute', left: nota.x, top: nota.y, minWidth: 40, fontFamily: fuenteDe(nota).css, fontSize: letraDeTexto(nota),
+        lineHeight: `${Math.round(letraDeTexto(nota) * 1.3)}px`, color: COLORES_TINTA[nota.color] || C.dark, whiteSpace: 'pre', padding: '3px 4px',
+        textAlign: { izquierda: 'left', centro: 'center', derecha: 'right' }[nota.alinear] || 'left' }}>
       {editando ? <Editable texto={nota.texto} onCambiar={onCambiar} onTerminar={onTerminar} /> : (nota.texto || ' ')}
     </div>
   );
@@ -219,6 +223,129 @@ export function PildoraZoom({ textoRef, porcentaje, onMenos, onMas, onMenu }) {
         <span ref={textoRef}>{porcentaje}</span><Icono nombre="abajo" tam={12} />
       </button>
       <Boton titulo="Acercar" atajo="Ctrl +" onClick={onMas}><Icono nombre="mas" tam={18} grosor={1} /></Boton>
+    </div>
+  );
+}
+
+// ── Barra contextual de la selección (como la de ACC: encima de lo elegido) ─────────────────────────────
+// Bloquear · color · letra · tamaño · alineación horizontal y vertical · ⋮ (duplicar, orden, eliminar).
+// Solo presentación: `estilo` es el de lo elegido y cada cambio sube con onEstilo.
+const OPCIONES_ALINEAR = [['izquierda', 'alinearIzquierda', 'Izquierda'], ['centro', 'alinearCentro', 'Centro'], ['derecha', 'alinearDerecha', 'Derecha']];
+const OPCIONES_VERTICAL = [['arriba', 'verticalArriba', 'Arriba'], ['centro', 'verticalCentro', 'Centro'], ['abajo', 'verticalAbajo', 'Abajo']];
+const separadorBarra = <span style={{ width: 1, height: 24, background: 'rgba(0,0,0,0.12)', flexShrink: 0 }} />;
+
+function Desplegable({ texto, ancho, abierto, onClick, titulo }) {
+  return (
+    <button onClick={onClick} aria-label={titulo} title={titulo} aria-expanded={abierto}
+      style={{ height: 30, width: ancho, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6, padding: '0 8px 0 10px',
+        border: `1px solid ${abierto ? '#006EAF' : 'rgba(0,0,0,0.18)'}`, borderRadius: 4, background: '#fff', cursor: 'pointer',
+        fontFamily: FUENTE, fontSize: 12.5, color: '#3C3C3C', whiteSpace: 'nowrap', overflow: 'hidden' }}>
+      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{texto}</span><Icono nombre="abajo" tam={12} />
+    </button>
+  );
+}
+
+function Lista({ children, ancho = 180 }) {
+  return (
+    <div role="menu" style={{ ...cajaFlotante, position: 'absolute', top: 'calc(100% + 8px)', left: 0, minWidth: ancho, padding: 6, zIndex: 2 }}>
+      {children}
+    </div>
+  );
+}
+
+function Opcion({ elegida, onClick, children, peligro, atajo }) {
+  const fondo = elegida ? 'rgba(0,110,175,0.08)' : 'transparent';
+  return (
+    <button role="menuitem" aria-current={elegida || undefined} onClick={onClick}
+      style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '7px 8px', border: 'none', borderRadius: 5,
+        background: fondo, cursor: 'pointer', fontFamily: FUENTE, fontSize: 12.5,
+        color: peligro ? C.error : '#3C3C3C', textAlign: 'left', whiteSpace: 'nowrap' }}
+      onMouseEnter={e => { if (!elegida) e.currentTarget.style.background = 'rgba(0,0,0,0.05)'; }}
+      onMouseLeave={e => { e.currentTarget.style.background = fondo; }}>
+      <span style={{ flex: 1, display: 'inline-flex', alignItems: 'center', gap: 8 }}>{children}</span>
+      {atajo && <span style={{ color: C.gris600, fontSize: 11.5 }}>{atajo}</span>}
+    </button>
+  );
+}
+
+export function BarraContextual({ estilo = {}, conNotas, conTextos, conEstilo, bloqueado, onEstilo, onBloquear, acciones, colores, fuentes, tamanos }) {
+  const [abierto, setAbierto] = useState(null);
+  useEffect(() => {
+    if (!abierto) return undefined;
+    const cerrar = () => setAbierto(null);
+    window.addEventListener('pointerdown', cerrar);
+    return () => window.removeEventListener('pointerdown', cerrar);
+  }, [abierto]);
+  const alternar = (k) => setAbierto(a => (a === k ? null : k));
+  const elegir = (patch) => { setAbierto(null); onEstilo(patch); };
+  const alineado = estilo.alinear || (conNotas ? 'centro' : 'izquierda');
+  const vertical = estilo.vertical || 'centro';
+  const muestra = conNotas ? colores.nota : colores.tinta;
+  const desplegado = (k, boton, lista) => (
+    <div style={{ position: 'relative', display: 'flex' }}>{boton}{abierto === k && lista}</div>
+  );
+  return (
+    <div onPointerDown={e => e.stopPropagation()} onDoubleClick={e => e.stopPropagation()}
+      style={{ ...cajaFlotante, height: 48, boxSizing: 'border-box', display: 'flex', alignItems: 'center', gap: 8, padding: '0 10px', whiteSpace: 'nowrap' }}>
+      <Boton titulo={bloqueado ? 'Desbloquear' : 'Bloquear'} atajo="Ctrl ⇧ L" activo={bloqueado} onClick={onBloquear}>
+        <Icono nombre={bloqueado ? 'candado' : 'candadoAbierto'} tam={20} grosor={1.2} />
+      </Boton>
+      {conEstilo && !bloqueado && (
+        <>
+          {separadorBarra}
+          {desplegado('color', (
+            <Boton titulo="Color" activo={abierto === 'color'} onClick={() => alternar('color')}>
+              <span style={{ width: 18, height: 18, borderRadius: '50%', boxSizing: 'border-box', border: '1px solid rgba(0,0,0,0.18)',
+                background: muestra[estilo.color] || (conNotas ? muestra.amarillo : muestra.gris) }} />
+            </Boton>
+          ), (
+            <div role="menu" style={{ ...cajaFlotante, position: 'absolute', top: 'calc(100% + 8px)', left: -4, padding: 8, display: 'grid', gridTemplateColumns: 'repeat(3, 28px)', gap: 6, zIndex: 2 }}>
+              {Object.entries(muestra).map(([k, v]) => (
+                <button key={k} onClick={() => elegir({ color: k })} aria-label={k} title={k[0].toUpperCase() + k.slice(1)}
+                  style={{ width: 28, height: 28, borderRadius: '50%', background: v, cursor: 'pointer', padding: 0, boxSizing: 'border-box',
+                    border: k === estilo.color ? '2px solid #006EAF' : '1px solid rgba(0,0,0,0.15)' }} />
+              ))}
+            </div>
+          ))}
+          {separadorBarra}
+          {desplegado('fuente', <Desplegable titulo="Letra" texto={(fuentes[estilo.fuente] || fuentes.sans).nombre} ancho={136} abierto={abierto === 'fuente'} onClick={() => alternar('fuente')} />, (
+            <Lista>{Object.entries(fuentes).map(([k, f]) => (
+              <Opcion key={k} elegida={(estilo.fuente || 'sans') === k} onClick={() => elegir({ fuente: k })}><span style={{ fontFamily: f.css }}>{f.nombre}</span></Opcion>
+            ))}</Lista>
+          ))}
+          {desplegado('tamano', <Desplegable titulo="Tamaño de la letra" texto={(tamanos.find(t => t[0] === (estilo.tamano || 'auto')) || tamanos[0])[1]} ancho={112} abierto={abierto === 'tamano'} onClick={() => alternar('tamano')} />, (
+            <Lista ancho={150}>{tamanos.map(([k, t]) => (
+              <Opcion key={k} elegida={(estilo.tamano || 'auto') === k} onClick={() => elegir({ tamano: k })}>{t}</Opcion>
+            ))}</Lista>
+          ))}
+          {separadorBarra}
+          {desplegado('alinear', (
+            <Boton titulo="Alineación" activo={abierto === 'alinear'} onClick={() => alternar('alinear')}>
+              <Icono nombre={(OPCIONES_ALINEAR.find(o => o[0] === alineado) || OPCIONES_ALINEAR[1])[1]} tam={20} grosor={1.2} />
+            </Boton>
+          ), (
+            <Lista ancho={150}>{OPCIONES_ALINEAR.map(([k, ic, t]) => (
+              <Opcion key={k} elegida={alineado === k} onClick={() => elegir({ alinear: k })}><Icono nombre={ic} tam={16} grosor={1.2} />{t}</Opcion>
+            ))}</Lista>
+          ))}
+          {conNotas && !conTextos && desplegado('vertical', (
+            <Boton titulo="Alineación vertical" activo={abierto === 'vertical'} onClick={() => alternar('vertical')}>
+              <Icono nombre={(OPCIONES_VERTICAL.find(o => o[0] === vertical) || OPCIONES_VERTICAL[1])[1]} tam={20} grosor={1.2} />
+            </Boton>
+          ), (
+            <Lista ancho={150}>{OPCIONES_VERTICAL.map(([k, ic, t]) => (
+              <Opcion key={k} elegida={vertical === k} onClick={() => elegir({ vertical: k })}><Icono nombre={ic} tam={16} grosor={1.2} />{t}</Opcion>
+            ))}</Lista>
+          ))}
+        </>
+      )}
+      {separadorBarra}
+      {desplegado('mas', <Boton titulo="Más" activo={abierto === 'mas'} onClick={() => alternar('mas')}><Icono nombre="puntos" tam={20} grosor={1.4} /></Boton>, (
+        <Lista ancho={220}>{acciones.map((a, i) => (a === null
+          ? <div key={`s${i}`} style={{ height: 1, background: 'rgba(0,0,0,0.08)', margin: '5px 4px' }} />
+          : <Opcion key={a[0]} atajo={a[1]} peligro={a[3]} onClick={() => { setAbierto(null); a[2](); }}>{a[0]}</Opcion>
+        ))}</Lista>
+      ))}
     </div>
   );
 }

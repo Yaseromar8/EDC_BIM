@@ -13,8 +13,8 @@
 import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { C, FUENTE, RADIO } from './tema';
-import { Nota, TextoLibre, BarraInferior, PaletaIzquierda, PildoraZoom } from './PiezasLienzo';
-import { NOTA_LADO, NOTA_HUECO, medidaTexto } from './notas';
+import { Nota, TextoLibre, BarraInferior, PaletaIzquierda, PildoraZoom, BarraContextual } from './PiezasLienzo';
+import { NOTA_LADO, NOTA_HUECO, medidaTexto, COLORES_NOTA, COLORES_TINTA, FUENTES, TAMANOS } from './notas';
 import { prepararImanes, imantarArrastre, svgDeLineas } from './imanes';
 
 const ZOOM_MIN = 0.01, ZOOM_MAX = 4;
@@ -24,7 +24,11 @@ const ARRASTRE_MIN = 4;
 const AZUL_SEL = '#0D66B4';
 const COLORES_SECCION = [C.orange, C.blue, C.green, C.gris700];
 const linea = (px) => `calc(${px}px / var(--s, 1))`;
-const CSS_LIENZO = `.tablero-nodo:hover { outline: ${linea(1.5)} solid rgba(13, 102, 180, 0.45); }`;
+const CSS_LIENZO = `.tablero-nodo:hover { outline: ${linea(1.5)} solid rgba(13, 102, 180, 0.45); }
+.lienzo-punto { opacity: 0; transition: opacity 120ms ease; } .lienzo-punto:hover { opacity: 1; }`;
+// Los puntos de «nota al lado» solo aparecen al pasar el ratón por la nota elegida (como en ACC).
+const cssPuntos = (id) => (id ? `[data-lienzo]:has([data-id="${id}"]:hover) .lienzo-punto { opacity: 1; }` : '');
+const ESTILO = ['color', 'fuente', 'tamano', 'alinear', 'vertical'];
 const uid = () => Math.random().toString(36).slice(2, 9) + Date.now().toString(36).slice(-3);
 const clamp = (v, a, b) => Math.min(Math.max(v, a), b);
 const redondo = (v) => Math.round(v);
@@ -66,7 +70,7 @@ const Lienzo = forwardRef(function Lienzo({ inicial = null, onCambio, claveCamar
   useEffect(() => { selRef.current = sel; }, [sel]);
   const todos = () => [...seccionesRef.current, ...notasRef.current];
   const refNodo = (id) => {
-    if (!refsDeNodo.current.has(id)) refsDeNodo.current.set(id, (el) => { if (el) nodosRef.current.set(id, el); else nodosRef.current.delete(id); });
+    if (!refsDeNodo.current.has(id)) refsDeNodo.current.set(id, (el) => { if (el) { el.dataset.id = id; nodosRef.current.set(id, el); } else nodosRef.current.delete(id); });
     return refsDeNodo.current.get(id);
   };
 
@@ -256,6 +260,7 @@ const Lienzo = forwardRef(function Lienzo({ inicial = null, onCambio, claveCamar
     window.addEventListener('pointermove', onMove); window.addEventListener('pointerup', onUp);
   };
   const iniciarMarco = (e) => {
+    window.getSelection()?.removeAllRanges();   // un lienzo no selecciona texto al arrastrar, selecciona piezas
     const base = e.shiftKey ? new Set(selRef.current) : new Set();
     rectangulo(e, (W) => {
       const n = new Set(base);
@@ -278,7 +283,7 @@ const Lienzo = forwardRef(function Lienzo({ inicial = null, onCambio, claveCamar
     const t = { id: uid(), tipo: 'texto', x: redondo(x), y: redondo(y - 16), texto: '', ...medidaTexto('') };
     setNotas(ns => [...ns, t]); setSeleccion(new Set([t.id])); setEditandoNota(t.id); setHerramienta('seleccionar');
   };
-  const cambiarTexto = (id, texto) => setNotas(ns => ns.map(n => (n.id !== id ? n : n.tipo === 'texto' ? { ...n, texto, ...medidaTexto(texto) } : { ...n, texto })));
+  const cambiarTexto = (id, texto) => setNotas(ns => ns.map(n => (n.id !== id ? n : n.tipo === 'texto' ? { ...n, texto, ...medidaTexto(texto, n) } : { ...n, texto })));
   const terminarNota = (id) => { setEditandoNota(null); setNotas(ns => ns.filter(n => !(n.id === id && n.tipo === 'texto' && !n.texto.trim()))); };
   const nuevaSeccion = (f, titulo) => {
     const s = { id: uid(), titulo: titulo || `Sección ${seccionesRef.current.length + 1}`, color: seccionesRef.current.length % COLORES_SECCION.length, ...f };
@@ -318,7 +323,7 @@ const Lienzo = forwardRef(function Lienzo({ inicial = null, onCambio, claveCamar
     const fs = seccionesRef.current.filter(f => ids.has(f.id));
     const dentro = (c, f) => { const cx = c.x + c.w / 2, cy = c.y + c.h / 2; return cx >= f.x && cx <= f.x + f.w && cy >= f.y && cy <= f.y + f.h; };
     const esSeccion = new Set(seccionesRef.current.map(f => f.id));
-    const moviles = todos().filter(n => ids.has(n.id) || (!esSeccion.has(n.id) && fs.some(f => dentro(n, f))));
+    const moviles = todos().filter(n => !n.bloqueado && (ids.has(n.id) || (!esSeccion.has(n.id) && fs.some(f => dentro(n, f)))));
     if (!moviles.length) return;
     const idsMov = new Set(moviles.map(n => n.id));
     const caja = [Math.min(...moviles.map(n => n.x)), Math.min(...moviles.map(n => n.y)), Math.max(...moviles.map(n => n.x + n.w)), Math.max(...moviles.map(n => n.y + n.h))];
@@ -358,7 +363,7 @@ const Lienzo = forwardRef(function Lienzo({ inicial = null, onCambio, claveCamar
     if (e.button !== 0) return;
     e.preventDefault(); e.stopPropagation();
     const f = seccionesRef.current.find(x => x.id === id), v = viewRef.current;
-    if (!f) return;
+    if (!f || f.bloqueado) return;
     const ini = { x: e.clientX, y: e.clientY, w: f.w, h: f.h };
     iniciarGesto();
     const onMove = (ev) => setSecciones(xs => xs.map(x => (x.id === id ? { ...x, w: redondo(Math.max(ini.w + (ev.clientX - ini.x) / v.s, 160)), h: redondo(Math.max(ini.h + (ev.clientY - ini.y) / v.s, 120)) } : x)));
@@ -370,8 +375,34 @@ const Lienzo = forwardRef(function Lienzo({ inicial = null, onCambio, claveCamar
   const borrarSeleccion = () => {
     const ids = selRef.current;
     if (!ids.size) return;
-    setNotas(ns => ns.filter(n => !ids.has(n.id))); setSecciones(fs => fs.filter(f => !ids.has(f.id))); setSeleccion(new Set());
+    const fuera = (x) => ids.has(x.id) && !x.bloqueado;
+    setNotas(ns => ns.filter(n => !fuera(n))); setSecciones(fs => fs.filter(f => !fuera(f)));
+    setSeleccion(new Set(todos().filter(x => ids.has(x.id) && x.bloqueado).map(x => x.id)));
   };
+  // Barra contextual: estilo de notas y textos, bloqueo y orden de dibujo.
+  const aplicarEstilo = (patch) => {
+    const ids = selRef.current;
+    setNotas(ns => ns.map(n => {
+      if (!ids.has(n.id) || n.bloqueado) return n;
+      const m = { ...n, ...patch };
+      return n.tipo === 'texto' ? { ...m, ...medidaTexto(m.texto, m) } : m;
+    }));
+  };
+  const alternarBloqueo = () => {
+    const ids = selRef.current;
+    if (!ids.size) return;
+    const elegidosAhora = todos().filter(x => ids.has(x.id));
+    const bloquear = !elegidosAhora.every(x => x.bloqueado);
+    const poner = (x) => (ids.has(x.id) ? { ...x, bloqueado: bloquear || undefined } : x);
+    setNotas(ns => ns.map(poner)); setSecciones(fs => fs.map(poner));
+    setEditandoNota(null);
+  };
+  const ordenar = (alFrente) => {
+    const ids = selRef.current;
+    const mover = (xs) => { const a = xs.filter(x => ids.has(x.id)), b = xs.filter(x => !ids.has(x.id)); return alFrente ? [...b, ...a] : [...a, ...b]; };
+    setNotas(mover); setSecciones(mover);
+  };
+  const editar = (id) => { if (!notasRef.current.find(n => n.id === id)?.bloqueado) setEditandoNota(id); };
   const copiar = () => {
     const ids = selRef.current;
     if (!ids.size) return false;
@@ -395,7 +426,7 @@ const Lienzo = forwardRef(function Lienzo({ inicial = null, onCambio, claveCamar
     if (!ids.size) return;
     const p = grande ? 10 : 1;
     const dx = k === 'arrowleft' ? -p : k === 'arrowright' ? p : 0, dy = k === 'arrowup' ? -p : k === 'arrowdown' ? p : 0;
-    const mover = (n) => (ids.has(n.id) ? { ...n, x: n.x + dx, y: n.y + dy } : n);
+    const mover = (n) => (ids.has(n.id) && !n.bloqueado ? { ...n, x: n.x + dx, y: n.y + dy } : n);
     setNotas(ns => ns.map(mover)); setSecciones(fs => fs.map(mover));
   };
   const alTeclear = (e) => {
@@ -414,6 +445,7 @@ const Lienzo = forwardRef(function Lienzo({ inicial = null, onCambio, claveCamar
     else if (ctrl && k === 'c') copiar();
     else if (ctrl && k === 'v') pegar();
     else if (ctrl && k === 'a') setSeleccion(new Set(todos().map(x => x.id)));
+    else if (ctrl && e.shiftKey && k === 'l') alternarBloqueo();
     else if (ctrl && (k === '=' || k === '+')) zoomPaso(1);
     else if (ctrl && k === '-') zoomPaso(-1);
     else if (e.shiftKey && e.code === 'Digit0') zoomA(1);
@@ -421,7 +453,7 @@ const Lienzo = forwardRef(function Lienzo({ inicial = null, onCambio, claveCamar
     else if (e.shiftKey && e.code === 'Digit2') zoomASeleccion();
     else if (k.startsWith('arrow') && !ctrl) empujar(k, e.shiftKey);
     else if (!ctrl && !e.altKey && { v: 1, h: 1, n: 1, t: 1, f: 1 }[k]) setHerramienta({ v: 'seleccionar', h: 'mano', n: 'nota', t: 'texto', f: 'seccion' }[k]);
-    else if (k === 'enter' && selRef.current.size === 1 && notasRef.current.some(n => selRef.current.has(n.id))) setEditandoNota([...selRef.current][0]);
+    else if (k === 'enter' && selRef.current.size === 1 && notasRef.current.some(n => selRef.current.has(n.id))) editar([...selRef.current][0]);
     else hecho = false;
     if (hecho) { e.preventDefault(); e.stopPropagation(); }
   };
@@ -445,23 +477,27 @@ const Lienzo = forwardRef(function Lienzo({ inicial = null, onCambio, claveCamar
     x2: Math.max(...elegidos.map(x => x.x + x.w)), y2: Math.max(...elegidos.map(x => x.y + x.h)),
   } : null;
   const uno = elegidos.length === 1 ? elegidos[0] : null;
+  const conEstilo = elegidos.filter(x => x.tipo === 'nota' || x.tipo === 'texto');
+  const primero = conEstilo[0] || {};
+  const estiloElegido = Object.fromEntries(ESTILO.map(k => [k, conEstilo.every(x => x[k] === primero[k]) ? primero[k] : undefined]));
+  const hayEnTitulo = elegidos.some(x => secciones.includes(x));
   const asa = (left, top, cursor, onDown) => (
     <div onPointerDown={onDown || undefined} style={{ position: 'absolute', left, top, width: linea(9), height: linea(9), transform: 'translate(-50%, -50%)',
       background: '#fff', border: `${linea(1.5)} solid ${AZUL_SEL}`, boxSizing: 'border-box', borderRadius: linea(1.5), pointerEvents: onDown ? 'auto' : 'none', cursor }} />
   );
   const punto = (left, top, dir) => (
-    <div onPointerDown={e => { e.stopPropagation(); e.preventDefault(); notaAlLado(uno, dir); }} title="Nota al lado"
+    <div className="lienzo-punto" onPointerDown={e => { e.stopPropagation(); e.preventDefault(); notaAlLado(uno, dir); }} title="Nota al lado"
       style={{ position: 'absolute', left, top, width: linea(14), height: linea(14), transform: 'translate(-50%, -50%)', borderRadius: '50%',
         background: 'rgba(13, 102, 180, 0.16)', border: `${linea(1.5)} solid ${AZUL_SEL}`, boxSizing: 'border-box', pointerEvents: 'auto', cursor: 'pointer' }} />
   );
 
   return (
-    <div ref={panelRef} tabIndex={-1} data-escape-propio
+    <div ref={panelRef} tabIndex={-1} data-escape-propio data-lienzo
       onPointerDownCapture={(e) => { if (!e.target.closest?.('input, textarea, select, [contenteditable]')) panelRef.current?.focus({ preventScroll: true }); }}
       style={{ position: 'relative', width: '100%', height: '100%', overflow: 'hidden', outline: 'none', fontFamily: FUENTE, color: C.dark }}>
-      <style>{CSS_LIENZO}</style>
+      <style>{CSS_LIENZO + cssPuntos(uno && uno.tipo === 'nota' && !uno.bloqueado ? uno.id : null)}</style>
       <div ref={canvasRef} onPointerDown={alPulsarLienzo} onDoubleClick={alDobleClic} onContextMenu={e => e.preventDefault()}
-        style={{ position: 'absolute', inset: 0, overflow: 'hidden', touchAction: 'none', backgroundColor: C.light,
+        style={{ position: 'absolute', inset: 0, overflow: 'hidden', touchAction: 'none', userSelect: 'none', WebkitUserSelect: 'none', backgroundColor: C.light,
           backgroundImage: rejilla.imagen, backgroundSize: rejilla.tamano, backgroundPosition: `${view.tx}px ${view.ty}px`,
           cursor: herramienta === 'mano' ? 'grab' : herramienta === 'seleccionar' ? 'default' : 'crosshair' }}>
         <div ref={marcoSelRef} style={{ display: 'none', position: 'absolute', zIndex: 3, pointerEvents: 'none', background: 'rgba(13, 102, 180, 0.06)', border: `1px solid ${AZUL_SEL}` }} />
@@ -486,18 +522,28 @@ const Lienzo = forwardRef(function Lienzo({ inicial = null, onCambio, claveCamar
             const Pieza = n.tipo === 'texto' ? TextoLibre : Nota;
             return (
               <Pieza key={n.id} nota={n} editando={editandoNota === n.id} refNodo={refNodo(n.id)} onPointerDown={arrastrar(n.id)}
-                onDoubleClick={(e) => { e.stopPropagation(); setEditandoNota(n.id); }}
+                onDoubleClick={(e) => { e.stopPropagation(); editar(n.id); }}
                 onCambiar={(t) => cambiarTexto(n.id, t)} onTerminar={() => terminarNota(n.id)} />
             );
           })}
           {caja && (
             <div ref={selCajaRef} style={{ position: 'absolute', left: caja.x1, top: caja.y1, width: caja.x2 - caja.x1, height: caja.y2 - caja.y1, pointerEvents: 'none' }}>
-              {elegidos.length > 1 && <div style={{ position: 'absolute', inset: 0, outline: `${linea(1)} solid ${AZUL_SEL}` }} />}
+              {(elegidos.length > 1 || (uno && !secciones.includes(uno))) && <div style={{ position: 'absolute', inset: 0, outline: `${linea(1)} solid ${AZUL_SEL}` }} />}
               {asa('0%', '0%', 'default')}
               {asa('100%', '0%', 'default')}
               {asa('0%', '100%', 'default')}
               {asa('100%', '100%', uno && secciones.includes(uno) ? 'nwse-resize' : 'default', uno && secciones.includes(uno) ? redimensionarSeccion(uno.id) : null)}
-              {uno && uno.tipo === 'nota' && (
+              {/* Barra contextual: a tamaño de pantalla (escala inversa), centrada encima de lo elegido */}
+              <div style={{ position: 'absolute', left: '50%', top: hayEnTitulo ? -36 : 0, pointerEvents: 'auto', zIndex: 7,
+                transform: 'translate(-50%, -100%) scale(calc(1 / var(--s, 1))) translateY(-14px)', transformOrigin: '50% 100%' }}>
+                <BarraContextual estilo={estiloElegido} conNotas={conEstilo.some(x => x.tipo === 'nota')} conTextos={conEstilo.some(x => x.tipo === 'texto')}
+                  conEstilo={conEstilo.length > 0} bloqueado={elegidos.every(x => x.bloqueado)}
+                  onEstilo={aplicarEstilo} onBloquear={alternarBloqueo}
+                  colores={{ nota: COLORES_NOTA, tinta: COLORES_TINTA }} fuentes={FUENTES} tamanos={TAMANOS}
+                  acciones={[['Duplicar', 'Ctrl D', duplicar], null, ['Traer al frente', '', () => ordenar(true)], ['Enviar al fondo', '', () => ordenar(false)], null,
+                    [elegidos.every(x => x.bloqueado) ? 'Desbloquear' : 'Bloquear', 'Ctrl ⇧ L', alternarBloqueo], null, ['Eliminar', 'Supr', borrarSeleccion, true]]} />
+              </div>
+              {uno && uno.tipo === 'nota' && !uno.bloqueado && (
                 <>
                   {punto('50%', 'calc(0% - 22px / var(--s, 1))', 'arriba')}
                   {punto('calc(100% + 22px / var(--s, 1))', '50%', 'derecha')}

@@ -408,6 +408,7 @@ export default function DashboardWorkspace({ project, backendUrl, onClose, proye
     return true;
   };
   const iniciarMarco = (e) => {
+    window.getSelection()?.removeAllRanges();   // un lienzo no selecciona texto al arrastrar, selecciona piezas
     const el = canvasRef.current, marco = marcoSelRef.current;
     if (!el) return;
     const r = el.getBoundingClientRect();
@@ -1021,7 +1022,7 @@ export default function DashboardWorkspace({ project, backendUrl, onClose, proye
         onDoubleClick={alDobleClicLienzo}
         onContextMenu={e => e.preventDefault()}
         style={{
-          flex: 1, position: 'relative', overflow: 'hidden', touchAction: 'none',
+          flex: 1, position: 'relative', overflow: 'hidden', touchAction: 'none', userSelect: 'none', WebkitUserSelect: 'none',
           cursor: herramienta === 'mano' ? 'grab' : herramienta === 'seleccionar' ? 'default' : 'crosshair',
           backgroundColor: C.light,
           backgroundImage: rejilla.imagen,
