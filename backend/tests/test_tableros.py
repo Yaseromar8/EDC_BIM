@@ -1,5 +1,6 @@
 """Contrato local de los Tableros de Docs (routes/tableros.py, docs/visor/57); no conecta a una base real."""
 from datetime import datetime, timezone
+import json
 import uuid
 
 from flask import Flask, g
@@ -398,12 +399,88 @@ def test_miembros_pasa_por_la_guardia(app, monkeypatch):
     assert app.test_client().get('/api/docs/tableros/%s/miembros' % TAB).status_code == 403
 
 
+# ── gráficas que llegan de View (doc 68) ──────────────────────────────────────────────────
+
+def _grafica(**cambios):
+    g = {'origen': {'frente': '1_CANAL', 'obra': '1', 'frenteId': 'CANAL', 'frenteNombre': 'Canal', 'tablero': '42', 'grafica': 'c7'},
+         'titulo': 'Tubería por material', 'subtitulo': 'Canal · contar', 'tipo': 'bar', 'metrica': 'count', 'campo': 'Material',
+         'grupos': [{'k': 'PVC', 'v': 340, 'n': 340, 'c': '#d97757'}, {'k': 'Concreto', 'v': 120, 'n': 120}], 'total': 460, 'elementos': 460}
+    g.update(cambios)
+    return g
+
+
+@pytest.fixture
+def con_frente(monkeypatch):
+    monkeypatch.setattr(tb, '_hay_acceso', lambda obra: obra in ('obra', '1_CANAL'))
+    monkeypatch.setattr(tb, '_misma_obra', lambda frente, obra: frente == '1_CANAL' and obra == 'obra')
+
+
+def test_una_grafica_de_view_entra_a_la_derecha_de_lo_que_hay(app, monkeypatch, con_frente):
+    cfg = {'notas': [{'id': 'n1', 'tipo': 'nota', 'x': 0, 'y': 50, 'w': 200, 'h': 200}], 'secciones': [{'id': 's', 'x': -100, 'y': 10, 'w': 600, 'h': 400}]}
+    cur, conn = _conectar(monkeypatch, [_fila(), (cfg,), (8,)])
+    r = app.test_client().post('/api/docs/tableros/%s/graficas' % TAB, json={'grafica': _grafica()})
+    d = r.get_json()
+    assert r.status_code == 200 and d['reemplazada'] is False and d['version'] == 8
+    assert 'FOR UPDATE' in cur.queries[1][0] and conn.committed
+    guardada = json.loads(cur.queries[2][1][0])['notas'][-1]
+    assert guardada['tipo'] == 'grafica' and guardada['id'] == d['id'] and (guardada['x'], guardada['y']) == (580, 10)
+    assert guardada['nombre'] == 'Tubería por material' and guardada['grupos'][0] == {'k': 'PVC', 'v': 340.0, 'n': 340, 'c': '#d97757'}
+    assert guardada['enviadaPor'] == 'Ana' and guardada['fecha'] and guardada['origen']['frenteNombre'] == 'Canal'
+
+
+def test_la_misma_grafica_se_reemplaza_sin_moverla(app, monkeypatch, con_frente):
+    vieja = {**_grafica(), 'id': 'g1', 'tipo': 'grafica', 'x': 900, 'y': 40, 'w': 600, 'h': 400, 'nombre': 'vieja', 'origen': _grafica()['origen']}
+    cur, conn = _conectar(monkeypatch, [_fila(), ({'notas': [vieja]},), (9,)])
+    r = app.test_client().post('/api/docs/tableros/%s/graficas' % TAB, json={'grafica': _grafica(grupos=[{'k': 'PVC', 'v': 400}])})
+    d = r.get_json()
+    assert d['reemplazada'] is True and d['id'] == 'g1'
+    notas = json.loads(cur.queries[2][1][0])['notas']
+    assert len(notas) == 1 and (notas[0]['x'], notas[0]['y'], notas[0]['w'], notas[0]['h']) == (900, 40, 600, 400)
+    assert notas[0]['grupos'] == [{'k': 'PVC', 'v': 400.0}] and notas[0]['nombre'] == 'Tubería por material'
+
+
+@pytest.mark.parametrize('mala', [
+    None, {}, _grafica(origen={}), _grafica(tipo='qa'), _grafica(metrica='mediana'), _grafica(grupos='x'),
+    _grafica(grupos=[{'k': 'a', 'v': 'diez'}]), _grafica(grupos=[{'k': str(i), 'v': i} for i in range(61)]),
+    _grafica(origen={'frente': '1_CANAL', 'grafica': '<script>'}),
+])
+def test_una_grafica_con_forma_rara_se_rechaza(app, monkeypatch, con_frente, mala):
+    _, conn = _conectar(monkeypatch, [_fila()])
+    assert app.test_client().post('/api/docs/tableros/%s/graficas' % TAB, json={'grafica': mala}).status_code == 400
+    assert not conn.committed
+
+
+def test_una_grafica_de_otra_obra_no_entra(app, monkeypatch, con_frente):
+    monkeypatch.setattr(tb, '_misma_obra', lambda frente, obra: False)
+    _, conn = _conectar(monkeypatch, [_fila()])
+    r = app.test_client().post('/api/docs/tableros/%s/graficas' % TAB, json={'grafica': _grafica()})
+    assert r.status_code == 400 and 'otra obra' in r.get_json()['error'] and not conn.committed
+
+
+def test_grafica_ni_lector_ni_archivado(app, monkeypatch, con_frente):
+    _, conn = _conectar(monkeypatch, [_fila(autor=99, rol='lector')])
+    assert app.test_client().post('/api/docs/tableros/%s/graficas' % TAB, json={'grafica': _grafica()}).status_code == 403
+    _, conn = _conectar(monkeypatch, [_fila(archivado=True)])
+    assert app.test_client().post('/api/docs/tableros/%s/graficas' % TAB, json={'grafica': _grafica()}).status_code == 409
+    assert not conn.committed
+
+
+def test_view_lista_los_tableros_de_la_obra_de_su_frente(app, monkeypatch, con_frente):
+    cur, _ = _conectar(monkeypatch, [[('obra',), ('otra',)], [(TAB, 'Reunión', False, AHORA, AHORA, 7, 'Ana', None, None, 'obra', 'responsable')]])
+    r = app.test_client().get('/api/docs/tableros?frente=1_CANAL')
+    d = r.get_json()
+    assert r.status_code == 200 and d['obra'] == 'obra' and [t['nombre'] for t in d['tableros']] == ['Reunión']
+    assert cur.queries[-1][1][2] == 'obra'
+    assert app.test_client().get('/api/docs/tableros?frente=9_OTRO').status_code == 403
+
+
 # ── perímetro ──────────────────────────────────────────────────────────────────────────────
 
 def test_el_perimetro_sabe_de_que_obra_es_un_tablero():
     assert po.RECURSOS['tableros'] == ('id', 'model_urn')
     assert po.RUTAS_POR_RECURSO['tablero'] == ('tableros', 'tid')
     assert po.RUTAS_POR_RECURSO['miembros_del_tablero'] == ('tableros', 'tid')      # y la de sus miembros
+    assert po.RUTAS_POR_RECURSO['graficas_del_tablero'] == ('tableros', 'tid')      # y la de las gráficas de View
 
 
 def test_sin_sesion_es_401(monkeypatch):

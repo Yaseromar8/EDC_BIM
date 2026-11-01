@@ -574,7 +574,8 @@ function TituloEditable({ titulo, onCambiar }) {
   );
 }
 
-export default function ChartCard({ config, rows, fields = [], meta = null, itemizado = null, onEdit, onUpdate, onDelete, onIsolate, onPaint, onCreateFromField, activeKey, dragHandlers, zoom = 1 }) {
+// `onEnviar(paquete)`: «Enviar a un tablero de Docs» (docs/visor/68) — la gráfica tal como se ve, ya calculada.
+export default function ChartCard({ config, rows, fields = [], meta = null, itemizado = null, onEdit, onUpdate, onDelete, onIsolate, onPaint, onCreateFromField, activeKey, dragHandlers, zoom = 1, onEnviar = null }) {
   const [painted, setPainted] = useState(false);
   const isQa = config.type === 'qa';
   const isScatter = config.type === 'scatter';
@@ -741,6 +742,21 @@ export default function ChartCard({ config, rows, fields = [], meta = null, item
               {painted
                 ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={C.green} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5" /></svg>
                 : <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2l7 7-9 9H4v-6l8-8z" /><path d="M15 5l4 4" /></svg>}
+            </IconBtn>
+          )}
+          {onEnviar && ['bar', 'donut', 'line', 'area', 'kpi'].includes(config.type) && (
+            <IconBtn title="Enviar a un tablero de Docs" onClick={() => {
+              const colores = coloresDe(config, agg.groups, null);
+              onEnviar({
+                titulo, subtitulo: subtitle, tipo: config.type, metrica: config.metric || 'count',
+                campo: nombreCampo(config.groupBy), valorCampo: nombreCampo(config.valueField),
+                grupos: agg.groups.map((g, i) => ({ k: g.isOthers ? 'Otros' : nombreValor(g.key), v: g.value, n: g.count, c: colores[i] })),
+                total: agg.total, elementos: agg.totalCount,
+                filtro: config.filter?.values?.length ? { campo: nombreCampo(config.filter.field), valores: config.filter.values.map(nombreValor) } : null,
+                grafica: config.id,
+              });
+            }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M12 8v7M8.5 11.5 12 8l3.5 3.5" /></svg>
             </IconBtn>
           )}
           <IconBtn title="Exportar CSV (Excel)" onClick={exportCsv}>

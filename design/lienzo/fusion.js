@@ -8,20 +8,22 @@
 // Por cada elemento (nota, texto, sección, vista), por su id:
 //   - solo lo cambié yo           → el mío
 //   - solo lo cambió el otro      → el suyo
-//   - lo cambiamos los dos        → el mío (soy quien guarda ahora; el suyo queda en su versión anterior)
+//   - lo cambiamos los dos        → campo a campo: lo que solo cambió uno, de ese; lo que cambiamos los dos, el mío (soy
+//                                   quien guarda). La posición y el tamaño van juntos, como un solo campo: yo muevo una
+//                                   gráfica y View le cambia los datos → se quedan los dos cambios (docs/visor/68)
 //   - lo borré yo y el otro no lo tocó  → borrado;   lo borré yo y el otro lo cambió → se queda el suyo
 //   - lo borró el otro y yo no lo toqué → borrado;   lo borró el otro y yo lo cambié → se queda el mío
 //   - nuevo de cualquiera         → se queda
 // El orden (que es el orden de dibujo) es el del servidor; lo que él ya no tiene y se queda (lo nuevo mío, o
 // lo que él borró y yo cambié) va detrás, encima de todo.
 //
-// Un elemento con `mensajes` (un comentario, docs/visor/64) que cambiamos los dos no se decide entero: sus mensajes
-// se fusionan igual, uno a uno, y quedan en orden de fecha (dos respuestas a la vez se quedan las dos), y cada uno de
-// sus demás campos, a tres bandas (yo respondo y el otro lo resuelve: mi respuesta y resuelto).
+// Un elemento con `mensajes` (un comentario, docs/visor/64) además fusiona sus mensajes uno a uno, en orden de fecha:
+// dos respuestas a la vez se quedan las dos.
 // `vistas` (docs/visor/63): las vistas publicadas del tablero, que también llevan id.
 export const LISTAS = ['notas', 'secciones', 'vistas'];
 
 const igual = (a, b) => a === b || JSON.stringify(a) === JSON.stringify(b);
+const GEOMETRIA = ['x', 'y', 'w', 'h', 'invX', 'invY', 'puntos'];
 const porId = (lista) => new Map((lista || []).map(x => [x.id, x]));
 
 function fusionarLista(base, mio, suyo) {
@@ -33,14 +35,19 @@ function fusionarLista(base, mio, suyo) {
     if (!m) return igual(s, b) ? null : s;              // lo borré yo
     if (!s) return igual(m, b) ? null : m;              // lo borró el otro
     if (igual(m, b)) return s;                          // cambió solo el otro
-    if (igual(s, b) || !(Array.isArray(m.mensajes) || Array.isArray(s.mensajes))) return m;   // solo yo, o los dos
+    if (igual(s, b)) return m;                          // cambié solo yo
+    // Los dos: campo a campo, con la geometría como un bloque.
+    const geo = (e) => GEOMETRIA.map(k => e[k]);
+    const deGeo = igual(geo(m), geo(b)) ? s : m;
     const salida = {};
     for (const k of new Set([...Object.keys(m), ...Object.keys(s)])) {
-      const v = igual(m[k], b[k]) ? s[k] : m[k];
+      const v = GEOMETRIA.includes(k) ? deGeo[k] : igual(m[k], b[k]) ? s[k] : m[k];
       if (v !== undefined) salida[k] = v;
     }
-    salida.mensajes = fusionarLista(b.mensajes, m.mensajes, s.mensajes).sort((x, y) => String(x.fecha || '').localeCompare(String(y.fecha || '')));
-    return salida;                                      // los dos, en un hilo: campo a campo y mensaje a mensaje
+    if (Array.isArray(m.mensajes) || Array.isArray(s.mensajes)) {
+      salida.mensajes = fusionarLista(b.mensajes, m.mensajes, s.mensajes).sort((x, y) => String(x.fecha || '').localeCompare(String(y.fecha || '')));
+    }
+    return salida;
   };
   const salida = [], vistos = new Set();
   for (const x of suyo || []) { vistos.add(x.id); const e = elegir(x.id); if (e) salida.push(e); }

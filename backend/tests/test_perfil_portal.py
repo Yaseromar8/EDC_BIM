@@ -207,7 +207,10 @@ def test_el_recorte_es_real(rutas_portal):
     # 302 -> 303 (31-oct-2026): UNA ruta de la misma familia, `/api/docs/tableros/<tid>/miembros` (listar, invitar o
     # cambiar el rol, quitar o salir): los miembros de un tablero, como «Miembros del panel» de ACC (docs/visor/66,
     # migración 44). Pasa por la misma guardia del tablero (obra, recurso y, si es solo de invitados, miembro).
-    TECHO = 303
+    # 303 -> 304 (31-oct-2026): UNA ruta de la misma familia, `POST /api/docs/tableros/<tid>/graficas`: View deja en un
+    # tablero una gráfica que él calculó (docs/visor/68). Solo valida la forma de la gráfica; NO lee el inventario (el
+    # portal sigue sin servirlo). Misma guardia del tablero, y el frente tiene que ser de la obra del tablero.
+    TECHO = 304
     sin_puente = [r for r in rutas_portal
                   if r not in puente_acc and r not in revision_cad]
     assert len(sin_puente) < TECHO, (

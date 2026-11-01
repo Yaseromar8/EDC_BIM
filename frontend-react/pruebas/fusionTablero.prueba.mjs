@@ -41,4 +41,15 @@ r = fusionar({}, { notas: [nota('a', 'A')] }, {});
 ver('sin base ni servidor', ids(r) === 'a:A@0' && Array.isArray(r.secciones), r);
 // 10 · mismoContenido
 ver('mismoContenido', mismoContenido(base, JSON.parse(JSON.stringify(base))) && !mismoContenido(base, { notas: [] }), null);
+// 11 · Los dos cambian el mismo elemento: campo a campo, con la geometría como un bloque (docs/visor/68)
+const graf = (x, v) => ({ id: 'g', tipo: 'grafica', x, y: 0, w: 480, h: 320, grupos: [{ k: 'PVC', v }], fecha: v === 340 ? 'a' : 'b' });
+r = fusionar({ notas: [graf(0, 340)], secciones: [] }, { notas: [graf(500, 340)], secciones: [] }, { notas: [graf(0, 410)], secciones: [] });
+ver('yo muevo la gráfica y View le cambia los datos: los dos', r.notas[0].x === 500 && r.notas[0].grupos[0].v === 410 && r.notas[0].fecha === 'b', r.notas[0]);
+r = fusionar(base, { ...base, notas: [nota('a', 'A editada'), nota('b', 'B'), nota('c', 'C')] }, { ...base, notas: [nota('a', 'A', 300), nota('b', 'B'), nota('c', 'C')] });
+ver('yo edito el texto y el otro la mueve: los dos', ids(r) === 'a:A editada@300 b:B@0 c:C@0', ids(r));
+r = fusionar(base, { ...base, notas: [nota('a', 'A', 100), nota('b', 'B'), nota('c', 'C')] }, { ...base, notas: [nota('a', 'A', 300), nota('b', 'B'), nota('c', 'C')] });
+ver('los dos la movemos: la mía', ids(r) === 'a:A@100 b:B@0 c:C@0', ids(r));
+const fl = (x, w, invX) => ({ id: 'f', tipo: 'flecha', x, y: 0, w, h: 0, invX });
+r = fusionar({ notas: [fl(0, 100, false)], secciones: [] }, { notas: [fl(50, 100, false)], secciones: [] }, { notas: [fl(0, 200, true)], secciones: [] });
+ver('la geometría va junta: no se mezcla mi x con su ancho', r.notas[0].x === 50 && r.notas[0].w === 100 && r.notas[0].invX === false, r.notas[0]);
 console.log(`${ok}/${n}`);

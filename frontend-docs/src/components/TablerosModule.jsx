@@ -31,6 +31,7 @@ import VistaPublicada from './tableros/VistaPublicada';
 import { leerEnlaceDeTablero, enlaceDeVista, ponerEnLaDireccion } from './tableros/enlaceDeTablero';
 import { ComentariosDelTablero, nuevoComentario, nuevoMensaje, esComentario, sinComentarios, yoDe, colorDe, iniciales, mismoAutor } from './tableros/comentarios';
 import { tipoComentario } from './tableros/tipoComentario';
+import { tipoGrafica } from './tableros/tipoGrafica';
 import HiloComentario from './tableros/HiloComentario';
 import PanelComentarios from './tableros/PanelComentarios';
 import PanelPresentacion from './tableros/PanelPresentacion';
@@ -428,6 +429,7 @@ function TableroEditor({ id, project, user, isAdmin, vistaInicial = null, onCerr
 
   const tipos = useMemo(() => ({
     comentario: tipoComentario({ abrir: abrirHilo }),
+    grafica: tipoGrafica(),                    // las que llegan de View (docs/visor/68)
     documento: tipoDocumento({ abrir, extraer: extraerPaginas }),
     incidencia: tipoIncidencia({ abrir: abrirIncidencia }),
     kanban: tipoKanban(),

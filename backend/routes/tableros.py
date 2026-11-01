@@ -110,6 +110,15 @@ def _es_admin(obra):
         return adm.es_admin_de_obra(conn.cursor(), _user(), obra)
 
 
+# GRÁFICAS DE VIEW (docs/visor/68): View calcula la gráfica con su modelo y la deja en un tablero como una foto con
+# fecha. Aquí solo se valida su forma (nada se calcula, ni se lee el inventario) y se pone en el tablero.
+TIPOS_DE_GRAFICA = ('bar', 'donut', 'kpi', 'line', 'area')
+METRICAS = ('count', 'sum', 'avg')
+MAX_GRUPOS = 60
+GRAFICA_LADO = (480, 320)
+_COLOR = re.compile(r'^#[0-9a-fA-F]{6}$')
+_ID_ORIGEN = re.compile(r'^[\w.:-]{1,80}$')
+
 ROLES = ('responsable', 'editor', 'lector')
 ACCESOS = ('obra', 'invitados')
 
@@ -118,6 +127,68 @@ def _pertenece(user_id, obra):
     """¿Esa persona (no la sesión) pertenece a la obra? Para invitarla."""
     from routes.documents import verify_project_access
     return verify_project_access(user_id, obra)
+
+
+def _misma_obra(frente, obra):
+    """¿El frente es de la obra del tablero? (las dos se resuelven a `projects.id`; sin resolver, no)"""
+    from db import resolve_project_id
+    a, b = resolve_project_id(frente), resolve_project_id(obra)
+    return a is not None and a == b
+
+
+def _txt(valor, maximo):
+    return ' '.join(str(valor).split())[:maximo] if isinstance(valor, (str, int, float)) and not isinstance(valor, bool) else ''
+
+
+def _numero(valor):
+    if isinstance(valor, bool) or not isinstance(valor, (int, float)):
+        return None
+    return float(valor) if valor == valor and abs(valor) < 1e15 else None
+
+
+def _limpiar_grafica(d):
+    """(grafica, error): solo pasa lo que una gráfica de View manda, con tamaños acotados."""
+    if not isinstance(d, dict):
+        return None, 'Falta la gráfica.'
+    origen = d.get('origen') if isinstance(d.get('origen'), dict) else {}
+    o = {k: str(origen.get(k) or '') for k in ('frente', 'obra', 'frenteId', 'tablero', 'grafica')}
+    if not o['frente'] or not o['grafica'] or not all(_ID_ORIGEN.match(v) for v in o.values() if v):
+        return None, 'La gráfica no dice de qué frente y de qué gráfica de View viene.'
+    tipo, metrica = d.get('tipo'), d.get('metrica') or 'count'
+    if tipo not in TIPOS_DE_GRAFICA or metrica not in METRICAS:
+        return None, 'Tipo de gráfica no válido.'
+    grupos = d.get('grupos')
+    if not isinstance(grupos, list) or len(grupos) > MAX_GRUPOS:
+        return None, 'Los grupos de la gráfica no son válidos.'
+    limpios = []
+    for g in grupos:
+        v = _numero(g.get('v')) if isinstance(g, dict) else None
+        if v is None:
+            return None, 'Los grupos de la gráfica no son válidos.'
+        n = g.get('n')
+        c = g.get('c')
+        limpios.append({'k': _txt(g.get('k'), 200) or '(sin valor)', 'v': v,
+                        **({'n': int(n)} if isinstance(n, int) and not isinstance(n, bool) and 0 <= n < 10**9 else {}),
+                        **({'c': c} if isinstance(c, str) and _COLOR.match(c) else {})})
+    filtro = d.get('filtro') if isinstance(d.get('filtro'), dict) else None
+    if filtro:
+        valores = filtro.get('valores') if isinstance(filtro.get('valores'), list) else []
+        filtro = {'campo': _txt(filtro.get('campo'), 200), 'valores': [_txt(x, 200) for x in valores[:50]]}
+        if not filtro['campo'] or not filtro['valores']:
+            filtro = None
+    total = _numero(d.get('total'))
+    elementos = d.get('elementos')
+    return {
+        'origen': {**{k: v for k, v in o.items() if v}, 'frenteNombre': _txt(origen.get('frenteNombre'), 120)},
+        'nombre': _txt(d.get('titulo'), 200) or 'Gráfica',
+        'subtitulo': _txt(d.get('subtitulo'), 300),
+        'grafica': tipo, 'metrica': metrica,
+        'campo': _txt(d.get('campo'), 200), 'valorCampo': _txt(d.get('valorCampo'), 200),
+        'grupos': limpios, 'total': total if total is not None else sum(g['v'] for g in limpios),
+        **({'elementos': int(elementos)} if isinstance(elementos, int) and not isinstance(elementos, bool) and 0 <= elementos < 10**9 else {}),
+        **({'filtro': filtro} if filtro else {}),
+        'unidad': _txt(d.get('unidad'), 40),
+    }, None
 
 
 def _nombre(valor):
@@ -206,6 +277,18 @@ def tableros():
         return _error('Autenticación requerida.', 401)
     if request.method == 'GET':
         obra = request.args.get('model_urn') or ''
+        frente = request.args.get('frente') or ''
+        if frente and not obra:
+            # Desde View, que conoce el frente y no el árbol documental de la obra: los tableros de la obra del frente.
+            if not _hay_acceso(frente):
+                return _error('No tienes acceso a esta obra.', 403)
+            with get_db_connection() as conn:
+                cur = conn.cursor()
+                cur.execute('SELECT DISTINCT model_urn FROM tableros WHERE archivado = false')
+                obras = [r[0] for r in cur.fetchall() if _misma_obra(frente, r[0])]
+            if len(obras) != 1:
+                return jsonify({'success': True, 'tableros': [], 'obra': None}), 200
+            obra = obras[0]
         if not obra or not _hay_acceso(obra):
             return _error('No tienes acceso a esta obra.', 403)
         archivados = request.args.get('archivados') in ('1', 'true')
@@ -227,7 +310,7 @@ def tableros():
                       'abierto_por_mi': _iso(r[7]), 'miniatura': r[8], 'acceso': r[9] or 'obra',
                       'mi_rol': r[10] or ('responsable' if admin else 'editor'),
                       'puedo_archivar': admin or r[10] == 'responsable'} for r in cur.fetchall()]
-        resp = jsonify({'success': True, 'tableros': lista})
+        resp = jsonify({'success': True, 'tableros': lista, 'obra': obra})
         resp.headers['Cache-Control'] = 'private, no-store'
         return resp
 
@@ -425,3 +508,58 @@ def miembros_del_tablero(tid):
         conn.commit()
         gente = lista(cur)
     return jsonify({'success': True, 'miembros': gente}), 200
+
+
+@tableros_bp.route('/api/docs/tableros/<tid>/graficas', methods=['POST'])
+def graficas_del_tablero(tid):
+    """POST {grafica} → deja en el tablero una gráfica calculada en View (docs/visor/68). Si ya estaba (misma gráfica de
+    View: frente, tablero de View y gráfica), se le cambian los datos donde esté, sin moverla; si no, entra a la
+    derecha de lo que hay. Sube la versión: quien tenga el tablero abierto la recibe con la fusión de siempre."""
+    tab, denied = _guardia_del_tablero(tid)
+    if denied:
+        return denied
+    if tab['archivado']:
+        return _error('Este tablero está archivado: recupéralo para editarlo.', 409, code='ARCHIVADO')
+    if not _puede_editar(tab):
+        return _error('En este tablero eres lector: puedes mirarlo, no cambiarlo.', 403, code='LECTOR')
+    grafica, error = _limpiar_grafica((request.get_json(silent=True) or {}).get('grafica'))
+    if error:
+        return _error(error, 400)
+    if not _hay_acceso(grafica['origen']['frente']) or not _misma_obra(grafica['origen']['frente'], tab['obra']):
+        return _error('Esa gráfica es de un frente de otra obra.', 400)
+    usuario = _user()
+    grafica['enviadaPor'] = _txt(usuario.get('name') or usuario.get('email') or '', 120)
+    from datetime import datetime, timezone
+    grafica['fecha'] = datetime.now(timezone.utc).isoformat(timespec='seconds')
+    clave = (grafica['origen']['frente'], grafica['origen'].get('tablero', ''), grafica['origen']['grafica'])
+    with get_db_connection() as conn:
+        cur = conn.cursor()
+        cur.execute('SELECT config FROM tableros WHERE id = %s FOR UPDATE', (tab['id'],))
+        config = (cur.fetchone() or [{}])[0] or {}
+        notas = list(config.get('notas') or [])
+        mismas = [i for i, n in enumerate(notas) if isinstance(n, dict) and n.get('tipo') == 'grafica'
+                  and (n.get('origen', {}).get('frente'), n.get('origen', {}).get('tablero', ''), n.get('origen', {}).get('grafica')) == clave]
+        if mismas:
+            for i in mismas:
+                n = notas[i]
+                notas[i] = {**grafica, 'id': n['id'], 'tipo': 'grafica', 'x': n.get('x', 0), 'y': n.get('y', 0),
+                            'w': n.get('w', GRAFICA_LADO[0]), 'h': n.get('h', GRAFICA_LADO[1])}
+            nuevo_id = notas[mismas[0]]['id']
+        else:
+            cajas = [(e.get('x', 0), e.get('y', 0), e.get('x', 0) + e.get('w', 0), e.get('y', 0) + e.get('h', 0))
+                     for e in notas + list(config.get('secciones') or []) if isinstance(e, dict)]
+            x = max((c[2] for c in cajas), default=0) + (80 if cajas else 0)
+            y = min((c[1] for c in cajas), default=0)
+            nuevo_id = 'g' + uuid.uuid4().hex[:16]
+            notas.append({**grafica, 'id': nuevo_id, 'tipo': 'grafica', 'x': x, 'y': y, 'w': GRAFICA_LADO[0], 'h': GRAFICA_LADO[1]})
+        config = {**config, 'notas': notas}
+        texto = json.dumps(config, ensure_ascii=False)
+        if len(texto.encode('utf-8')) > CONFIG_MAX:
+            conn.rollback()
+            return _error('El tablero es demasiado grande para añadirle la gráfica.', 413)
+        cur.execute('''UPDATE tableros SET config = %s::jsonb, version = version + 1, updated_by_id = %s, updated_at = now()
+                        WHERE id = %s RETURNING version''', (texto, _uid(), tab['id']))
+        version = cur.fetchone()[0]
+        conn.commit()
+    return jsonify({'success': True, 'id': nuevo_id, 'reemplazada': bool(mismas), 'version': version,
+                    'tablero': tab['nombre']}), 200

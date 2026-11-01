@@ -17,6 +17,7 @@ import ChartCard from './ChartCard';
 import ChartEditor from './ChartEditor';
 import VistaDePagina from './VistaDePagina';
 import BarraDeVistas from './BarraDeVistas';
+import EnviarATablero from './EnviarATablero';
 import Herramienta, { CSS_HERRAMIENTAS, Icono, Separador } from './Herramienta';
 import { Nota, TextoLibre, BarraInferior, PaletaIzquierda, PildoraZoom } from '../../../../design/lienzo/PiezasLienzo';
 import { NOTA_LADO, NOTA_HUECO, medidaTexto } from '../../../../design/lienzo/notas';
@@ -103,6 +104,7 @@ export default function DashboardWorkspace({ project, backendUrl, onClose, proye
   const [fields, setFields] = useState([]);
   const [hora, setHora] = useState('');             // cuándo se leyó el inventario
   const [dashId, setDashId] = useState(null);
+  const [enviando, setEnviando] = useState(null);    // la gráfica que va a un tablero de Docs (docs/visor/68)
   const [dashName, setDashName] = useState('General');
   const [charts, setCharts] = useState([]);
   const [frames, setFrames] = useState([]);         // secciones estilo Miro
@@ -1092,6 +1094,7 @@ export default function DashboardWorkspace({ project, backendUrl, onClose, proye
                 onEdit={setEditing}
                 onUpdate={(next) => setCharts(cs => cs.map(c => (c.id === next.id ? next : c)))}
                 onDelete={deleteChart}
+                onEnviar={(paquete) => setEnviando(paquete)}
                 onIsolate={handleIsolate}
                 onPaint={handlePaint}
                 onCreateFromField={createFromField}
@@ -1245,6 +1248,17 @@ export default function DashboardWorkspace({ project, backendUrl, onClose, proye
       </div>
 
       {/* Editor */}
+      {enviando && (() => {
+        // La obra y el frente de esta gráfica, como el enlace de una vista (docs/visor/52).
+        const frente = proyecto?.frontId;
+        const id = String(proyecto?.id || project);
+        const obra = frente && id.endsWith('_' + frente) ? id.slice(0, -(frente.length + 1)) : id;
+        const { grafica, ...paquete } = enviando;
+        return (
+          <EnviarATablero grafica={paquete} backendUrl={backendUrl} frente={project} onCerrar={() => setEnviando(null)}
+            origen={{ frente: String(project), obra, frenteId: frente || '', frenteNombre: proyecto?.frontName || '', tablero: dashId ? String(dashId) : '', grafica: String(grafica) }} />
+        );
+      })()}
       {editing && (
         <ChartEditor
           initial={editing === 'new' ? null : editing}

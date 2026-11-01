@@ -159,6 +159,7 @@ RUTAS_POR_RECURSO = {
     # Tableros de Docs: abrir, guardar, renombrar y archivar solo traen el id del tablero.
     'tablero': ('tableros', 'tid'),
     'miembros_del_tablero': ('tableros', 'tid'),     # sus miembros (docs/visor/66)
+    'graficas_del_tablero': ('tableros', 'tid'),     # gráficas que llegan de View (docs/visor/68)
 }
 
 
