@@ -1019,6 +1019,8 @@ def _observaciones_del_plano(cur, node_id):
         plano = next((e for e in evidencia if e.get('tipo') == 'plano'), {})
         salida.append({**_resumen_de_observacion(r[:8], nombres, hoy), 'del_plano': True,
                        'version_id': plano.get('version_id'), 'version_numero': plano.get('version_numero'),
+                       # EL PIN EN LA HOJA (2-nov-2026, como ACC): página y punto en coordenadas del PDF.
+                       'pin': plano.get('pin'),
                        'marcas': [e['marca'] for e in evidencia if e.get('tipo') == 'marca' and e.get('marca') is not None]})
     return _con_empresas(cur, salida)
 
@@ -1357,6 +1359,14 @@ def observacion_del_plano(node_id):
     except (TypeError, ValueError):
         return jsonify({"success": False, "error": "Las marcas no son válidas."}), 400
     borrador = bool(d.get('borrador'))
+    # EL PIN (2-nov-2026, como la herramienta «Incidencia» de ACC): dónde se clavó en la hoja. Opcional.
+    pin = None
+    if d.get('pin') is not None:
+        crudo = d.get('pin') if isinstance(d.get('pin'), dict) else {}
+        pagina, punto = crudo.get('pagina'), _punto(crudo.get('p'))
+        if isinstance(pagina, bool) or not isinstance(pagina, int) or not 1 <= pagina <= 5000 or not punto                 or not all(-1e6 < c < 1e6 for c in punto):
+            return jsonify({"success": False, "error": "El pin no es válido."}), 400
+        pin = {'pagina': pagina, 'p': punto}
     try:
         with get_db_connection() as conn:
             cur = conn.cursor()
@@ -1411,13 +1421,15 @@ def observacion_del_plano(node_id):
                                     "error": "Alguna marca ya está en una observación abierta (%s)." % ', '.join(sorted(set(ocupadas))),
                                     "code": "YA_TIENE_OBSERVACION"}), 409
             ubicacion = ' · '.join(x for x in (nombre, 'V%s' % version_num if version_num else '',
-                                               ('%d marca%s' % (len(marcas), '' if len(marcas) == 1 else 's')) if marcas else 'plano entero')
+                                               'pág. %d' % pin['pagina'] if pin else '',
+                                               ('%d marca%s' % (len(marcas), '' if len(marcas) == 1 else 's')) if marcas
+                                               else ('' if pin else 'plano entero'))
                                    if x)[:300]
             if borrador and iss.opcional_apagado(iss.BORRADOR, iss.opcionales_de_obra(cur, obra)):
                 return jsonify({"success": False, "error": "Esta obra no usa borradores.",
                                 "code": "ESTADO_APAGADO"}), 409
             evidencia = [{'tipo': 'plano', 'documento': nodo, 'nombre': nombre, 'version_id': version_id,
-                          'version_numero': version_num}] + [
+                          'version_numero': version_num, **({'pin': pin} if pin else {})}] + [
                 {'tipo': 'marca', 'marca': m[0], 'documento': nodo, 'nombre': nombre, 'version_id': version_id,
                  'version_numero': version_num, 'pagina': m[3], 'clase': m[4]} for m in marcas]
             iid = codigo = None

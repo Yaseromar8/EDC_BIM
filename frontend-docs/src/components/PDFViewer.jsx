@@ -175,10 +175,9 @@ const GRUPOS_DE_HERRAMIENTAS = [
       hint: 'Clic por puntos · doble clic termina la medición' },
     { id: 'area', etiqueta: 'Área', title: 'Medir área',
       icon: <><path d="M5 7 14 4l6 7-4 9H6z"/><path d="M4 6h2v2H4zM13 3h2v2h-2zM19 10h2v2h-2zM15 19h2v2h-2zM5 19h2v2H5z" fill="currentColor" stroke="none"/></>,
-      hint: 'Clic en cada vértice · doble clic cierra el área' },
-    { id: 'count', etiqueta: 'Contar', title: 'Conteo de elementos',
-      icon: <><circle cx="12" cy="12" r="8"/><path d="M10.5 9.5 12.5 8v8M10.5 16h4"/></>,
-      hint: 'Cada clic suma una unidad al conteo' } ] },
+      hint: 'Clic en cada vértice · doble clic cierra el área' } ] },
+  // «Contar» salió del estuche el 2-nov-2026: su sitio es la INCIDENCIA (abajo). Los conteos que ya existan se
+  // siguen viendo y se pueden borrar; solo no se crean nuevos.
   { nombre: 'anotar', items: [
     { id: 'cloud', etiqueta: 'Nube', title: 'Nube de revisión',
       // La nube de revisión de siempre: un rectángulo de festones iguales (3 × 2), grandes para que se lean a 18 px.
@@ -196,6 +195,11 @@ const GRUPOS_DE_HERRAMIENTAS = [
   // FOTO y SELLO (16-oct-2026, docs/ux/ACC_LECTOR_MARCAS_FOTO_REFERENCIA.md). Las REFERENCIAS no son una
   // herramienta: cualquier marca las lleva desde su panel (clic sobre ella con «Mover»).
   { nombre: 'evidencia', items: [
+    // LA INCIDENCIA EN LA HOJA (2-nov-2026, docs/archivos/21), como ACC: clic donde está el problema → un pin numerado
+    // con el color de su estado y el panel lateral para levantarla. El pin vive en la incidencia (su evidencia del
+    // plano), no es una marca: no se edita como una nube ni se publica aparte.
+    { id: 'issue', etiqueta: 'Incidencia', title: 'Incidencia: clic donde está el problema',
+      icon: null, hint: 'Clic donde está el problema · se abre el panel para levantar la incidencia' },
     { id: 'photo', etiqueta: 'Foto', title: 'Foto: marca dónde se tomó y súbela o elígela de la obra',
       icon: <><path d="M4 8h3l1.6-2.2h6.8L17 8h3v11H4z"/><circle cx="12" cy="13" r="3.4"/></>,
       hint: 'Clic donde se tomó la foto · luego súbela o elígela de la obra' },
@@ -228,7 +232,7 @@ const HERRAMIENTA = Object.fromEntries(GRUPOS_DE_HERRAMIENTAS.flatMap(g => g.ite
 // 1,2 px que el navegador emborronaba (el dueño: «los botones los veo pixelados»).
 const ICONO_DE = {
   pan: 'seleccionar', measure: 'distancia', area: 'area', count: 'contar', cloud: 'nube', cloudpoly: 'nube-poligonal',
-  arrow: 'flecha', text: 'texto', stamp: 'sello', photo: 'marca-foto', erase: 'borrar-marca',
+  arrow: 'flecha', text: 'texto', stamp: 'sello', photo: 'marca-foto', erase: 'borrar-marca', issue: 'incidencia-nueva',
 };
 const IconoDeHerramienta = ({ id, tamano = 20 }) => (ICONO_DE[id]
   ? <IconoModulo nombre={ICONO_DE[id]} tamano={tamano} />
@@ -236,14 +240,14 @@ const IconoDeHerramienta = ({ id, tamano = 20 }) => (ICONO_DE[id]
       strokeLinecap="round" strokeLinejoin="round">{HERRAMIENTA[id]?.icon}</svg>);
 const NOMBRE_COMPACTO = { pan: 'Seleccionar y mover', measure: 'Distancia' };
 const nombreDe = (id) => NOMBRE_COMPACTO[id] || HERRAMIENTA[id]?.etiqueta || id;
-const TECLA = { pan: 'V', measure: 'M', area: 'A', count: 'K', cloud: 'C', cloudpoly: 'N', arrow: 'F', text: 'T', stamp: 'S', photo: 'P' };
+const TECLA = { pan: 'V', measure: 'M', area: 'A', cloud: 'C', cloudpoly: 'N', arrow: 'F', text: 'T', stamp: 'S', photo: 'P', issue: 'I' };
 const HERRAMIENTA_POR_TECLA = Object.fromEntries(Object.entries(TECLA).map(([id, k]) => [k.toLowerCase(), id]));
 const ESTUCHE_COMPACTO = [
   [{ grupo: 'ver', variantes: ['pan'] }],
-  [{ grupo: 'medir', nombre: 'Medir', variantes: ['measure', 'area', 'count'] },
+  [{ grupo: 'medir', nombre: 'Medir', variantes: ['measure', 'area'] },
     { grupo: 'marcar', nombre: 'Marcar', variantes: ['cloud', 'cloudpoly', 'arrow'] },
     { grupo: 'texto', variantes: ['text'] }],
-  [{ grupo: 'sello', variantes: ['stamp'] }, { grupo: 'foto', variantes: ['photo'] }],
+  [{ grupo: 'incidencia', variantes: ['issue'] }, { grupo: 'sello', variantes: ['stamp'] }, { grupo: 'foto', variantes: ['photo'] }],
 ];
 
 // ----------------------------------------------------------------------
@@ -457,13 +461,14 @@ function cronoFin(extra) {
   _crono.t0 = 0;
 }
 
-// Una observación para el plano entero (docs/archivos/18). El número: las del plano que siguen sin cerrar.
+// Las incidencias del plano (docs/archivos/18 y 21). El número: las que siguen sin cerrar. El icono es el PIN que se
+// clava en la hoja (antes un bocadillo, que el dueño leía como «un mensaje»).
 function BotonObservacionesDelPlano({ activo, cuantas, onClick }) {
   return (
     <button type="button" className="pdf-rail-btn pdf-rail-btn--obs" aria-pressed={activo}
-      aria-label="Observaciones del plano" data-tip="Observaciones del plano" title="Observaciones del plano"
+      aria-label="Incidencias del plano" data-tip="Incidencias del plano" title="Incidencias del plano"
       onClick={onClick}>
-      <IconoModulo nombre="observaciones" tamano={20} />
+      <IconoModulo nombre="incidencia" tamano={20} />
       {cuantas > 0 && <span className="pdf-rail-btn__num">{cuantas > 99 ? '99+' : cuantas}</span>}
     </button>
   );

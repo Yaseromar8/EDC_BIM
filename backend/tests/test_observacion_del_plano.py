@@ -236,3 +236,28 @@ def test_el_detalle_ajeno_o_de_otro_plano_no_existe(app, monkeypatch):
     _conectar(monkeypatch, [None])
     assert app.test_client().get('/api/pdf/planos/%s/observacion?id=55' % PLANO).status_code == 404
     assert app.test_client().get('/api/pdf/planos/%s/observacion?id=x' % PLANO).status_code == 400
+
+
+# ── El pin en la hoja (como la herramienta «Incidencia» de ACC) ────────────
+
+def test_una_observacion_con_su_pin_en_la_hoja(app, monkeypatch, alta):
+    cur, _ = _conectar(monkeypatch, [('obra', 'DR-803.pdf', VIGENTE, 2), (1,), (1,), (57,), [], []])
+    r = _post(app, pin={'pagina': 3, 'p': [410.5, 220]})
+    assert r.status_code == 201, r.get_json()
+    p = next(q for q in cur.queries if 'INSERT INTO doc_issues' in q[0])[1]
+    assert p[6] == 'DR-803.pdf · V2 · pág. 3'
+    assert json.loads(p[12])[0]['pin'] == {'pagina': 3, 'p': [410.5, 220.0]}
+
+
+@pytest.mark.parametrize('pin', [{'pagina': 0, 'p': [1, 2]}, {'pagina': 2, 'p': [1]}, {'pagina': True, 'p': [1, 2]},
+                                 {'pagina': 2, 'p': ['a', 2]}, 'centro'])
+def test_un_pin_mal_formado_no_entra(app, monkeypatch, alta, pin):
+    cur, conn = _conectar(monkeypatch, [])
+    assert _post(app, pin=pin).status_code == 400 and not conn.committed
+
+
+def test_la_lista_del_plano_trae_el_pin():
+    ev = [{'tipo': 'plano', 'documento': PLANO, 'version_id': VIGENTE, 'version_numero': 2, 'pin': {'pagina': 1, 'p': [5, 6]}}]
+    cur = Cursor([[(55, 'ISS-020', 'Abierto', 'Cotas', 9, 7, VENCE, PLANO, ev)], [(9, 'Luis'), (7, 'Ana')]])
+    o, = pdf._observaciones_del_plano(cur, PLANO)
+    assert o['pin'] == {'pagina': 1, 'p': [5, 6]}

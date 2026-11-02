@@ -22,6 +22,7 @@ import { abrirDocumento } from '../utils/enlaceDeMarcas';
 import { confirmAction } from '../utils/confirm';
 import { estadoDeObservacion, etiquetaDeCita, fechaCorta, observacionViva, textoDeCitas, TOPE_CITAS } from '../utils/marcasConEnlace';
 import SelectorDeDocumento from './SelectorDeDocumento';
+import IconoModulo from './IconoModulo';
 import IncidenciaLateral from './IncidenciaLateral';
 import { destinoDelLector } from './ObservacionesDelPlano';
 import { DialogoDeSello } from './MarcaConEnlace';
@@ -43,7 +44,7 @@ const Ico = ({ children, size = 16 }) => (
 );
 const IcoTexto = () => <Ico><path d="M5 6h14M12 6v13" /></Ico>;
 const IcoRef = () => <Ico><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1" /><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1" /></Ico>;
-const IcoIssue = () => <Ico><path d="M5 4h14v12H9l-4 4z" /><path d="M12 8v3" /><path d="M12 13.5v.01" /></Ico>;
+const IcoIssue = () => <IconoModulo nombre="incidencia" tamano={16} />;
 const IcoDuplicar = () => <Ico><rect x="8" y="8" width="12" height="12" rx="2" /><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3" /></Ico>;
 const IcoPublicar = () => <Ico><path d="M12 16V4" /><path d="M7 9l5-5 5 5" /><path d="M5 20h14" /></Ico>;
 const IcoRetirar = () => <Ico><path d="M12 4v12" /><path d="M7 11l5 5 5-5" /><path d="M5 20h14" /></Ico>;

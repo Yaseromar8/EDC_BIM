@@ -278,13 +278,61 @@ function Acto({ entorno, obra, acto, i, onHacer, onCancelar }) {
 
 const ESTADOS_DONDE_SE_REASIGNA = ['Borrador', 'Abierto', 'En curso', 'Reabierto'];
 
+// El PIN de la incidencia, en la hoja, en la cabecera del panel y en las listas. Es el MISMO dibujo del juego oficial
+// (design/iconos/iconos-obra.json, «incidencia»: retícula 24, trazo 1,5, puntas redondas), relleno con el color de su
+// estado (lista cerrada D-24) y perfilado en Light #faf9f5 para que se lea sobre cualquier plano. El número, en IBM
+// Plex Sans 600, como el resto de la interfaz.
+const PIN = 'M12 21s-6.5-5.6-6.5-10.8a6.5 6.5 0 0 1 13 0C18.5 15.4 12 21 12 21z';
+const CLARO = '#faf9f5';
+export function PinDeIncidencia({ color = '#d97757', tamano = 28, numero = null, ...resto }) {
+  return (
+    <svg width={tamano} height={tamano} viewBox="0 0 24 24" aria-hidden="true" style={{ flex: 'none' }} {...resto}>
+      <path d={PIN} fill={color} stroke={CLARO} strokeWidth="1.5" strokeLinejoin="round" />
+      {numero != null
+        ? <text x="12" y="12.8" textAnchor="middle" fontSize={String(numero).length > 2 ? 5.5 : 7} fontWeight="600" fill={CLARO}
+            fontFamily="var(--a-font-sans, 'IBM Plex Sans', sans-serif)">{numero}</text>
+        : <><path d="M12 6.7v3.8" stroke={CLARO} strokeWidth="1.5" strokeLinecap="round" /><circle cx="12" cy="13.2" r="1" fill={CLARO} /></>}
+    </svg>
+  );
+}
+
+export const numeroDe = (codigo) => (/(\d+)\s*$/.exec(String(codigo || '')) || [])[1]?.replace(/^0+(?=\d)/, '') || null;
+
+function iniciales(nombre) {
+  const p = String(nombre || '?').replace(/@.*/, '').split(/[\s._-]+/).filter(Boolean);
+  return ((p[0] || '?')[0] + (p[1] ? p[1][0] : '')).toUpperCase();
+}
+
+/** Una miniatura de un adjunto: la imagen si la aplicación sabe darla; si no, el icono de documento. */
+function Miniatura({ entorno, adjunto, onAbrir, onQuitar }) {
+  const [url, setUrl] = useState(null);
+  useEffect(() => {
+    if (!entorno.miniatura || !/\.(jpe?g|png|webp|heic|heif|gif|bmp)$/i.test(adjunto.nombre || '')) return undefined;
+    let vivo = true;
+    let creada = null;
+    entorno.miniatura(adjunto.documento).then((b) => {
+      if (vivo && b) { creada = URL.createObjectURL(b); setUrl(creada); }
+    }).catch(() => {});
+    return () => { vivo = false; if (creada) URL.revokeObjectURL(creada); };
+  }, [entorno, adjunto.documento, adjunto.nombre]);
+  return (
+    <li className="pinc-mini">
+      <button type="button" className="pinc-mini__img" onClick={onAbrir} title={adjunto.nombre}>
+        {url ? <img src={url} alt={adjunto.nombre} />
+          : <Ico><path d="M7 3h7l5 5v13H7z" /><path d="M14 3v5h5" /></Ico>}
+      </button>
+      <span className="pinc-mini__nombre" title={adjunto.nombre}>{adjunto.nombre}</span>
+      {onQuitar && <button type="button" className="pinc-mini__quitar" aria-label={`Quitar ${adjunto.nombre}`} onClick={onQuitar}>×</button>}
+    </li>
+  );
+}
+
 function Detalle({ entorno, obra, ob, issueId, extraDetalle, onCambio, onCargada }) {
   const API = entorno.API ?? '';
   const [i, setI] = useState(null);
   const [acto, setActo] = useState(null);
   const [editando, setEditando] = useState(null);       // 'asignar' | 'observadores' | 'clasificar'
   const [borrador, setBorrador] = useState({});
-  const [pestana, setPestana] = useState('comentarios');
   const [comentario, setComentario] = useState('');
   const [ocupado, setOcupado] = useState(false);
 
@@ -327,9 +375,8 @@ function Detalle({ entorno, obra, ob, issueId, extraDetalle, onCambio, onCargada
   const autor = ob.nombres[i.autor_id] || null;
   const vence = String(i.vence_en || '').slice(0, 10);
   const vencida = vence && vence < hoyMas(0) && issueViva(i);
-  const historia = (i.history || []).filter(h => h && typeof h === 'object');
-  const comentarios = historia.filter(h => h.event === 'commented');
-  const actividad = historia.filter(h => h.event !== 'commented');
+  // LA ACTIVIDAD, como en ACC: comentarios e historial juntos y en orden, lo último abajo, junto a donde se escribe.
+  const actividad = (i.history || []).filter(h => h && typeof h === 'object');
   const campos = camposDelTipo(ob.config, i.tipo);
   const clasificacion = [i.subtipo && `Subtipo: ${i.subtipo}`, i.causa_raiz && `Causa raíz: ${i.causa_raiz}`,
     ...campos.filter(c => (i.campos || {})[c.clave] != null).map(c => `${c.etiqueta}: ${(i.campos || {})[c.clave]}`)].filter(Boolean);
@@ -342,15 +389,23 @@ function Detalle({ entorno, obra, ob, issueId, extraDetalle, onCambio, onCargada
     if (t && await hacer('comentar', { texto: t })) setComentario('');
   };
 
+  const Fila = ({ etiqueta, children, accion = null }) => (
+    <div className="pinc-fila">
+      <dt>{etiqueta}</dt>
+      <dd><span>{children}</span>{accion}</dd>
+    </div>
+  );
+
   return (
-    <div className="pinc-cuerpo">
-      <div className="pinc-estado">
-        <span className="pinc-chip" style={{ '--estado': e.color }}><i />{e.etiqueta}</span>
-        {vencida && <span className="pinc-vencida">Vencida</span>}
-        <small>{aQuienLeTocaIssue(i, { responsable, verificador, autor })}</small>
+    <div className="pinc-cuerpo pinc-detalle">
+      <div className="pinc-cabeza">
+        <h3 className="pinc-titulo">{i.titulo}</h3>
+        <div className="pinc-estado">
+          <span className="pinc-chip" style={{ '--estado': e.color }}><i />{e.etiqueta}</span>
+          {vencida && <span className="pinc-vencida">Vencida</span>}
+          <small>{aQuienLeTocaIssue(i, { responsable, verificador, autor })}</small>
+        </div>
       </div>
-      <h3 className="pinc-titulo">{i.titulo}</h3>
-      {i.descripcion && <p className="pinc-texto">{i.descripcion}</p>}
 
       {i.estado === 'Borrador' && <p className="pinc-aviso">Borrador: solo lo ves tú. Al enviarlo le llega al responsable, con su fecha.</p>}
       {i.estado === 'En disputa' && <p className="pinc-aviso pinc-aviso--ambar">{responsable || 'El responsable'} dice que no procede. Decide {autor || 'quien la levantó'}: reafirmarla o anularla.</p>}
@@ -397,137 +452,129 @@ function Detalle({ entorno, obra, ob, issueId, extraDetalle, onCambio, onCargada
         </div>
       )}
 
-      <dl className="pinc-datos">
-        <dt>Asignada a</dt>
-        <dd>
-          {responsable || '—'}
-          {dirige && ESTADOS_DONDE_SE_REASIGNA.includes(i.estado) && editando !== 'asignar' && (
-            <button type="button" className="pinc-enlace" onClick={() => { setBorrador({}); setEditando('asignar'); }}>Reasignar</button>
-          )}
-        </dd>
-        {editando === 'asignar' && (
-          <dd className="pinc-editor">
-            <ResponsableDeAlta miembros={ob.miembros} empresas={ob.empresas} valor={borrador} excluir={i.verificador_id}
-              etiqueta="Nuevo responsable" onChange={setBorrador} />
-            <div className="pinc-botones">
-              <button type="button" className="pinc-btn pinc-btn--prim" disabled={ocupado || !(borrador.responsable_id || borrador.responsable_empresa)}
-                onClick={() => hacer('editar', borrador, 'Reasignada: le llega al nuevo responsable')}>Reasignar</button>
-              <button type="button" className="pinc-btn pinc-btn--plano" onClick={() => setEditando(null)}>Cancelar</button>
+      <section className="pinc-seccion">
+        <h4>Detalles</h4>
+        <dl className="pinc-filas">
+          <Fila etiqueta="Estado"><span className="pinc-chip" style={{ '--estado': e.color }}><i />{e.etiqueta}</span></Fila>
+          <Fila etiqueta="Asignada a" accion={dirige && ESTADOS_DONDE_SE_REASIGNA.includes(i.estado) && editando !== 'asignar'
+            ? <button type="button" className="pinc-enlace" onClick={() => { setBorrador({}); setEditando('asignar'); }}>Reasignar</button> : null}>
+            {responsable || '—'}
+          </Fila>
+          {editando === 'asignar' && (
+            <div className="pinc-editor">
+              <ResponsableDeAlta miembros={ob.miembros} empresas={ob.empresas} valor={borrador} excluir={i.verificador_id}
+                etiqueta="Nuevo responsable" onChange={setBorrador} />
+              <div className="pinc-botones">
+                <button type="button" className="pinc-btn pinc-btn--prim" disabled={ocupado || !(borrador.responsable_id || borrador.responsable_empresa)}
+                  onClick={() => hacer('editar', borrador, 'Reasignada: le llega al nuevo responsable')}>Reasignar</button>
+                <button type="button" className="pinc-btn pinc-btn--plano" onClick={() => setEditando(null)}>Cancelar</button>
+              </div>
             </div>
-          </dd>
-        )}
-        <dt>Verifica</dt><dd>{verificador || (i.tipo === 'OBSERVACION' ? autor : null) || 'Sin designar'}</dd>
-        <dt>Levantó</dt><dd>{autor || '—'}</dd>
-        <dt>Fecha límite</dt><dd className={vencida ? 'es-vencida' : ''}>{fechaDeDia(vence) || '—'}</dd>
-        {(i.ubicacion || i.progresiva) && <><dt>Ubicación</dt><dd>{[i.ubicacion, i.progresiva].filter(Boolean).join(' · ')}</dd></>}
-        <dt>Observadores</dt>
-        <dd>
-          {(i.observadores || []).length ? i.observadores.map(u => ob.nombres[u] || `usuario ${u}`).join(', ') : 'Nadie'}
-          {i.estado !== 'Borrador' && (
-            <button type="button" className="pinc-enlace" disabled={ocupado}
-              onClick={() => hacer('editar', { seguir: !sigo }, sigo ? 'Ya no la sigues' : 'La sigues: te avisaremos de cada paso')}>
-              {sigo ? 'Dejar de seguir' : 'Seguir'}</button>
           )}
-          {dirige && editando !== 'observadores' && (
-            <button type="button" className="pinc-enlace" onClick={() => { setBorrador({ observadores: i.observadores || [] }); setEditando('observadores'); }}>Cambiar</button>
-          )}
-        </dd>
-        {editando === 'observadores' && (
-          <dd className="pinc-editor">
-            <ObservadoresDeAlta miembros={ob.miembros} valor={borrador.observadores || []} onChange={v => setBorrador({ observadores: v })} />
-            <div className="pinc-botones">
-              <button type="button" className="pinc-btn pinc-btn--prim" disabled={ocupado}
-                onClick={() => hacer('editar', { observadores: borrador.observadores || [] }, 'Observadores guardados')}>Guardar</button>
-              <button type="button" className="pinc-btn pinc-btn--plano" onClick={() => setEditando(null)}>Cancelar</button>
-            </div>
-          </dd>
-        )}
-        {hayClasificacion ? (
-          <>
-            <dt>Clasificación</dt>
-            <dd>
-              {clasificacion.join(' · ') || 'Sin clasificar'}
-              {interviene && editando !== 'clasificar' && (
-                <button type="button" className="pinc-enlace"
-                  onClick={() => { setBorrador({ subtipo: i.subtipo, causa_raiz: i.causa_raiz, campos: i.campos || {} }); setEditando('clasificar'); }}>
-                  {cerrada ? 'Causa raíz' : 'Editar'}</button>
-              )}
-            </dd>
-            {editando === 'clasificar' && (
-              <dd className="pinc-editor">
-                <ClasificacionDeAlta config={cerrada ? { causas: ob.config?.causas } : ob.config} tipo={i.tipo} valores={borrador} onChange={setBorrador} />
-                <div className="pinc-botones">
-                  <button type="button" className="pinc-btn pinc-btn--prim" disabled={ocupado}
-                    onClick={() => hacer('editar', cerrada ? { causa_raiz: borrador.causa_raiz } : borrador, 'Clasificación guardada')}>Guardar</button>
-                  <button type="button" className="pinc-btn pinc-btn--plano" onClick={() => setEditando(null)}>Cancelar</button>
-                </div>
-              </dd>
+          <Fila etiqueta="Verifica">{verificador || (i.tipo === 'OBSERVACION' ? autor : null) || 'Sin designar'}</Fila>
+          <Fila etiqueta="Fecha límite"><span className={vencida ? 'es-vencida' : ''}>{fechaDeDia(vence) || '—'}</span></Fila>
+          <Fila etiqueta="Tipo">{i.tipo_etiqueta || i.tipo}</Fila>
+          {(i.ubicacion || i.progresiva) && <Fila etiqueta="Ubicación">{[i.ubicacion, i.progresiva].filter(Boolean).join(' · ')}</Fila>}
+          <Fila etiqueta="Observadores" accion={<>
+            {i.estado !== 'Borrador' && (
+              <button type="button" className="pinc-enlace" disabled={ocupado}
+                onClick={() => hacer('editar', { seguir: !sigo }, sigo ? 'Ya no la sigues' : 'La sigues: te avisaremos de cada paso')}>
+                {sigo ? 'Dejar de seguir' : 'Seguir'}</button>
             )}
-          </>
-        ) : null}
-      </dl>
-
-      {extraDetalle?.(i)}
-
-      <div className="pinc-pestanas" role="tablist">
-        {[['comentarios', `Comentarios${comentarios.length ? ` ${comentarios.length}` : ''}`],
-          ['adjuntos', `Adjuntos${(i.adjuntos || []).length ? ` ${i.adjuntos.length}` : ''}`],
-          ['historial', 'Historial']].map(([k, t]) => (
-          <button key={k} type="button" role="tab" aria-selected={pestana === k} onClick={() => setPestana(k)}>{t}</button>
-        ))}
-      </div>
-
-      {pestana === 'comentarios' && (
-        <div className="pinc-hilo">
-          {comentarios.length === 0 && <p className="pinc-nota">Sin comentarios.</p>}
-          {comentarios.map((c, n) => (
-            <div key={`${c.at}-${n}`} className="pinc-comentario">
-              <div><b>{ob.nombreDeQuien(c.by)}</b><small>{fechaCorta(c.at)}</small></div>
-              <p>{c.texto}</p>
+            {dirige && editando !== 'observadores' && (
+              <button type="button" className="pinc-enlace" onClick={() => { setBorrador({ observadores: i.observadores || [] }); setEditando('observadores'); }}>Cambiar</button>
+            )}
+          </>}>
+            {(i.observadores || []).length ? i.observadores.map(u => ob.nombres[u] || `usuario ${u}`).join(', ') : 'Nadie'}
+          </Fila>
+          {editando === 'observadores' && (
+            <div className="pinc-editor">
+              <ObservadoresDeAlta miembros={ob.miembros} valor={borrador.observadores || []} onChange={v => setBorrador({ observadores: v })} />
+              <div className="pinc-botones">
+                <button type="button" className="pinc-btn pinc-btn--prim" disabled={ocupado}
+                  onClick={() => hacer('editar', { observadores: borrador.observadores || [] }, 'Observadores guardados')}>Guardar</button>
+                <button type="button" className="pinc-btn pinc-btn--plano" onClick={() => setEditando(null)}>Cancelar</button>
+              </div>
             </div>
-          ))}
+          )}
+          {hayClasificacion ? (
+            <Fila etiqueta="Clasificación" accion={interviene && editando !== 'clasificar'
+              ? <button type="button" className="pinc-enlace"
+                  onClick={() => { setBorrador({ subtipo: i.subtipo, causa_raiz: i.causa_raiz, campos: i.campos || {} }); setEditando('clasificar'); }}>
+                  {cerrada ? 'Causa raíz' : 'Editar'}</button> : null}>
+              {clasificacion.join(' · ') || 'Sin clasificar'}
+            </Fila>
+          ) : null}
+          {editando === 'clasificar' && (
+            <div className="pinc-editor">
+              <ClasificacionDeAlta config={cerrada ? { causas: ob.config?.causas } : ob.config} tipo={i.tipo} valores={borrador} onChange={setBorrador} />
+              <div className="pinc-botones">
+                <button type="button" className="pinc-btn pinc-btn--prim" disabled={ocupado}
+                  onClick={() => hacer('editar', cerrada ? { causa_raiz: borrador.causa_raiz } : borrador, 'Clasificación guardada')}>Guardar</button>
+                <button type="button" className="pinc-btn pinc-btn--plano" onClick={() => setEditando(null)}>Cancelar</button>
+              </div>
+            </div>
+          )}
+          <Fila etiqueta="Levantó">{[autor, fechaCorta(i.creado_en)].filter(Boolean).join(' · ') || '—'}</Fila>
+        </dl>
+        {extraDetalle?.(i)}
+      </section>
+
+      {i.descripcion && (
+        <section className="pinc-seccion">
+          <h4>Descripción</h4>
+          <p className="pinc-texto">{i.descripcion}</p>
+        </section>
+      )}
+
+      <section className="pinc-seccion">
+        <h4>Adjuntos <span>{(i.adjuntos || []).length || ''}</span></h4>
+        {(i.adjuntos || []).length === 0 && <p className="pinc-nota">Sin fotos ni documentos.</p>}
+        {(i.adjuntos || []).length > 0 && (
+          <ul className="pinc-minis">
+            {i.adjuntos.map(a => (
+              <Miniatura key={a.documento} entorno={entorno} adjunto={a} onAbrir={() => entorno.abrirDocumento?.(a.documento)}
+                onQuitar={!cerrada && a.por_id != null && String(a.por_id) === String(yo)
+                  ? () => hacer('adjuntar', { quitar: a.documento }, 'Adjunto quitado') : null} />
+            ))}
+          </ul>
+        )}
+        {interviene && !cerrada && (
+          <Adjuntar entorno={entorno} obra={obra} ocupado={ocupado} setOcupado={setOcupado} codigo={i.codigo}
+            onAdjunto={(a) => hacer('adjuntar', { documento: a.documento }, 'Adjuntado')} />
+        )}
+      </section>
+
+      <section className="pinc-seccion">
+        <h4>Actividad</h4>
+        <ol className="pinc-actividad">
+          {actividad.map((h, n) => {
+            const quien = ob.nombreDeQuien(h.by);
+            return (
+              <li key={`${h.at}-${n}`} className={h.event === 'commented' ? 'es-comentario' : ''}>
+                <span className="pinc-avatar" aria-hidden="true">{iniciales(quien)}</span>
+                <div>
+                  <div className="pinc-actividad__cab">
+                    <b>{quien || 'Alguien'}</b>
+                    <span>{h.event === 'commented' ? 'comentó' : (EVENTOS_DE_ISSUE[h.event] || h.event).toLowerCase()}</span>
+                    <small>{fechaCorta(h.at)}</small>
+                  </div>
+                  {(h.texto || h.motivo || h.comentario) && <p>{h.texto || h.motivo || h.comentario}</p>}
+                </div>
+              </li>
+            );
+          })}
+        </ol>
+        <div className="pinc-comentar">
           <textarea value={comentario} onChange={ev => setComentario(ev.target.value)} rows={2} maxLength={2000}
             placeholder="Escribe un comentario…"
             onKeyDown={ev => { if (ev.key === 'Enter' && (ev.ctrlKey || ev.metaKey)) { ev.preventDefault(); comentar(); } }} />
           <div className="pinc-botones">
             <button type="button" className="pinc-btn pinc-btn--prim" disabled={!comentario.trim() || ocupado} onClick={comentar}>Comentar</button>
-            <small className="pinc-nota">Quedan en el expediente: no se editan ni se borran.</small>
+            <small className="pinc-nota">Queda en el expediente: no se edita ni se borra.</small>
           </div>
         </div>
-      )}
-
-      {pestana === 'adjuntos' && (
-        <div className="pinc-hilo">
-          {(i.adjuntos || []).length === 0 && <p className="pinc-nota">Sin fotos ni documentos.</p>}
-          <ul className="pinc-adjuntos">
-            {(i.adjuntos || []).map(a => (
-              <li key={a.documento}>
-                <button type="button" className="pinc-cita" onClick={() => entorno.abrirDocumento?.(a.documento)}>{a.nombre}</button>
-                {!cerrada && a.por_id != null && String(a.por_id) === String(yo) && (
-                  <button type="button" className="pinc-quitar" aria-label={`Quitar ${a.nombre}`} disabled={ocupado}
-                    onClick={() => hacer('adjuntar', { quitar: a.documento }, 'Adjunto quitado')}>×</button>
-                )}
-              </li>
-            ))}
-          </ul>
-          {interviene && !cerrada && (
-            <Adjuntar entorno={entorno} obra={obra} ocupado={ocupado} setOcupado={setOcupado} codigo={i.codigo}
-              onAdjunto={(a) => hacer('adjuntar', { documento: a.documento }, 'Adjuntado')} />
-          )}
-        </div>
-      )}
-
-      {pestana === 'historial' && (
-        <ol className="pinc-historial">
-          {actividad.map((h, n) => (
-            <li key={`${h.at}-${n}`}>
-              <span>{EVENTOS_DE_ISSUE[h.event] || h.event}</span>
-              <small>{[ob.nombreDeQuien(h.by), fechaCorta(h.at)].filter(Boolean).join(' · ')}</small>
-              {(h.motivo || h.comentario) && <p>{h.motivo || h.comentario}</p>}
-            </li>
-          ))}
-        </ol>
-      )}
+      </section>
     </div>
   );
 }
@@ -549,6 +596,7 @@ export default function PanelDeIncidencia({ entorno, obra, issueId = null, nueva
   const ob = useObraDeIncidencias(entorno, obra);
   const [id, setId] = useState(issueId);
   const [codigo, setCodigo] = useState(null);
+  const [cargada, setCargada] = useState(null);
   useEffect(() => { setId(issueId); }, [issueId]);
   const tipoNuevo = (ob.catalogo?.tipos || []).find(t => t.codigo === nueva?.tipo);
   const cabecera = id ? (codigo || 'Incidencia') : (titulo || (tipoNuevo ? `Nueva ${tipoNuevo.etiqueta.toLowerCase()}` : 'Nueva incidencia'));
@@ -558,15 +606,18 @@ export default function PanelDeIncidencia({ entorno, obra, issueId = null, nueva
       {...AISLADO}>
       <header className="pinc-cab">
         {onVolver && <button type="button" className="pinc-icono" onClick={onVolver} aria-label="Volver"><Ico><path d="M15 6l-6 6 6 6" /></Ico></button>}
+        <PinDeIncidencia color={id && cargada ? estadoDeIssue(cargada.estado).color : '#b0aea5'}
+          numero={id && cargada ? numeroDe(cargada.codigo) : null} />
         <div className="pinc-cab__tit">
           <b>{cabecera}</b>
           {!id && nueva?.lugar && <small>{nueva.lugar}</small>}
+          {id && cargada && <small>{[cargada.tipo_etiqueta, cargada.ubicacion].filter(Boolean).join(' · ')}</small>}
         </div>
         <button type="button" className="pinc-icono" onClick={onCerrar} aria-label="Cerrar"><Ico><path d="M6 6l12 12M18 6 6 18" /></Ico></button>
       </header>
       {id ? (
         <Detalle key={id} entorno={entorno} obra={obra} ob={ob} issueId={id} extraDetalle={extraDetalle}
-          onCargada={(d) => setCodigo(d?.codigo || null)} onCambio={onCambio} />
+          onCargada={(d) => { setCodigo(d?.codigo || null); setCargada(d); }} onCambio={onCambio} />
       ) : (
         <Alta entorno={entorno} obra={obra} ob={ob} nueva={nueva || {}} crear={crear} extraAlta={extraAlta} onCerrar={onCerrar}
           onCreada={(hecha) => {

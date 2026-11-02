@@ -1,13 +1,15 @@
 // PdfToolsOverlay.jsx — Capa de ingeniería sobre PDF.js
 // Mediciones (distancia/área/conteo), anotaciones (nube, flecha, rect, lápiz, texto)
 // y calibración de escala. Geometrías en coordenadas PDF (independientes del zoom).
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useLayoutEffect } from 'react';
 import toast from 'react-hot-toast';
 import { API } from '../utils/helpers';
 import { apiFetch } from '../utils/apiFetch';
 import { PanelDeMarca, DialogoDeSello } from './MarcaConEnlace';
 import BarraDeMarca from './BarraDeMarca';
 import ObservacionesDelPlano from './ObservacionesDelPlano';
+import { PinDeIncidencia, numeroDe } from '../../../design/incidencias/PanelDeIncidencia.jsx';
+import { estadoDeIssue } from '../utils/estadosDeIssue';
 import { estadoDeObservacion, observacionViva } from '../utils/marcasConEnlace';
 import { estadoDeSello, marcaDeLaDireccion, fechaCorta } from '../utils/marcasConEnlace';
 
@@ -144,6 +146,16 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
   // OBSERVACIONES DEL PLANO (docs/archivos/18): tras un acto se vuelven a pedir las marcas (su etiqueta de
   // observación) y cuántas del plano siguen sin cerrar (el número del botón del rail).
   const [vuelta, setVuelta] = useState(0);
+  // LOS PINES (2-nov-2026, docs/archivos/21): las incidencias del plano con su punto en la hoja; el que se está
+  // levantando (fantasma, gris) y el pedido al panel del plano (abrir el alta con un pin, o una incidencia).
+  const [obsPlano, setObsPlano] = useState([]);
+  const [pinPendiente, setPinPendiente] = useState(null);
+  const [abiertaDelPlano, setAbiertaDelPlano] = useState(null);
+  const [pedidoDelPlano, setPedidoDelPlano] = useState(null);
+  const pedirAlPlano = (vista, pin = null) => {
+    setPedidoDelPlano(p => ({ vista, pin, n: (p?.n || 0) + 1 }));
+    onPanelDelPlano?.(true);
+  };
   const avisarDelPlano = useRef(onObservacionesDelPlano);
   avisarDelPlano.current = onObservacionesDelPlano;
   // LAS MARCAS SON DE LA VERSIÓN QUE SE MIRA (migración 36). Sin versión (enlace compartido, banco viejo),
@@ -184,7 +196,9 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
         const lista = Array.isArray(d.markups) ? d.markups : [];
         setMarkups(lista);
         setEnOtras(Array.isArray(d.en_otras_versiones) ? d.en_otras_versiones : []);
-        avisarDelPlano.current?.((d.observaciones_del_plano || []).filter(o => observacionViva(o)).length);
+        const delPlano = Array.isArray(d.observaciones_del_plano) ? d.observaciones_del_plano : [];
+        setObsPlano(delPlano);
+        avisarDelPlano.current?.(delPlano.filter(o => observacionViva(o)).length);
         // Llegada desde «Citado en»: la marca pedida se abre en su panel (PDFViewer ya fue a su página).
         const pedida = marcaPedida.current;
         if (pedida && lista.some(m => String(m.id) === String(pedida))) setElegida(Number(pedida) || pedida);
@@ -195,9 +209,22 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
     return () => { vigente = false; };
   }, [nodeId, versionId, vuelta]);
 
+  // Píxeles del dibujado por píxel de pantalla: la capa se estira al tamaño de la hoja. Lo usan los pines, que miden
+  // lo mismo en pantalla a cualquier zoom. Se mide tras colocar la capa y solo se guarda si cambia.
+  const [porPixel, setPorPixel] = useState(1);
+  useLayoutEffect(() => {
+    const ancho = svgRef.current?.getBoundingClientRect().width;
+    if (!ancho || !vpInfo?.w) return;
+    const k = vpInfo.w / ancho;
+    setPorPixel(prev => (Math.abs(prev - k) > 0.01 ? k : prev));
+  });
+
   // El panel de una marca y el del plano ocupan el mismo costado: abrir uno cierra el otro.
   useEffect(() => { if (elegida != null) onPanelDelPlano?.(false); }, [elegida]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { if (panelDelPlano) setElegida(null); }, [panelDelPlano]);
+  useEffect(() => {
+    if (panelDelPlano) setElegida(null);
+    else { setPinPendiente(null); setAbiertaDelPlano(null); setPedidoDelPlano(null); }
+  }, [panelDelPlano]);
 
   // ── Transformaciones ──
   const toPdf = useCallback((e) => {
@@ -380,6 +407,14 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
     const p = toPdf(e);
 
     if (tool === 'count') { saveMarkup('count', { p }); return; }
+    // Incidencia: el pin se pone donde está el problema y el panel se abre en el alta (como la foto).
+    if (tool === 'issue') {
+      setTool('pan');
+      const pin = { pagina: page, p: [Math.round(p[0] * 100) / 100, Math.round(p[1] * 100) / 100] };
+      setPinPendiente(pin);
+      pedirAlPlano('nueva', pin);
+      return;
+    }
     // Foto: el marcador se pone y se abre su panel para subir o elegir las fotos.
     if (tool === 'photo') {
       setTool('pan');
@@ -485,6 +520,8 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
           version={{ id: versionId || vigenteId, numero: versionDeLasMarcas?.version_number ?? versionVigente?.version_number }}
           // Las que esta persona ve de esta versión: publicadas o suyas, ya guardadas.
           marcas={markups.filter(m => !String(m.id).startsWith('tmp_') && (m.publicado || m.created_by === userName))}
+          pedido={pedidoDelPlano} onPinPendiente={setPinPendiente} onAbierta={setAbiertaDelPlano}
+          onIrAPin={(pin) => onIrAPagina?.(pin.pagina)}
           onCambio={() => setVuelta(v => v + 1)}
           onIrAMarca={(m) => { onIrAPagina?.(m.page); setElegida(m.id); }}
           onCerrar={() => onPanelDelPlano?.(false)} />
@@ -800,6 +837,38 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
     );
   });
 
+  // LOS PINES DE LAS INCIDENCIAS, encima de todo. Tamaño fijo en pantalla (como ACC), con la punta en el punto;
+  // el color es el de su estado y el número el de su código. En la versión vigente se ven todos (la incidencia
+  // sigue al plano); en una anterior, solo los que se clavaron en ella. Clic: se abre en el panel.
+  const renderPines = () => {
+    const T = 34 * porPixel;   // caja de 34 px de pantalla: el pin visible mide ~18 × 26 px
+    const pines = obsPlano.filter(o => o.pin && o.pin.pagina === page && Array.isArray(o.pin.p)
+      && (enVigente || !o.version_id || String(o.version_id) === String(versionId)));
+    const uno = (key, p, color, numero, extra = {}) => {
+      const s = toScr(p);
+      return (
+        <PinDeIncidencia key={key} x={s[0] - T / 2} y={s[1] - T * (21 / 24)} tamano={T} color={color} numero={numero} {...extra} />
+      );
+    };
+    return (
+      <g>
+        {pines.map(o => {
+          const abierta = String(abiertaDelPlano) === String(o.id);
+          return (
+            <g key={o.id} style={{ cursor: 'pointer' }} pointerEvents="all"
+              onPointerDown={e => e.stopPropagation()} onMouseDown={e => e.stopPropagation()}
+              onClick={e => { e.stopPropagation(); pedirAlPlano(o.id); }}>
+              <title>{`${o.codigo} · ${estadoDeIssue(o.estado).etiqueta} · ${o.titulo || ''}`}</title>
+              {abierta && (() => { const s = toScr(o.pin.p); return <circle cx={s[0]} cy={s[1] - T * (10.8 / 24)} r={T * 0.4} fill="none" stroke="#141413" strokeWidth="1.5" />; })()}
+              {uno(o.id, o.pin.p, estadoDeIssue(o.estado).color, numeroDe(o.codigo))}
+            </g>
+          );
+        })}
+        {pinPendiente && pinPendiente.pagina === page && uno('nuevo', pinPendiente.p, '#72706b', null)}
+      </g>
+    );
+  };
+
   const marcaElegida = elegida != null ? markups.find(m => m.id === elegida) : null;
   const interactive = tool !== 'pan';
   return (
@@ -825,6 +894,7 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
         {renderEnlaces()}
         {renderTiradores()}
         {renderDraft()}
+        {renderPines()}
       </svg>
 
       {/* MARCAS DE OTRAS VERSIONES (36): en la vigente, cuántas hay en las anteriores y un salto para verlas;

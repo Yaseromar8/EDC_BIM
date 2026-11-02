@@ -7,7 +7,10 @@
  * (design/incidencias/PanelDeIncidencia.jsx). Lo propio del plano es esta lista, y elegir sus marcas al crearla.
  *
  *   GET  /api/pdf/planos/<plano>/observacion          las del plano (un borrador ajeno no se ve)
- *   POST /api/pdf/planos/<plano>/observacion          levantarla (o `borrador: true`), con sus marcas
+ *   POST /api/pdf/planos/<plano>/observacion          levantarla (o `borrador: true`), con sus marcas y su pin
+ *
+ * EL PIN (2-nov-2026, docs/archivos/21): con la herramienta «Incidencia» se hace clic en la hoja y el panel se abre
+ * ya en el alta, con ese punto; el lector lo pide con `pedido` ({ vista, pin, n }) y dibuja el pin mientras dure.
  */
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -17,7 +20,8 @@ import { estadoDeIssue, issueViva } from '../utils/estadosDeIssue';
 import { fechaDeDia, observacionViva } from '../utils/marcasConEnlace';
 import { exportarExcel, exportarPdf, filasDelInforme } from '../utils/informeDeIncidencias';
 import IncidenciaLateral from './IncidenciaLateral';
-import { AISLADO } from '../../../design/incidencias/PanelDeIncidencia.jsx';
+import IconoModulo from './IconoModulo';
+import { AISLADO, PinDeIncidencia, numeroDe } from '../../../design/incidencias/PanelDeIncidencia.jsx';
 
 const NOMBRE_DE_TIPO = {
   foto: 'Foto', sello: 'Sello', cloud: 'Nube', arrow: 'Flecha', text: 'Texto', measure: 'Medición',
@@ -27,9 +31,6 @@ const NOMBRE_DE_TIPO = {
 const Ico = ({ children }) => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"
     strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{children}</svg>
-);
-export const IconoObservaciones = (
-  <><path d="M5 4h14v12H9l-4 4z" /><path d="M9 8h6" /><path d="M9 11h4" /></>
 );
 
 export function destinoDelLector() {
@@ -83,6 +84,7 @@ function FilaDelPlano({ o, onAbrir }) {
     <li>
       <button type="button" className="obp-fila" onClick={onAbrir}>
         <span className="obp-fila__cab">
+          <PinDeIncidencia color={e.color} tamano={20} numero={numeroDe(o.codigo)} />
           <span className="mce-obs-estado" style={{ '--estado': e.color }}><i />{e.etiqueta}</span>
           <b>{o.codigo}</b>
           {o.vencida && <span className="mce-obs-vencida">Vencida</span>}
@@ -90,18 +92,32 @@ function FilaDelPlano({ o, onAbrir }) {
         <span className="obp-fila__tit">{o.titulo}</span>
         <small>
           {[o.responsable, o.vence_en ? fechaDeDia(o.vence_en) : null, o.version_numero ? `V${o.version_numero}` : null,
-            n ? `${n} marca${n === 1 ? '' : 's'}` : 'plano entero'].filter(Boolean).join(' · ')}
+            o.pin ? `pág. ${o.pin.pagina}` : null,
+            n ? `${n} marca${n === 1 ? '' : 's'}` : (o.pin ? null : 'plano entero')].filter(Boolean).join(' · ')}
         </small>
       </button>
     </li>
   );
 }
 
-export default function ObservacionesDelPlano({ API, obra, nodeId, nombre = '', version, marcas = [], onCambio, onIrAMarca, onCerrar }) {
+export default function ObservacionesDelPlano({ API, obra, nodeId, nombre = '', version, marcas = [], pedido = null,
+  onCambio, onIrAMarca, onIrAPin, onPinPendiente, onAbierta, onCerrar }) {
   const [lista, setLista] = useState(null);
-  const [vista, setVista] = useState('lista');          // 'lista' | 'nueva' | id de una observación
+  const [vista, setVista] = useState(pedido?.vista ?? 'lista');   // 'lista' | 'nueva' | id de una observación
+  const [pin, setPin] = useState(pedido?.pin || null);             // el punto de la hoja de la que se levanta
   const libres = useMemo(() => marcas.filter(m => !observacionViva(m.observacion)), [marcas]);
-  const [elegidas, setElegidas] = useState(() => new Set(libres.map(m => m.id)));
+  // Con pin se señala UN sitio: no se le cuelgan todas las marcas libres por defecto.
+  const [elegidas, setElegidas] = useState(() => new Set(pedido?.pin ? [] : libres.map(m => m.id)));
+  // Un pedido nuevo del lector (otro clic con «Incidencia», o un pin de la hoja) manda sobre lo que se mostraba.
+  useEffect(() => {
+    if (!pedido) return;
+    setVista(pedido.vista);
+    setPin(pedido.pin || null);
+    if (pedido.vista === 'nueva') setElegidas(new Set(pedido.pin ? [] : libres.map(m => m.id)));
+  }, [pedido?.n]); // eslint-disable-line react-hooks/exhaustive-deps
+  // El pin fantasma de la hoja dura lo que dura el alta.
+  useEffect(() => { onPinPendiente?.(vista === 'nueva' ? pin : null); }, [vista, pin]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { onAbierta?.(vista === 'lista' || vista === 'nueva' ? null : vista); }, [vista]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const cargar = useCallback(async () => {
     try {
@@ -127,7 +143,7 @@ export default function ObservacionesDelPlano({ API, obra, nodeId, nombre = '', 
   const crearDelPlano = async (cuerpo) => {
     const r = await apiFetch(`${API}/api/pdf/planos/${nodeId}/observacion`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...cuerpo, version_id: version?.id || undefined, marcas: [...elegidas] }),
+      body: JSON.stringify({ ...cuerpo, version_id: version?.id || undefined, marcas: [...elegidas], ...(pin ? { pin } : {}) }),
     });
     const d = await r.json().catch(() => ({}));
     if (!r.ok || !d.success) throw new Error(d.error || 'No se pudo crear.');
@@ -141,14 +157,29 @@ export default function ObservacionesDelPlano({ API, obra, nodeId, nombre = '', 
       <IncidenciaLateral API={API} obra={obra} contenedor={destinoDelLector()} onVolver={() => setVista('lista')}
         issueId={vista === 'nueva' ? null : vista}
         nueva={vista === 'nueva' ? { tipo: 'OBSERVACION', lugar: [nombre, version?.numero ? `V${version.numero}` : null].filter(Boolean).join(' · ') } : null}
-        titulo="Nueva observación del plano"
+        titulo={pin ? 'Nueva incidencia' : 'Nueva incidencia del plano'}
         crear={crearDelPlano}
-        extraAlta={<MarcasDeLaVersion version={version} marcas={marcas} elegidas={elegidas} setElegidas={setElegidas} />}
+        extraAlta={<>
+          {pin && (
+            <div className="pinc-campo">
+              <span className="pinc-campo__cab">Pin en la hoja
+                <button type="button" className="pinc-enlace" onClick={() => setPin(null)}>Quitar</button></span>
+              <small>Página {pin.pagina}: el pin queda donde hiciste clic.</small>
+            </div>
+          )}
+          <MarcasDeLaVersion version={version} marcas={marcas} elegidas={elegidas} setElegidas={setElegidas} />
+        </>}
         extraDetalle={(i) => {
           const ids = (i.evidencia || []).filter(e => e && e.tipo === 'marca' && e.marca != null).map(e => e.marca);
-          if (!ids.length) return i.origen_tipo === 'PLANO' ? <p className="pinc-nota">Observación del plano entero.</p> : null;
+          const suPin = ((i.evidencia || []).find(e => e && e.tipo === 'plano') || {}).pin;
+          const irAlPin = suPin ? (
+            <p className="pinc-nota">Pin en la página {suPin.pagina} ·{' '}
+              <button type="button" className="pinc-cita" onClick={() => onIrAPin?.(suPin)}>Ver en el plano</button></p>
+          ) : null;
+          if (!ids.length) return irAlPin || (i.origen_tipo === 'PLANO' ? <p className="pinc-nota">Observación del plano entero.</p> : null);
           return (
             <div className="pinc-campo">
+              {irAlPin}
               <span>Marcas</span>
               <ul className="pinc-adjuntos">
                 {ids.map(id => {
@@ -164,7 +195,8 @@ export default function ObservacionesDelPlano({ API, obra, nodeId, nombre = '', 
             </div>
           );
         }}
-        onCreada={tras} onCambio={tras} onCerrar={onCerrar} />
+        onCreada={(hecha) => { tras(); if (hecha?.id) { setPin(null); setVista(hecha.id); } }}
+        onCambio={tras} onCerrar={onCerrar} />
     );
   }
 
@@ -174,9 +206,9 @@ export default function ObservacionesDelPlano({ API, obra, nodeId, nombre = '', 
   return createPortal(
     <aside className="mce-panel" aria-label="Observaciones del plano" {...AISLADO}>
       <header className="mce-panel__cab">
-        <span className="mce-panel__ico"><Ico>{IconoObservaciones}</Ico></span>
+        <span className="mce-panel__ico"><IconoModulo nombre="incidencia" tamano={20} /></span>
         <div className="mce-panel__tit">
-          <b>Observaciones del plano</b>
+          <b>Incidencias del plano</b>
           <small>{vivas.length ? `${vivas.length} sin cerrar` : 'Ninguna sin cerrar'}{version?.numero ? ` · vigente V${version.numero}` : ''}</small>
         </div>
         <button type="button" className="mce-icono" onClick={onCerrar} aria-label="Cerrar">
@@ -186,12 +218,12 @@ export default function ObservacionesDelPlano({ API, obra, nodeId, nombre = '', 
 
       <div className="mce-panel__cuerpo">
         <section className="mce-sec">
-          <p className="mce-vacio">Una sola observación para todo el plano: con responsable, estado y fecha límite,
-            y las marcas que elijas de esta versión.</p>
+          <p className="mce-vacio">Con la herramienta «Incidencia» (I) haz clic donde está el problema: queda un pin en la
+            hoja. O levanta una para el plano entero, con las marcas que elijas de esta versión.</p>
           <div className="mce-acciones">
             <button type="button" className="mce-btn mce-btn--prim"
-              onClick={() => { setElegidas(new Set(libres.map(m => m.id))); setVista('nueva'); }}>
-              Nueva observación del plano</button>
+              onClick={() => { setPin(null); setElegidas(new Set(libres.map(m => m.id))); setVista('nueva'); }}>
+              Nueva incidencia del plano</button>
             {(lista || []).length > 0 && (
               <>
                 <button type="button" className="mce-btn mce-btn--sec" onClick={() => informe('pdf')}>Informe PDF</button>

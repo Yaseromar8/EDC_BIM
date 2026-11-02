@@ -32,6 +32,9 @@ export function useEntornoDocs({ API = API_DOCS, user = null, project = null } =
     pedir: apiFetch,
     avisar: { ok: (m) => toast.success(m), error: (m) => toast.error(m) },
     abrirDocumento: (id) => abrirDocumento(id),
+    // La miniatura de una foto adjunta: la misma que la galería (proxy del documento con `thumb=1`).
+    miniatura: (id) => apiFetch(`${API}/api/docs/proxy?id=${encodeURIComponent(id)}&thumb=1`)
+      .then(r => (r.ok ? r.blob() : null)),
     subirFoto: (obra, f, descripcion) => subirFoto(API, obra, f, descripcion),
     ElegirDocumento: ({ obra, titulo, ayuda, onElegir, onCerrar }) => (
       <SelectorDeDocumento API={API} project={{ id: obra, model_urn: obra }} titulo={titulo} ayuda={ayuda}

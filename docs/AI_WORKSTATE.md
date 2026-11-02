@@ -1,19 +1,22 @@
 # AI_WORKSTATE.md — estado y antecedentes
 
-## 2-nov-2026 · INCIDENCIAS COMO ACC: ESTADOS, PANEL ÚNICO, MENÚ DE LA MARCA (commit local, sin push)
+## 2-nov-2026 · INCIDENCIAS COMO ACC: ESTADOS, PANEL ÚNICO, MENÚ DE LA MARCA, PIN EN LA HOJA
 
-Todo en `docs/archivos/18`, `19` y `20`. **Necesita la migración 45** (aplicarla como `ecd_migrator` ANTES del
-backend). CODE BASELINE HEAD sigue siendo `fbd7f799` (nada desplegado).
-- **18:** estados de ACC (Borrador, En curso, En disputa…), observación del plano entero, empresa responsable,
-  observadores, adjuntos, subtipo/causa raíz/campos propios por obra, informe Excel/PDF.
-- **19:** panel lateral único de incidencia en `design/incidencias/` (compartido Docs/View); en el lector, Issues y
-  punch y tableros. Fases 2 (resto de Docs) y 3 (View 3D) pendientes.
-- **20:** al elegir una marca, menú junto a ella como ACC (no panel; solo foto e incidencia tienen panel); nube con
-  festones a escala del plano, grosor, relleno, triángulo de revisión y nube poligonal.
-- **Pruebas:** suite backend (ver el commit), ensayo PostgreSQL real 67/67, node 7/7 y 11/11, build.
-- **Sin verificar en pantalla:** el menú de la marca y la nube nueva (el panel del navegador estaba oculto).
-- EXACT NEXT ACTION: ver en el banco (`probar-plano.html`, servidor `servidor_banco_plano.py` en 5196) el menú de la
-  marca y la nube; luego el dueño decide publicar (45 → backend → portal) o seguir con la fase 2.
+Detalle en `docs/archivos/18`, `19`, `20` y `21`.
+- `bb7c48fc` (estados de ACC, panel único, menú de la marca, nube): migración 45 aplicada por el dueño, backend y portal
+  DESPLEGADOS (health `bb7c48fcd91a`).
+- `43d529d5` (el panel y el menú de la marca atienden sus propios clics; tokens; iconos a 20 px): solo frontend,
+  empujado; el despliegue del portal lo hace el dueño.
+- Commit siguiente (21, pin en la hoja + panel como ACC): herramienta «Incidencia» (I) en lugar de «Contar», pin
+  numerado con el color del estado, clic en un pin abre la incidencia; detalle por secciones (Detalles en filas,
+  Adjuntos con miniatura, una sola Actividad). El pin va en la evidencia `plano` de la incidencia: SIN migración.
+  Toca backend (`routes/pdf_tools.py` acepta y devuelve `pin`) y portal.
+- **Pruebas:** suite backend 2582 pasan + 1 fallo previo ajeno (`test_reconstruccion_desde_cero`: el bootstrap no
+  tiene las tablas de tableros); node 7/7 y 11/11; build de Docs. Banco con la hoja dibujada y clics reales: crear con
+  pin, pin en su sitio, abrir desde el pin.
+- EXACT NEXT ACTION: Manual Deploy de `visor-ecd-backend-va` y DESPUÉS de `visor-ecd-portal` con el HEAD de main;
+  comprobar `/api/health` y el bundle del portal (Cloudflare ~5 min). Luego, recorrido real con dos personas (correo
+  a observadores y subida de fotos sin probar en producción).
 
 ## ESTADO OPERATIVO ACTUAL — 14-oct-2026 (tarde-noche) · CAÍDAS POR MEMORIA + PUBLICACIÓN DE LO DE PROCORE
 
