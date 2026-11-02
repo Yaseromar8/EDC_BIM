@@ -7,6 +7,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ChipDeEstado, ChipDeTipo } from '../PunchModule';
 import { COLUMNAS, fechaCorta, vencida } from './incidencias';
+import { estadoDeIssue } from '../../utils/estadosDeIssue';
 
 const GRIS = '#72706B', LINEA = '#ECEAE2', TINTA = '#141413';
 const COLS = '36px 104px minmax(0,1fr) 110px 150px 140px 110px';
@@ -53,7 +54,7 @@ export default function SelectorIncidencias({ incidencias, catalogo, nombres, on
             style={{ flex: 1, height: 32, padding: '0 10px', border: '1px solid #D9D7CD', borderRadius: 6, fontSize: 13, fontFamily: 'inherit', outline: 'none' }} />
           <select value={estado} onChange={e => setEstado(e.target.value)} aria-label="Filtrar por estado" style={selector}>
             <option value="">Todos los estados</option>
-            {[...COLUMNAS, 'Anulado'].map(e => <option key={e} value={e}>{e}</option>)}
+            {[...COLUMNAS, 'Anulado'].map(e => <option key={e} value={e}>{estadoDeIssue(e).etiqueta}</option>)}
           </select>
           <select value={tipo} onChange={e => setTipo(e.target.value)} aria-label="Filtrar por tipo" style={selector}>
             <option value="">Todos los tipos</option>

@@ -16,6 +16,7 @@ import { planDeVecinas } from '../utils/vecinasDelLector';
 import { aplanarIndice } from '../utils/lectorDePlanos';
 import { marcaDeLaDireccion } from '../utils/marcasConEnlace';
 import CapaMosaico from './CapaMosaico';
+import { IconoObservaciones } from './ObservacionesDelPlano';
 import { fuenteRemota } from '../utils/mosaicoRemoto';
 import {
   PASO_DE_TECLADO, pasoDeRueda, suavizar, limitesDeZoom, objetivoDelZoom,
@@ -183,6 +184,9 @@ const GRUPOS_DE_HERRAMIENTAS = [
       // La nube de revisión de siempre: un rectángulo de festones iguales (3 × 2), grandes para que se lean a 18 px.
       icon: <path d="M4.5 7a2.5 2.5 0 0 1 5 0a2.5 2.5 0 0 1 5 0a2.5 2.5 0 0 1 5 0a2.5 2.5 0 0 1 0 5a2.5 2.5 0 0 1 0 5a2.5 2.5 0 0 1-5 0a2.5 2.5 0 0 1-5 0a2.5 2.5 0 0 1-5 0a2.5 2.5 0 0 1 0-5a2.5 2.5 0 0 1 0-5z"/>,
       hint: 'Clic en una esquina y clic en la opuesta' },
+    { id: 'cloudpoly', etiqueta: 'Nube poligonal', title: 'Nube de revisión poligonal',
+      icon: <path d="M5 8a2.4 2.4 0 0 1 4.3-1.6A2.4 2.4 0 0 1 14 5.6a2.4 2.4 0 0 1 4.4 1.9a2.4 2.4 0 0 1 .8 4.6a2.4 2.4 0 0 1-2.3 3.9a2.4 2.4 0 0 1-4.3 2.4a2.4 2.4 0 0 1-4.5-.6A2.4 2.4 0 0 1 5 13.4a2.4 2.4 0 0 1 0-5.4z"/>,
+      hint: 'Clic en cada vértice · doble clic cierra la nube' },
     { id: 'arrow', etiqueta: 'Flecha', title: 'Flecha',
       icon: <><path d="M5 19 18 6"/><path d="M18 6h-6.5M18 6v6.5"/></>,
       hint: 'Clic en el origen y clic en la punta' },
@@ -222,12 +226,12 @@ const HERRAMIENTA = Object.fromEntries(GRUPOS_DE_HERRAMIENTAS.flatMap(g => g.ite
 const ICONO_SELECCIONAR = <path d="M6 4l12 7-5.5 1.2L10 18z" />;
 const NOMBRE_COMPACTO = { pan: 'Seleccionar y mover', measure: 'Distancia' };
 const nombreDe = (id) => NOMBRE_COMPACTO[id] || HERRAMIENTA[id]?.etiqueta || id;
-const TECLA = { pan: 'V', measure: 'M', area: 'A', count: 'K', cloud: 'C', arrow: 'F', text: 'T', stamp: 'S', photo: 'P' };
+const TECLA = { pan: 'V', measure: 'M', area: 'A', count: 'K', cloud: 'C', cloudpoly: 'N', arrow: 'F', text: 'T', stamp: 'S', photo: 'P' };
 const HERRAMIENTA_POR_TECLA = Object.fromEntries(Object.entries(TECLA).map(([id, k]) => [k.toLowerCase(), id]));
 const ESTUCHE_COMPACTO = [
   [{ grupo: 'ver', variantes: ['pan'] }],
   [{ grupo: 'medir', nombre: 'Medir', variantes: ['measure', 'area', 'count'] },
-    { grupo: 'marcar', nombre: 'Marcar', variantes: ['cloud', 'arrow'] },
+    { grupo: 'marcar', nombre: 'Marcar', variantes: ['cloud', 'cloudpoly', 'arrow'] },
     { grupo: 'texto', variantes: ['text'] }],
   [{ grupo: 'sello', variantes: ['stamp'] }, { grupo: 'foto', variantes: ['photo'] }],
 ];
@@ -441,6 +445,19 @@ function cronoFin(extra) {
   cronoMarca('total');
   console.info('[lector]', _crono.doc || '', _crono.marcas.join('  ·  '), extra || '');
   _crono.t0 = 0;
+}
+
+// Una observación para el plano entero (docs/archivos/18). El número: las del plano que siguen sin cerrar.
+function BotonObservacionesDelPlano({ activo, cuantas, onClick }) {
+  return (
+    <button type="button" className="pdf-rail-btn pdf-rail-btn--obs" aria-pressed={activo}
+      aria-label="Observaciones del plano" data-tip="Observaciones del plano" title="Observaciones del plano"
+      onClick={onClick}>
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+        strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">{IconoObservaciones}</svg>
+      {cuantas > 0 && <span className="pdf-rail-btn__num">{cuantas > 99 ? '99+' : cuantas}</span>}
+    </button>
+  );
 }
 
 export default function PDFViewer({ url, preparando = false,
@@ -918,6 +935,10 @@ export default function PDFViewer({ url, preparando = false,
 
   // Herramientas de ingeniería (overlay)
   const [tool, setTool] = useState('pan');
+  // OBSERVACIONES DEL PLANO (docs/archivos/18): el panel lo pinta PdfToolsOverlay; el botón está en el rail.
+  const [panelDelPlano, setPanelDelPlano] = useState(false);
+  const [obsDelPlano, setObsDelPlano] = useState(0);
+  useEffect(() => { setPanelDelPlano(false); setObsDelPlano(0); }, [nodeId]);
   const [markupColor, setMarkupColor] = useState(COLORS[0]);
   // Estuche compacto: la última variante de cada familia y el desplegable abierto (uno a la vez).
   const [variante, setVariante] = useState({ medir: 'measure', marcar: 'cloud' });
@@ -2529,7 +2550,9 @@ export default function PDFViewer({ url, preparando = false,
                   <PdfToolsOverlay vpInfo={vpInfo} page={currentPage} nodeId={nodeId}
                     projectPrefix={projectPrefix} tool={tool} setTool={setTool}
                     color={markupColor} userName={userName}
-                    versionDeLasMarcas={versionDeLasMarcas} versionVigente={versionVigente} onIrAVersion={onIrAVersion} />
+                    versionDeLasMarcas={versionDeLasMarcas} versionVigente={versionVigente} onIrAVersion={onIrAVersion}
+                    panelDelPlano={panelDelPlano} onPanelDelPlano={setPanelDelPlano} onIrAPagina={goToPage}
+                    onObservacionesDelPlano={setObsDelPlano} nombreDelDocumento={fileName} />
                 )}
               </div>
             </div>
@@ -2584,6 +2607,10 @@ export default function PDFViewer({ url, preparando = false,
                   ))}
                 </div>
               ))}
+              <div className="pdf-rail__group">
+                <BotonObservacionesDelPlano activo={panelDelPlano} cuantas={obsDelPlano}
+                  onClick={() => { setDesplegable(null); setColorOpen(false); setPanelDelPlano(v => !v); }} />
+              </div>
               <div className="pdf-rail__group">
                 <span className="pdf-estuche__celda">
                   <button type="button" className="pdf-swatch" aria-label="Color de la marca" data-tip="Color de la marca"
@@ -2647,6 +2674,10 @@ export default function PDFViewer({ url, preparando = false,
                   )}
                 </div>
               ))}
+              <div className="pdf-rail__group">
+                <BotonObservacionesDelPlano activo={panelDelPlano} cuantas={obsDelPlano}
+                  onClick={() => setPanelDelPlano(v => !v)} />
+              </div>
             </div>
         )}
 

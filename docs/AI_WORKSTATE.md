@@ -1,5 +1,20 @@
 # AI_WORKSTATE.md — estado y antecedentes
 
+## 2-nov-2026 · INCIDENCIAS COMO ACC: ESTADOS, PANEL ÚNICO, MENÚ DE LA MARCA (commit local, sin push)
+
+Todo en `docs/archivos/18`, `19` y `20`. **Necesita la migración 45** (aplicarla como `ecd_migrator` ANTES del
+backend). CODE BASELINE HEAD sigue siendo `fbd7f799` (nada desplegado).
+- **18:** estados de ACC (Borrador, En curso, En disputa…), observación del plano entero, empresa responsable,
+  observadores, adjuntos, subtipo/causa raíz/campos propios por obra, informe Excel/PDF.
+- **19:** panel lateral único de incidencia en `design/incidencias/` (compartido Docs/View); en el lector, Issues y
+  punch y tableros. Fases 2 (resto de Docs) y 3 (View 3D) pendientes.
+- **20:** al elegir una marca, menú junto a ella como ACC (no panel; solo foto e incidencia tienen panel); nube con
+  festones a escala del plano, grosor, relleno, triángulo de revisión y nube poligonal.
+- **Pruebas:** suite backend (ver el commit), ensayo PostgreSQL real 67/67, node 7/7 y 11/11, build.
+- **Sin verificar en pantalla:** el menú de la marca y la nube nueva (el panel del navegador estaba oculto).
+- EXACT NEXT ACTION: ver en el banco (`probar-plano.html`, servidor `servidor_banco_plano.py` en 5196) el menú de la
+  marca y la nube; luego el dueño decide publicar (45 → backend → portal) o seguir con la fase 2.
+
 ## ESTADO OPERATIVO ACTUAL — 14-oct-2026 (tarde-noche) · CAÍDAS POR MEMORIA + PUBLICACIÓN DE LO DE PROCORE
 
 Render reinició `visor-ecd-backend-va` tres veces (15:15, 15:20 y 15:21, hora de Lima; «Ran out of memory, used over

@@ -160,6 +160,8 @@ RUTAS_POR_RECURSO = {
     'tablero': ('tableros', 'tid'),
     'miembros_del_tablero': ('tableros', 'tid'),     # sus miembros (docs/visor/66)
     'graficas_del_tablero': ('tableros', 'tid'),     # gráficas que llegan de View (docs/visor/68)
+    # La observación del plano entero solo trae el id del documento (docs/archivos/18).
+    'observacion_del_plano': ('file_nodes', 'node_id'),
 }
 
 

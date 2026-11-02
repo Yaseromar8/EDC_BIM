@@ -66,13 +66,42 @@ def test_los_tipos_son_una_lista_CERRADA():
 
 
 def test_el_ciclo_es_detectar_corregir_verificar():
+    """Desde la 45 (2-nov-2026) con los estados de ACC: Borrador, En curso y En disputa
+    se suman; los códigos de antes NO cambian (hay historial escrito con ellos)."""
     import flujo_de_issue as iss
-    assert iss.ESTADOS == ('Abierto', 'Corregido', 'Verificado', 'Reabierto', 'Anulado')
-    assert iss.TRANSICIONES['Abierto'] == ('Corregido', 'Anulado')
+    assert iss.ESTADOS == ('Borrador', 'Abierto', 'En curso', 'En disputa', 'Corregido',
+                           'Verificado', 'Reabierto', 'Anulado')
+    assert iss.TRANSICIONES['Borrador'] == ('Abierto', 'Anulado')
+    assert iss.TRANSICIONES['Abierto'] == ('En curso', 'Corregido', 'En disputa', 'Anulado')
+    assert iss.TRANSICIONES['En curso'] == ('Corregido', 'En disputa', 'Anulado')
+    # En disputa NO se corrige ni se cierra sola: quien la levantó la reafirma o la anula.
+    assert iss.TRANSICIONES['En disputa'] == ('Abierto', 'Anulado')
     assert iss.TRANSICIONES['Corregido'] == ('Verificado', 'Reabierto')
-    assert iss.TRANSICIONES['Reabierto'] == ('Corregido', 'Anulado')
+    assert iss.TRANSICIONES['Reabierto'] == ('En curso', 'Corregido', 'En disputa', 'Anulado')
     # Verificado es terminal: un defecto nuevo es un issue nuevo.
     assert iss.TRANSICIONES['Verificado'] == ()
+    # Verificar sigue siendo el ÚNICO camino a Verificado: nada salta la revisión.
+    assert [e for e, d in iss.TRANSICIONES.items() if 'Verificado' in d] == ['Corregido']
+
+
+def test_los_estados_son_los_del_CHECK_de_la_45():
+    import flujo_de_issue as iss
+    m45 = io.open(os.path.join(RAIZ, 'sql', '45_estados_de_issue.sql'), encoding='utf-8').read()
+    check = re.search(r"CHECK \(estado IN \(([^)]*)\)\)", m45)
+    assert check, 'la 45 debe volver a poner ck_issues_estado'
+    assert set(re.findall(r"'([^']+)'", check.group(1))) == set(iss.ESTADOS)
+    opc = re.search(r"opcionales <@ ARRAY\[([^\]]*)\]", m45)
+    assert set(re.findall(r"'([^']+)'", opc.group(1))) == set(iss.OPCIONALES)
+
+
+def test_las_etiquetas_son_las_de_ACC():
+    import flujo_de_issue as iss
+    assert set(iss.ETIQUETAS) == set(iss.ESTADOS)
+    assert (iss.etiqueta_estado('Corregido'), iss.etiqueta_estado('Reabierto'),
+            iss.etiqueta_estado('Verificado')) == ('En revisión', 'No aprobada', 'Cerrada')
+    assert iss.opcional_apagado('En curso', ['En disputa'])
+    assert not iss.opcional_apagado('En curso', None)          # sin configurar: todos encendidos
+    assert not iss.opcional_apagado('Corregido', [])           # los de siempre no se apagan
 
 
 # ══ LA INVARIANTE DEL OBJETO ═══════════════════════════════════════════════
@@ -209,8 +238,11 @@ def test_un_PUNCH_exige_ubicacion_y_responsable():
     import flujo_de_issue as iss
     assert iss.PUNCH in iss.EXIGEN_UBICACION
     assert iss.PUNCH in iss.EXIGEN_RESPONSABLE
-    cuerpo = _rutas().split('def crear')[1].split('\ndef ')[0]
-    assert 'SIN_UBICACION' in cuerpo and 'SIN_RESPONSABLE' in cuerpo
+    # Lo exige `_falta_para_enviar`, que llaman el alta (salvo un borrador, 45) y `enviar`.
+    falta = _rutas().split('def _falta_para_enviar')[1].split('\ndef ')[0]
+    assert 'SIN_UBICACION' in falta and 'SIN_RESPONSABLE' in falta
+    for acto in ('crear', 'enviar'):
+        assert '_falta_para_enviar(' in _rutas().split('def %s(' % acto)[1].split('\ndef ')[0]
 
 
 def test_una_observacion_de_calidad_NO_exige_ubicacion():
@@ -387,8 +419,8 @@ def test_la_pelota_de_CORREGIDO_va_al_verificador_designado():
 def test_un_PUNCH_exige_verificador_designado():
     import flujo_de_issue as iss
     assert iss.PUNCH in iss.EXIGEN_VERIFICADOR
-    cuerpo = _rutas().split('def crear')[1].split('\\ndef ')[0]
-    assert 'SIN_VERIFICADOR' in cuerpo
+    falta = _rutas().split('def _falta_para_enviar')[1].split('\ndef ')[0]
+    assert 'SIN_VERIFICADOR' in falta
 
 
 def test_no_se_puede_nacer_con_responsable_igual_a_verificador():

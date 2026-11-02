@@ -29,15 +29,10 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 import { apiFetch } from '../utils/apiFetch';
 import * as campo from '../offline/captura';
-import { confirmAction } from '../utils/confirm';
-
-const COLOR_ESTADO = {
-  'Abierto':    { fondo: '#fbebeb', texto: '#b93535' },
-  'Corregido':  { fondo: '#f9eeda', texto: '#734500' },
-  'Verificado': { fondo: '#e0e3d7', texto: '#64744e' },
-  'Reabierto':  { fondo: '#fbebeb', texto: '#b93535' },
-  'Anulado':    { fondo: '#f1f0e8', texto: '#72706b' },
-};
+import { ESTADOS_DE_ISSUE, OPCIONALES, estadoDeIssue, usaEstado } from '../utils/estadosDeIssue';
+import { exportarExcel, exportarPdf, filasDelInforme } from '../utils/informeDeIncidencias';
+import { useObraDeIncidencias } from '../../../design/incidencias/piezas.jsx';
+import IncidenciaLateral, { useEntornoDocs } from './IncidenciaLateral';
 
 const COLOR_TIPO = {
   PUNCH:          { fondo: '#f1f0e8', texto: '#507294' },
@@ -48,19 +43,6 @@ const COLOR_TIPO = {
 };
 
 const CAJA = { border: '1px solid #e8e6dc', borderRadius: 6, boxSizing: 'border-box' };
-
-// El historial se guarda con los nombres del motor (`flujo_de_registro.entrada`),
-// que son los mismos para todos los registros del producto. Traducirlos AL LEER
-// —y no al escribir— es lo que permite que el expediente siga siendo legible por
-// una máquina y por una persona a la vez.
-const EVENTO = {
-  detected: 'Detectado',
-  corrected: 'Corregido',
-  verified: 'Verificado',
-  reopened: 'Reabierto',
-  voided: 'Anulado',
-  self_verification_allowed: 'Autoverificación autorizada',
-};
 
 function Chip({ mapa, valor, texto }) {
   const c = mapa[valor] || { fondo: '#f1f0e8', texto: '#72706b' };
@@ -74,14 +56,18 @@ function Chip({ mapa, valor, texto }) {
 
 // Los mismos chips, el detalle y el alta, para el tablero de Docs (docs/visor/61): una incidencia se ve y se trabaja
 // con las mismas piezas y las mismas reglas que aquí, no con una segunda versión.
-export function ChipDeEstado({ estado }) { return <Chip mapa={COLOR_ESTADO} valor={estado} />; }
+// El estado se lee con la etiqueta de ACC (migración 45): «Corregido» se ve «En revisión».
+export function ChipDeEstado({ estado }) {
+  const e = estadoDeIssue(estado);
+  return <Chip mapa={{ [estado]: { fondo: `${e.color}1f`, texto: e.color } }} valor={estado} texto={e.etiqueta} />;
+}
 export function ChipDeTipo({ tipo, etiqueta }) { return <Chip mapa={COLOR_TIPO} valor={tipo} texto={etiqueta} />; }
 
 // ── LAS TRES IDENTIDADES ───────────────────────────────────────────────────
 // Un papel vacío se dice, no se esconde. «Sin designar» es información: es un
 // issue que va a quedarse sin nadie a quien pasarle la pelota al corregirse.
-function Papel({ rotulo, uid, nombres, esElTurno, ausenteGrave }) {
-  const nombre = uid ? (nombres[uid] || `usuario ${uid}`) : null;
+function Papel({ rotulo, uid, nombres, esElTurno, ausenteGrave, texto = null }) {
+  const nombre = texto || (uid ? (nombres[uid] || `usuario ${uid}`) : null);
   return (
     <div style={{ minWidth: 0 }}>
       <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: '.05em',
@@ -97,13 +83,16 @@ function Papel({ rotulo, uid, nombres, esElTurno, ausenteGrave }) {
   );
 }
 
-function Identidades({ d, nombres }) {
+function Identidades({ d, nombres, nombresDeEmpresa = {} }) {
+  // Asignada a una EMPRESA (45): corrige cualquiera de ella.
+  const empresa = !d.responsable_id && d.responsable_empresa
+    ? `${nombresDeEmpresa[d.responsable_empresa] || 'Empresa'} (empresa)` : null;
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
                   gap: 14, alignItems: 'start' }}>
       <Papel rotulo="DETECTÓ" uid={d.autor_id} nombres={nombres} />
-      <Papel rotulo="CORRIGE" uid={d.responsable_id} nombres={nombres}
-             esElTurno={d.a_quien_le_toca === d.responsable_id && !!d.responsable_id} />
+      <Papel rotulo="CORRIGE" uid={d.responsable_id} nombres={nombres} texto={empresa}
+             esElTurno={(d.a_quien_le_toca === d.responsable_id && !!d.responsable_id) || !!d.a_quien_le_toca_empresa} />
       <Papel rotulo="VERIFICA" uid={d.verificador_id} nombres={nombres}
              esElTurno={d.a_quien_le_toca === d.verificador_id && !!d.verificador_id}
              // Corregido y sin verificador designado: la pelota se ha caído.
@@ -118,14 +107,44 @@ export default function PunchModule({ project, API, user, isAdmin }) {
   const [resumen, setResumen] = useState({});
   const [catalogo, setCatalogo] = useState({ tipos: [], estados: [] });
   const [miembros, setMiembros] = useState([]);
-  const [planos, setPlanos] = useState([]);
   const [filtro, setFiltro] = useState({ tipo: '', estado: '', mios: false });
   const [abierto, setAbierto] = useState(null);
   const [creando, setCreando] = useState(false);
   const [error, setError] = useState('');
+  const [configurando, setConfigurando] = useState(false);
+  const [exportando, setExportando] = useState(false);
 
   const urn = project?.model_urn || project?.urn;
   const obra = project?.id;
+  // Lo que la obra decide de sus incidencias (45) y sus empresas: estados opcionales, subtipos, causas raíz, campos.
+  const entorno = useEntornoDocs({ API, user, project });
+  const ob = useObraDeIncidencias(entorno, urn);
+  const opcionales = ob.config ? ob.config.opcionales : null;
+
+  const guardarConfiguracion = async (cambios) => {
+    try {
+      const r = await apiFetch(`${API}/api/issues/configuracion`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model_urn: urn, ...cambios }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || 'No se pudo guardar.');
+      ob.recargar();
+      toast.success('Configuración de las incidencias guardada');
+      return true;
+    } catch (e) { toast.error(e.message); return false; }
+  };
+
+  const exportar = async (formato) => {
+    setExportando(false);
+    const informe = filasDelInforme(visibles, { nombres, empresas: ob.nombresDeEmpresa, campos: ob.config?.campos || [] });
+    if (!informe.filas.length) { toast.error('No hay incidencias en la lista para exportar.'); return; }
+    const titulo = `Incidencias ${project?.name || ''}`.trim();
+    try {
+      if (formato === 'xlsx') await exportarExcel(titulo, informe);
+      else await exportarPdf(titulo, filtro.estado ? estadoDeIssue(filtro.estado).etiqueta : 'Todas las de la lista', informe);
+    } catch (e) { toast.error(`No se pudo exportar: ${e.message}`); }
+  };
 
   const nombres = useMemo(() => {
     const m = {};
@@ -180,14 +199,6 @@ export default function PunchModule({ project, API, user, isAdmin }) {
       .catch(() => {});
   }, [API, obra]);
 
-  useEffect(() => {
-    if (!urn) return;
-    apiFetch(`${API}/api/planos?model_urn=${encodeURIComponent(urn)}`)
-      .then(r => (r.ok ? r.json() : null))
-      .then(d => { if (d) setPlanos(d.planos || []); })
-      .catch(() => {});
-  }, [API, urn]);
-
   const visibles = useMemo(() => {
     const lista = issues || [];
     if (!filtro.mios) return lista;
@@ -204,7 +215,7 @@ export default function PunchModule({ project, API, user, isAdmin }) {
     .reduce((n, porEstado) => n + (porEstado[estado] || 0), 0);
 
   return (
-    <div style={{ padding: '18px 22px', height: '100%', overflowY: 'auto' }}>
+    <div style={{ padding: '18px 22px', paddingRight: abierto || creando ? 422 : 22, height: '100%', overflowY: 'auto' }}>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
         <h2 style={{ margin: 0, fontSize: 19, fontWeight: 650, color: '#141413' }}>
           Issues y punch
@@ -213,7 +224,36 @@ export default function PunchModule({ project, API, user, isAdmin }) {
           Un defecto se cierra cuando <b>otro</b> verifica que se corrigió.
         </span>
         <div style={{ flex: 1 }} />
-        <button type="button" onClick={() => setCreando(true)}
+        <div style={{ position: 'relative' }}>
+          <button type="button" onClick={() => setExportando(v => !v)} aria-haspopup="menu" aria-expanded={exportando}
+                  style={{ ...CAJA, padding: '7px 13px', background: '#fff', fontSize: 14,
+                           cursor: 'pointer', color: '#141413' }}>
+            Exportar
+          </button>
+          {exportando && (
+            <div role="menu" style={{ ...CAJA, position: 'absolute', right: 0, top: 'calc(100% + 6px)', zIndex: 20,
+                                      background: '#fff', padding: 4, minWidth: 190, boxShadow: '0 8px 24px rgba(0,0,0,.14)' }}>
+              {[['xlsx', 'Excel (.xlsx)'], ['pdf', 'Informe PDF']].map(([f, t]) => (
+                <button key={f} type="button" role="menuitem" onClick={() => exportar(f)}
+                        style={{ display: 'block', width: '100%', textAlign: 'left', padding: '7px 10px', border: 'none',
+                                 background: 'none', fontSize: 13, cursor: 'pointer', borderRadius: 4 }}>
+                  {t}
+                </button>
+              ))}
+              <div style={{ padding: '4px 10px 6px', fontSize: 12, color: '#72706b' }}>
+                {visibles.length} de la lista, con sus filtros
+              </div>
+            </div>
+          )}
+        </div>
+        {isAdmin && (
+          <button type="button" onClick={() => setConfigurando(true)}
+                  style={{ ...CAJA, padding: '7px 13px', background: '#fff', fontSize: 14,
+                           cursor: 'pointer', color: '#141413' }}>
+            Configuración
+          </button>
+        )}
+        <button type="button" onClick={() => { setAbierto(null); setCreando(true); }}
                 style={{ padding: '8px 15px', borderRadius: 6, border: 'none',
                          background: 'var(--accent, #507294)', color: '#fff',
                          fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
@@ -223,17 +263,21 @@ export default function PunchModule({ project, API, user, isAdmin }) {
 
       {/* EL ESTADO DE LA OBRA EN UNA LÍNEA */}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', margin: '14px 0 12px' }}>
-        {['Abierto', 'Reabierto', 'Corregido', 'Verificado'].map(e => (
+        {/* Los de ACC en el orden del flujo. Un opcional apagado se ve solo si aún tiene alguna. */}
+        {ESTADOS_DE_ISSUE
+          .filter(e => e.codigo !== 'Anulado'
+                       && (usaEstado(e.codigo, opcionales) || totalPor(e.codigo) > 0)
+                       && (e.codigo !== 'Borrador' || totalPor(e.codigo) > 0))
+          .map(({ codigo: e, etiqueta, color }) => (
           <button key={e} type="button"
                   onClick={() => setFiltro(f => ({ ...f, estado: f.estado === e ? '' : e }))}
                   style={{ ...CAJA, padding: '6px 12px', cursor: 'pointer',
                            background: filtro.estado === e ? '#f1f0e8' : '#fff',
                            borderColor: filtro.estado === e ? '#507294' : '#e8e6dc' }}>
-            <span style={{ fontSize: 16, fontWeight: 700,
-                           color: (COLOR_ESTADO[e] || {}).texto || '#141413' }}>
+            <span style={{ fontSize: 16, fontWeight: 700, color }}>
               {totalPor(e)}
             </span>
-            <span style={{ fontSize: 12, color: '#72706b', marginLeft: 6 }}>{e}</span>
+            <span style={{ fontSize: 12, color: '#72706b', marginLeft: 6 }}>{etiqueta}</span>
           </button>
         ))}
         <button type="button" onClick={() => setFiltro(f => ({ ...f, mios: !f.mios }))}
@@ -283,28 +327,156 @@ export default function PunchModule({ project, API, user, isAdmin }) {
 
       <div style={{ display: 'grid', gap: 8 }}>
         {visibles.map(i => (
-          <FilaIssue key={i.id} d={i} nombres={nombres} yo={user?.id}
-                     onAbrir={() => setAbierto(i)} abierta={abierto?.id === i.id} />
+          <FilaIssue key={i.id} d={i} nombres={nombres} yo={user?.id} nombresDeEmpresa={ob.nombresDeEmpresa}
+                     onAbrir={() => { setCreando(false); setAbierto(i); }} abierta={abierto?.id === i.id} />
         ))}
       </div>
 
-      {abierto && (
-        <PanelIssue d={abierto} API={API} user={user} isAdmin={isAdmin} nombres={nombres}
-                    onCerrar={() => setAbierto(null)} onCambio={cargar} />
+      {/* EL PANEL LATERAL: la lista sigue a la vista a la izquierda, como en ACC. */}
+      {(abierto || creando) && (
+        <IncidenciaLateral key={abierto ? abierto.id : 'nueva'} API={API} user={user} project={project} obra={urn}
+          issueId={abierto ? abierto.id : null} nueva={abierto ? null : {}}
+          onCreada={(hecha) => { cargar(); if (hecha?.id) { setCreando(false); setAbierto({ id: String(hecha.id) }); } }}
+          onCambio={cargar} onCerrar={() => { setAbierto(null); setCreando(false); }} />
       )}
 
-      {creando && (
-        <ModalLevantar API={API} urn={urn} catalogo={catalogo} miembros={miembros}
-                       planos={planos} yo={user?.id}
-                       user={user} project={project}
-                       onCerrar={() => setCreando(false)}
-                       onCreado={() => { setCreando(false); cargar(); }} />
+      {configurando && (
+        <ConfiguracionDeIncidencias config={ob.config} tipos={catalogo.tipos || []}
+                                    onGuardar={guardarConfiguracion} onCerrar={() => setConfigurando(false)} />
       )}
     </div>
   );
 }
 
-function FilaIssue({ d, nombres, yo, onAbrir, abierta }) {
+// Los estados opcionales de la obra, como en la administración de incidencias de ACC. Apagar uno no mueve las que ya
+// están en él: siguen su ciclo; solo deja de ofrecerse entrar.
+const AYUDA_OPCIONAL = {
+  'Borrador': 'Guardar una incidencia sin enviarla: nadie más la ve hasta que se envía.',
+  'En curso': 'El responsable avisa de que ya la está corrigiendo.',
+  'En disputa': 'El responsable dice que no procede, con motivo; quien la levantó la reafirma o la anula.',
+};
+
+const CLASES_DE_CAMPO = [['texto', 'Texto'], ['numero', 'Número'], ['fecha', 'Fecha'], ['lista', 'Lista']];
+const lineas = (t) => String(t || '').split('\n').map(x => x.trim()).filter(Boolean);
+
+function ConfiguracionDeIncidencias({ config, tipos, onGuardar, onCerrar }) {
+  const [marcados, setMarcados] = useState(config?.opcionales ?? OPCIONALES);
+  const [subtipos, setSubtipos] = useState(() => Object.fromEntries(
+    tipos.map(t => [t.codigo, ((config?.subtipos || {})[t.codigo] || []).join('\n')])));
+  const [causas, setCausas] = useState((config?.causas || []).join('\n'));
+  const [campos, setCampos] = useState(() => (config?.campos || []).map(c => ({
+    ...c, opciones: (c.opciones || []).join(', '), tipoDeIncidencia: (c.tipos || [])[0] || '' })));
+  const [guardando, setGuardando] = useState(false);
+  const cambiar = (c) => setMarcados(m => (m.includes(c) ? m.filter(x => x !== c) : [...m, c]));
+  const campo = (n, k, v) => setCampos(cs => cs.map((c, m) => (m === n ? { ...c, [k]: v } : c)));
+  const rotulo = { fontSize: 12, fontWeight: 700, color: '#72706b', letterSpacing: '.05em', margin: '16px 0 6px' };
+  const entrada = { ...CAJA, padding: '6px 9px', fontSize: 13, fontFamily: 'inherit', background: '#fff' };
+
+  const guardar = async () => {
+    setGuardando(true);
+    const ok = await onGuardar({
+      opcionales: marcados,
+      subtipos: Object.fromEntries(Object.entries(subtipos).map(([t, v]) => [t, lineas(v)]).filter(([, v]) => v.length)),
+      causas: lineas(causas),
+      campos: campos.filter(c => c.etiqueta?.trim()).map(c => ({
+        ...(c.clave ? { clave: c.clave } : {}), etiqueta: c.etiqueta.trim(), tipo: c.tipo, obligatorio: !!c.obligatorio,
+        ...(c.tipo === 'lista' ? { opciones: String(c.opciones || '').split(',').map(x => x.trim()).filter(Boolean) } : {}),
+        tipos: c.tipoDeIncidencia ? [c.tipoDeIncidencia] : [],
+      })),
+    });
+    setGuardando(false);
+    if (ok) onCerrar();
+  };
+
+  return (
+    <div onClick={onCerrar}
+         style={{ position: 'fixed', inset: 0, background: 'rgba(20,20,19,.45)', display: 'flex',
+                  alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+      <div onClick={e => e.stopPropagation()} role="dialog" aria-label="Configuración de las incidencias"
+           style={{ background: '#fff', borderRadius: 10, padding: 24, width: 640, maxWidth: '94vw',
+                    maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 12px 40px rgba(0,0,0,.22)' }}>
+        <h3 style={{ margin: '0 0 4px', fontSize: 16, fontWeight: 650 }}>Configuración de las incidencias</h3>
+        <p style={{ margin: 0, fontSize: 13, color: '#72706b', lineHeight: 1.5 }}>
+          Lo que esta obra usa, como el administrador de incidencias de ACC. Lo que cambies vale para las nuevas; las que
+          ya existen siguen su ciclo.
+        </p>
+
+        <div style={rotulo}>ESTADOS OPCIONALES</div>
+        <p style={{ margin: '0 0 8px', fontSize: 12, color: '#72706b' }}>
+          Abierta, En revisión, No aprobada, Cerrada y Anulada están siempre.
+        </p>
+        {OPCIONALES.map(c => {
+          const e = estadoDeIssue(c);
+          return (
+            <label key={c} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', marginBottom: 8, cursor: 'pointer' }}>
+              <input type="checkbox" checked={marcados.includes(c)} onChange={() => cambiar(c)} style={{ marginTop: 3 }} />
+              <span>
+                <b style={{ fontSize: 13, color: e.color }}>{e.etiqueta}</b>
+                <span style={{ display: 'block', fontSize: 12, color: '#72706b', lineHeight: 1.45 }}>{AYUDA_OPCIONAL[c]}</span>
+              </span>
+            </label>
+          );
+        })}
+
+        <div style={rotulo}>SUBTIPOS <span style={{ fontWeight: 400, letterSpacing: 0 }}>· uno por línea; vacío = sin subtipos</span></div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 10 }}>
+          {tipos.map(t => (
+            <label key={t.codigo} style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12, color: '#52524d' }}>
+              {t.etiqueta}
+              <textarea rows={3} value={subtipos[t.codigo] || ''} style={entrada}
+                        onChange={e => setSubtipos(v => ({ ...v, [t.codigo]: e.target.value }))} />
+            </label>
+          ))}
+        </div>
+
+        <div style={rotulo}>CAUSAS RAÍZ <span style={{ fontWeight: 400, letterSpacing: 0 }}>· una por línea</span></div>
+        <textarea rows={4} value={causas} onChange={e => setCausas(e.target.value)} style={{ ...entrada, width: '100%' }}
+                  placeholder={'Diseño\nEjecución\nMaterial\nCoordinación'} />
+
+        <div style={rotulo}>CAMPOS PROPIOS</div>
+        {campos.length === 0 && <p style={{ margin: '0 0 8px', fontSize: 12, color: '#72706b' }}>Ninguno.</p>}
+        {campos.map((c, n) => (
+          <div key={n} style={{ display: 'grid', gridTemplateColumns: '1.3fr 96px 1.2fr 120px auto auto', gap: 8,
+                                alignItems: 'center', marginBottom: 6 }}>
+            <input value={c.etiqueta || ''} onChange={e => campo(n, 'etiqueta', e.target.value)} placeholder="Nombre del campo" style={entrada} />
+            <select value={c.tipo || 'texto'} onChange={e => campo(n, 'tipo', e.target.value)} style={entrada}>
+              {CLASES_DE_CAMPO.map(([v, t]) => <option key={v} value={v}>{t}</option>)}
+            </select>
+            <input value={c.opciones || ''} onChange={e => campo(n, 'opciones', e.target.value)} disabled={c.tipo !== 'lista'}
+                   placeholder={c.tipo === 'lista' ? 'Opciones, separadas por comas' : ''} style={entrada} />
+            <select value={c.tipoDeIncidencia || ''} onChange={e => campo(n, 'tipoDeIncidencia', e.target.value)} style={entrada}
+                    aria-label="A qué tipo de incidencia se aplica">
+              <option value="">Todos los tipos</option>
+              {tipos.map(t => <option key={t.codigo} value={t.codigo}>{t.etiqueta}</option>)}
+            </select>
+            <label style={{ fontSize: 12, color: '#52524d', display: 'flex', gap: 4, alignItems: 'center' }}>
+              <input type="checkbox" checked={!!c.obligatorio} onChange={e => campo(n, 'obligatorio', e.target.checked)} />
+              Obligatorio
+            </label>
+            <button type="button" aria-label="Quitar el campo" onClick={() => setCampos(cs => cs.filter((_, m) => m !== n))}
+                    style={{ border: 'none', background: 'none', fontSize: 18, color: '#72706b', cursor: 'pointer' }}>×</button>
+          </div>
+        ))}
+        <button type="button" onClick={() => setCampos(cs => [...cs, { etiqueta: '', tipo: 'texto', opciones: '', obligatorio: false }])}
+                style={{ ...CAJA, padding: '5px 11px', background: '#fff', fontSize: 13, cursor: 'pointer' }}>
+          Añadir campo
+        </button>
+
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 20 }}>
+          <button type="button" onClick={onCerrar}
+                  style={{ ...CAJA, padding: '8px 14px', background: '#fff', fontSize: 14, cursor: 'pointer' }}>Cancelar</button>
+          <button type="button" onClick={guardar} disabled={guardando}
+                  style={{ padding: '8px 16px', borderRadius: 6, border: 'none', background: 'var(--accent, #507294)',
+                           color: '#fff', fontSize: 14, fontWeight: 600, cursor: guardando ? 'wait' : 'pointer' }}>
+            {guardando ? 'Guardando…' : 'Guardar'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FilaIssue({ d, nombres, yo, onAbrir, abierta, nombresDeEmpresa = {} }) {
   const esMio = d.a_quien_le_toca === yo && !!yo;
   return (
     <div onClick={onAbrir}
@@ -325,10 +497,10 @@ function FilaIssue({ d, nombres, yo, onAbrir, abierta }) {
             AUTOVERIFICACIÓN AUTORIZADA
           </span>
         )}
-        <Chip mapa={COLOR_ESTADO} valor={d.estado} />
+        <ChipDeEstado estado={d.estado} />
       </div>
       <div style={{ marginTop: 9, paddingTop: 9, borderTop: '1px solid #f1f0e8' }}>
-        <Identidades d={d} nombres={nombres} />
+        <Identidades d={d} nombres={nombres} nombresDeEmpresa={nombresDeEmpresa} />
       </div>
       {(d.ubicacion || d.progresiva || d.origen_tipo) && (
         <div style={{ marginTop: 7, fontSize: 12, color: '#72706b' }}>
@@ -344,452 +516,19 @@ function FilaIssue({ d, nombres, yo, onAbrir, abierta }) {
   );
 }
 
-// ── EL DETALLE, DONDE SE ACTÚA ─────────────────────────────────────────────
+// ── EL DETALLE Y EL ALTA: EL PANEL LATERAL ÚNICO ───────────────────────────
 //
-// Cada acto es una llamada distinta con su propia autoridad, igual que en el
-// backend. Aquí NO hay un «cambiar estado»: no existe en el servidor, y ofrecerlo
-// habría sido dibujar una puerta que no está.
-export function PanelIssue({ d, API, user, isAdmin, nombres, onCerrar, onCambio }) {
-  const [ocupado, setOcupado] = useState(false);
-  const [texto, setTexto] = useState('');
-  const [evidencias, setEvidencias] = useState([]);
-
-  const yo = user?.id;
-  const soyResponsable = yo && d.responsable_id === yo;
-  const soyVerificador = yo && d.verificador_id === yo;
-  const puedeCorregir = soyResponsable && ['Abierto', 'Reabierto'].includes(d.estado);
-  // El espejo EXACTO de `flujo_de_issue.puede_verificar`. Si diverge, el
-  // servidor gana: la pantalla puede ofrecer de menos, nunca de más.
-  const puedeVerificar = d.estado === 'Corregido' && (
-    soyResponsable ? !!d.autoverificacion
-      : (d.verificador_id ? soyVerificador : !!isAdmin));
-
-  const llamar = async (ruta, cuerpo, exito) => {
-    setOcupado(true);
-    try {
-      const r = await apiFetch(`${API}/api/issues/${d.id}/${ruta}`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(cuerpo),
-      });
-      const res = await r.json();
-      if (!r.ok) throw new Error(res.error || 'No se pudo.');
-      toast.success(exito);
-      setTexto(''); setEvidencias([]);
-      await onCambio();
-    } catch (e) { toast.error(e.message); } finally { setOcupado(false); }
-  };
-
-  const verificar = async (acepta) => {
-    if (!acepta && !texto.trim()) {
-      toast.error('Rechazar exige un motivo: sin él, quien corrige no sabe qué rehacer.');
-      return;
-    }
-    if (acepta && !await confirmAction({
-      titulo: `Verificar ${d.codigo}`,
-      mensaje: 'Estás dando por buena la corrección y cerrando el issue. '
-             + 'Un defecto nuevo sobre lo mismo será un issue nuevo.',
-      confirmar: 'Verificar y cerrar',
-    })) return;
-    await llamar('verificar', { acepta, motivo: texto.trim() },
-                 acepta ? 'Verificado y cerrado' : 'Reabierto: vuelve a quien corrige');
-  };
-
-  return (
-    <div onClick={onCerrar}
-         style={{ position: 'fixed', inset: 0, background: 'rgba(20,20,19,.45)',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-      <div onClick={e => e.stopPropagation()}
-           style={{ background: '#fff', borderRadius: 10, padding: 24, width: 640,
-                    maxWidth: '94vw', maxHeight: '90vh', overflowY: 'auto',
-                    boxShadow: '0 12px 40px rgba(0,0,0,.22)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-          <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: 14,
-                         fontWeight: 700, color: '#507294' }}>{d.codigo}</span>
-          <Chip mapa={COLOR_TIPO} valor={d.tipo} texto={d.tipo_etiqueta} />
-          <Chip mapa={COLOR_ESTADO} valor={d.estado} />
-          <div style={{ flex: 1 }} />
-          <button type="button" onClick={onCerrar}
-                  style={{ border: 'none', background: 'none', fontSize: 20,
-                           color: '#72706b', cursor: 'pointer', lineHeight: 1 }}>×</button>
-        </div>
-        <h3 style={{ margin: '10px 0 4px', fontSize: 16.5, fontWeight: 650 }}>{d.titulo}</h3>
-        {d.descripcion && (
-          <p style={{ margin: '0 0 12px', fontSize: 14, color: '#52524d', lineHeight: 1.55 }}>
-            {d.descripcion}
-          </p>
-        )}
-
-        <div style={{ ...CAJA, padding: '11px 13px', background: '#faf9f5', margin: '12px 0' }}>
-          <Identidades d={d} nombres={nombres} />
-          {d.verificado_por && d.verificado_por !== d.verificador_id && (
-            <div style={{ marginTop: 9, fontSize: 12, color: '#734500' }}>
-              Lo verificó <b>{nombres[d.verificado_por] || d.verificado_por}</b>, que no
-              era el verificador designado. Quedan registradas las dos cosas.
-            </div>
-          )}
-        </div>
-
-        {d.autoverificacion && (
-          <div style={{ ...CAJA, borderColor: '#c8d8e7', background: '#ecf0f1',
-                        padding: '9px 13px', marginBottom: 12, fontSize: 13,
-                        color: '#507294' }}>
-            <b>Autoverificación autorizada.</b> Quien corrige puede cerrar este issue.
-            {d.autoverificacion_motivo && <> Motivo: «{d.autoverificacion_motivo}»</>}
-          </div>
-        )}
-
-        {(d.evidencia_correccion || []).length > 0 && (
-          <div style={{ marginBottom: 12 }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: '#72706b',
-                          letterSpacing: '.05em', marginBottom: 5 }}>
-              EVIDENCIA DE LA CORRECCIÓN
-            </div>
-            {d.evidencia_correccion.map((e, n) => (
-              <div key={n} style={{ fontSize: 13, color: '#52524d' }}>
-                · {e.nombre || 'evidencia'} <span style={{ color: '#72706b' }}>— {e.por}</span>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* ── LOS ACTOS ─────────────────────────────────────────────────── */}
-        {puedeCorregir && (
-          <div style={{ ...CAJA, padding: 13, marginBottom: 10 }}>
-            <div style={{ fontSize: 13, fontWeight: 650, marginBottom: 7 }}>
-              Declarar corregido
-            </div>
-            <p style={{ margin: '0 0 8px', fontSize: 13, color: '#72706b', lineHeight: 1.5 }}>
-              Exige evidencia: sin ella, quien verifica tiene que volver a la obra —
-              y cuando ya se ha construido encima, a veces no se puede.
-            </p>
-            <div style={{ fontSize: 13, color: evidencias.length ? '#64744e' : '#b93535',
-                          marginBottom: 8 }}>
-              {evidencias.length ? `✓ ${evidencias.length} evidencia(s)` : '✕ Sin evidencia'}
-              <button type="button"
-                      onClick={() => setEvidencias(a => [...a, { nombre: `correccion-${a.length + 1}.jpg` }])}
-                      style={{ marginLeft: 8, padding: '2px 9px', fontSize: 12,
-                               borderRadius: 4, border: '1px solid #cccac0',
-                               background: '#fff', cursor: 'pointer' }}>
-                Adjuntar
-              </button>
-            </div>
-            <textarea value={texto} onChange={e => setTexto(e.target.value)} rows={2}
-                      placeholder="Qué se hizo (opcional)"
-                      style={{ ...CAJA, width: '100%', padding: '6px 9px', fontSize: 13,
-                               fontFamily: 'inherit', marginBottom: 8 }} />
-            <button type="button" disabled={ocupado || !evidencias.length}
-                    onClick={() => llamar('corregir',
-                                          { evidencia: evidencias, comentario: texto.trim() },
-                                          'Corregido: la pelota pasa a quien verifica')}
-                    style={{ padding: '8px 15px', borderRadius: 6, border: 'none',
-                             background: evidencias.length ? 'var(--accent, #507294)' : '#cccac0',
-                             color: '#fff', fontSize: 14, fontWeight: 600,
-                             cursor: evidencias.length ? 'pointer' : 'not-allowed' }}>
-              {ocupado ? 'Guardando…' : 'Declarar corregido'}
-            </button>
-          </div>
-        )}
-
-        {puedeVerificar && (
-          <div style={{ ...CAJA, padding: 13, marginBottom: 10 }}>
-            <div style={{ fontSize: 13, fontWeight: 650, marginBottom: 7 }}>
-              Verificar la corrección
-            </div>
-            <textarea value={texto} onChange={e => setTexto(e.target.value)} rows={2}
-                      placeholder="Motivo (obligatorio si rechazas)"
-                      style={{ ...CAJA, width: '100%', padding: '6px 9px', fontSize: 13,
-                               fontFamily: 'inherit', marginBottom: 8 }} />
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button type="button" disabled={ocupado} onClick={() => verificar(true)}
-                      style={{ padding: '8px 15px', borderRadius: 6, border: 'none',
-                               background: '#64744e', color: '#fff', fontSize: 14,
-                               fontWeight: 600, cursor: 'pointer' }}>
-                Verificar y cerrar
-              </button>
-              <button type="button" disabled={ocupado} onClick={() => verificar(false)}
-                      style={{ padding: '8px 15px', borderRadius: 6,
-                               border: '1px solid #fbebeb', background: '#fff',
-                               color: '#b93535', fontSize: 14, fontWeight: 600,
-                               cursor: 'pointer' }}>
-                Rechazar y reabrir
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* POR QUÉ NO PUEDES: decirlo es parte de enseñar la separación. Un
-            botón ausente sin explicación se lee como un fallo de la pantalla. */}
-        {d.estado === 'Corregido' && !puedeVerificar && (
-          <div style={{ ...CAJA, padding: '10px 13px', marginBottom: 10, fontSize: 13,
-                        color: '#72706b', background: '#faf9f5' }}>
-            {soyResponsable
-              ? 'Corregiste tú: quien corrige no verifica su propia corrección. '
-                + 'Un administrador de la obra puede autorizar la autoverificación, y quedará escrita.'
-              : d.verificador_id
-                ? `La verificación le corresponde a ${nombres[d.verificador_id] || 'su verificador designado'}.`
-                : 'Este issue no tiene verificador designado; hasta que se le asigne uno, '
-                  + 'solo un administrador de la obra puede cerrarlo.'}
-          </div>
-        )}
-
-        {isAdmin && d.estado === 'Corregido' && !d.autoverificacion
-          && d.responsable_id && !d.verificador_id && (
-          <div style={{ ...CAJA, padding: 13, marginBottom: 10, borderColor: '#c8d8e7',
-                        background: '#faf9f5' }}>
-            <div style={{ fontSize: 13, fontWeight: 650, marginBottom: 5 }}>
-              Autorizar autoverificación
-            </div>
-            <p style={{ margin: '0 0 8px', fontSize: 13, color: '#72706b', lineHeight: 1.5 }}>
-              Excepción: permite que <b>quien corrigió</b> cierre este issue. Exige motivo
-              escrito y queda en el historial. Una excepción que se puede leer es gobierno;
-              una que se concede en silencio es un agujero.
-            </p>
-            <input value={texto} onChange={e => setTexto(e.target.value)}
-                   placeholder="Motivo — por qué en este caso no hay un tercero"
-                   style={{ ...CAJA, width: '100%', height: 34, padding: '0 9px',
-                            fontSize: 13, marginBottom: 8 }} />
-            <button type="button" disabled={ocupado || !texto.trim()}
-                    onClick={() => llamar('autoverificacion', { motivo: texto.trim() },
-                                          'Autoverificación autorizada')}
-                    style={{ padding: '7px 14px', borderRadius: 6, border: 'none',
-                             background: texto.trim() ? '#507294' : '#cccac0', color: '#fff',
-                             fontSize: 13, fontWeight: 600,
-                             cursor: texto.trim() ? 'pointer' : 'not-allowed' }}>
-              Autorizar
-            </button>
-          </div>
-        )}
-
-        {/* ── EL HISTORIAL: quién hizo cada acto ────────────────────────── */}
-        <div style={{ fontSize: 12, fontWeight: 700, color: '#72706b',
-                      letterSpacing: '.05em', margin: '14px 0 6px' }}>
-          HISTORIAL
-        </div>
-        <div style={{ borderLeft: '2px solid #f1f0e8', paddingLeft: 11 }}>
-          {(d.history || []).map((h, n) => (
-            <div key={n} style={{ marginBottom: 7, fontSize: 13 }}>
-              <b style={{ color: '#141413' }}>{EVENTO[h.event] || h.event}</b>
-              <span style={{ color: '#72706b' }}> — {h.by}</span>
-              {h.at && (
-                <span style={{ color: '#72706b' }}>
-                  {' · '}{String(h.at).slice(0, 16).replace('T', ' ')}
-                </span>
-              )}
-              {(h.motivo || h.comentario) && (
-                <div style={{ color: '#52524d', marginTop: 2 }}>«{h.motivo || h.comentario}»</div>
-              )}
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
+// Desde el 2-nov-2026 una incidencia se crea y se trabaja en el MISMO panel lateral, como en ACC, y es el mismo en
+// todas las herramientas (design/incidencias/PanelDeIncidencia.jsx, docs/archivos/19). Cada acto sigue siendo una
+// llamada distinta con su propia autoridad: no hay un «cambiar estado», porque no existe en el servidor.
+//
+// `PanelIssue` y `ModalLevantar` se quedan con su nombre para quien ya los usa (los tableros).
+export function PanelIssue({ d, API, user, onCerrar, onCambio }) {
+  return <IncidenciaLateral API={API} user={user} obra={d.project_id || d.model_urn} issueId={d.id}
+    onCambio={onCambio} onCerrar={onCerrar} />;
 }
 
-// ── LEVANTAR ───────────────────────────────────────────────────────────────
-//
-// Lo que cada tipo EXIGE lo dice el catálogo del servidor (`exige_responsable`,
-// `exige_verificador`, `exige_ubicacion`), no una lista escrita aquí. Si mañana
-// se añade un tipo, esta pantalla ya sabe pedirle lo suyo.
-export function ModalLevantar({ API, urn, catalogo, miembros, planos, yo,
-                        user, project, onCerrar, onCreado }) {
-  const [f, setF] = useState({
-    tipo: 'PUNCH', titulo: '', descripcion: '', responsable_id: '',
-    verificador_id: '', revision_id: '', ubicacion: '', progresiva: '', vence_en: '',
-  });
-  const [guardando, setGuardando] = useState(false);
-
-  const tipo = (catalogo.tipos || []).find(t => t.codigo === f.tipo) || {};
-  const conVigente = planos.filter(p => p.vigente);
-
-  const crear = async () => {
-    if (!f.titulo.trim()) { toast.error('El título es obligatorio.'); return; }
-    if (tipo.exige_responsable && !f.responsable_id) {
-      toast.error('Un defecto sin responsable es un defecto que nadie va a corregir.'); return;
-    }
-    if (tipo.exige_verificador && !f.verificador_id) {
-      toast.error('Este tipo exige un verificador designado distinto de quien corrige.'); return;
-    }
-    if (f.responsable_id && f.responsable_id === f.verificador_id) {
-      toast.error('Quien corrige no puede ser quien verifica.'); return;
-    }
-    if (tipo.exige_ubicacion && !f.revision_id) {
-      toast.error('Un punch se levanta sobre una lámina concreta.'); return;
-    }
-    setGuardando(true);
-    try {
-      // GAP 07 · EL MISMO CAMINO CON Y SIN COBERTURA.
-      //
-      // Un punch se levanta EN OBRA, que es exactamente donde no hay señal. Si
-      // esta pantalla solo funcionara con red, la observación se apuntaría en
-      // una libreta y se pasaría al sistema por la noche -- o no se pasaría.
-      const ctx = campo.contextoDe(user, project);
-      if (!ctx) throw new Error('no se pudo identificar la obra');
-      const cuerpo = {
-          ...f, model_urn: urn,
-          responsable_id: f.responsable_id ? Number(f.responsable_id) : null,
-          verificador_id: f.verificador_id ? Number(f.verificador_id) : null,
-          // EL ANCLAJE HISTORICO. Es la revisión que se está mirando AHORA, y
-          // sigue siendo esa aunque salga una más nueva mientras no haya red.
-          revision_id: f.revision_id || null,
-          vence_en: f.vence_en || null,
-      };
-      const { modo, datos, veredicto, sinCampo } = await campo.capturar(API, ctx, {
-        object_type: campo.ISSUE,
-        action: campo.CREATE,
-        local_object_id: campo.nuevoObjetoLocal(),
-        payload: cuerpo,
-        // LA RUTA DE SIEMPRE, por si este servidor todavía no recibe campo.
-        // El portal se despliega antes que el backend, y durante esa ventana
-        // levantar un punch tiene que seguir funcionando igual que ayer.
-        enLinea: async () => {
-          const r = await apiFetch(`${API}/api/issues`, {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(cuerpo),
-          });
-          const d = await r.json();
-          if (!r.ok) throw new Error(d.error || 'No se pudo levantar.');
-          return d;
-        },
-      });
-
-      if (sinCampo) {
-        toast.success(`${datos.codigo} levantado`);
-      } else if (modo === 'servidor') {
-        toast.success(`${(datos.canonical_result || {}).codigo || ''} levantado`);
-      } else if (veredicto) {
-        // El servidor decidió algo distinto de aceptarlo. No se disfraza de
-        // éxito ni de fallo de red: se dice lo que dijo.
-        toast.error(veredicto.error || 'el servidor no lo aceptó');
-      } else {
-        // GUARDADO AQUI, NO CONFIRMADO. La diferencia se dice, no se insinúa.
-        toast.success('Guardado en este dispositivo. Subirá cuando haya '
-                      + 'cobertura; míralo en «Trabajo de campo».',
-                      { duration: 6000 });
-      }
-      // La incidencia creada, si el servidor ya la tiene (el tablero la pone como tarjeta); guardada solo en este
-      // dispositivo aún no tiene número: null.
-      onCreado(sinCampo ? datos : (modo === 'servidor' ? datos?.canonical_result : null) || null);
-    } catch (e) { toast.error(e.message); } finally { setGuardando(false); }
-  };
-
-  const selPersona = (campo, excluir) => (
-    <select value={f[campo]} onChange={e => setF(p => ({ ...p, [campo]: e.target.value }))}
-            style={{ ...CAJA, width: '100%', height: 36, padding: '0 8px',
-                     fontSize: 14, background: '#fff' }}>
-      <option value="">Sin designar</option>
-      {miembros.filter(m => String(m.id) !== String(excluir)).map(m => (
-        <option key={m.id} value={m.id}>
-          {m.name || m.email}{m.empresa ? ` — ${m.empresa}` : ''}
-        </option>
-      ))}
-    </select>
-  );
-
-  return (
-    <div onClick={onCerrar}
-         style={{ position: 'fixed', inset: 0, background: 'rgba(20,20,19,.45)',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-      <div onClick={e => e.stopPropagation()}
-           style={{ background: '#fff', borderRadius: 10, padding: 24, width: 560,
-                    maxWidth: '94vw', maxHeight: '90vh', overflowY: 'auto',
-                    boxShadow: '0 12px 40px rgba(0,0,0,.22)' }}>
-        <h3 style={{ margin: '0 0 4px', fontSize: 16, fontWeight: 650 }}>Levantar issue</h3>
-        <p style={{ margin: '0 0 16px', fontSize: 13, color: '#72706b', lineHeight: 1.5 }}>
-          Tú quedas como <b>quien lo detectó</b>. Eso no se elige y no te convierte en
-          quien lo cierra: el cierre lo aprueba el verificador designado.
-        </p>
-
-        <div style={{ display: 'flex', gap: 10, marginBottom: 10 }}>
-          <select value={f.tipo} onChange={e => setF(p => ({ ...p, tipo: e.target.value }))}
-                  style={{ ...CAJA, flex: '0 0 210px', height: 36, padding: '0 8px',
-                           fontSize: 14, background: '#fff' }}>
-            {/* La observación de documento se levanta desde una marca del lector, no aquí (37). */}
-            {(catalogo.tipos || []).filter(t => !t.solo_desde_marca).map(t => (
-              <option key={t.codigo} value={t.codigo}>{t.etiqueta}</option>
-            ))}
-          </select>
-          <input value={f.titulo} onChange={e => setF(p => ({ ...p, titulo: e.target.value }))}
-                 placeholder="Qué está mal"
-                 style={{ ...CAJA, flex: 1, height: 36, padding: '0 10px', fontSize: 14 }} />
-        </div>
-
-        <textarea value={f.descripcion} rows={2}
-                  onChange={e => setF(p => ({ ...p, descripcion: e.target.value }))}
-                  placeholder="Descripción (opcional)"
-                  style={{ ...CAJA, width: '100%', padding: '7px 10px', fontSize: 13,
-                           fontFamily: 'inherit', marginBottom: 12 }} />
-
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10,
-                      marginBottom: 4 }}>
-          <div>
-            <label style={{ fontSize: 12, fontWeight: 700, color: '#72706b',
-                            letterSpacing: '.05em' }}>
-              CORRIGE{tipo.exige_responsable ? ' *' : ''}
-            </label>
-            {selPersona('responsable_id', f.verificador_id)}
-          </div>
-          <div>
-            <label style={{ fontSize: 12, fontWeight: 700, color: '#72706b',
-                            letterSpacing: '.05em' }}>
-              VERIFICA{tipo.exige_verificador ? ' *' : ''}
-            </label>
-            {selPersona('verificador_id', f.responsable_id)}
-          </div>
-        </div>
-        <p style={{ margin: '6px 0 14px', fontSize: 12, color: '#72706b', lineHeight: 1.5 }}>
-          Tienen que ser personas distintas. Si se deja sin designar quien verifica,
-          al corregirse el issue no habrá a quién pasarle la pelota.
-        </p>
-
-        {tipo.exige_ubicacion && (
-          <div style={{ marginBottom: 12 }}>
-            <label style={{ fontSize: 12, fontWeight: 700, color: '#72706b',
-                            letterSpacing: '.05em' }}>LÁMINA *</label>
-            <select value={f.revision_id}
-                    onChange={e => setF(p => ({ ...p, revision_id: e.target.value }))}
-                    style={{ ...CAJA, width: '100%', height: 36, padding: '0 8px',
-                             fontSize: 14, background: '#fff' }}>
-              <option value="">Elegir la lámina vigente…</option>
-              {conVigente.map(p => (
-                <option key={p.id} value={p.vigente.id}>
-                  {p.numero} — {p.titulo} (rev. {p.vigente.codigo})
-                </option>
-              ))}
-            </select>
-            {conVigente.length === 0 && (
-              <div style={{ fontSize: 12, color: '#b93535', marginTop: 5 }}>
-                No hay planos con revisión vigente en esta obra: un punch no puede
-                levantarse sin decir dónde.
-              </div>
-            )}
-          </div>
-        )}
-
-        <div style={{ display: 'flex', gap: 10, marginBottom: 16 }}>
-          <input value={f.ubicacion} onChange={e => setF(p => ({ ...p, ubicacion: e.target.value }))}
-                 placeholder="Ubicación — «Losa eje 4, nivel +3.20»"
-                 style={{ ...CAJA, flex: 1, height: 36, padding: '0 10px', fontSize: 14 }} />
-          <input value={f.progresiva} onChange={e => setF(p => ({ ...p, progresiva: e.target.value }))}
-                 placeholder="PK 0+340"
-                 style={{ ...CAJA, flex: '0 0 130px', height: 36, padding: '0 10px', fontSize: 14 }} />
-          <input type="date" value={f.vence_en}
-                 onChange={e => setF(p => ({ ...p, vence_en: e.target.value }))}
-                 style={{ ...CAJA, flex: '0 0 150px', height: 36, padding: '0 8px', fontSize: 14 }} />
-        </div>
-
-        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-          <button type="button" onClick={onCerrar} disabled={guardando}
-                  style={{ ...CAJA, padding: '8px 14px', background: '#fff',
-                           fontSize: 14, cursor: 'pointer' }}>Cancelar</button>
-          <button type="button" onClick={crear} disabled={guardando}
-                  style={{ padding: '8px 16px', borderRadius: 6, border: 'none',
-                           background: 'var(--accent, #507294)', color: '#fff', fontSize: 14,
-                           fontWeight: 600, cursor: guardando ? 'wait' : 'pointer' }}>
-            {guardando ? 'Levantando…' : 'Levantar'}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
+export function ModalLevantar({ API, urn, user, project, onCerrar, onCreado }) {
+  return <IncidenciaLateral API={API} user={user} project={project} obra={urn} nueva={{}}
+    onCreada={(hecha) => onCreado?.(hecha)} onCerrar={onCerrar} />;
 }

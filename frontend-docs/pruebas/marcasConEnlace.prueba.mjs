@@ -21,24 +21,38 @@ test('los estados del sello son los del servidor y ninguno es «Aprobado»', () 
 });
 
 test('la observación usa los actos de la incidencia, en femenino y con colores D-24', () => {
-  igual(ESTADOS_DE_OBSERVACION.map(e => e.codigo), ['Abierto', 'Reabierto', 'Corregido', 'Verificado', 'Anulado']);
-  igual(estadoDeObservacion('Corregido').etiqueta, 'Corregida');
+  igual(ESTADOS_DE_OBSERVACION.map(e => e.codigo),
+    ['Borrador', 'Abierto', 'En curso', 'En disputa', 'Corregido', 'Reabierto', 'Verificado', 'Anulado']);
+  igual(estadoDeObservacion('Corregido').etiqueta, 'En revisión');      // las etiquetas de ACC (migración 45)
   igual(estadoDeObservacion('inventado').codigo, 'Abierto');
-  const D24 = ['#d97757', '#b93535', '#6a9bcc', '#64744e', '#b0aea5'];
+  // Los tres de la 45 (Borrador, En curso, En disputa) son los mismos tonos de la lista cerrada que ya usan el sello
+  // (#507294, #734500) y los textos secundarios (#72706b).
+  const D24 = ['#d97757', '#b93535', '#6a9bcc', '#64744e', '#b0aea5', '#507294', '#734500', '#72706b'];
   if (ESTADOS_DE_OBSERVACION.some(e => !D24.includes(e.color))) throw new Error('color fuera de D-24');
-  if (!observacionViva({ estado: 'Corregido' }) || observacionViva({ estado: 'Verificado' }) || observacionViva(null)) {
-    throw new Error('viva = Abierta, Reabierta o Corregida');
+  if (!observacionViva({ estado: 'Corregido' }) || observacionViva({ estado: 'Verificado' }) || observacionViva(null)
+      || !observacionViva({ estado: 'Borrador' }) || !observacionViva({ estado: 'En disputa' })) {
+    throw new Error('viva = sin cerrar, borrador incluido: retiene sus marcas');
   }
 });
 
 test('cada acto es de quien le toca: corrige el responsable, verifica quien la levantó', () => {
   const obs = { estado: 'Abierto', responsable_id: 9, verificador_id: 7, autor_id: 7 };
-  igual(accionesDeObservacion(obs, 9), { corregir: true, verificar: false, anular: false });
-  igual(accionesDeObservacion(obs, '7'), { corregir: false, verificar: false, anular: true });
-  igual(accionesDeObservacion({ ...obs, estado: 'Corregido' }, 7), { corregir: false, verificar: true, anular: false });
-  igual(accionesDeObservacion({ ...obs, estado: 'Corregido' }, 9), { corregir: false, verificar: false, anular: false });
-  igual(accionesDeObservacion({ ...obs, estado: 'Verificado' }, 7), { corregir: false, verificar: false, anular: false });
-  igual(accionesDeObservacion(obs, null), { corregir: false, verificar: false, anular: false });
+  const nada = { enviar: false, empezar: false, corregir: false, disputar: false, reafirmar: false, anular: false, verificar: false };
+  igual(accionesDeObservacion(obs, 9), { ...nada, empezar: true, corregir: true, disputar: true });
+  igual(accionesDeObservacion(obs, '7'), { ...nada, anular: true });
+  igual(accionesDeObservacion({ ...obs, estado: 'Corregido' }, 7), { ...nada, verificar: true });
+  igual(accionesDeObservacion({ ...obs, estado: 'Corregido' }, 9), nada);
+  igual(accionesDeObservacion({ ...obs, estado: 'Verificado' }, 7), nada);
+  igual(accionesDeObservacion(obs, null), nada);
+  // Los de la 45: el borrador lo envía quien la levantó; la disputa la resuelve él.
+  igual(accionesDeObservacion({ ...obs, estado: 'Borrador' }, 7), { ...nada, enviar: true, anular: true });
+  igual(accionesDeObservacion({ ...obs, estado: 'En disputa' }, 7), { ...nada, reafirmar: true, anular: true });
+  igual(accionesDeObservacion({ ...obs, estado: 'En disputa' }, 9), nada);
+  // Una obra que apagó «En curso» no lo ofrece.
+  igual(accionesDeObservacion(obs, 9, { opcionales: ['En disputa'] }), { ...nada, corregir: true, disputar: true });
+  // Sin `autor_id` (el resumen de la hoja), la levantó quien la verifica.
+  igual(accionesDeObservacion({ estado: 'En disputa', responsable_id: 9, verificador_id: 7 }, 7).reafirmar, true);
+  igual(aQuienLeToca({ estado: 'En disputa', verificador: 'Ana' }), 'Decide: Ana');
   igual(aQuienLeToca({ estado: 'Reabierto', responsable: 'Luis' }), 'Corregir: Luis');
   igual(aQuienLeToca({ estado: 'Corregido', verificador: 'Ana' }), 'Verificar: Ana');
 });
@@ -48,7 +62,7 @@ test('fecha límite por defecto a 7 días y fechas de día sin corrimiento', () 
   igual(fechaLimitePorDefecto(new Date(2026, 11, 30), 3), '2027-01-02');
   if (!/15/.test(fechaDeDia('2099-01-15'))) throw new Error(fechaDeDia('2099-01-15'));
   igual(fechaDeDia('mal'), '');
-  igual(textoDelEvento({ event: 'reopened' }), 'Rechazó la corrección y la reabrió');
+  igual(textoDelEvento({ event: 'reopened' }), 'No aprobó la corrección: vuelve al responsable');
   igual(textoDelEvento({ event: 'raro' }), 'Cambio');
 });
 

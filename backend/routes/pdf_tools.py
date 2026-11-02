@@ -5,6 +5,7 @@ abajo-izquierda) para que sean independientes del zoom/rotación del visor.
 """
 from esquema_congelado import solo_con_ddl
 import json
+import re
 import os
 import traceback
 import uuid
@@ -166,7 +167,7 @@ def list_markups():
                 "version_id": r[10], "version_number": r[11], "llevada_de": r[12],
             } for r in cur.fetchall()]
             _con_enlaces(cur, rows)
-            _con_observacion(cur, rows)
+            _con_observacion(cur, rows, node_id)
             en_otras = []
             if version:
                 cur.execute("""SELECT v.id::text, v.version_number, count(*)
@@ -179,7 +180,9 @@ def list_markups():
                                 GROUP BY v.id, v.version_number
                                 ORDER BY v.version_number DESC""", (node_id, version, autor))
                 en_otras = [{"version_id": r[0], "version_number": r[1], "marcas": r[2]} for r in cur.fetchall()]
-        return jsonify({"success": True, "markups": rows, "en_otras_versiones": en_otras})
+            del_plano = _observaciones_del_plano(cur, node_id)
+        return jsonify({"success": True, "markups": rows, "en_otras_versiones": en_otras,
+                        "observaciones_del_plano": del_plano})
     except Exception as e:
         traceback.print_exc()
         return jsonify({"success": False, "error": str(e)}), 500
@@ -201,6 +204,12 @@ def create_markup():
     estilo = dict(d.get('style') or {})
     estilo.pop('citas', None)
     estilo.pop('fotos', None)
+    # Grosor, relleno y festones (al duplicar una marca, 2-nov-2026): las mismas reglas que al cambiarlos.
+    pedido = {k: estilo.pop(k) for k in ('grosor', 'relleno', 'festones', 'triangulo') if k in estilo}
+    if pedido:
+        estilo, error = _estilo(d['kind'], pedido, estilo)
+        if error:
+            return jsonify({"success": False, "error": error}), 400
     if d['kind'] == 'sello':
         sello, error = _sello(estilo.get('sello'))
         if error:
@@ -440,6 +449,9 @@ def _geometria(kind, valor, anterior):
         return None, 'Esta marca no se puede mover.'
     if not isinstance(valor, dict):
         return None, 'A la posición le falta su contenido.'
+    # La NUBE POLIGONAL (2-nov-2026): una nube que en vez de su caja lleva sus vértices.
+    if kind == 'cloud' and 'points' in valor:
+        forma = 'poligono'
     if forma == 'caja':
         x, y, w, h = (_numero(valor.get(k)) for k in ('x', 'y', 'w', 'h'))
         if None in (x, y, w, h) or w <= 0 or h <= 0:
@@ -466,6 +478,53 @@ def _geometria(kind, valor, anterior):
     if not all(limpios):
         return None, 'Uno de los puntos de la marca no es válido.'
     return {'points': limpios}, None
+
+
+# EL ESTILO DE LA FIGURA (2-nov-2026, como el «Estilo» de ACC: color de trazo y de relleno): además del color, el
+# grosor del trazo, el relleno (uno de los colores de la paleta, que se pinta translúcido) y el tamaño de los festones
+# de la nube. Valores cerrados: lo que no está aquí no entra en `style`.
+GROSORES = ('fino', 'medio', 'grueso')
+# El TRIÁNGULO DE REVISIÓN de la nube: el código de la revisión que la levanta (C02, R1, B…), como en los planos.
+TRIANGULO = re.compile(r'^[A-Za-z0-9][A-Za-z0-9.\-]{0,7}$')
+FESTONES = ('pequenos', 'medianos', 'grandes')
+CON_RELLENO = ('cloud', 'rect')
+CON_GROSOR = ('cloud', 'rect', 'arrow', 'pen')
+
+
+def _estilo(kind, pedido, estilo):
+    """(estilo nuevo, None) o (None, motivo). Solo grosor, relleno y festones, y solo donde tienen sentido."""
+    if not isinstance(pedido, dict):
+        return None, "El estilo no es válido."
+    nuevo = dict(estilo)
+    if 'grosor' in pedido:
+        if kind not in CON_GROSOR or pedido['grosor'] not in GROSORES:
+            return None, "Ese grosor no vale para esta marca."
+        nuevo['grosor'] = pedido['grosor']
+    if 'relleno' in pedido:
+        if kind not in CON_RELLENO:
+            return None, "Esta marca no lleva relleno."
+        if pedido['relleno'] in (None, '', 'ninguno'):
+            nuevo.pop('relleno', None)
+        else:
+            color, error = _color(pedido['relleno'])
+            if error:
+                return None, error
+            nuevo['relleno'] = color
+    if 'festones' in pedido:
+        if kind != 'cloud' or pedido['festones'] not in FESTONES:
+            return None, "Solo la nube tiene festones (pequeños, medianos o grandes)."
+        nuevo['festones'] = pedido['festones']
+    if 'triangulo' in pedido:
+        if kind != 'cloud':
+            return None, "Solo la nube lleva triángulo de revisión."
+        valor = str(pedido['triangulo'] or '').strip()
+        if not valor:
+            nuevo.pop('triangulo', None)
+        elif not TRIANGULO.match(valor):
+            return None, "El triángulo lleva el código de la revisión: hasta 8 letras o números (C02, R1…)."
+        else:
+            nuevo['triangulo'] = valor.upper()
+    return nuevo, None
 
 
 def _color(valor):
@@ -524,9 +583,9 @@ def editar_markup(markup_id):
     """Citas, fotos, sello, orientación, posición, color y texto de una marca. Solo su autor.
 
     Cuerpo: {citas?: [id], fotos?: [id], sello?: {...}, angulo?: grados,
-    geometria?: {...}, color?: '#rrggbb', texto?: str}. Lo que no viene no
+    geometria?: {...}, color?: '#rrggbb', estilo?: {grosor, relleno, festones}, texto?: str}. Lo que no viene no
     cambia. Citar exige poder abrir lo citado (regla 2). La figura (geometria,
-    color, texto) solo cambia en un borrador sin observación abierta.
+    color, estilo, texto) solo cambia en un borrador sin observación abierta.
     """
     negativa = guardia_de_recurso('pdf_markups', markup_id)
     if negativa:
@@ -548,7 +607,7 @@ def editar_markup(markup_id):
                 return jsonify({"success": False, "error": "Solo el autor de la marca puede cambiarla."}), 403
             estilo, geometria = dict(estilo or {}), dict(geometria or {})
             texto = None
-            if any(k in d for k in ('geometria', 'color', 'texto')):
+            if any(k in d for k in ('geometria', 'color', 'estilo', 'texto')):
                 cur.execute("SELECT publicado FROM pdf_markups WHERE id = %s", (markup_id,))
                 if (cur.fetchone() or (False,))[0]:
                     return jsonify({"success": False, "code": "MARCA_PUBLICADA",
@@ -568,6 +627,10 @@ def editar_markup(markup_id):
                     if error:
                         return jsonify({"success": False, "error": error}), 400
                     estilo['color'] = color
+                if 'estilo' in d:
+                    estilo, error = _estilo(kind, d['estilo'], estilo)
+                    if error:
+                        return jsonify({"success": False, "error": error}), 400
                 if 'texto' in d:
                     texto = str(d['texto'] or '').strip()
                     if kind != 'text':
@@ -818,18 +881,35 @@ def citas_de():
 # Decisión del propietario: docs/ux/MARCAS_REVISION_LO_PROFESIONAL.md, opción A.
 
 ORIGEN_MARCA = 'MARCA'
+# OBSERVACIÓN DEL PLANO (2-nov-2026, docs/archivos/18). El dueño: «en un plano puedo tener varias marcas y no quisiera
+# agarrar cada nube y asignarla: asignar todo el plano a un usuario con su estado y fecha». Es la misma observación de
+# documento (migración 37, mismos estados y actos), pero su origen es el PLANO (`origen_id` = el documento) y su
+# evidencia, la versión y TODAS las marcas que se eligieron. Sin migración: `origen_tipo` es texto y `evidencia`, jsonb.
+ORIGEN_PLANO = 'PLANO'
+_EN_EVIDENCIA = lambda markup_id: json.dumps([{'marca': int(markup_id)}])
+# Un BORRADOR (migración 45) solo lo ve quien lo levantó: todavía no se envió a nadie.
+_NO_ES_BORRADOR_AJENO = "(estado <> 'Borrador' OR autor_id = %s)"
+
+
+def _yo():
+    try:
+        return _user().get('id')
+    except RuntimeError:             # fuera de una petición (las pruebas llaman a las funciones a pelo)
+        return None
 
 
 def _observacion_viva(cur, markup_id):
     """El código de la observación ABIERTA de la marca, o None.
 
     Mientras haya una, la marca no se retira ni se borra: es lo que el responsable
-    tiene que ver para corregir, y lo que la observación señala en la hoja.
+    tiene que ver para corregir, y lo que la observación señala en la hoja. Un
+    borrador (45) también la retiene: va a enviarse con ella.
     """
     import flujo_de_issue as iss
     cur.execute("""SELECT codigo FROM doc_issues
-                    WHERE origen_tipo = %s AND origen_id = %s AND estado = ANY(%s)
-                    LIMIT 1""", (ORIGEN_MARCA, str(markup_id), list(iss.VIVOS)))
+                    WHERE estado = ANY(%s)
+                      AND ((origen_tipo = %s AND origen_id = %s) OR (origen_tipo = %s AND evidencia @> %s::jsonb))
+                    LIMIT 1""", (list(iss.SIN_CERRAR), ORIGEN_MARCA, str(markup_id), ORIGEN_PLANO, _EN_EVIDENCIA(markup_id)))
     fila = cur.fetchone()
     return fila[0] if fila else None
 
@@ -840,6 +920,21 @@ def _nombres(cur, ids):
         return {}
     cur.execute("SELECT id, COALESCE(NULLIF(name, ''), email) FROM users WHERE id = ANY(%s)", (ids,))
     return {r[0]: r[1] for r in cur.fetchall()}
+
+
+def _con_empresas(cur, resumenes):
+    """A los resúmenes sin persona responsable, la EMPRESA responsable (45) y su nombre. Una consulta, y solo si hace
+    falta."""
+    sin = [o for o in resumenes if o and not o.get('responsable_id')]
+    if not sin:
+        return resumenes
+    cur.execute("""SELECT i.id, c.id, c.name FROM doc_issues i JOIN companies c ON c.id = i.responsable_empresa
+                    WHERE i.id = ANY(%s)""", ([int(o['id']) for o in sin],))
+    por_id = {str(f[0]): (f[1], f[2]) for f in cur.fetchall()}
+    for o in sin:
+        if o['id'] in por_id:
+            o['responsable_empresa'], o['responsable'] = por_id[o['id']]
+    return resumenes
 
 
 def _hoy_en_obra():
@@ -858,11 +953,16 @@ def _resumen_de_observacion(r, nombres, hoy):
         'vence_en': vence.isoformat() if vence else None,
         'vencida': bool(vence and vence < hoy and r[2] in iss.VIVOS),
         'cerrada': iss.esta_cerrado(r[2]),
+        'estado_etiqueta': iss.etiqueta_estado(r[2]),
     }
 
 
-def _con_observacion(cur, rows):
-    """Pone en cada marca su observación más reciente (o None). Una consulta para toda la hoja."""
+def _con_observacion(cur, rows, node_id=None):
+    """Pone en cada marca su observación más reciente (o None). Una consulta para toda la hoja.
+
+    `node_id`: el plano de esas marcas. Con él, las observaciones del plano entero se buscan SOLO en ese plano
+    (índice `idx_issues_origen`); sin él se recorrerían las de todos los planos de todas las obras.
+    """
     import flujo_de_issue as iss
     for m in rows:
         m['observacion'] = None
@@ -872,15 +972,92 @@ def _con_observacion(cur, rows):
     cur.execute("""SELECT DISTINCT ON (origen_id)
                           id, codigo, estado, titulo, responsable_id, verificador_id, vence_en, origen_id
                      FROM doc_issues
-                    WHERE origen_tipo = %s AND origen_id = ANY(%s) AND tipo = %s
-                    ORDER BY origen_id, creado_en DESC, id DESC""", (ORIGEN_MARCA, ids, iss.OBSERVACION))
+                    WHERE origen_tipo = %s AND origen_id = ANY(%s) AND tipo = %s AND """
+                + _NO_ES_BORRADOR_AJENO + """
+                    ORDER BY origen_id, creado_en DESC, id DESC""", (ORIGEN_MARCA, ids, iss.OBSERVACION, _yo()))
     filas = cur.fetchall()
     nombres = _nombres(cur, [x for r in filas for x in (r[4], r[5])])
     hoy = _hoy_en_obra()
     por_marca = {r[7]: _resumen_de_observacion(r, nombres, hoy) for r in filas}
+    # Las que no tienen una suya pueden estar en una OBSERVACIÓN DEL PLANO: la más reciente que la incluye.
+    sueltas = [str(m['id']) for m in rows if m.get('id') is not None and str(m.get('id')) not in por_marca]
+    if sueltas:
+        cur.execute("""SELECT id, codigo, estado, titulo, responsable_id, verificador_id, vence_en, origen_id, evidencia
+                         FROM doc_issues
+                        WHERE origen_tipo = %s AND (%s::text IS NULL OR origen_id = %s::text) AND tipo = %s
+                          AND evidencia @> ANY(%s::jsonb[]) AND """
+                    + _NO_ES_BORRADOR_AJENO + """
+                        ORDER BY creado_en DESC, id DESC""",
+                    (ORIGEN_PLANO, node_id and str(node_id), node_id and str(node_id), iss.OBSERVACION,
+                     [_EN_EVIDENCIA(i) for i in sueltas], _yo()))
+        del_plano = cur.fetchall()
+        nombres.update(_nombres(cur, [x for r in del_plano for x in (r[4], r[5])]))
+        for r in del_plano:
+            resumen = {**_resumen_de_observacion(r[:8], nombres, hoy), 'del_plano': True}
+            for e in r[8] or []:
+                clave = str(e.get('marca')) if isinstance(e, dict) and e.get('marca') is not None else None
+                if clave in sueltas and clave not in por_marca:
+                    por_marca[clave] = resumen
+    _con_empresas(cur, list({id(o): o for o in por_marca.values()}.values()))
     for m in rows:
         m['observacion'] = por_marca.get(str(m.get('id')))
     return rows
+
+
+def _observaciones_del_plano(cur, node_id):
+    """Las observaciones del plano entero (las más recientes primero), con su versión y sus marcas."""
+    import flujo_de_issue as iss
+    cur.execute("""SELECT id, codigo, estado, titulo, responsable_id, verificador_id, vence_en, origen_id, evidencia
+                     FROM doc_issues
+                    WHERE origen_tipo = %s AND origen_id = %s AND tipo = %s AND """ + _NO_ES_BORRADOR_AJENO + """
+                    ORDER BY creado_en DESC, id DESC LIMIT 50""", (ORIGEN_PLANO, str(node_id), iss.OBSERVACION, _yo()))
+    filas = cur.fetchall()
+    nombres, hoy = _nombres(cur, [x for r in filas for x in (r[4], r[5])]), _hoy_en_obra()
+    salida = []
+    for r in filas:
+        evidencia = [e for e in (r[8] or []) if isinstance(e, dict)]
+        plano = next((e for e in evidencia if e.get('tipo') == 'plano'), {})
+        salida.append({**_resumen_de_observacion(r[:8], nombres, hoy), 'del_plano': True,
+                       'version_id': plano.get('version_id'), 'version_numero': plano.get('version_numero'),
+                       'marcas': [e['marca'] for e in evidencia if e.get('tipo') == 'marca' and e.get('marca') is not None]})
+    return _con_empresas(cur, salida)
+
+
+def _leer_observaciones_del_plano(nodo):
+    """GET: las observaciones del plano entero (las más recientes primero) o, con `?id=`, el detalle de una.
+
+    Un borrador ajeno no se ve (migración 45). El detalle es el mismo que el de la observación de una marca.
+    """
+    import flujo_de_issue as iss
+    try:
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            pedida = request.args.get('id')
+            if pedida is None:
+                salida = jsonify({"success": True, "observaciones": _observaciones_del_plano(cur, nodo)})
+            else:
+                try:
+                    iid = int(pedida)
+                except ValueError:
+                    return jsonify({"success": False, "error": "Observación no válida."}), 400
+                cur.execute("SELECT " + _COLS_DETALLE + """, evidencia FROM doc_issues
+                              WHERE id = %s AND origen_tipo = %s AND origen_id = %s AND tipo = %s AND """
+                            + _NO_ES_BORRADOR_AJENO, (iid, ORIGEN_PLANO, nodo, iss.OBSERVACION, _yo()))
+                r = cur.fetchone()
+                if not r:
+                    return jsonify({"success": False, "error": "La observación no existe."}), 404
+                obs = _detalle_de_observacion(cur, r[:14], True)
+                evidencia = [e for e in (r[14] or []) if isinstance(e, dict)]
+                plano = next((e for e in evidencia if e.get('tipo') == 'plano'), {})
+                obs.update({'version_id': plano.get('version_id'), 'version_numero': plano.get('version_numero'),
+                            'marcas': [e['marca'] for e in evidencia
+                                       if e.get('tipo') == 'marca' and e.get('marca') is not None]})
+                salida = jsonify({"success": True, "observacion": obs})
+        salida.headers['Cache-Control'] = 'private, no-store'
+        return salida
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"success": False, "error": str(e)}), 500
 
 
 def _marca_para_observacion(cur, markup_id):
@@ -891,6 +1068,37 @@ def _marca_para_observacion(cur, markup_id):
                 LEFT JOIN file_versions v ON v.id = COALESCE(m.file_version_id, n.current_version_id)
                     WHERE m.id = %s""", (markup_id,))
     return cur.fetchone()
+
+
+def _campos_de_observacion(d, uid, empresa_vale=False):
+    """((titulo, descripcion, responsable, vence), None) o (None, respuesta de error).
+
+    Con `empresa_vale` (la del plano, 45) el responsable puede ser una EMPRESA (`responsable_empresa`): entonces
+    `responsable` vuelve None y la empresa la valida `routes.issues.datos_de_la_45`.
+    """
+    from datetime import date
+    titulo = str(d.get('titulo') or '').strip()[:180]
+    if not titulo:
+        return None, (jsonify({"success": False, "error": "Escribe qué hay que corregir."}), 400)
+    descripcion = str(d.get('descripcion') or '').strip()[:2000] or None
+    try:
+        responsable = int(d.get('responsable_id'))
+    except (TypeError, ValueError):
+        responsable = None
+    if responsable is None and not (empresa_vale and d.get('responsable_empresa')):
+        return None, (jsonify({"success": False, "error": "Elige a quién le toca corregir.",
+                               "code": "SIN_RESPONSABLE"}), 400)
+    if responsable == uid:
+        return None, (jsonify({"success": False,
+                               "error": "La verificas tú, que la detectaste: el responsable de corregir tiene que ser otra persona.",
+                               "code": "VERIFICADOR_ES_RESPONSABLE"}), 409)
+    try:
+        vence = date.fromisoformat(str(d.get('vence_en') or '')[:10])
+    except ValueError:
+        return None, (jsonify({"success": False, "error": "Pon una fecha límite."}), 400)
+    if vence < _hoy_en_obra():
+        return None, (jsonify({"success": False, "error": "La fecha límite no puede estar en el pasado."}), 400)
+    return (titulo, descripcion, responsable, vence), None
 
 
 @pdf_tools_bp.route('/api/pdf/markups/<int:markup_id>/observacion', methods=['POST'])
@@ -915,25 +1123,11 @@ def crear_observacion(markup_id):
     actor = u.get('email') or autor or 'desconocido'
     if not uid or not autor:
         return jsonify({"success": False, "error": "Sesión sin identidad."}), 401
-    titulo = str(d.get('titulo') or '').strip()[:180]
-    if not titulo:
-        return jsonify({"success": False, "error": "Escribe qué hay que corregir."}), 400
-    descripcion = str(d.get('descripcion') or '').strip()[:2000] or None
-    try:
-        responsable = int(d.get('responsable_id'))
-    except (TypeError, ValueError):
-        return jsonify({"success": False, "error": "Elige a quién le toca corregir.",
-                        "code": "SIN_RESPONSABLE"}), 400
-    if responsable == uid:
-        return jsonify({"success": False,
-                        "error": "La verificas tú, que la detectaste: el responsable de corregir tiene que ser otra persona.",
-                        "code": "VERIFICADOR_ES_RESPONSABLE"}), 409
-    try:
-        vence = date.fromisoformat(str(d.get('vence_en') or '')[:10])
-    except ValueError:
-        return jsonify({"success": False, "error": "Pon una fecha límite."}), 400
-    if vence < _hoy_en_obra():
-        return jsonify({"success": False, "error": "La fecha límite no puede estar en el pasado."}), 400
+    campos, error = _campos_de_observacion(d, uid, empresa_vale=True)
+    if error:
+        return error
+    titulo, descripcion, responsable, vence = campos
+    borrador = bool(d.get('borrador'))
     try:
         with get_db_connection() as conn:
             cur = conn.cursor()
@@ -955,11 +1149,21 @@ def crear_observacion(markup_id):
             if corte:
                 return corte
             for quien, persona in (('responsable', responsable), ('verificador', uid)):
+                if persona is None:
+                    continue
                 cur.execute('SELECT 1 FROM project_users WHERE project_id = %s AND user_id = %s', (obra, persona))
                 if not cur.fetchone():
                     return jsonify({"success": False,
                                     "error": "El %s no es miembro de esta obra." % quien,
                                     "code": "%s_NO_MIEMBRO" % quien.upper()}), 409
+            # Empresa responsable, observadores, adjuntos y clasificación (45): la misma regla que el resto.
+            from routes.issues import datos_de_la_45, guardar_datos_de_la_45
+            if borrador and iss.opcional_apagado(iss.BORRADOR, iss.opcionales_de_obra(cur, obra)):
+                return jsonify({"success": False, "error": "Esta obra no usa borradores.", "code": "ESTADO_APAGADO"}), 409
+            datos45, error = datos_de_la_45(cur, obra, iss.OBSERVACION, d if responsable is None
+                                            else {**d, 'responsable_empresa': None}, responsable, uid, borrador)
+            if error:
+                return (jsonify({"success": False, **error[0].get_json()}), error[1])
             viva = _observacion_viva(cur, markup_id)
             if viva:
                 return jsonify({"success": False,
@@ -988,36 +1192,81 @@ def crear_observacion(markup_id):
                          json.dumps([reg.entrada('detected', actor, codigo=codigo, tipo=iss.OBSERVACION,
                                                  desde_marca=markup_id)])))
                     iid = cur.fetchone()[0]
+                    if borrador:
+                        cur.execute('UPDATE doc_issues SET estado = %s WHERE id = %s', (iss.BORRADOR, iid))
+                    guardar_datos_de_la_45(cur, iid, datos45)
                     cur.execute('RELEASE SAVEPOINT alta_observacion')
                     break
                 except Exception:
                     cur.execute('ROLLBACK TO SAVEPOINT alta_observacion')
                     if intento == 4:
                         raise
-            if not publicado:
+            # Un borrador (45) ni publica la marca ni le debe nada a nadie: eso pasa al enviarlo.
+            if not publicado and not borrador:
                 cur.execute("""UPDATE pdf_markups SET publicado = TRUE, publicado_en = CURRENT_TIMESTAMP,
                                       publicado_por = %s
                                 WHERE id = %s""", (uid, markup_id))
             conn.commit()
             # LA PELOTA, en el mismo acto: al responsable le aparece en «Mi trabajo» y recibe aviso.
             # En su propio try, como en el protocolo: si el encargo falla, la observación ya existe.
-            try:
-                eid = _enc.abrir(cur, 'ISSUE', iid, 'Corregir %s: %s' % (codigo, titulo),
-                                 destino_usuario=responsable, vence_en=vence, creado_por=actor)
-                if eid:
-                    _enc.avisar(cur, eid)
-                conn.commit()
-            except Exception as e:
-                conn.rollback()
-                print('[pdf] observación %s creada sin encargo: %s' % (codigo, str(e)[:120]))
+            if not borrador:
+                try:
+                    eid = _enc.abrir(cur, 'ISSUE', iid, 'Corregir %s: %s' % (codigo, titulo),
+                                     destino_usuario=responsable,
+                                     destino_empresa=None if responsable else datos45['responsable_empresa'],
+                                     vence_en=vence, creado_por=actor)
+                    if eid:
+                        _enc.avisar(cur, eid)
+                    conn.commit()
+                except Exception as e:
+                    conn.rollback()
+                    print('[pdf] observación %s creada sin encargo: %s' % (codigo, str(e)[:120]))
             log_activity(model_urn, 'CREATE', 'ISSUE', str(iid), codigo, actor,
                          {'tipo': iss.OBSERVACION, 'responsable': responsable, 'marca': markup_id})
             marca = {'id': markup_id}
-            _con_observacion(cur, [marca])
-        return jsonify({"success": True, "observacion": marca['observacion'], "publicado": True}), 201
+            _con_observacion(cur, [marca], nodo)
+        return jsonify({"success": True, "observacion": marca['observacion'], "publicado": not borrador or bool(publicado)}), 201
     except Exception as e:
         traceback.print_exc()
         return jsonify({"success": False, "error": str(e)}), 500
+
+
+_COLS_DETALLE = """id, codigo, estado, titulo, responsable_id, verificador_id, vence_en, origen_id,
+                  descripcion, autor_id, evidencia_correccion, history, autoverificacion, creado_en"""
+
+
+def _detalle_de_observacion(cur, r, del_plano=False):
+    """Lo que pinta el panel de una observación (fila con `_COLS_DETALLE`): el resumen, el autor, la evidencia de la
+    corrección (sin enseñar el nombre de lo que esta persona no puede ver) y el historial."""
+    nombres = _nombres(cur, (r[4], r[5], r[9]))
+    obs = _resumen_de_observacion(r, nombres, _hoy_en_obra())
+    corregida = []
+    ids = [_uuid(e.get('documento')) for e in (r[10] or []) if isinstance(e, dict) and _uuid(e.get('documento'))]
+    docs, cache = _documentos(cur, ids), {}
+    for e in r[10] or []:
+        if not isinstance(e, dict):
+            continue
+        nid = _uuid(e.get('documento'))
+        item = {'por': e.get('por'), 'comentario': e.get('comentario')}
+        if nid:
+            doc = docs.get(nid)
+            if not doc:
+                item.update({'id': nid, 'eliminado': True})
+            elif _puede_ver(nid, doc[0], cache):
+                item.update({'id': nid, 'nombre': doc[1]})
+            else:
+                item.update({'id': nid, 'restringido': True})
+        corregida.append(item)
+    obs.update({
+        'descripcion': r[8], 'autor_id': r[9], 'autor': nombres.get(r[9]),
+        'evidencia_correccion': corregida,
+        'historial': [h for h in (r[11] or []) if isinstance(h, dict)],
+        'autoverificacion': bool(r[12]),
+        'creado_en': r[13].isoformat() if r[13] else None,
+        **({'del_plano': True} if del_plano else {}),
+    })
+    _con_empresas(cur, [obs])
+    return obs
 
 
 @pdf_tools_bp.route('/api/pdf/markups/<int:markup_id>/observacion', methods=['GET'])
@@ -1042,41 +1291,185 @@ def leer_observacion(markup_id):
                                   descripcion, autor_id, evidencia_correccion, history, autoverificacion,
                                   creado_en
                              FROM doc_issues
-                            WHERE origen_tipo = %s AND origen_id = %s AND tipo = %s
+                            WHERE origen_tipo = %s AND origen_id = %s AND tipo = %s AND """ + _NO_ES_BORRADOR_AJENO + """
                             ORDER BY creado_en DESC, id DESC LIMIT 1""",
-                        (ORIGEN_MARCA, str(markup_id), iss.OBSERVACION))
+                        (ORIGEN_MARCA, str(markup_id), iss.OBSERVACION, _yo()))
             r = cur.fetchone()
+            del_plano = False
+            if not r:
+                cur.execute("""SELECT id, codigo, estado, titulo, responsable_id, verificador_id, vence_en, origen_id,
+                                      descripcion, autor_id, evidencia_correccion, history, autoverificacion,
+                                      creado_en
+                                 FROM doc_issues
+                                WHERE origen_tipo = %s AND tipo = %s AND evidencia @> %s::jsonb AND """
+                                + _NO_ES_BORRADOR_AJENO + """
+                                ORDER BY creado_en DESC, id DESC LIMIT 1""",
+                            (ORIGEN_PLANO, iss.OBSERVACION, _EN_EVIDENCIA(markup_id), _yo()))
+                r, del_plano = cur.fetchone(), True
             if not r:
                 return jsonify({"success": True, "observacion": None})
-            nombres = _nombres(cur, (r[4], r[5], r[9]))
-            obs = _resumen_de_observacion(r, nombres, _hoy_en_obra())
-            corregida = []
-            ids = [_uuid(e.get('documento')) for e in (r[10] or []) if isinstance(e, dict) and _uuid(e.get('documento'))]
-            docs, cache = _documentos(cur, ids), {}
-            for e in r[10] or []:
-                if not isinstance(e, dict):
-                    continue
-                nid = _uuid(e.get('documento'))
-                item = {'por': e.get('por'), 'comentario': e.get('comentario')}
-                if nid:
-                    doc = docs.get(nid)
-                    if not doc:
-                        item.update({'id': nid, 'eliminado': True})
-                    elif _puede_ver(nid, doc[0], cache):
-                        item.update({'id': nid, 'nombre': doc[1]})
-                    else:
-                        item.update({'id': nid, 'restringido': True})
-                corregida.append(item)
-            obs.update({
-                'descripcion': r[8], 'autor_id': r[9], 'autor': nombres.get(r[9]),
-                'evidencia_correccion': corregida,
-                'historial': [h for h in (r[11] or []) if isinstance(h, dict)],
-                'autoverificacion': bool(r[12]),
-                'creado_en': r[13].isoformat() if r[13] else None,
-            })
+            obs = _detalle_de_observacion(cur, r, del_plano)
         response = jsonify({"success": True, "observacion": obs})
         response.headers['Cache-Control'] = 'private, no-store'
         return response
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@pdf_tools_bp.route('/api/pdf/planos/<node_id>/observacion', methods=['GET', 'POST'])
+def observacion_del_plano(node_id):
+    """Levanta UNA observación del PLANO entero (docs/archivos/18): con responsable, fecha límite y las marcas que se
+    eligieron de una versión. La levanta cualquier miembro de la obra que pueda ver el plano, y la verifica él.
+
+    Cuerpo: {titulo, descripcion?, responsable_id, vence_en, version_id?, marcas: [ids], borrador?}. Las marcas tienen
+    que ser de ese plano y esa versión, visibles para quien la levanta (publicadas o suyas) y sin otra observación
+    abierta. Sus borradores entran publicados: el responsable tiene que verlos. Con `borrador` (migración 45) se guarda
+    sin enviar: ni encargo ni marcas publicadas hasta `POST /api/issues/<id>/enviar`.
+    """
+    import encargos as _enc
+    import flujo_de_issue as iss
+    import flujo_de_registro as reg
+    from db import log_activity, resolve_project_id
+    from perimetro_de_obra import guardia_de_obra
+
+    nodo = _uuid(node_id)
+    if not nodo:
+        return jsonify({"success": False, "error": "Plano no válido."}), 400
+    negativa = guardia_de_recurso('file_nodes', nodo)
+    if negativa:
+        return negativa
+    if request.method == 'GET':
+        return _leer_observaciones_del_plano(nodo)
+    d = request.get_json(silent=True) or {}
+    u = _user()
+    uid, autor = u.get('id'), u.get('name') or ''
+    actor = u.get('email') or autor or 'desconocido'
+    if not uid or not autor:
+        return jsonify({"success": False, "error": "Sesión sin identidad."}), 401
+    campos, error = _campos_de_observacion(d, uid, empresa_vale=True)
+    if error:
+        return error
+    titulo, descripcion, responsable, vence = campos
+    marcas_pedidas = d.get('marcas') if isinstance(d.get('marcas'), list) else []
+    try:
+        marcas_pedidas = sorted({int(x) for x in marcas_pedidas})[:500]
+    except (TypeError, ValueError):
+        return jsonify({"success": False, "error": "Las marcas no son válidas."}), 400
+    borrador = bool(d.get('borrador'))
+    try:
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            version_pedida = _uuid(d.get('version_id'))
+            cur.execute("""SELECT n.model_urn, n.name, v.id::text, v.version_number
+                             FROM file_nodes n
+                        LEFT JOIN file_versions v ON v.id = COALESCE(%s::uuid, n.current_version_id) AND v.file_node_id = n.id
+                            WHERE n.id = %s""", (version_pedida, nodo))
+            fila = cur.fetchone()
+            if not fila:
+                return jsonify({"success": False, "error": "El plano no existe."}), 404
+            model_urn, nombre, version_id, version_num = fila
+            if version_pedida and version_id != version_pedida:
+                return jsonify({"success": False, "error": "Esa versión no es de este plano."}), 400
+            obra = resolve_project_id(model_urn)
+            if not obra:
+                return jsonify({"success": False, "error": "No se pudo determinar la obra."}), 400
+            corte = guardia_de_obra(obra, 'levantar una observación')
+            if corte:
+                return corte
+            for quien, persona in (('responsable', responsable), ('verificador', uid)):
+                if persona is None:
+                    continue
+                cur.execute('SELECT 1 FROM project_users WHERE project_id = %s AND user_id = %s', (obra, persona))
+                if not cur.fetchone():
+                    return jsonify({"success": False,
+                                    "error": "El %s no es miembro de esta obra." % quien,
+                                    "code": "%s_NO_MIEMBRO" % quien.upper()}), 409
+            # Empresa responsable, observadores, adjuntos y clasificación (45): la misma regla que el alta de incidencias.
+            from routes.issues import datos_de_la_45, guardar_datos_de_la_45
+            datos45, error = datos_de_la_45(cur, obra, iss.OBSERVACION, d if responsable is None
+                                            else {**d, 'responsable_empresa': None}, responsable, uid, borrador)
+            if error:
+                return (jsonify({"success": False, **error[0].get_json()}), error[1])
+            marcas = []
+            if marcas_pedidas:
+                # Las de este plano y esta versión que esta persona ve (publicadas o suyas); las anteriores a la
+                # migración 36, sin versión, cuentan como de la vigente.
+                cur.execute("""SELECT m.id, m.created_by, m.publicado, m.page, m.kind
+                                 FROM pdf_markups m JOIN file_nodes n ON n.id = m.file_node_id
+                                WHERE m.id = ANY(%s) AND m.file_node_id = %s
+                                  AND (m.file_version_id = %s OR (m.file_version_id IS NULL AND n.current_version_id = %s))
+                                  AND (m.publicado OR m.created_by = %s)""",
+                            (marcas_pedidas, nodo, version_id, version_id, autor))
+                marcas = cur.fetchall()
+                if len(marcas) != len(marcas_pedidas):
+                    return jsonify({"success": False, "error": "Alguna marca no es de esta versión del plano.",
+                                    "code": "MARCA_AJENA"}), 400
+                ocupadas = [c for c in (_observacion_viva(cur, m[0]) for m in marcas) if c]
+                if ocupadas:
+                    return jsonify({"success": False,
+                                    "error": "Alguna marca ya está en una observación abierta (%s)." % ', '.join(sorted(set(ocupadas))),
+                                    "code": "YA_TIENE_OBSERVACION"}), 409
+            ubicacion = ' · '.join(x for x in (nombre, 'V%s' % version_num if version_num else '',
+                                               ('%d marca%s' % (len(marcas), '' if len(marcas) == 1 else 's')) if marcas else 'plano entero')
+                                   if x)[:300]
+            if borrador and iss.opcional_apagado(iss.BORRADOR, iss.opcionales_de_obra(cur, obra)):
+                return jsonify({"success": False, "error": "Esta obra no usa borradores.",
+                                "code": "ESTADO_APAGADO"}), 409
+            evidencia = [{'tipo': 'plano', 'documento': nodo, 'nombre': nombre, 'version_id': version_id,
+                          'version_numero': version_num}] + [
+                {'tipo': 'marca', 'marca': m[0], 'documento': nodo, 'nombre': nombre, 'version_id': version_id,
+                 'version_numero': version_num, 'pagina': m[3], 'clase': m[4]} for m in marcas]
+            iid = codigo = None
+            for intento in range(5):
+                codigo = reg.siguiente_codigo(cur, iss.SEMANTICA, obra)
+                try:
+                    cur.execute('SAVEPOINT alta_observacion')
+                    cur.execute("""INSERT INTO doc_issues
+                        (project_id, model_urn, codigo, tipo, titulo, descripcion, ubicacion,
+                         autor_id, responsable_id, verificador_id, created_by, vence_en, evidencia,
+                         origen_tipo, origen_id, history)
+                        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                        RETURNING id""",
+                        (obra, model_urn, codigo, iss.OBSERVACION, titulo, descripcion, ubicacion,
+                         uid, responsable, uid, actor, vence, json.dumps(evidencia),
+                         ORIGEN_PLANO, nodo,
+                         json.dumps([reg.entrada('detected', actor, codigo=codigo, tipo=iss.OBSERVACION,
+                                                 desde_plano=nodo, marcas=len(marcas))])))
+                    iid = cur.fetchone()[0]
+                    if borrador:
+                        cur.execute('UPDATE doc_issues SET estado = %s WHERE id = %s', (iss.BORRADOR, iid))
+                    guardar_datos_de_la_45(cur, iid, datos45)
+                    cur.execute('RELEASE SAVEPOINT alta_observacion')
+                    break
+                except Exception:
+                    cur.execute('ROLLBACK TO SAVEPOINT alta_observacion')
+                    if intento == 4:
+                        raise
+            # Un borrador no publica nada ni le debe nada a nadie: eso pasa al enviarlo.
+            publicadas = [] if borrador else [m[0] for m in marcas if not m[2]]
+            if publicadas:
+                cur.execute("""UPDATE pdf_markups SET publicado = TRUE, publicado_en = CURRENT_TIMESTAMP, publicado_por = %s
+                                WHERE id = ANY(%s) AND created_by = %s""", (uid, publicadas, autor))
+            conn.commit()
+            # LA PELOTA, en el mismo acto: al responsable le aparece en «Mi trabajo» y recibe aviso.
+            if not borrador:
+                try:
+                    eid = _enc.abrir(cur, 'ISSUE', iid, 'Corregir %s: %s' % (codigo, titulo),
+                                     destino_usuario=responsable,
+                                     destino_empresa=None if responsable else datos45['responsable_empresa'],
+                                     vence_en=vence, creado_por=actor)
+                    if eid:
+                        _enc.avisar(cur, eid)
+                    conn.commit()
+                except Exception as e:
+                    conn.rollback()
+                    print('[pdf] observación del plano %s creada sin encargo: %s' % (codigo, str(e)[:120]))
+            log_activity(model_urn, 'CREATE', 'ISSUE', str(iid), codigo, actor,
+                         {'tipo': iss.OBSERVACION, 'responsable': responsable, 'plano': nodo, 'marcas': len(marcas),
+                          'borrador': borrador or None})
+            obs = next((o for o in _observaciones_del_plano(cur, nodo) if o['id'] == str(iid)), None)
+        return jsonify({"success": True, "observacion": obs, "publicadas": publicadas}), 201
     except Exception as e:
         traceback.print_exc()
         return jsonify({"success": False, "error": str(e)}), 500

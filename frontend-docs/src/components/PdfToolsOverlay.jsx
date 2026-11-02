@@ -6,6 +6,8 @@ import toast from 'react-hot-toast';
 import { API } from '../utils/helpers';
 import { apiFetch } from '../utils/apiFetch';
 import { PanelDeMarca, DialogoDeSello } from './MarcaConEnlace';
+import BarraDeMarca from './BarraDeMarca';
+import ObservacionesDelPlano from './ObservacionesDelPlano';
 import { estadoDeObservacion, observacionViva } from '../utils/marcasConEnlace';
 import { estadoDeSello, marcaDeLaDireccion, fechaCorta } from '../utils/marcasConEnlace';
 
@@ -42,8 +44,17 @@ function escalaLegible(unidadesPorPunto, unidad) {
 }
 
 // Path de nube de revisión: arcos festoneados sobre el perímetro de un rect
-function cloudPath(x, y, w, h) {
-  const r = Math.max(6, Math.min(14, Math.min(Math.abs(w), Math.abs(h)) / 6));
+// EL ESTILO DE LA MARCA (2-nov-2026, como el «Estilo» de ACC): grosor del trazo, relleno translúcido y tamaño de los
+// festones de la nube. Lo guarda `style` (routes/pdf_tools.py `_estilo`); sin él, como siempre.
+const GROSOR = { fino: 0.6, medio: 1, grueso: 1.8 };
+// Los FESTONES se miden en PUNTOS DEL PLANO, como en papel: con el zoom crecen y menguan con la hoja. Un festón
+// mediano mide 10 pt de radio (unos 3,5 mm impreso a escala 1:1).
+const FESTON_PT = { pequenos: 6, medianos: 10, grandes: 16 };
+const grosorDe = (m) => GROSOR[m?.style?.grosor] || 1;
+const radioDeFeston = (m, escala, lado) =>
+  Math.max(2.5, Math.min((FESTON_PT[m?.style?.festones] || FESTON_PT.medianos) * (escala || 1), lado / 2.5));
+
+function cloudPath(x, y, w, h, r) {
   const seg = (x1, y1, x2, y2) => {
     const len = Math.hypot(x2 - x1, y2 - y1);
     const n = Math.max(1, Math.round(len / (r * 1.6)));
@@ -56,6 +67,37 @@ function cloudPath(x, y, w, h) {
   };
   const x2 = x + w, y2 = y + h;
   return `M ${x} ${y}` + seg(x, y, x2, y) + seg(x2, y, x2, y2) + seg(x2, y2, x, y2) + seg(x, y2, x, y) + ' Z';
+}
+
+// La NUBE POLIGONAL: los mismos festones a lo largo de cada lado de su polígono (en el sentido de las agujas, para
+// que los arcos miren hacia fuera).
+function cloudPolyPath(pts, r) {
+  if (pts.length < 3) return '';
+  const area = pts.reduce((a, p, i) => { const q = pts[(i + 1) % pts.length]; return a + (p[0] * q[1] - q[0] * p[1]); }, 0);
+  const ps = area < 0 ? [...pts].reverse() : pts;
+  let d = `M ${ps[0][0]} ${ps[0][1]}`;
+  for (let i = 0; i < ps.length; i++) {
+    const [x1, y1] = ps[i], [x2, y2] = ps[(i + 1) % ps.length];
+    const n = Math.max(1, Math.round(Math.hypot(x2 - x1, y2 - y1) / (r * 1.6)));
+    const rr = Math.max(r, Math.hypot(x2 - x1, y2 - y1) / n / 2);
+    for (let k = 1; k <= n; k++) d += ` A ${rr} ${rr} 0 0 1 ${x1 + (x2 - x1) * k / n} ${y1 + (y2 - y1) * k / n}`;
+  }
+  return d + ' Z';
+}
+
+// El TRIÁNGULO DE REVISIÓN: en la esquina superior derecha de la nube, con el código de la revisión. Tamaño en
+// puntos del plano, como los festones.
+function TrianguloDeRevision({ caja, codigo, color, escala }) {
+  const t = Math.max(16, Math.min(46, 26 * (escala || 1)));
+  const cx = caja.x2 - t * 0.2, base = caja.y + t * 0.35;
+  const pts = `${cx - t / 2},${base} ${cx + t / 2},${base} ${cx},${base - t * 0.87}`;
+  return (
+    <g style={{ pointerEvents: 'none' }}>
+      <polygon points={pts} fill="#fff" stroke={color} strokeWidth="1.6" strokeLinejoin="round" />
+      <text x={cx} y={base - t * 0.2} fontSize={Math.max(7, t * (codigo.length > 3 ? 0.24 : 0.32))} fontWeight="700"
+        fill={color} textAnchor="middle" fontFamily="'IBM Plex Sans', sans-serif">{codigo}</text>
+    </g>
+  );
 }
 
 // EDITAR LA FIGURA (29-oct-2026, como la revisión de CAD): la marca entera se arrastra y sus tiradores cambian su
@@ -87,7 +129,9 @@ function conTirador(g, i, p) {
 }
 
 export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, tool, setTool, color, userName,
-                                         versionDeLasMarcas = null, versionVigente = null, onIrAVersion = null }) {
+                                         versionDeLasMarcas = null, versionVigente = null, onIrAVersion = null,
+                                         panelDelPlano = false, onPanelDelPlano = null, onIrAPagina = null,
+                                         onObservacionesDelPlano = null, nombreDelDocumento = '' }) {
   const [markups, setMarkups] = useState([]);          // todos los del documento
   const [calibrations, setCalibrations] = useState({}); // { page: {units_per_pdf, display_unit} }
   const [draft, setDraft] = useState(null);            // figura en construcción
@@ -97,6 +141,11 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
   const [elegida, setElegida] = useState(null);         // id de la marca abierta en su panel
   const [selloEn, setSelloEn] = useState(null);         // { p } donde se colocará un sello
   const [enOtras, setEnOtras] = useState([]);           // [{ version_id, version_number, marcas }]
+  // OBSERVACIONES DEL PLANO (docs/archivos/18): tras un acto se vuelven a pedir las marcas (su etiqueta de
+  // observación) y cuántas del plano siguen sin cerrar (el número del botón del rail).
+  const [vuelta, setVuelta] = useState(0);
+  const avisarDelPlano = useRef(onObservacionesDelPlano);
+  avisarDelPlano.current = onObservacionesDelPlano;
   // LAS MARCAS SON DE LA VERSIÓN QUE SE MIRA (migración 36). Sin versión (enlace compartido, banco viejo),
   // como antes: todas las del documento.
   const versionId = versionDeLasMarcas?.id || null;
@@ -135,6 +184,7 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
         const lista = Array.isArray(d.markups) ? d.markups : [];
         setMarkups(lista);
         setEnOtras(Array.isArray(d.en_otras_versiones) ? d.en_otras_versiones : []);
+        avisarDelPlano.current?.((d.observaciones_del_plano || []).filter(o => observacionViva(o)).length);
         // Llegada desde «Citado en»: la marca pedida se abre en su panel (PDFViewer ya fue a su página).
         const pedida = marcaPedida.current;
         if (pedida && lista.some(m => String(m.id) === String(pedida))) setElegida(Number(pedida) || pedida);
@@ -143,7 +193,11 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
     apiFetch(`${API}/api/pdf/calibration?node_id=${nodeId}`).then(r => r.json())
       .then(d => { if (vigente && d.success) setCalibrations(d.calibrations || {}); }).catch(() => {});
     return () => { vigente = false; };
-  }, [nodeId, versionId]);
+  }, [nodeId, versionId, vuelta]);
+
+  // El panel de una marca y el del plano ocupan el mismo costado: abrir uno cierra el otro.
+  useEffect(() => { if (elegida != null) onPanelDelPlano?.(false); }, [elegida]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (panelDelPlano) setElegida(null); }, [panelDelPlano]);
 
   // ── Transformaciones ──
   const toPdf = useCallback((e) => {
@@ -232,6 +286,15 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
   };
 
   // «Llevar a la vigente»: copia la marca (borrador, de quien la lleva) en la versión vigente y va allí a verla.
+  // DUPLICAR (como ACC): una copia tuya, en borrador, desplazada para que se vea; con su estilo y su texto, sin sus
+  // referencias ni su observación.
+  const duplicarMarca = async (m) => {
+    const d = 12 / (vp?.scale || 1);
+    const id = await saveMarkup(m.kind, trasladar(m.geometry || {}, d, -d), m.text || null,
+      { ...(m.style || {}) });
+    if (id) { setElegida(id); toast.success('Duplicada: la copia es un borrador tuyo'); }
+  };
+
   const llevarMarca = async (m) => {
     try {
       const r = await apiFetch(`${API}/api/pdf/markups/${m.id}/llevar`, { method: 'POST' });
@@ -325,6 +388,10 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
     }
     if (tool === 'stamp') { setSelloEn({ p }); return; }
     if (tool === 'text') { setTextDraft({ p }); return; }
+    if (tool === 'cloudpoly') {
+      setDraft(prev => ({ kind: 'cloudpoly', points: prev?.kind === 'cloudpoly' ? [...prev.points, p] : [p], cursor: p }));
+      return;
+    }
     if (tool === 'measure' || tool === 'area' || tool === 'calibrate') {
       const modo = faltaEscala ? 'calibrate' : tool;
       setDraft(prev => {
@@ -383,6 +450,11 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
     setDraft(null);
     if (d.kind === 'measure' && pts.length >= 2) saveMarkup('measure', { points: pts });
     if (d.kind === 'area' && pts.length >= 3) saveMarkup('area', { points: pts });
+    // La nube poligonal es una NUBE: se guarda como tal, con sus vértices (sin el último clic repetido del doble).
+    if (d.kind === 'cloudpoly') {
+      const limpios = pts.filter((q, i) => i === 0 || dist2d(q, pts[i - 1]) > 1);
+      if (limpios.length >= 3) saveMarkup('cloud', { points: limpios });
+    }
   };
 
   // Esc cancela el dibujo en curso y DESACTIVA la herramienta, como en ACC (29-oct-2026): hasta entonces la
@@ -407,7 +479,17 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
     return cal ? `${fmt(a * cal.units_per_pdf * cal.units_per_pdf)} ${cal.display_unit}²` : `${fmt(a)} pt² (sin escala)`;
   };
 
-  if (!vp) return null;
+  // El panel del plano no depende de la hoja: se abre aunque el PDF siga dibujándose.
+  const panelPlano = panelDelPlano ? (
+        <ObservacionesDelPlano API={API} obra={projectPrefix} nodeId={nodeId} nombre={nombreDelDocumento}
+          version={{ id: versionId || vigenteId, numero: versionDeLasMarcas?.version_number ?? versionVigente?.version_number }}
+          // Las que esta persona ve de esta versión: publicadas o suyas, ya guardadas.
+          marcas={markups.filter(m => !String(m.id).startsWith('tmp_') && (m.publicado || m.created_by === userName))}
+          onCambio={() => setVuelta(v => v + 1)}
+          onIrAMarca={(m) => { onIrAPagina?.(m.page); setElegida(m.id); }}
+          onCerrar={() => onPanelDelPlano?.(false)} />
+  ) : null;
+  if (!vp) return panelPlano;
   // La marca que se arrastra se dibuja donde va, antes de guardarla.
   const pageMarkups = markups.filter(m => m.page === page)
     .map(m => (arrastre && arrastre.id === m.id ? { ...m, geometry: arrastre.geo } : m));
@@ -509,7 +591,7 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
         <g key={m.id}>
           {m.kind === 'area'
             ? <polygon points={pts.map(p => p.join(',')).join(' ')} {...common} fill={c + '22'} />
-            : <polyline points={pts.map(p => p.join(',')).join(' ')} {...common} />}
+            : <polyline points={pts.map(p => p.join(',')).join(' ')} {...common} strokeWidth={2 * grosorDe(m)} />}
           {m.kind !== 'pen' && (
             <text x={mid[0] + 6} y={mid[1] - 6} fontSize="13" fontWeight="700" fill={c} stroke="#fff" strokeWidth="3" paintOrder="stroke" style={{ pointerEvents: 'none' }}>
               {m.kind === 'measure' ? lenLabel(g.points) : areaLabel(g.points)}
@@ -534,18 +616,39 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
       const h = 12;
       return (
         <g key={m.id}>
-          <line x1={a[0]} y1={a[1]} x2={b[0]} y2={b[1]} {...common} strokeWidth={2.5} />
+          <line x1={a[0]} y1={a[1]} x2={b[0]} y2={b[1]} {...common} strokeWidth={2.5 * grosorDe(m)} />
           <polygon points={`${b[0]},${b[1]} ${b[0] - h * Math.cos(ang - 0.45)},${b[1] - h * Math.sin(ang - 0.45)} ${b[0] - h * Math.cos(ang + 0.45)},${b[1] - h * Math.sin(ang + 0.45)}`}
             fill={c} style={common.style} onClick={common.onClick} onPointerDown={common.onPointerDown} pointerEvents={tocable ? 'all' : 'none'} />
+        </g>
+      );
+    }
+    if (m.kind === 'cloud' && g.points) {
+      const pts = g.points.map(toScr);
+      const xs = pts.map(p => p[0]), ys = pts.map(p => p[1]);
+      const caja = { x: Math.min(...xs), y: Math.min(...ys), x2: Math.max(...xs), y2: Math.max(...ys) };
+      const relleno = m.style?.relleno ? { fill: m.style.relleno, fillOpacity: 0.14 } : {};
+      return (
+        <g key={m.id}>
+          <path d={cloudPolyPath(pts, radioDeFeston(m, vp?.scale, Math.min(caja.x2 - caja.x, caja.y2 - caja.y)))}
+            {...common} {...relleno} strokeWidth={2.2 * grosorDe(m)} />
+          {m.style?.triangulo && <TrianguloDeRevision caja={caja} codigo={m.style.triangulo} color={c} escala={vp?.scale} />}
         </g>
       );
     }
     if (m.kind === 'rect' || m.kind === 'cloud') {
       const a = toScr([g.x, g.y]), b = toScr([g.x + g.w, g.y + g.h]);
       const x = Math.min(a[0], b[0]), y = Math.min(a[1], b[1]), w = Math.abs(b[0] - a[0]), h = Math.abs(b[1] - a[1]);
+      const relleno = m.style?.relleno ? { fill: m.style.relleno, fillOpacity: 0.14 } : {};
       return m.kind === 'cloud'
-        ? <path key={m.id} d={cloudPath(x, y, w, h)} {...common} strokeWidth={2.2} />
-        : <rect key={m.id} x={x} y={y} width={w} height={h} {...common} />;
+        ? (
+          <g key={m.id}>
+            <path d={cloudPath(x, y, w, h, radioDeFeston(m, vp?.scale, Math.min(w, h)))} {...common} {...relleno}
+              strokeWidth={2.2 * grosorDe(m)} />
+            {m.style?.triangulo && <TrianguloDeRevision caja={{ x, y, x2: x + w, y2: y + h }} codigo={m.style.triangulo}
+              color={c} escala={vp?.scale} />}
+          </g>
+        )
+        : <rect key={m.id} x={x} y={y} width={w} height={h} {...common} {...relleno} strokeWidth={2 * grosorDe(m)} />;
     }
     if (m.kind === 'text') {
       const s = toScr(g.p);
@@ -581,6 +684,17 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
   // ── Borrador en curso ──
   const renderDraft = () => {
     if (!draft) return null;
+    if (draft.kind === 'cloudpoly') {
+      const pts = (draft.cursor ? [...draft.points, draft.cursor] : draft.points).map(toScr);
+      return (
+        <g>
+          {pts.length >= 3
+            ? <path d={cloudPolyPath(pts, Math.max(2.5, FESTON_PT.medianos * (vp?.scale || 1)))} stroke={color} strokeWidth="2" fill="none" strokeDasharray="6 4" />
+            : <polyline points={pts.map(p => p.join(',')).join(' ')} stroke={color} strokeWidth="2" fill="none" strokeDasharray="6 4" />}
+          {draft.points.map(toScr).map((p, i) => <circle key={i} cx={p[0]} cy={p[1]} r="3.5" fill={color} />)}
+        </g>
+      );
+    }
     if (draft.points && (draft.kind === 'measure' || draft.kind === 'area' || draft.kind === 'calibrate')) {
       const all = draft.cursor ? [...draft.points, draft.cursor] : draft.points;
       const pts = all.map(toScr);
@@ -603,7 +717,7 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
       const a = toScr(start), b = toScr(end);
       const x = Math.min(a[0], b[0]), y = Math.min(a[1], b[1]), w = Math.abs(b[0] - a[0]), h = Math.abs(b[1] - a[1]);
       return kind === 'cloud'
-        ? <path d={cloudPath(x, y, w, h)} stroke={color} strokeWidth="2" fill="none" strokeDasharray="6 4" />
+        ? <path d={cloudPath(x, y, w, h, Math.max(2.5, Math.min(FESTON_PT.medianos * (vp?.scale || 1), Math.min(w, h) / 2.5)))} stroke={color} strokeWidth="2" fill="none" strokeDasharray="6 4" />
         : <rect x={x} y={y} width={w} height={h} stroke={color} strokeWidth="2" fill="none" strokeDasharray="6 4" />;
     }
     return null;
@@ -730,7 +844,29 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
       )}
 
       {/* El panel de la marca elegida: referencias, fotos, sello, publicar y borrar. */}
-      {marcaElegida && (
+      {marcaElegida && marcaElegida.kind !== 'foto' && (() => {
+        // EL MENÚ DE LA MARCA (2-nov-2026, como ACC): junto a la marca, no un panel. Encima de su caja, o debajo si no
+        // cabe; dentro de la hoja.
+        const k = cajaDe(marcaElegida);
+        if (!k) return null;
+        const arriba = k.y > 56;
+        return (
+          <BarraDeMarca key={marcaElegida.id} API={API} obra={projectPrefix} marca={marcaElegida} colores={COLORS}
+            revisionSugerida={(/(?:^|[-_ .])([A-Z]\d{1,2})(?=\.[a-z0-9]+$|[-_ ])/i.exec(nombreDelDocumento || '') || [])[1] || ''}
+            esAutor={!!userName && marcaElegida.created_by === userName} editable={editable(marcaElegida)}
+            posicion={{ left: `${Math.max(0, Math.min(100, (k.x / vpInfo.w) * 100))}%`,
+                        top: arriba ? `calc(${(k.y / vpInfo.h) * 100}% - 48px)` : `calc(${(k.y2 / vpInfo.h) * 100}% + 10px)` }}
+            versionVigente={versionVigente?.version_number ?? null}
+            onLlevar={vigenteId && marcaElegida.version_id && String(marcaElegida.version_id) !== String(vigenteId)
+              ? () => llevarMarca(marcaElegida) : null}
+            onDuplicar={() => duplicarMarca(marcaElegida)}
+            onCambio={(nueva) => setMarkups(prev => prev.map(x => x.id === nueva.id ? { ...x, ...nueva } : x))}
+            onPublicar={() => publicarMarkup(marcaElegida)}
+            onBorrar={() => { setElegida(null); deleteMarkup(marcaElegida); }}
+            onCerrar={() => setElegida(null)} />
+        );
+      })()}
+      {marcaElegida && marcaElegida.kind === 'foto' && (
         <PanelDeMarca key={marcaElegida.id} API={API} obra={projectPrefix} marca={marcaElegida}
           esAutor={!!userName && marcaElegida.created_by === userName}
           editable={editable(marcaElegida)} colores={COLORS}
@@ -742,6 +878,7 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
           onBorrar={() => { setElegida(null); deleteMarkup(marcaElegida); }}
           onCerrar={() => setElegida(null)} />
       )}
+      {panelPlano}
       {selloEn && (
         <DialogoDeSello autor={userName} onAceptar={colocarSello} onCerrar={() => setSelloEn(null)} />
       )}

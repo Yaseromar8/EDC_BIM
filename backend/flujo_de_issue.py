@@ -52,7 +52,8 @@ Esto es EL NÚCLEO que GAP 04 necesita, no el gap entero. Fuera, a propósito:
 
     campos personalizados por tipo      ┐
     causa raíz y su analítica           │  siguen en
-    estados configurables por obra      ├─ GAP 11 · ISSUES DE PRIMERA CLASE
+    estados propios por obra (45 solo   ├─ GAP 11 · ISSUES DE PRIMERA CLASE
+      apaga los opcionales de ACC)      │
     tipos configurables por admin       │  y NO se declaran COMPLETE hoy
     taxonomías y automatizaciones       ┘
 
@@ -61,6 +62,7 @@ que pertenece al gap grande.
 """
 
 import collections
+import unicodedata
 
 import flujo_de_registro as reg
 
@@ -106,43 +108,179 @@ def etiqueta_tipo(codigo):
 
 
 # ── EL CICLO ───────────────────────────────────────────────────────────────
+# Los códigos guardados NO cambian (hay historial escrito con ellos); lo que se ve
+# son las ETIQUETAS, las de los issues de ACC (docs/archivos/18 §3). ACC: Draft,
+# Open, In progress, In dispute, In review, Not approved, Closed, Void.
+BORRADOR = 'Borrador'      # (45) lo guarda quien la levanta; nadie más la ve ni le debe nada
 ABIERTO = 'Abierto'        # detectado, con responsable; falta corregir
+EN_CURSO = 'En curso'      # (45) el responsable dice que ya la está corrigiendo
+EN_DISPUTA = 'En disputa'  # (45) el responsable dice que no procede; decide quien la levantó
 CORREGIDO = 'Corregido'    # el responsable declara que lo arregló (Ready to Close)
 VERIFICADO = 'Verificado'  # OTRO comprobó la corrección. Cerrado
 REABIERTO = 'Reabierto'    # el verificador la rechazó; vuelve al responsable
 ANULADO = 'Anulado'        # se levantó por error; nunca fue un defecto
 
-ESTADOS = (ABIERTO, CORREGIDO, VERIFICADO, REABIERTO, ANULADO)
+ESTADOS = (BORRADOR, ABIERTO, EN_CURSO, EN_DISPUTA, CORREGIDO, VERIFICADO, REABIERTO, ANULADO)
+
+ETIQUETAS = {
+    BORRADOR: 'Borrador', ABIERTO: 'Abierta', EN_CURSO: 'En curso', EN_DISPUTA: 'En disputa',
+    CORREGIDO: 'En revisión', REABIERTO: 'No aprobada', VERIFICADO: 'Cerrada', ANULADO: 'Anulada',
+}
+
+# Los que el administrador de cada obra puede apagar, como en ACC. Sin fila en
+# `issue_estados_de_obra` (45) están todos encendidos.
+OPCIONALES = (BORRADOR, EN_CURSO, EN_DISPUTA)
 
 TRANSICIONES = {
-    ABIERTO:    (CORREGIDO, ANULADO),
+    BORRADOR:   (ABIERTO, ANULADO),                          # enviar o descartar
+    ABIERTO:    (EN_CURSO, CORREGIDO, EN_DISPUTA, ANULADO),
+    EN_CURSO:   (CORREGIDO, EN_DISPUTA, ANULADO),
+    EN_DISPUTA: (ABIERTO, ANULADO),                          # quien la levantó la reafirma o la anula
     CORREGIDO:  (VERIFICADO, REABIERTO),
-    REABIERTO:  (CORREGIDO, ANULADO),
+    REABIERTO:  (EN_CURSO, CORREGIDO, EN_DISPUTA, ANULADO),
     VERIFICADO: (),          # cerrado. Un defecto nuevo es un issue nuevo
     ANULADO:    (),
 }
 
 # Los estados en los que el issue TODAVÍA PESA sobre alguien.
-VIVOS = (ABIERTO, CORREGIDO, REABIERTO)
+VIVOS = (ABIERTO, EN_CURSO, EN_DISPUTA, CORREGIDO, REABIERTO)
+# Los que todavía no se cerraron: los vivos y el borrador. Una marca en uno de
+# ellos no se puede retirar.
+SIN_CERRAR = (BORRADOR,) + VIVOS
+# Donde el responsable tiene la pelota: corregir, empezar o decir que no procede.
+EN_MANOS_DEL_RESPONSABLE = (ABIERTO, EN_CURSO, REABIERTO)
 
 
 def esta_cerrado(estado):
     return estado in (VERIFICADO, ANULADO)
 
 
+def etiqueta_estado(codigo):
+    return ETIQUETAS.get(codigo, codigo or '')
+
+
+def config_de_obra(cur, obra):
+    """Lo que la obra decide de sus incidencias (45): estados opcionales, subtipos por tipo, causas raíz y campos
+    propios. Sin fila: todos los opcionales encendidos y ninguna lista."""
+    cur.execute('SELECT opcionales, subtipos, causas, campos FROM issue_config_de_obra WHERE project_id = %s', (obra,))
+    r = cur.fetchone()
+    if not r:
+        return {'opcionales': list(OPCIONALES), 'subtipos': {}, 'causas': [], 'campos': []}
+    return {'opcionales': list(r[0] or []), 'subtipos': r[1] or {}, 'causas': list(r[2] or []),
+            'campos': list(r[3] or [])}
+
+
+def opcionales_de_obra(cur, obra):
+    """Los estados opcionales que usa la obra (45). Sin fila: todos, que es lo de partida."""
+    return config_de_obra(cur, obra)['opcionales']
+
+
+# ── LOS CAMPOS PROPIOS DE LA OBRA (45) ────────────────────────────────────
+# Como los «custom attributes» de ACC: los define el administrador de la obra y
+# viven en `campos` (jsonb) de cada incidencia. Cuatro clases, ni una más: lo
+# que una obra necesita apuntar cabe en ellas, y cada una se valida aquí.
+TIPOS_DE_CAMPO = ('texto', 'numero', 'fecha', 'lista')
+
+
+def definiciones_validas(definiciones):
+    """(lista normalizada, None) o (None, motivo). La define el administrador."""
+    if not isinstance(definiciones, list) or len(definiciones) > 30:
+        return None, 'Como mucho 30 campos propios.'
+    salida, claves = [], set()
+    for d in definiciones:
+        if not isinstance(d, dict):
+            return None, 'Cada campo es {clave, etiqueta, tipo}.'
+        etiqueta = str(d.get('etiqueta') or '').strip()[:80]
+        # La clave, sin tildes ni signos: es lo que se guarda en `campos` y no cambia si se retoca la etiqueta.
+        sin_tildes = unicodedata.normalize('NFKD', etiqueta.lower()).encode('ascii', 'ignore').decode()
+        clave = str(d.get('clave') or '').strip()[:40] or \
+            '_'.join(''.join(c if c.isalnum() else ' ' for c in sin_tildes).split())[:40]
+        tipo = d.get('tipo')
+        if not etiqueta or not clave or tipo not in TIPOS_DE_CAMPO:
+            return None, 'Cada campo necesita un nombre y una clase (%s).' % ', '.join(TIPOS_DE_CAMPO)
+        if clave in claves:
+            return None, 'Dos campos con el mismo nombre: «%s».' % etiqueta
+        claves.add(clave)
+        opciones = [str(o).strip()[:80] for o in (d.get('opciones') or []) if str(o).strip()][:50]
+        if tipo == 'lista' and not opciones:
+            return None, 'El campo «%s» es una lista: dale sus opciones.' % etiqueta
+        # A qué TIPOS de incidencia se aplica, como los atributos de ACC: vacío = a todos.
+        tipos = [t for t in (d.get('tipos') or []) if t in CODIGOS_TIPO]
+        if len(tipos) != len(d.get('tipos') or []):
+            return None, 'El campo «%s» se aplica a un tipo que no existe.' % etiqueta
+        salida.append({'clave': clave, 'etiqueta': etiqueta, 'tipo': tipo, 'obligatorio': bool(d.get('obligatorio')),
+                       **({'opciones': opciones} if tipo == 'lista' else {}), **({'tipos': tipos} if tipos else {})})
+    return salida, None
+
+
+def campos_del_tipo(definiciones, tipo):
+    """Los campos propios que se aplican a ese tipo de incidencia (sin `tipos`, a todos)."""
+    return [d for d in definiciones or [] if not d.get('tipos') or tipo in d['tipos']]
+
+
+def valores_validos(definiciones, valores, exigir_obligatorios=True, tipo=None):
+    """(valores normalizados, None) o (None, motivo). Solo entran las claves definidas por la obra (y, con `tipo`,
+    las que se aplican a ese tipo)."""
+    from datetime import date
+    valores = valores if isinstance(valores, dict) else {}
+    salida = {}
+    for d in (campos_del_tipo(definiciones, tipo) if tipo else definiciones or []):
+        v = valores.get(d['clave'])
+        if v is None or (isinstance(v, str) and not v.strip()):
+            if exigir_obligatorios and d.get('obligatorio'):
+                return None, 'Falta «%s».' % d['etiqueta']
+            continue
+        if d['tipo'] == 'numero':
+            try:
+                v = float(v)
+            except (TypeError, ValueError):
+                return None, '«%s» tiene que ser un número.' % d['etiqueta']
+        elif d['tipo'] == 'fecha':
+            try:
+                v = date.fromisoformat(str(v)[:10]).isoformat()
+            except ValueError:
+                return None, '«%s» tiene que ser una fecha.' % d['etiqueta']
+        elif d['tipo'] == 'lista':
+            if v not in d.get('opciones', []):
+                return None, '«%s» no está entre sus opciones.' % d['etiqueta']
+        else:
+            v = str(v).strip()[:500]
+        salida[d['clave']] = v
+    return salida, None
+
+
+def opcional_apagado(estado, encendidos):
+    """¿Esta obra apagó ese estado? `encendidos` = los opcionales que usa (None: todos)."""
+    return estado in OPCIONALES and encendidos is not None and estado not in encendidos
+
+
 # ── LAS TRES IDENTIDADES ───────────────────────────────────────────────────
 
-def puede_corregir(usuario, issue):
+def es_del_responsable(usuario, issue, empresa_del_usuario=None):
+    """¿Esta persona ES el responsable? La persona designada o, si se asignó a una
+    EMPRESA (45), cualquiera de esa empresa —que además es de la obra: lo
+    garantiza quien pasa `empresa_del_usuario`—."""
+    issue = issue or {}
+    uid = (usuario or {}).get('id')
+    if not uid:
+        return False
+    if issue.get('responsable_id'):
+        return uid == issue.get('responsable_id')
+    empresa = issue.get('responsable_empresa')
+    return bool(empresa) and empresa_del_usuario is not None and int(empresa) == int(empresa_del_usuario)
+
+
+def puede_corregir(usuario, issue, empresa_del_usuario=None):
     """Corrige el RESPONSABLE, y nadie más.
 
     Ni el administrador: un administrador que pudiera declarar corregido lo
     ajeno estaría firmando por otro que algo se arregló, sin haberlo hecho.
+    Asignada a una empresa, corrige cualquiera de ella (como en ACC).
     """
-    uid = (usuario or {}).get('id')
-    return bool(uid) and uid == (issue or {}).get('responsable_id')
+    return es_del_responsable(usuario, issue, empresa_del_usuario)
 
 
-def puede_verificar(usuario, issue, es_admin_de_obra=False):
+def puede_verificar(usuario, issue, es_admin_de_obra=False, empresa_del_usuario=None):
     """Verifica EL VERIFICADOR DESIGNADO. Devuelve (puede, motivo_si_no).
 
     LA INVARIANTE DEL OBJETO. Sin ella «verificado» significa «el responsable
@@ -169,7 +307,8 @@ def puede_verificar(usuario, issue, es_admin_de_obra=False):
     # LA EXCEPCIÓN, PRIMERO Y APARTE. Existe precisamente para que el CORRECTOR
     # pueda verificar lo suyo cuando un administrador lo ha autorizado por
     # escrito. Comprobarla al final la dejaba inservible.
-    if uid == issue.get('responsable_id'):
+    # Asignada a una EMPRESA, nadie de esa empresa verifica lo suyo (45).
+    if es_del_responsable(usuario, issue, empresa_del_usuario):
         if issue.get('autoverificacion'):
             return True, ''
         return False, ('quien corrige no verifica su propia corrección; hace falta '

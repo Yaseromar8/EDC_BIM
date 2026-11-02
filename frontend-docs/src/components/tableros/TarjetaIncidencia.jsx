@@ -8,7 +8,7 @@
  */
 import React, { useContext } from 'react';
 import { ChipDeEstado, ChipDeTipo } from '../PunchModule';
-import { IncidenciasDelTablero, COLUMNAS, fechaCorta, vencida } from './incidencias';
+import { IncidenciasDelTablero, columnasDelKanban, fechaCorta, vencida } from './incidencias';
 
 const GRIS = '#72706B', TINTA = '#141413', BORDE = '#E5E3DA';
 const SOMBRA = '0 1px 2px rgba(20,20,19,0.08), 0 6px 18px rgba(20,20,19,0.10)';
@@ -72,7 +72,7 @@ export function KanbanIncidencias({ elemento: el, elegido }) {
   const { porId, nombres, abrir, cargando } = useContext(IncidenciasDelTablero);
   const ids = el.issueIds || [];
   const presentes = ids.map(id => porId[id]).filter(Boolean);
-  const columnas = presentes.some(i => i.estado === 'Anulado') ? [...COLUMNAS, 'Anulado'] : COLUMNAS;
+  const columnas = columnasDelKanban(presentes);
   const faltan = cargando ? 0 : ids.length - presentes.length;
   return (
     <div style={{ position: 'absolute', inset: 0, boxSizing: 'border-box', display: 'flex', flexDirection: 'column', background: '#F7F6F2',

@@ -210,7 +210,16 @@ def test_el_recorte_es_real(rutas_portal):
     # 303 -> 304 (31-oct-2026): UNA ruta de la misma familia, `POST /api/docs/tableros/<tid>/graficas`: View deja en un
     # tablero una gráfica que él calculó (docs/visor/68). Solo valida la forma de la gráfica; NO lee el inventario (el
     # portal sigue sin servirlo). Misma guardia del tablero, y el frente tiene que ser de la obra del tablero.
-    TECHO = 304
+    # 304 -> 305 (2-nov-2026): `POST /api/pdf/planos/<node_id>/observacion`, la OBSERVACIÓN DEL PLANO entero (una sola,
+    # con responsable, fecha y las marcas elegidas; docs/archivos/18). Producto documental del lector, con guardia de
+    # recurso (el plano) y de obra, como la observación de una marca.
+    # 305 -> 310 (2-nov-2026, migración 45): los estados de ACC en las incidencias. Cuatro ACTOS con su autoridad
+    # --`enviar` (el borrador), `empezar` (En curso), `disputar` (En disputa) y `reafirmar`-- y `GET|PUT /api/issues/estados`
+    # (los opcionales que usa la obra; cambiarlos, solo su administrador). Misma familia que corregir/verificar/anular.
+    # 310 -> 312 (2-nov-2026, misma 45): `/estados` pasa a `/configuracion` (estados, subtipos, causas raíz y campos
+    # propios de la obra) y dos rutas más de la incidencia: `editar` (reasignar a persona o empresa, observadores,
+    # clasificación) y `adjuntar` (fotos y documentos de Docs de la misma obra). Misma guardia de recurso.
+    TECHO = 312
     sin_puente = [r for r in rutas_portal
                   if r not in puente_acc and r not in revision_cad]
     assert len(sin_puente) < TECHO, (

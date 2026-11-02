@@ -3,6 +3,7 @@
  * Reglas puras, sin red ni React: las prueba pruebas/marcasConEnlace.prueba.mjs.
  * Estudio y decisiones: docs/ux/ACC_LECTOR_MARCAS_FOTO_REFERENCIA.md.
  */
+import { ESTADOS_DE_ISSUE, actosDeIssue, aQuienLeTocaIssue, esDelResponsable, estadoDeIssue, issueViva } from './estadosDeIssue.js';
 
 // El sello es una NOTA sobre la hoja: NO cambia el estado del documento (eso va por Revisiones). Por eso sus
 // estados son de revisión de campo y no «Aprobado». Los mismos códigos que el servidor (ESTADOS_DE_SELLO).
@@ -20,44 +21,36 @@ export function estadoDeSello(codigo) {
 
 // ── OBSERVACIÓN DE DOCUMENTO (20-oct-2026, migración 37) ─────────────────────────────────────────────
 // La marca DIBUJA; lo que hay que corregir es una OBSERVACIÓN: una incidencia con responsable, quien verifica,
-// fecha límite e historial. Sus estados son los ACTOS de la incidencia (flujo_de_issue.ESTADOS), dichos en
-// femenino porque se habla de «la observación». Colores de la lista cerrada D-24.
-// Estudio y decisión: docs/ux/MARCAS_REVISION_LO_PROFESIONAL.md (opción A).
-export const ESTADOS_DE_OBSERVACION = [
-  { codigo: 'Abierto',    etiqueta: 'Abierta',    color: '#d97757' },   // Orange: le toca al responsable
-  { codigo: 'Reabierto',  etiqueta: 'Reabierta',  color: '#b93535' },   // Error: se rechazó la corrección
-  { codigo: 'Corregido',  etiqueta: 'Corregida',  color: '#6a9bcc' },   // Blue: le toca a quien verifica
-  { codigo: 'Verificado', etiqueta: 'Verificada', color: '#64744e' },   // cerrada
-  { codigo: 'Anulado',    etiqueta: 'Anulada',    color: '#b0aea5' },   // cerrada sin defecto
-];
+// fecha límite e historial. Sus estados son los de la incidencia, con las etiquetas de ACC desde la migración 45
+// (utils/estadosDeIssue: Borrador, Abierta, En curso, En disputa, En revisión, No aprobada, Cerrada, Anulada).
+// Estudio y decisión: docs/ux/MARCAS_REVISION_LO_PROFESIONAL.md (opción A) y docs/archivos/18 §3.
+export const ESTADOS_DE_OBSERVACION = ESTADOS_DE_ISSUE;
 
 export function estadoDeObservacion(codigo) {
-  return ESTADOS_DE_OBSERVACION.find(e => e.codigo === codigo) || ESTADOS_DE_OBSERVACION[0];
+  return ESTADOS_DE_OBSERVACION.find(e => e.codigo === codigo) || estadoDeIssue('Abierto');
 }
 
+// Viva = aún sin cerrar: retiene sus marcas. Un borrador también (va a enviarse con ellas).
 export function observacionViva(obs) {
-  return !!obs && ['Abierto', 'Reabierto', 'Corregido'].includes(obs.estado);
+  return !!obs && (issueViva(obs) || obs.estado === 'Borrador');
 }
 
 // Qué ACTOS puede hacer esta persona ahora. Lo decide el servidor; esto solo evita ofrecer botones que van a
-// devolver 403. Corrige el responsable; verifica (o reabre) quien verifica; anula quien la levantó.
-export function accionesDeObservacion(obs, usuarioId) {
+// devolver 403. Corrige (o empieza, o dice que no procede) el responsable; verifica quien verifica; envía,
+// reafirma o anula quien la levantó (el resumen de la hoja no trae `autor_id`: la levantó quien la verifica).
+export function accionesDeObservacion(obs, usuarioId, { opcionales = null, miEmpresa = null } = {}) {
   const yo = usuarioId == null ? null : String(usuarioId);
   const es = (id) => yo != null && id != null && String(id) === yo;
-  const est = obs?.estado;
+  const actos = actosDeIssue({ ...obs, autor_id: obs?.autor_id ?? obs?.verificador_id }, usuarioId, { opcionales, miEmpresa });
   return {
-    corregir: es(obs?.responsable_id) && (est === 'Abierto' || est === 'Reabierto'),
-    verificar: es(obs?.verificador_id) && !es(obs?.responsable_id) && est === 'Corregido',
-    anular: es(obs?.autor_id ?? obs?.verificador_id) && (est === 'Abierto' || est === 'Reabierto'),
+    ...actos,
+    verificar: es(obs?.verificador_id) && !esDelResponsable(obs, usuarioId, miEmpresa) && obs?.estado === 'Corregido',
   };
 }
 
 // A quién le toca: lo que se lee en la tarjeta sin abrir nada.
 export function aQuienLeToca(obs) {
-  if (!obs) return '';
-  if (obs.estado === 'Abierto' || obs.estado === 'Reabierto') return obs.responsable ? `Corregir: ${obs.responsable}` : 'Corregir';
-  if (obs.estado === 'Corregido') return obs.verificador ? `Verificar: ${obs.verificador}` : 'Verificar';
-  return 'Cerrada';
+  return aQuienLeTocaIssue(obs, { autor: obs?.autor ?? obs?.verificador });
 }
 
 // La fecha límite que se propone: dentro de 7 días, en AAAA-MM-DD (lo que pide <input type="date">).
@@ -78,9 +71,13 @@ export function fechaDeDia(aaaammdd) {
 // Una línea del historial, en palabras. Los comentarios se pintan aparte, con su texto.
 const EVENTOS = {
   detected: 'Levantó la observación',
+  sent: 'La envió al responsable',
+  started: 'Empezó a corregirla',
+  disputed: 'Dijo que no procede',
+  reaffirmed: 'La reafirmó: vuelve al responsable',
   corrected: 'La declaró corregida',
   verified: 'Verificó la corrección y la cerró',
-  reopened: 'Rechazó la corrección y la reabrió',
+  reopened: 'No aprobó la corrección: vuelve al responsable',
   voided: 'La anuló',
   commented: 'Comentó',
   self_verify_allowed: 'Autorizó la autoverificación',

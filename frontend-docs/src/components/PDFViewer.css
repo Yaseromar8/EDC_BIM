@@ -1072,3 +1072,10 @@
   background: #302f2e;
 }
 .pdf-estuche__colores button[aria-pressed="true"] { border-color: #faf9f5; }
+
+/* Observaciones del plano (docs/archivos/15): el número de las que siguen sin cerrar, sobre el botón del rail. */
+.pdf-rail-btn--obs { position: relative; }
+.pdf-rail-btn__num {
+  position: absolute; top: 1px; right: 1px; min-width: 15px; height: 15px; padding: 0 3px; box-sizing: border-box;
+  border-radius: 8px; background: #d97757; color: #fff; font: 600 10px/15px var(--a-font-sans); text-align: center;
+}

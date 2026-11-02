@@ -8,12 +8,17 @@
 import { createContext } from 'react';
 import { API } from '../../utils/helpers';
 import { apiFetch } from '../../utils/apiFetch';
+import { CODIGOS_VIVOS, ESTADOS_DE_ISSUE } from '../../utils/estadosDeIssue';
 
 export const IncidenciasDelTablero = createContext({ porId: {}, nombres: {}, abrir: () => {} });
 
-// Las columnas del kanban, en el orden del flujo (`flujo_de_issue.py`). Anulado solo si alguna lo está.
-export const COLUMNAS = ['Abierto', 'Reabierto', 'Corregido', 'Verificado'];
-export const VIVOS = ['Abierto', 'Reabierto', 'Corregido'];
+// Las columnas del kanban, en el orden del flujo (`flujo_de_issue.py`, estados de ACC desde la 45). Las FIJAS se ven
+// siempre; En curso, En disputa y Anulada, solo si alguna está en ellas. Un borrador no se pone en un tablero.
+export const COLUMNAS = ESTADOS_DE_ISSUE.map(e => e.codigo).filter(c => c !== 'Borrador' && c !== 'Anulado');
+export const FIJAS = ['Abierto', 'Corregido', 'Reabierto', 'Verificado'];
+export const VIVOS = CODIGOS_VIVOS;
+export const columnasDelKanban = (presentes) => [...COLUMNAS, 'Anulado']
+  .filter(c => FIJAS.includes(c) || presentes.some(i => i.estado === c));
 export const TAMANO_INCIDENCIA = { w: 300, h: 156 };
 export const TAMANO_KANBAN = { w: 1040, h: 520 };
 

@@ -444,7 +444,21 @@ def captura():
 
 
 def punch():
-    return _leer('src', 'components', 'PunchModule.jsx')
+    """Donde se LEVANTA un punch. Desde el 2-nov-2026 (docs/archivos/19) el alta es el panel lateral único de las
+    incidencias, y lo que tiene de Docs —la cola de campo incluida— vive en su adaptador, IncidenciaLateral.jsx.
+    PunchModule lo usa pasándole la sesión y la obra, que es lo que la cola necesita (lo comprueba la prueba de abajo)."""
+    return _leer('src', 'components', 'IncidenciaLateral.jsx')
+
+
+def test_punch_levanta_por_el_panel_con_la_sesion_y_la_obra():
+    """Sin `user` y `project`, el adaptador no tiene contexto de campo y todo iría directo al servidor: sin
+    cobertura, el punch se perdería."""
+    m = _sin_comentarios(_leer('src', 'components', 'PunchModule.jsx'))
+    assert 'IncidenciaLateral' in m
+    for trozo in m.split('<IncidenciaLateral')[1:]:
+        cabeza = trozo.split('/>')[0]
+        if 'nueva=' in cabeza:
+            assert 'user={user}' in cabeza and 'project={project}' in cabeza
 
 
 def protocolos():

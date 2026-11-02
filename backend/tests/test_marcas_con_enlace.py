@@ -9,6 +9,14 @@ import pytest
 import routes.pdf_tools as pdf
 
 
+@pytest.fixture(autouse=True)
+def obra_sin_configurar(monkeypatch):
+    """Lo que la obra decide de sus incidencias (45): aquí, nada configurado."""
+    import flujo_de_issue as iss
+    monkeypatch.setattr(iss, 'config_de_obra', lambda cur, obra: {'opcionales': list(iss.OPCIONALES), 'subtipos': {},
+                                                                  'causas': [], 'campos': []})
+
+
 PLANO = str(uuid.uuid4())
 FOTO = str(uuid.uuid4())
 INFORME = str(uuid.uuid4())
@@ -208,7 +216,7 @@ def test_citado_en_exige_poder_abrir_el_documento(app, monkeypatch, prohibidos):
 
 def test_listar_por_version_filtra_y_cuenta_las_demas(app, monkeypatch):
     marcas = [(3, 1, 'cloud', {}, {}, None, 'Ana', AHORA, True, AHORA, ANTERIOR, 1, None)]
-    cur, _ = _conectar(monkeypatch, [marcas, [], [(VIGENTE, 2, 4)]])
+    cur, _ = _conectar(monkeypatch, [marcas, [], [], [(VIGENTE, 2, 4)]])   # marcas · su observación · la del plano · otras versiones
     r = app.test_client().get(f'/api/pdf/markups?node_id={PLANO}&version_id={ANTERIOR}')
     d = r.get_json()
     assert d['markups'][0]['version_number'] == 1 and d['markups'][0]['version_id'] == ANTERIOR
@@ -379,7 +387,8 @@ def test_al_listar_cada_marca_trae_su_observacion_y_si_vencio(app, monkeypatch):
     assert o['codigo'] == 'ISS-012' and o['vencida'] is True and o['responsable'] == 'Luis'
     assert d['markups'][1]['observacion'] is None
     sql, params = [q for q in cur.queries if 'FROM doc_issues' in q[0]][0]
-    assert params == ('MARCA', ['5', '6'], 'OBSERVACION')                 # una consulta para toda la hoja
+    assert params == ('MARCA', ['5', '6'], 'OBSERVACION', 7)              # una consulta para toda la hoja
+    assert "estado <> 'Borrador' OR autor_id = %s" in sql                    # el borrador ajeno no se ve (45)
 
 
 def test_leer_la_observacion_nombra_la_correccion_sin_dar_acceso(app, monkeypatch, prohibidos):
@@ -489,6 +498,54 @@ def test_recolorear_un_borrador(app, monkeypatch):
         assert not _update(cur)
     cur, _ = _conectar(monkeypatch, [_figura(kind='sello', geo={'p': [1, 2]}), (False,), None])
     assert app.test_client().patch('/api/pdf/markups/5', json={'color': '#507294'}).status_code == 400
+
+
+def test_el_estilo_de_la_nube_grosor_relleno_y_festones(app, monkeypatch):
+    """Como el «Estilo» de ACC (2-nov-2026): grosor, relleno de la paleta y tamaño de los festones."""
+    cur, _ = _conectar(monkeypatch, [_figura(), (False,), None])
+    r = app.test_client().patch('/api/pdf/markups/5', json={'estilo': {'grosor': 'grueso', 'relleno': '#D97757',
+                                                                      'festones': 'grandes'}})
+    assert r.status_code == 200, r.get_json()
+    assert json.loads(_update(cur)[0][1][0]) == {'color': '#b93535', 'grosor': 'grueso', 'relleno': '#d97757',
+                                                 'festones': 'grandes'}
+    cur, _ = _conectar(monkeypatch, [(*_figura()[:1], {'color': '#b93535', 'relleno': '#d97757'}, *_figura()[2:]), (False,), None])
+    r = app.test_client().patch('/api/pdf/markups/5', json={'estilo': {'relleno': None}})
+    assert r.status_code == 200 and 'relleno' not in r.get_json()['markup']['style']
+
+
+@pytest.mark.parametrize('kind, estilo', [
+    ('cloud', {'grosor': 'enorme'}), ('arrow', {'relleno': '#d97757'}), ('rect', {'festones': 'grandes'}),
+    ('text', {'grosor': 'fino'}), ('cloud', {'relleno': 'url(x)'}), ('cloud', 'grueso'),
+])
+def test_el_estilo_solo_donde_tiene_sentido(app, monkeypatch, kind, estilo):
+    cur, _ = _conectar(monkeypatch, [_figura(kind=kind), (False,), None])
+    assert app.test_client().patch('/api/pdf/markups/5', json={'estilo': estilo}).status_code == 400
+    assert not _update(cur)
+
+
+def test_el_triangulo_de_revision_de_la_nube(app, monkeypatch):
+    cur, _ = _conectar(monkeypatch, [_figura(), (False,), None])
+    r = app.test_client().patch('/api/pdf/markups/5', json={'estilo': {'triangulo': ' c02 '}})
+    assert r.status_code == 200 and r.get_json()['markup']['style']['triangulo'] == 'C02'
+    for malo in ('C 02', 'x' * 9, '<b>'):
+        cur, _ = _conectar(monkeypatch, [_figura(), (False,), None])
+        assert app.test_client().patch('/api/pdf/markups/5', json={'estilo': {'triangulo': malo}}).status_code == 400
+    cur, _ = _conectar(monkeypatch, [_figura(kind='rect'), (False,), None])
+    assert app.test_client().patch('/api/pdf/markups/5', json={'estilo': {'triangulo': 'C02'}}).status_code == 400
+
+
+def test_la_nube_poligonal_se_mueve_por_sus_vertices(app, monkeypatch):
+    cur, _ = _conectar(monkeypatch, [_figura(geo={'points': [[0, 0], [10, 0], [5, 8]]}), (False,), None])
+    r = app.test_client().patch('/api/pdf/markups/5', json={'geometria': {'points': [[1, 1], [11, 1], [6, 9]]}})
+    assert r.status_code == 200 and r.get_json()['markup']['geometry'] == {'points': [[1.0, 1.0], [11.0, 1.0], [6.0, 9.0]]}
+    cur, _ = _conectar(monkeypatch, [_figura(geo={'points': [[0, 0], [10, 0], [5, 8]]}), (False,), None])
+    assert app.test_client().patch('/api/pdf/markups/5', json={'geometria': {'points': [[1, 1], [2, 2]]}}).status_code == 400
+
+
+def test_una_nube_publicada_no_cambia_de_estilo(app, monkeypatch):
+    cur, _ = _conectar(monkeypatch, [_figura(), (True,)])
+    r = app.test_client().patch('/api/pdf/markups/5', json={'estilo': {'grosor': 'fino'}})
+    assert r.status_code == 409 and r.get_json()['code'] == 'MARCA_PUBLICADA'
 
 
 def test_reescribir_el_texto_solo_en_una_marca_de_texto(app, monkeypatch):

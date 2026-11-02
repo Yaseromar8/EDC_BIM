@@ -29,14 +29,17 @@ def test_cuenta_abiertas_vencidas_y_cerradas_y_la_proxima():
                  'b': {'abiertas': 0, 'vencidas': 0, 'cerradas': 3, 'vence': None, 'responsable': None}}
     # «c» no tiene nada vivo ni cerrado (p. ej. solo anuladas): no se pinta aviso.
     sql, params = cur.consultas[0]
-    assert "i.tipo = %s" in sql and params[-2] == 'OBSERVACION' and params[-1] == ['a', 'b', 'c']
-    assert list(params[0]) == ['Abierto', 'Corregido', 'Reabierto']          # «Corregido» aún falta verificar
+    assert params[:6] == ('MARCA', 'OBSERVACION', ['a', 'b', 'c'], 'PLANO', 'OBSERVACION', ['a', 'b', 'c'])
+    assert set(params[6]) == {'Abierto', 'En curso', 'En disputa', 'Corregido', 'Reabierto'}  # vivas (45)
     # La próxima en vencer solo se pregunta por los planos con abiertas.
-    assert cur.consultas[1][1][-1] == ['a']
+    assert cur.consultas[1][1][2] == ['a'] and cur.consultas[1][1][5] == ['a']
 
 
-def test_solo_observaciones_nacidas_de_una_marca():
+def test_cuentan_las_de_una_marca_y_las_del_plano_entero():
     cur = Cursor([[]])
     obs.resumen(cur, ['a'])
     sql, params = cur.consultas[0]
-    assert "i.origen_tipo = %s AND i.origen_id = m.id::text" in sql and 'MARCA' in params
+    assert "i.origen_tipo = %s AND i.origen_id = m.id::text" in sql and params[0] == 'MARCA'
+    # La del plano entero (docs/archivos/18): su origen es el documento y su versión, la primera evidencia.
+    assert "i.origen_tipo = %s AND i.tipo = %s AND i.origen_id = ANY(%s)" in sql and params[3] == 'PLANO'
+    assert "i.evidencia->0->>'version_id'" in sql

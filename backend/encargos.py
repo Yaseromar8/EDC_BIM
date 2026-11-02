@@ -554,6 +554,10 @@ def deudor_de_issue(cur, fila):
 
         Abierto     el RESPONSABLE: tiene que corregir
         Reabierto   el RESPONSABLE: la verificacion lo rechazo
+        En curso    el RESPONSABLE: dijo que ya la esta corrigiendo (45)
+        En disputa  QUIEN LA LEVANTO: el responsable dice que no procede, y
+                    reafirmarla o anularla es de quien la detecto (45)
+        Borrador    nadie: todavia no se envio (45)
         Corregido   el VERIFICADOR DESIGNADO: tiene que comprobar la correccion
         Verificado  nadie
         Anulado     nadie
@@ -563,12 +567,16 @@ def deudor_de_issue(cur, fila):
     desaparece de todas las bandejas sin que nadie lo haya comprobado.
     """
     (iid, codigo, titulo, estado, autor_id, responsable_id,
-     verificador_id, vence) = fila
+     verificador_id, vence) = fila[:8]
     estado = (estado or '').strip()
-    if estado in ('Abierto', 'Reabierto'):
+    if estado in ('Abierto', 'Reabierto', 'En curso'):
         if not responsable_id:
             return None, '', None
         return (responsable_id, 'Corregir %s: %s' % (codigo or 'ISS', titulo or ''), vence)
+    if estado == 'En disputa':
+        if not autor_id:
+            return None, '', None
+        return (autor_id, 'Resolver la disputa de %s: %s' % (codigo or 'ISS', titulo or ''), vence)
     if estado == 'Corregido':
         # AL VERIFICADOR DESIGNADO, no al detector. La primera version mandaba
         # la pelota a `autor_id`, y eso convertia a quien ENCUENTRA el defecto
@@ -587,10 +595,29 @@ def deudor_de_issue(cur, fila):
     return None, '', None
 
 
+def empresa_deudora_de_issue(fila):
+    """La EMPRESA a la que le toca un issue AHORA (45), o None. (empresa, asunto, vence).
+
+    Un issue asignado a una empresa (`responsable_empresa`, sin persona) se le
+    debe a ella mientras esté en manos del responsable: el encargo va con
+    `destino_empresa` y lo ve en «Mi Trabajo» cualquiera de esa empresa que sea
+    de la obra. `fila` = la de `deudor_de_issue` más `responsable_empresa` al final.
+    """
+    if len(fila) < 9:
+        return None, '', None
+    iid, codigo, titulo, estado, _autor, responsable_id, _verif, vence = fila[:8]
+    empresa = fila[8]
+    if responsable_id or not empresa:
+        return None, '', None
+    if (estado or '').strip() in ('Abierto', 'Reabierto', 'En curso'):
+        return int(empresa), 'Corregir %s: %s' % (codigo or 'ISS', titulo or ''), vence
+    return None, '', None
+
+
 _SQL_ISSUES_VIVOS = """
     SELECT id, codigo, titulo, estado, autor_id, responsable_id, verificador_id,
-           vence_en, project_id
-      FROM doc_issues WHERE estado IN ('Abierto','Reabierto','Corregido')
+           vence_en, project_id, responsable_empresa
+      FROM doc_issues WHERE estado IN ('Abierto','Reabierto','Corregido','En curso','En disputa')
 """
 
 
@@ -864,7 +891,7 @@ def _sigue_debiendose(cur, tipo, objeto_id, destino_usuario):
 
     if tipo == 'ISSUE':
         cur.execute("""SELECT id, codigo, titulo, estado, autor_id, responsable_id,
-                              verificador_id, vence_en
+                              verificador_id, vence_en, responsable_empresa
                          FROM doc_issues WHERE id::text = %s""",
                     (str(objeto_id),))
         fila = cur.fetchone()
@@ -872,7 +899,9 @@ def _sigue_debiendose(cur, tipo, objeto_id, destino_usuario):
             return None
         uid, _a, _v = deudor_de_issue(cur, fila)
         if uid is None:
-            return False
+            # Asignado a una EMPRESA (45): su encargo no lleva persona.
+            empresa, _a, _v = empresa_deudora_de_issue(fila)
+            return empresa is not None and destino_usuario is None
         return True if destino_usuario is None else uid == destino_usuario
 
     if tipo == 'PROTOCOLO':
@@ -1127,6 +1156,12 @@ def _faltantes(cur):
             obra = fila[8]
             uid, asunto, vence = deudor_de_issue(cur, fila[:8])
             if not uid:
+                empresa, asunto, vence = empresa_deudora_de_issue(fila[:8] + (fila[9],))
+                if empresa is not None:
+                    cur.execute("SELECT 1 FROM encargos WHERE objeto_tipo='ISSUE' AND objeto_id=%s "
+                                "   AND destino_empresa=%s AND estado='abierto'", (str(fila[0]), empresa))
+                    if not cur.fetchone():
+                        faltan.append(('ISSUE', str(fila[0]), None, asunto, vence, empresa))
                 continue
             cur.execute('SELECT 1 FROM project_users WHERE project_id = %s AND user_id = %s',
                         (str(obra), uid))
@@ -1381,12 +1416,14 @@ def conciliar(cur, aplicar=False, actor='conciliacion'):
                         "       cerrado_en=CURRENT_TIMESTAMP, cerrado_por=%s "
                         " WHERE id=%s AND estado='abierto'", (actor, eid))
             cerrados += cur.rowcount
-        for tipo, oid, uid, asunto, vence in d['faltantes']:
+        for tipo, oid, uid, asunto, vence, *empresa in d['faltantes']:
             # Pasa por `abrir()`, que vuelve a comprobar pertenencia: la
             # conciliacion no puede colar un encargo que la via normal negaria.
             # Y con `vence_en`: reconstruir el encargo sin su plazo lo dejaria
             # sin recordatorio y sin aviso de vencido, que es media reparacion.
+            # Un issue asignado a una EMPRESA (45) lleva la empresa como sexto dato.
             if abrir(cur, tipo, oid, asunto, destino_usuario=uid,
-                     vence_en=vence, creado_por=actor):
+                     vence_en=vence, creado_por=actor,
+                     destino_empresa=empresa[0] if empresa else None):
                 abiertos += 1
     return cerrados, abiertos, d

@@ -1,0 +1,57 @@
+/* El menú de la marca elegida (2-nov-2026), como el de ACC: una barra pequeña junto a la marca, y lo que despliega
+   justo debajo. Paleta D-24, letra del sistema. */
+.bdm { position: absolute; z-index: 30; font-family: var(--a-font-sans); color: #141413; transform: translateX(-4px); }
+.bdm-barra {
+  display: inline-flex; align-items: center; gap: 2px; padding: 4px; background: #fff; border: 1px solid #e8e6dc;
+  border-radius: 8px; box-shadow: 0 4px 16px rgba(20, 20, 19, .14); white-space: nowrap;
+}
+.bdm-info { padding: 0 8px 0 6px; font-size: 12px; font-weight: 600; color: #52524d; border-right: 1px solid #f1f0e8; margin-right: 2px; }
+.bdm-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 4px; min-width: 30px; height: 30px; padding: 0 6px;
+  border: none; border-radius: 6px; background: transparent; color: #52524d; cursor: pointer;
+}
+.bdm-btn:hover:not(:disabled) { background: #f1f0e8; color: #141413; }
+.bdm-btn[aria-pressed="true"] { background: #f1f0e8; color: #141413; }
+.bdm-btn:disabled { color: #cccac0; cursor: default; }
+.bdm-btn:focus-visible { outline: 2px solid #6a9bcc; }
+.bdm-btn--peligro:hover:not(:disabled) { color: #b93535; background: #fbebeb; }
+.bdm-btn b { font: 600 11px 'IBM Plex Mono', monospace; }
+.bdm-muestra { width: 14px; height: 14px; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 0 0 1px #cccac0; }
+.bdm-sep { width: 1px; height: 20px; background: #f1f0e8; margin: 0 2px; }
+.bdm-obs {
+  display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 8px; margin: 0 2px; border: none; border-radius: 4px;
+  background: color-mix(in srgb, var(--estado) 14%, #fff); color: #141413; font: 600 12px var(--a-font-sans); cursor: pointer;
+}
+.bdm-obs i { width: 8px; height: 8px; border-radius: 50%; background: var(--estado); }
+.bdm-obs:hover { filter: brightness(.97); }
+
+.bdm-menu {
+  position: absolute; top: calc(100% + 6px); left: 0; min-width: 220px; display: flex; flex-direction: column; gap: 6px;
+  padding: 10px 12px; background: #fff; border: 1px solid #e8e6dc; border-radius: 8px; box-shadow: 0 8px 24px rgba(20, 20, 19, .14);
+}
+.bdm-menu--ancho { min-width: 280px; max-width: 360px; }
+.bdm-rotulo { font-size: 12px; color: #72706b; }
+.bdm-colores { display: flex; gap: 6px; flex-wrap: wrap; }
+.bdm-colores button { width: 20px; height: 20px; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 0 0 1px #cccac0; cursor: pointer; padding: 0; }
+.bdm-colores button[aria-checked="true"] { box-shadow: 0 0 0 2px #141413; }
+.bdm-colores .bdm-sin { background: linear-gradient(135deg, #fff 45%, #b93535 45%, #b93535 55%, #fff 55%); }
+.bdm-opciones { display: inline-flex; border: 1px solid #cccac0; border-radius: 6px; overflow: hidden; align-self: flex-start; }
+.bdm-opciones button { border: none; background: #fff; padding: 4px 10px; font: 500 12px var(--a-font-sans); color: #52524d; cursor: pointer; }
+.bdm-opciones button + button { border-left: 1px solid #e8e6dc; }
+.bdm-opciones button[aria-checked="true"] { background: #141413; color: #fff; }
+.bdm-nota { font-size: 12px; color: #72706b; line-height: 1.45; }
+.bdm-menu textarea { font: 14px/1.4 var(--a-font-sans); border: 1px solid #cccac0; border-radius: 6px; padding: 6px 8px; resize: vertical; min-width: 260px; }
+.bdm-acciones { display: flex; gap: 6px; }
+.bdm-accion { height: 28px; padding: 0 10px; border-radius: 6px; border: 1px solid #cccac0; background: #fff; font: 500 12px var(--a-font-sans); cursor: pointer; }
+.bdm-accion--prim { background: #141413; border-color: #141413; color: #fff; }
+.bdm-accion:disabled { opacity: .45; cursor: default; }
+.bdm-citas { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.bdm-citas li { display: flex; align-items: center; gap: 6px; }
+.bdm-cita { flex: 1; min-width: 0; border: none; background: none; padding: 0; text-align: left; font: 500 13px var(--a-font-sans); color: #507294; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bdm-cita:hover { text-decoration: underline; }
+.bdm-cita--tenue { color: #72706b; font-style: italic; cursor: default; }
+.bdm-quitar { border: none; background: none; color: #72706b; font-size: 16px; cursor: pointer; padding: 0 4px; }
+.bdm-quitar:hover { color: #b93535; }
+.bdm-triangulo { display: flex; gap: 6px; align-items: center; }
+.bdm-triangulo input { width: 72px; height: 28px; box-sizing: border-box; border: 1px solid #cccac0; border-radius: 6px; padding: 0 8px;
+  font: 600 13px 'IBM Plex Mono', monospace; text-transform: uppercase; }
