@@ -11,16 +11,16 @@
 }
 .mce-btn:hover:not(:disabled) { background: #f1f0e8; }
 .mce-btn:disabled { opacity: .45; cursor: default; }
-.mce-btn:focus-visible { outline: 2px solid #6a9bcc; outline-offset: 1px; }
-.mce-btn--prim { background: #141413; border-color: #141413; color: #fff; }
-.mce-btn--prim:hover:not(:disabled) { background: #333330; }
+.mce-btn:focus-visible { outline: none; box-shadow: var(--a-focus-ring, 0 0 0 2px #fff, 0 0 0 4px #1f3a5f); }
+.mce-btn--prim { background: var(--a-action-primary, #1f3a5f); border-color: transparent; color: var(--a-text-on-action, #fff); }
+.mce-btn--prim:hover:not(:disabled) { background: var(--a-action-primary-hover, #162b47); }
 .mce-btn--peligro { color: #b93535; }
 .mce-icono {
   display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px;
   border: none; border-radius: 6px; background: transparent; color: #52524d; cursor: pointer;
 }
 .mce-icono:hover { background: #f1f0e8; color: #141413; }
-.mce-icono:focus-visible { outline: 2px solid #6a9bcc; }
+.mce-icono:focus-visible { outline: none; box-shadow: var(--a-focus-ring, 0 0 0 2px #fff, 0 0 0 4px #1f3a5f); }
 .mce-icono--peq { width: 22px; height: 22px; }
 
 /* ── Panel de la marca (acoplado al costado derecho del lector, como en ACC) ── */
@@ -126,7 +126,7 @@
 .mce-campo legend { padding: 0; margin-bottom: 6px; }
 .mce-campo small { font-weight: 400; color: #72706b; }
 .mce-campo input, .mce-campo textarea, .mce-campo select { font: 14px/1.4 var(--a-font-sans); color: #141413; border: 1px solid #cccac0; border-radius: 6px; padding: 8px 10px; resize: vertical; }
-.mce-campo input:focus, .mce-campo textarea:focus, .mce-campo select:focus { outline: 2px solid #6a9bcc; outline-offset: -1px; border-color: #6a9bcc; }
+.mce-campo input:focus-visible, .mce-campo textarea:focus-visible, .mce-campo select:focus-visible { outline: none; box-shadow: var(--a-focus-ring, 0 0 0 2px #fff, 0 0 0 4px #1f3a5f); border-color: var(--a-action-text, #1f3a5f); }
 .mce-opcion { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 6px; font-weight: 400; color: #141413; cursor: pointer; }
 .mce-opcion:hover { background: #f1f0e8; }
 .mce-opcion.es-elegida { background: #ecf0f1; }

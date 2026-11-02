@@ -106,6 +106,7 @@
 .pdf-ico:hover { background: var(--pdf-hover); color: var(--pdf-ink); }
 .pdf-ico[aria-pressed="true"] { background: var(--pdf-active-bg); color: var(--pdf-active); }
 .pdf-ico:disabled { cursor: not-allowed; opacity: 0.32; }
+.pdf-ico:focus-visible { outline: none; box-shadow: var(--a-focus-ring, 0 0 0 2px #fff, 0 0 0 4px #1f3a5f); }
 
 .pdf-sep { flex-shrink: 0; width: 1px; height: 20px; margin: 0 5px; background: var(--pdf-line); }
 
@@ -273,8 +274,8 @@
 
 .pdf-rail-btn, .pdf-swatch {
   display: inline-flex; align-items: center; justify-content: center;
-  width: 34px; height: 34px; padding: 0;
-  border: none; border-radius: 7px;
+  width: 36px; height: 36px; padding: 0;
+  border: none; border-radius: 6px;
   background: transparent; color: var(--pdf-icon);
   cursor: pointer;
   transition: background 0.13s ease, color 0.13s ease;
@@ -991,7 +992,11 @@
 
 .pdf-rail--compacto .pdf-rail-btn:focus-visible,
 .pdf-rail--compacto .pdf-swatch:focus-visible,
-.pdf-estuche__menu button:focus-visible { outline: 2px solid #6a9bcc; outline-offset: 1px; }
+.pdf-estuche__menu button:focus-visible {
+  /* El anillo de DOS BANDAS (UI polish T2) sobre el estuche oscuro: la de dentro del color del estuche y la de fuera
+     clara, para que se lea sobre el plano y sobre el propio estuche. */
+  outline: none; box-shadow: 0 0 0 2px #302f2e, 0 0 0 4px #faf9f5;
+}
 
 /* El triángulo de la esquina: este botón tiene más herramientas. */
 .pdf-estuche__mas {

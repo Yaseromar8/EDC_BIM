@@ -534,6 +534,15 @@ function Detalle({ entorno, obra, ob, issueId, extraDetalle, onCambio, onCargada
 
 // ── EL PANEL ─────────────────────────────────────────────────────────────────
 
+// EL PANEL NO ES DEL LIENZO (2-nov-2026, el dueño: «cuando hago clic dentro del panel se mueve el plano, y en Detalle
+// no se puede escribir»). El panel se dibuja en otro sitio del DOM, pero React hace subir sus eventos por el árbol de
+// componentes hasta quien lo monta: en el lector, el contenedor del plano, que con «Mover» arrastra la hoja y anula
+// el clic (`preventDefault`), así que un campo nunca recibía el foco ni un desplegable se abría. Lo que pasa dentro
+// del panel se queda dentro.
+export const AISLADO = Object.fromEntries(['onMouseDown', 'onMouseUp', 'onMouseMove', 'onPointerDown', 'onPointerUp',
+  'onPointerMove', 'onClick', 'onDoubleClick', 'onWheel', 'onKeyDown', 'onContextMenu']
+  .map(k => [k, (e) => e.stopPropagation()]));
+
 export default function PanelDeIncidencia({ entorno, obra, issueId = null, nueva = null, crear = null, titulo = null,
                                             extraAlta = null, extraDetalle = null, contenedor = null,
                                             onVolver = null, onCreada, onCambio, onCerrar }) {
@@ -545,7 +554,8 @@ export default function PanelDeIncidencia({ entorno, obra, issueId = null, nueva
   const cabecera = id ? (codigo || 'Incidencia') : (titulo || (tipoNuevo ? `Nueva ${tipoNuevo.etiqueta.toLowerCase()}` : 'Nueva incidencia'));
   const destino = contenedor || document.body;
   return createPortal(
-    <aside className={`pinc${contenedor ? ' pinc--dentro' : ''}`} aria-label={id ? `Incidencia ${codigo || ''}` : 'Nueva incidencia'}>
+    <aside className={`pinc${contenedor ? ' pinc--dentro' : ''}`} aria-label={id ? `Incidencia ${codigo || ''}` : 'Nueva incidencia'}
+      {...AISLADO}>
       <header className="pinc-cab">
         {onVolver && <button type="button" className="pinc-icono" onClick={onVolver} aria-label="Volver"><Ico><path d="M15 6l-6 6 6 6" /></Ico></button>}
         <div className="pinc-cab__tit">

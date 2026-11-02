@@ -25,6 +25,7 @@ import SelectorDeDocumento from './SelectorDeDocumento';
 import IncidenciaLateral from './IncidenciaLateral';
 import { destinoDelLector } from './ObservacionesDelPlano';
 import { DialogoDeSello } from './MarcaConEnlace';
+import { AISLADO } from '../../../design/incidencias/PanelDeIncidencia.jsx';
 import './BarraDeMarca.css';
 
 const NOMBRE = {
@@ -131,7 +132,7 @@ export default function BarraDeMarca({ API, obra, marca, esAutor, editable, colo
 
   return (
     <div ref={raiz} className="bdm" style={posicion} role="toolbar" aria-label={`${NOMBRE[marca.kind] || 'Marca'} elegida`}
-      onPointerDown={e => e.stopPropagation()} onClick={e => e.stopPropagation()}>
+      {...AISLADO}>
       <div className="bdm-barra">
         <span className="bdm-info" data-tip={[marca.version_number ? `V${marca.version_number}` : '', marca.created_by,
           fechaCorta(marca.created_at), marca.publicado ? 'Publicada' : 'Borrador'].filter(Boolean).join(' · ')}>

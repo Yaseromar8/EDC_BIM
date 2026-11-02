@@ -23,6 +23,7 @@ import {
   textoDeCitas, citasPorPlano, etiquetaDeCita, siguienteAngulo, fechaCorta, observacionViva,
 } from '../utils/marcasConEnlace';
 import ObservacionDeMarca, { EtiquetaDeObservacion } from './ObservacionDeMarca';
+import { AISLADO } from '../../../design/incidencias/PanelDeIncidencia.jsx';
 import './MarcaConEnlace.css';
 
 const NOMBRE_DE_TIPO = {
@@ -271,7 +272,7 @@ export function PanelDeMarca({ API, obra, marca, esAutor, versionVigente = null,
   const sello = marca.style?.sello;
 
   return createPortal(
-    <aside className="mce-panel" aria-label={`${tipo} seleccionada`}>
+    <aside className="mce-panel" aria-label={`${tipo} seleccionada`} {...AISLADO}>
       <header className="mce-panel__cab">
         <span className="mce-panel__ico">{marca.kind === 'foto' ? <IconoFoto /> : marca.kind === 'sello' ? <IconoSello /> : <IconoEnlace />}</span>
         <div className="mce-panel__tit">

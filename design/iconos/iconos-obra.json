@@ -4,7 +4,8 @@
   "docs": "Herramientas de Docs",
   "obra": "Obra e ingeniería",
   "visor": "Visor",
-  "acciones": "Acciones"
+  "acciones": "Acciones",
+  "lector": "Lector de documentos"
  },
  "iconos": {
   "buscar": {
@@ -311,6 +312,66 @@
    "grupo": "acciones",
    "titulo": "Más acciones",
    "svg": "<circle cx=\"12\" cy=\"5.5\" r=\"1\" fill=\"currentColor\" stroke=\"none\"/><circle cx=\"12\" cy=\"12\" r=\"1\" fill=\"currentColor\" stroke=\"none\"/><circle cx=\"12\" cy=\"18.5\" r=\"1\" fill=\"currentColor\" stroke=\"none\"/>"
+  },
+  "seleccionar": {
+   "grupo": "lector",
+   "titulo": "Seleccionar y mover",
+   "svg": "<path d=\"M6 4.5 18.5 11l-5.6 1.7-2.4 5.3z\"/><path d=\"m13.2 12.9 4.8 4.8\"/>"
+  },
+  "distancia": {
+   "grupo": "lector",
+   "titulo": "Distancia",
+   "svg": "<path d=\"M4 12h16\"/><path d=\"M4 8.5v7M20 8.5v7\"/><path d=\"m7 10-2.5 2L7 14M17 10l2.5 2-2.5 2\"/>"
+  },
+  "area": {
+   "grupo": "lector",
+   "titulo": "Área",
+   "svg": "<path d=\"M5.5 8.5 13 4.5l6 5.5-2.5 8.5h-9z\"/><circle cx=\"5.5\" cy=\"8.5\" r=\"1\" fill=\"currentColor\" stroke=\"none\"/><circle cx=\"13\" cy=\"4.5\" r=\"1\" fill=\"currentColor\" stroke=\"none\"/><circle cx=\"19\" cy=\"10\" r=\"1\" fill=\"currentColor\" stroke=\"none\"/><circle cx=\"16.5\" cy=\"18.5\" r=\"1\" fill=\"currentColor\" stroke=\"none\"/><circle cx=\"7.5\" cy=\"18.5\" r=\"1\" fill=\"currentColor\" stroke=\"none\"/>"
+  },
+  "contar": {
+   "grupo": "lector",
+   "titulo": "Contar",
+   "svg": "<circle cx=\"12\" cy=\"12\" r=\"8\"/><path d=\"M10.5 9.5 12.5 8v8M10.5 16h4\"/>"
+  },
+  "nube": {
+   "grupo": "lector",
+   "titulo": "Nube de revisión",
+   "svg": "<path d=\"M4.5 7a2.5 2.5 0 0 1 5 0 2.5 2.5 0 0 1 5 0 2.5 2.5 0 0 1 5 0 2.5 2.5 0 0 1 0 5 2.5 2.5 0 0 1 0 5 2.5 2.5 0 0 1-5 0 2.5 2.5 0 0 1-5 0 2.5 2.5 0 0 1-5 0 2.5 2.5 0 0 1 0-5 2.5 2.5 0 0 1 0-5z\"/>"
+  },
+  "nube-poligonal": {
+   "grupo": "lector",
+   "titulo": "Nube poligonal",
+   "svg": "<path d=\"M6 8.5a2.4 2.4 0 0 1 4.2-1.8A2.4 2.4 0 0 1 14.7 5a2.4 2.4 0 0 1 4.2 2.1 2.4 2.4 0 0 1 .9 4.5 2.4 2.4 0 0 1-2.2 3.9 2.4 2.4 0 0 1-4.2 2.6 2.4 2.4 0 0 1-4.4-.4 2.4 2.4 0 0 1-3-3.4A2.4 2.4 0 0 1 6 8.5z\"/>"
+  },
+  "flecha": {
+   "grupo": "lector",
+   "titulo": "Flecha",
+   "svg": "<path d=\"M5 19 18 6\"/><path d=\"M18 6h-6.5M18 6v6.5\"/>"
+  },
+  "texto": {
+   "grupo": "lector",
+   "titulo": "Texto",
+   "svg": "<path d=\"M5.5 6.5h13M12 6.5v12\"/><path d=\"M9.5 18.5h5\"/>"
+  },
+  "sello": {
+   "grupo": "lector",
+   "titulo": "Sello de revisión",
+   "svg": "<path d=\"M9.5 4h5l-.8 6h-3.4z\"/><path d=\"M5 13.5a1.5 1.5 0 0 1 1.5-1.5h11a1.5 1.5 0 0 1 1.5 1.5v3H5z\"/><path d=\"M6 20h12\"/>"
+  },
+  "marca-foto": {
+   "grupo": "lector",
+   "titulo": "Foto en el plano",
+   "svg": "<path d=\"M4 8.5a2 2 0 0 1 2-2h2l1.5-2.5h5L16 6.5h2a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z\"/><circle cx=\"12\" cy=\"13\" r=\"3.3\"/>"
+  },
+  "observaciones": {
+   "grupo": "lector",
+   "titulo": "Observaciones del plano",
+   "svg": "<path d=\"M5.5 4.5h13a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H11l-4.5 3v-3h-1a2 2 0 0 1-2-2v-9a2 2 0 0 1 2-2z\"/><path d=\"M8.5 9h7M8.5 12.5h4.5\"/>"
+  },
+  "borrar-marca": {
+   "grupo": "lector",
+   "titulo": "Borrar marca",
+   "svg": "<path d=\"m5.5 14.5 8-8a1.5 1.5 0 0 1 2.1 0l3.4 3.4a1.5 1.5 0 0 1 0 2.1l-6.5 6.5H9.5z\"/><path d=\"m9.5 10.5 5 5\"/><path d=\"M12.5 18.5h7\"/>"
   }
  }
 }

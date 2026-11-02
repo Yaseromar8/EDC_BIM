@@ -16,7 +16,7 @@ import { planDeVecinas } from '../utils/vecinasDelLector';
 import { aplanarIndice } from '../utils/lectorDePlanos';
 import { marcaDeLaDireccion } from '../utils/marcasConEnlace';
 import CapaMosaico from './CapaMosaico';
-import { IconoObservaciones } from './ObservacionesDelPlano';
+import IconoModulo from './IconoModulo';
 import { fuenteRemota } from '../utils/mosaicoRemoto';
 import {
   PASO_DE_TECLADO, pasoDeRueda, suavizar, limitesDeZoom, objetivoDelZoom,
@@ -223,7 +223,17 @@ const HINTS = {
 // (D-24) es el «indicador activo». «Borrar marca» sale del estuche: se elige la marca y se pulsa Supr (o la
 // papelera de su panel). Las herramientas son las mismas de arriba; solo cambia cómo se ofrecen.
 const HERRAMIENTA = Object.fromEntries(GRUPOS_DE_HERRAMIENTAS.flatMap(g => g.items).map(t => [t.id, t]));
-const ICONO_SELECCIONAR = <path d="M6 4l12 7-5.5 1.2L10 18z" />;
+// LOS ICONOS DEL ESTUCHE SON LOS DEL JUEGO OFICIAL (2-nov-2026, design/iconos/iconos-obra.json, grupo «Lector»):
+// retícula 24, trazo 1,5, puntas redondas, dibujados a 20 px. Antes eran propios, a 18 px con trazo 1,6: líneas de
+// 1,2 px que el navegador emborronaba (el dueño: «los botones los veo pixelados»).
+const ICONO_DE = {
+  pan: 'seleccionar', measure: 'distancia', area: 'area', count: 'contar', cloud: 'nube', cloudpoly: 'nube-poligonal',
+  arrow: 'flecha', text: 'texto', stamp: 'sello', photo: 'marca-foto', erase: 'borrar-marca',
+};
+const IconoDeHerramienta = ({ id, tamano = 20 }) => (ICONO_DE[id]
+  ? <IconoModulo nombre={ICONO_DE[id]} tamano={tamano} />
+  : <svg width={tamano} height={tamano} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"
+      strokeLinecap="round" strokeLinejoin="round">{HERRAMIENTA[id]?.icon}</svg>);
 const NOMBRE_COMPACTO = { pan: 'Seleccionar y mover', measure: 'Distancia' };
 const nombreDe = (id) => NOMBRE_COMPACTO[id] || HERRAMIENTA[id]?.etiqueta || id;
 const TECLA = { pan: 'V', measure: 'M', area: 'A', count: 'K', cloud: 'C', cloudpoly: 'N', arrow: 'F', text: 'T', stamp: 'S', photo: 'P' };
@@ -453,8 +463,7 @@ function BotonObservacionesDelPlano({ activo, cuantas, onClick }) {
     <button type="button" className="pdf-rail-btn pdf-rail-btn--obs" aria-pressed={activo}
       aria-label="Observaciones del plano" data-tip="Observaciones del plano" title="Observaciones del plano"
       onClick={onClick}>
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-        strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">{IconoObservaciones}</svg>
+      <IconoModulo nombre="observaciones" tamano={20} />
       {cuantas > 0 && <span className="pdf-rail-btn__num">{cuantas > 99 ? '99+' : cuantas}</span>}
     </button>
   );
@@ -2301,7 +2310,7 @@ export default function PDFViewer({ url, preparando = false,
   const paginacion = (
     <div className="pdf-pagenav">
       <button className="pdf-ico" aria-label="Página anterior" title="Página anterior"
-        onClick={() => goToPage(currentPage - 1)} disabled={currentPage <= 1}><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button>
+        onClick={() => goToPage(currentPage - 1)} disabled={currentPage <= 1}><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button>
       <input aria-label="Número de página" inputMode="numeric" type="number"
         value={pageDraft} min={1} max={numPages}
         onChange={(e) => setPageDraft(e.target.value)}
@@ -2312,7 +2321,7 @@ export default function PDFViewer({ url, preparando = false,
         }} />
       <span>de {numPages || '—'}</span>
       <button className="pdf-ico" aria-label="Página siguiente" title="Página siguiente"
-        onClick={() => goToPage(currentPage + 1)} disabled={currentPage >= numPages}><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M9 5l7 7-7 7"/></svg></button>
+        onClick={() => goToPage(currentPage + 1)} disabled={currentPage >= numPages}><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M9 5l7 7-7 7"/></svg></button>
     </div>
   );
 
@@ -2323,12 +2332,12 @@ export default function PDFViewer({ url, preparando = false,
         <div className="pdf-topbar__left">
           <button className="pdf-ico" onClick={() => setShowSidebar(!showSidebar)}
             aria-label="Panel de miniaturas" aria-pressed={showSidebar} title="Miniaturas de páginas">
-            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
           </button>
           <button className="pdf-ico" aria-label="Buscar en el documento" aria-pressed={searchOpen}
             title="Buscar en el documento (Ctrl+F)"
             onClick={() => { setSearchOpen(o => !o); setTimeout(() => document.getElementById('pdf-search-input')?.focus(), 0); }}>
-            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.6-3.6"/></svg>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.6-3.6"/></svg>
           </button>
 
           {searchOpen ? (
@@ -2386,21 +2395,21 @@ export default function PDFViewer({ url, preparando = false,
               <SelloEscritorio app={appEscritorio} tamano={21} />
             </button>
           )}
-          <button className="pdf-ico" onClick={printDocument} title="Imprimir"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9V3h12v6"/><rect x="4" y="9" width="16" height="7" rx="1.5"/><path d="M7 16h10v5H7z"/></svg></button>
+          <button className="pdf-ico" onClick={printDocument} title="Imprimir"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9V3h12v6"/><rect x="4" y="9" width="16" height="7" rx="1.5"/><path d="M7 16h10v5H7z"/></svg></button>
           <button className="pdf-ico" onClick={downloadDocument} disabled={descargando}
-            title={`Descargar ${fileName}`}><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M12 4v11M8 12l4 4 4-4"/><path d="M4 19h16"/></svg></button>
+            title={`Descargar ${fileName}`}><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 4v11M8 12l4 4 4-4"/><path d="M4 19h16"/></svg></button>
           <span className="pdf-sep" />
           <button className="pdf-ico" onClick={toggleFullscreen}
             title={isFullscreen ? 'Salir de pantalla completa' : 'Pantalla completa'}>
-            {isFullscreen ? <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></svg> : <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>}
+            {isFullscreen ? <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></svg> : <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>}
           </button>
 
           {onClose && (
             <>
               <span className="pdf-sep" />
               <button className="pdf-ico" onClick={onClose} title="Cerrar documento" aria-label="Cerrar documento">
-                <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                  strokeWidth="1.7" strokeLinecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                  strokeWidth="1.5" strokeLinecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>
               </button>
             </>
           )}
@@ -2578,8 +2587,7 @@ export default function PDFViewer({ url, preparando = false,
                             setDesplegable(null);
                             setTool(prev => (prev === id && id !== 'pan' ? 'pan' : id));
                           }}>
-                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                            strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">{id === 'pan' ? ICONO_SELECCIONAR : HERRAMIENTA[id].icon}</svg>
+                          <IconoDeHerramienta id={id} />
                           {conMas && <span className="pdf-estuche__mas" aria-hidden="true" />}
                         </button>
                         {conMas && desplegable === g.grupo && (
@@ -2588,8 +2596,7 @@ export default function PDFViewer({ url, preparando = false,
                               <button key={v} type="button" role="menuitemradio" aria-checked={tool === v}
                                 title={HERRAMIENTA[v].title}
                                 onClick={() => { setTool(v); setDesplegable(null); }}>
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                  strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">{HERRAMIENTA[v].icon}</svg>
+                                <IconoDeHerramienta id={v} tamano={16} />
                                 <span>{nombreDe(v)}</span><kbd>{TECLA[v]}</kbd>
                               </button>
                             ))}
@@ -2601,8 +2608,8 @@ export default function PDFViewer({ url, preparando = false,
                   {i === 0 && (extrasDelEstuche || []).map(x => (
                     <button key={x.id} type="button" className="pdf-rail-btn" aria-label={x.titulo || x.etiqueta}
                       data-tip={x.etiqueta} aria-pressed={!!x.activo} onClick={x.onClick}>
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                        strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">{x.icono}</svg>
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                        strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">{x.icono}</svg>
                     </button>
                   ))}
                 </div>
@@ -2641,15 +2648,14 @@ export default function PDFViewer({ url, preparando = false,
                     <button key={t.id} className="pdf-rail-btn" title={t.title}
                       aria-label={t.title} aria-pressed={tool === t.id}
                       onClick={() => setTool(prev => prev === t.id ? 'pan' : t.id)}>
-                      <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                        strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">{t.icon}</svg>
+                      <IconoDeHerramienta id={t.id} />
                       {cajetin && <span className="pdf-rail-btn__txt">{t.etiqueta}</span>}
                     </button>
                   ))}
                   {cajetin && grupo.nombre === 'navegar' && (extrasDelEstuche || []).map(x => (
                     <button key={x.id} className="pdf-rail-btn" title={x.titulo || x.etiqueta} aria-label={x.titulo || x.etiqueta}
                       aria-pressed={!!x.activo} onClick={x.onClick}>
-                      <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                         strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">{x.icono}</svg>
                       <span className="pdf-rail-btn__txt">{x.etiqueta}</span>
                     </button>
@@ -2699,9 +2705,9 @@ export default function PDFViewer({ url, preparando = false,
             <div className="pdf-dock__group">
               {cajetin && numPages > 1 && <>{paginacion}<span className="pdf-sep" /></>}
               <button className="pdf-ico" onClick={() => fitTo('page')}
-                aria-pressed={fitMode === 'page'} title="Ajustar página (Ctrl+0)"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="3" width="16" height="18" rx="1.5"/><path d="M9 9l-2 2 2 2M15 9l2 2-2 2"/></svg></button>
+                aria-pressed={fitMode === 'page'} title="Ajustar página (Ctrl+0)"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="3" width="16" height="18" rx="1.5"/><path d="M9 9l-2 2 2 2M15 9l2 2-2 2"/></svg></button>
               <button className="pdf-ico" onClick={() => fitTo('width')}
-                aria-pressed={fitMode === 'width'} title="Ajustar ancho"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12h18M7 8l-4 4 4 4M17 8l4 4-4 4"/></svg></button>
+                aria-pressed={fitMode === 'width'} title="Ajustar ancho"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12h18M7 8l-4 4 4 4M17 8l4 4-4 4"/></svg></button>
             {/* Las medidas del papel (841 x 594 mm) tambien se retiraron a
                 peticion del dueno: en una carpeta de planos del mismo formato
                 repetian el mismo dato en cada uno. */}
@@ -2711,7 +2717,7 @@ export default function PDFViewer({ url, preparando = false,
                 <span className="pdf-sep" />
                 <button className="pdf-ico" onClick={() => irAHermano(-1)}
                   disabled={indiceActual <= 0} title="Documento anterior de la carpeta">
-                  <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                     strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
                 </button>
                 <button className="pdf-ico pdf-tira-boton" onClick={() => setTiraAbierta(v => !v)}
@@ -2733,15 +2739,15 @@ export default function PDFViewer({ url, preparando = false,
                 <button className="pdf-ico" onClick={() => irAHermano(1)}
                   disabled={indiceActual < 0 || indiceActual >= hermanos.length - 1}
                   title="Documento siguiente de la carpeta">
-                  <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                     strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M9 6l6 6-6 6"/></svg>
                 </button>
               </>
             )}
             <span className="pdf-sep" />
             <button className="pdf-ico" onClick={rotateRight} title="Girar 90°">
-              <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 5v6h-6"/>
               </svg>
             </button>

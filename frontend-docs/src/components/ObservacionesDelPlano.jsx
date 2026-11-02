@@ -17,6 +17,7 @@ import { estadoDeIssue, issueViva } from '../utils/estadosDeIssue';
 import { fechaDeDia, observacionViva } from '../utils/marcasConEnlace';
 import { exportarExcel, exportarPdf, filasDelInforme } from '../utils/informeDeIncidencias';
 import IncidenciaLateral from './IncidenciaLateral';
+import { AISLADO } from '../../../design/incidencias/PanelDeIncidencia.jsx';
 
 const NOMBRE_DE_TIPO = {
   foto: 'Foto', sello: 'Sello', cloud: 'Nube', arrow: 'Flecha', text: 'Texto', measure: 'Medición',
@@ -171,7 +172,7 @@ export default function ObservacionesDelPlano({ API, obra, nodeId, nombre = '', 
   const cerradas = (lista || []).filter(o => !(issueViva(o) || o.estado === 'Borrador'));
 
   return createPortal(
-    <aside className="mce-panel" aria-label="Observaciones del plano">
+    <aside className="mce-panel" aria-label="Observaciones del plano" {...AISLADO}>
       <header className="mce-panel__cab">
         <span className="mce-panel__ico"><Ico>{IconoObservaciones}</Ico></span>
         <div className="mce-panel__tit">
