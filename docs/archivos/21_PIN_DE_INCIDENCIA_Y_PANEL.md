@@ -172,3 +172,72 @@ nuestro:
 
 - La miniatura en el alta: el banco no sube fotos. Es el mismo componente del detalle, que en producción sí la enseñó.
 - El lápiz nuevo en la lista: el banco del lector no la tiene. Docs compila.
+
+## 6 · Descartar un borrador, ocultar las anuladas y un panel más claro (2-nov-2026, noche)
+
+El dueño preguntó si una incidencia se puede eliminar. La respuesta es que no: se anula. Aprobó dos cambios («ok
+vamos») y pidió que el panel fuera «más profesional e intuitivo».
+
+**Descartar un borrador.**
+
+- Un borrador nunca llegó a nadie. Antes, «descartarlo» lo anulaba y quedaba «Anulada» **a la vista de toda la obra**.
+- Ahora `POST /api/issues/<id>/descartar` hace un descarte lógico: solo su autor, solo si sigue en borrador.
+  - La incidencia pasa a «Anulado» con el evento `discarded`.
+  - Ninguna lectura la devuelve: la lista, el resumen, el detalle (404), las del plano y las de la marca
+    (`flujo_de_issue.SQL_NO_DESCARTADA`).
+- **No se borra la fila.** La aplicación no tiene DELETE sobre `doc_issues` desde el barrido de privilegios de la
+  migración 26. Lo descubrió el banco: el primer intento con DELETE dio `permission denied`. Esa protección se queda.
+- Lo enviado no se descarta (409): se anula, con su motivo.
+- Techo de rutas del portal: 312 → 313.
+
+**Un borrador del plano sin responsable.** El panel dejaba guardar un borrador sin responsable, pero el plano y la marca
+respondían `SIN_RESPONSABLE`. Ahora se guarda, y el responsable se exige al enviarlo. Mientras falte, el panel lo dice y
+no ofrece «Enviar».
+
+**Los pines de las anuladas** ya no se clavan en la hoja; siguen en la lista del panel.
+
+**El panel.** Antes los pasos eran enlaces diminutos al borde, la ubicación aparecía dos veces y no quedaba claro qué te
+tocaba hacer. Ahora:
+
+- **Cabecera:** el pin, el código y el tipo. La ubicación va en los detalles.
+- **Línea de estado:**
+  - el estado, como desplegable con quién da cada paso;
+  - la fecha límite con su icono, en rojo si está vencida;
+  - **Seguir / Siguiendo**, con campana.
+- **«Lo que te toca»:** una tarjeta con borde del color del estado.
+  - Si te toca a ti dice qué hacer, con el paso principal en negro y los otros al lado. Por ejemplo, «Te toca corregirla
+    antes del 12 nov. 2026» con *Declarar corregida*, *Empezar* y *No procede*.
+  - Si no te toca, dice a quién le toca y qué.
+  - Cerrada o anulada, lo dice.
+- **Detalles:**
+  - el valor se pulsa para cambiarlo (Asignada a → reasignar, Clasificación); el lápiz aparece al pasar el ratón;
+  - los observadores, como personas con sus iniciales y «+ Añadir / Cambiar»;
+  - el pin, como una fila más («Página 1 · Ver en el plano»);
+  - fuera «Tipo», que ya está en la cabecera.
+- **Fotos y documentos:** mosaico de 88 px con una tesela «+ Añadir» que abre dos opciones: *Subir fotos* y *Documento
+  de la obra*.
+- **Comentarios | Historial:**
+  - pestañas; los comentarios solo tienen lo que escribe la gente, y el historial es una línea de tiempo;
+  - **la caja de comentar va fija abajo**, en una línea con el botón al lado, y crece si el texto es largo.
+
+**Pruebas:**
+
+- Suite backend: 2586 pasan y 1 fallo previo, ajeno (`test_reconstruccion_desde_cero`). Las nuevas:
+  - descartar no borra la fila, pasa a «Anulado» con `discarded`, y solo si sigue en borrador;
+  - lo enviado no se descarta;
+  - el borrador ajeno no se descarta;
+  - un descartado da 404 y la lista lo excluye;
+  - un borrador del plano se guarda sin responsable;
+  - el techo de rutas sube a 313.
+- Node: 9/9 y 11/11.
+- Build de Docs.
+- Banco contra PostgreSQL real, como `ecd_app`:
+  - el borrador desaparece de la lista, y leerlo da 404;
+  - descartar algo enviado da 409;
+  - un borrador del plano sin responsable se crea, y el envío lo frena;
+  - desde el panel: «Descartar» → confirmar → vuelve a la lista y el pin desaparece.
+- Panel en el banco:
+  - como Ana (no le toca): «Le toca a Luis corregirla antes del 12 nov. 2026»;
+  - como Luis: la tarjeta con *Declarar corregida / Empezar / No procede*;
+  - el menú de «+ Añadir» ofrece sus dos opciones;
+  - la pestaña Historial no muestra la caja de comentar.

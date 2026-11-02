@@ -173,8 +173,13 @@ export default function ObservacionesDelPlano({ API, obra, nodeId, nombre = '', 
           const ids = (i.evidencia || []).filter(e => e && e.tipo === 'marca' && e.marca != null).map(e => e.marca);
           const suPin = ((i.evidencia || []).find(e => e && e.tipo === 'plano') || {}).pin;
           const irAlPin = suPin ? (
-            <p className="pinc-nota">Pin en la página {suPin.pagina} ·{' '}
-              <button type="button" className="pinc-cita" onClick={() => onIrAPin?.(suPin)}>Ver en el plano</button></p>
+            <dl className="pinc-filas">
+              <div className="pinc-fila">
+                <dt>Pin</dt>
+                <dd><span className="pinc-valor pinc-valor--fijo">Página {suPin.pagina}</span>
+                  <button type="button" className="pinc-anadir" onClick={() => onIrAPin?.(suPin)}>Ver en el plano</button></dd>
+              </div>
+            </dl>
           ) : null;
           if (!ids.length) return irAlPin || (i.origen_tipo === 'PLANO' ? <p className="pinc-nota">Observación del plano entero.</p> : null);
           return (

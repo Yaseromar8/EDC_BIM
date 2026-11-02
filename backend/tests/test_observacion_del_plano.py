@@ -261,3 +261,15 @@ def test_la_lista_del_plano_trae_el_pin():
     cur = Cursor([[(55, 'ISS-020', 'Abierto', 'Cotas', 9, 7, VENCE, PLANO, ev)], [(9, 'Luis'), (7, 'Ana')]])
     o, = pdf._observaciones_del_plano(cur, PLANO)
     assert o['pin'] == {'pagina': 1, 'p': [5, 6]}
+
+
+def test_un_borrador_del_plano_se_guarda_sin_responsable(app, monkeypatch):
+    # El panel deja guardar un borrador sin responsable (como el resto de incidencias); el plano y la marca lo
+    # rechazaban con SIN_RESPONSABLE. Se exige al ENVIARLO (routes.issues._falta_para_enviar).
+    from datetime import date
+    monkeypatch.setattr(pdf, '_hoy_en_obra', lambda: date(2026, 11, 2))
+    with app.test_request_context():
+        campos, error = pdf._campos_de_observacion({'titulo': 'Cotas', 'borrador': True, 'vence_en': '2026-11-20'}, 7)
+        assert error is None and campos[2] is None
+        campos, error = pdf._campos_de_observacion({'titulo': 'Cotas', 'vence_en': '2026-11-20'}, 7)
+        assert campos is None and error[0].get_json()['code'] == 'SIN_RESPONSABLE'

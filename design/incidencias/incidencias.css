@@ -148,7 +148,7 @@
 .pinc-fila dd > .pinc-enlace + .pinc-enlace { padding-left: var(--a-space-12, 12px); }
 .pinc-fila .es-vencida { color: var(--a-status-danger, #b93535); font-weight: 600; }
 .pinc-filas .pinc-editor { display: flex; flex-direction: column; gap: var(--a-space-8, 8px); margin: 4px 0 8px; padding: var(--a-space-12, 12px); border: var(--a-border-width-1, 1px) solid var(--a-border-default, #e8e6dc); border-radius: var(--a-radius-md, 4px); background: var(--a-surface-sunken, #faf9f5); }
-.pinc-minis { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: var(--a-space-8, 8px); }
+.pinc-minis { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, 88px); gap: var(--a-space-8, 8px); }
 .pinc-mini { position: relative; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .pinc-mini__img { aspect-ratio: 1; display: grid; place-items: center; padding: 0; overflow: hidden; border: var(--a-border-width-1, 1px) solid var(--a-border-default, #e8e6dc); border-radius: var(--a-radius-md, 4px); background: var(--a-surface-sunken, #faf9f5); color: var(--a-text-muted, #72706b); cursor: pointer; }
 .pinc-mini__img:hover { border-color: var(--a-border-strong, #b0aea5); }
@@ -166,8 +166,8 @@
 .pinc-actividad__cab small { color: var(--a-text-muted, #72706b); font-size: var(--a-type-caption-size, 12px); margin-left: auto; }
 .pinc-actividad p { margin: 4px 0 0; line-height: 1.45; white-space: pre-wrap; color: var(--a-text-primary, #141413); }
 .pinc-actividad li.es-comentario p { padding: var(--a-space-8, 8px) var(--a-space-12, 12px); border-radius: var(--a-radius-md, 4px); background: var(--a-surface-sunken, #faf9f5); }
-.pinc-comentar { display: flex; flex-direction: column; gap: var(--a-space-8, 8px); margin-top: var(--a-space-4, 4px); }
-.pinc-comentar .pinc-botones small { margin-left: auto; }
+.pinc-comentar textarea { flex: 1; min-height: 34px; resize: none; }
+.pinc-comentar .pinc-btn { flex: none; }
 .pinc-historia summary { cursor: pointer; list-style: none; font-size: var(--a-type-body-size, 13px); font-weight: 600; color: var(--a-text-secondary, #52524d); display: flex; gap: 6px; align-items: baseline; border-radius: 2px; }
 .pinc-historia summary::-webkit-details-marker { display: none; }
 .pinc-historia summary::before { content: ''; width: 6px; height: 6px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: rotate(-45deg); margin-right: 4px; align-self: center; transition: transform .15s; }
@@ -204,3 +204,61 @@
 @media (max-width: 720px) {
   .pinc, .pinc--dentro { width: 100%; }
 }
+
+/* ── EL PANEL, VERSIÓN «PROFESIONAL E INTUITIVA» (2-nov-2026, docs/archivos/21 §6) ── */
+/* La línea del estado: estado (desplegable), fecha límite y Seguir */
+.pinc-estado { gap: var(--a-space-8, 8px); }
+.pinc-vence { display: inline-flex; align-items: center; gap: 5px; font-size: var(--a-type-caption-size, 12px); color: var(--a-text-secondary, #52524d); }
+.pinc-vence.es-vencida { color: var(--a-status-danger, #b93535); font-weight: 600; }
+.pinc-seguir { margin-left: auto; display: inline-flex; align-items: center; gap: 5px; height: 28px; padding: 0 10px; border: var(--a-border-width-1, 1px) solid var(--a-border-default, #e8e6dc); border-radius: var(--a-radius-md, 4px); background: var(--a-surface-raised, #fff); font: 500 var(--a-type-caption-size, 12px) var(--a-font-sans, system-ui, sans-serif); color: var(--a-text-secondary, #52524d); cursor: pointer; }
+.pinc-seguir:hover:not(:disabled) { background: var(--a-state-hover, #f1f0e8); color: var(--a-text-primary, #141413); }
+.pinc-seguir.es-activo { color: var(--a-text-primary, #141413); border-color: var(--a-border-strong, #b0aea5); }
+
+/* Lo que te toca: una frase y, si es tuyo, el paso principal */
+.pinc-turno { margin: var(--a-space-12, 12px) var(--a-space-16, 16px) 0; padding: var(--a-space-12, 12px); border-radius: var(--a-radius-md, 4px); border: var(--a-border-width-1, 1px) solid var(--a-border-default, #e8e6dc); border-left: 3px solid var(--estado); background: var(--a-surface-sunken, #faf9f5); display: flex; flex-direction: column; gap: var(--a-space-8, 8px); }
+.pinc-turno p { margin: 0; font-size: var(--a-type-body-size, 13px); line-height: 1.45; color: var(--a-text-secondary, #52524d); }
+.pinc-turno.es-mio { background: var(--a-surface-raised, #fff); box-shadow: var(--a-shadow-sm); }
+.pinc-turno.es-mio p { color: var(--a-text-primary, #141413); font-weight: 600; }
+.pinc-turno.es-fin { border-left-color: var(--a-border-strong, #b0aea5); }
+.pinc-turno .pinc-enlace--suelto { margin: 0; }
+.pinc-btn--rojo { color: var(--a-status-danger, #b93535); }
+
+/* Los valores de los detalles: el propio valor se pulsa para cambiarlo */
+.pinc-fila { align-items: center; }
+.pinc-fila dd { justify-content: flex-start; }
+.pinc-valor { display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 100%; margin: -3px -6px; padding: 3px 6px; border: var(--a-border-width-1, 1px) solid transparent; border-radius: var(--a-radius-md, 4px); background: none; font: 400 var(--a-type-body-size, 13px)/20px var(--a-font-sans, system-ui, sans-serif); color: var(--a-text-primary, #141413); text-align: left; cursor: pointer; }
+button.pinc-valor:hover { border-color: var(--a-border-default, #e8e6dc); background: var(--a-surface-raised, #fff); }
+.pinc-valor--fijo { cursor: default; }
+.pinc-valor--largo { overflow-wrap: anywhere; }
+.pinc-valor__lapiz { flex: none; color: var(--a-text-muted, #72706b); opacity: 0; }
+button.pinc-valor:hover .pinc-valor__lapiz, button.pinc-valor:focus-visible .pinc-valor__lapiz { opacity: 1; }
+.pinc-avatar--chico { width: 20px; height: 20px; font-size: 9px; flex: none; }
+.pinc-chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.pinc-persona { display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px 2px 2px; border-radius: 999px; background: var(--a-surface-sunken, #f1f0e8); font-size: var(--a-type-caption-size, 12px); }
+.pinc-vacio { color: var(--a-text-muted, #72706b); }
+.pinc-anadir { border: none; background: none; padding: 2px 4px; border-radius: var(--a-radius-md, 4px); font: 500 var(--a-type-caption-size, 12px) var(--a-font-sans, system-ui, sans-serif); color: var(--a-action-text, #1f3a5f); cursor: pointer; }
+.pinc-anadir:hover { background: var(--a-state-hover, #f1f0e8); }
+
+/* Adjuntar: una tesela más del mosaico */
+.pinc-mini--nuevo .pinc-mini__img { border-style: dashed; background: var(--a-surface-raised, #fff); }
+.pinc-mini--nuevo .pinc-mini__img:hover:not(:disabled) { border-color: var(--a-border-strong, #b0aea5); color: var(--a-text-primary, #141413); }
+.pinc-mini__menu { top: 100%; min-width: 260px; }
+.pinc-mini__menu button { grid-template-columns: 1fr; }
+.pinc-mini__menu small { grid-column: 1; }
+
+/* Comentarios | Historial */
+.pinc-conversacion { gap: var(--a-space-12, 12px); }
+.pinc-pestanas { display: flex; gap: var(--a-space-16, 16px); border-bottom: var(--a-border-width-1, 1px) solid var(--a-border-default, #e8e6dc); }
+.pinc-pestanas button { border: none; background: none; padding: 0 0 var(--a-space-8, 8px); margin-bottom: -1px; border-bottom: 2px solid transparent; font: 600 var(--a-type-body-size, 13px) var(--a-font-sans, system-ui, sans-serif); color: var(--a-text-muted, #72706b); cursor: pointer; display: inline-flex; gap: 6px; }
+.pinc-pestanas button:hover { color: var(--a-text-primary, #141413); }
+.pinc-pestanas button[aria-selected="true"] { color: var(--a-text-primary, #141413); border-bottom-color: var(--a-text-primary, #141413); }
+.pinc-pestanas button span { font-weight: 400; color: var(--a-text-muted, #72706b); }
+.pinc-actividad--historial { gap: var(--a-space-8, 8px); position: relative; }
+.pinc-actividad--historial li { grid-template-columns: 12px 1fr; font-size: var(--a-type-caption-size, 12px); }
+.pinc-actividad--historial .pinc-actividad__cab span { color: var(--a-text-secondary, #52524d); }
+.pinc-actividad--historial .pinc-actividad__cab b { color: var(--a-text-primary, #141413); font-weight: 600; }
+.pinc-punto { width: 8px; height: 8px; margin-top: 6px; border-radius: 50%; background: var(--a-border-strong, #b0aea5); }
+.pinc-actividad--historial li:last-child .pinc-punto { background: var(--estado); }
+
+/* La caja de comentar, fija abajo como en una conversación */
+.pinc-comentar { position: sticky; bottom: 0; z-index: 1; display: flex; align-items: flex-end; gap: var(--a-space-8, 8px); padding: var(--a-space-12, 12px) var(--a-space-16, 16px); border-top: var(--a-border-width-1, 1px) solid var(--a-border-default, #e8e6dc); background: var(--a-surface-raised, #fff); }

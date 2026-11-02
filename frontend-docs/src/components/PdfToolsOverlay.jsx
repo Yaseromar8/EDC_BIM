@@ -846,7 +846,8 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
   // sigue al plano); en una anterior, solo los que se clavaron en ella. Clic: se abre en el panel.
   const renderPines = () => {
     const T = 34 * porPixel;   // caja de 34 px de pantalla: el pin visible mide ~18 × 26 px
-    const pines = obsPlano.filter(o => o.pin && o.pin.pagina === page && Array.isArray(o.pin.p)
+    // Las ANULADAS no se clavan en la hoja (2-nov-2026): se levantaron por error; siguen en la lista del panel.
+    const pines = obsPlano.filter(o => o.pin && o.estado !== 'Anulado' && o.pin.pagina === page && Array.isArray(o.pin.p)
       && (enVigente || !o.version_id || String(o.version_id) === String(versionId)));
     const uno = (key, p, color, numero, extra = {}) => {
       const s = toScr(p);

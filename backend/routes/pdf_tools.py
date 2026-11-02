@@ -888,7 +888,8 @@ ORIGEN_MARCA = 'MARCA'
 ORIGEN_PLANO = 'PLANO'
 _EN_EVIDENCIA = lambda markup_id: json.dumps([{'marca': int(markup_id)}])
 # Un BORRADOR (migración 45) solo lo ve quien lo levantó: todavía no se envió a nadie.
-_NO_ES_BORRADOR_AJENO = "(estado <> 'Borrador' OR autor_id = %s)"
+# Tampoco un borrador DESCARTADO (2-nov-2026): para todos es como si no existiera (flujo_de_issue.SQL_NO_DESCARTADA).
+_NO_ES_BORRADOR_AJENO = "(estado <> 'Borrador' OR autor_id = %s) AND NOT (history @> '[{\"event\": \"discarded\"}]'::jsonb)"
 
 
 def _yo():
@@ -1075,6 +1076,9 @@ def _marca_para_observacion(cur, markup_id):
 def _campos_de_observacion(d, uid, empresa_vale=False):
     """((titulo, descripcion, responsable, vence), None) o (None, respuesta de error).
 
+    Un BORRADOR (45) se guarda sin responsable, como en las demás incidencias: el panel lo permite y antes el plano y la
+    marca lo rechazaban. Se exige al enviarlo (`routes.issues._falta_para_enviar`).
+
     Con `empresa_vale` (la del plano, 45) el responsable puede ser una EMPRESA (`responsable_empresa`): entonces
     `responsable` vuelve None y la empresa la valida `routes.issues.datos_de_la_45`.
     """
@@ -1087,7 +1091,7 @@ def _campos_de_observacion(d, uid, empresa_vale=False):
         responsable = int(d.get('responsable_id'))
     except (TypeError, ValueError):
         responsable = None
-    if responsable is None and not (empresa_vale and d.get('responsable_empresa')):
+    if responsable is None and not (empresa_vale and d.get('responsable_empresa')) and not d.get('borrador'):
         return None, (jsonify({"success": False, "error": "Elige a quién le toca corregir.",
                                "code": "SIN_RESPONSABLE"}), 400)
     if responsable == uid:

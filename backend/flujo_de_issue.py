@@ -147,6 +147,16 @@ VIVOS = (ABIERTO, EN_CURSO, EN_DISPUTA, CORREGIDO, REABIERTO)
 # Los que todavía no se cerraron: los vivos y el borrador. Una marca en uno de
 # ellos no se puede retirar.
 SIN_CERRAR = (BORRADOR,) + VIVOS
+
+# UN BORRADOR DESCARTADO (2-nov-2026, decisión del dueño): para todos, como si se hubiera borrado. NO se borra la fila:
+# la aplicación no tiene DELETE sobre doc_issues desde el barrido de privilegios de la migración 26, y esa protección se
+# queda. Pasa a «Anulado» con el evento `discarded` en su historial, y toda lectura lo deja fuera con esta condición.
+EVENTO_DESCARTADA = 'discarded'
+SQL_NO_DESCARTADA = "NOT (history @> '[{\"event\": \"discarded\"}]'::jsonb)"
+
+
+def es_descartada(history):
+    return any(isinstance(h, dict) and h.get('event') == EVENTO_DESCARTADA for h in (history or []))
 # Donde el responsable tiene la pelota: corregir, empezar o decir que no procede.
 EN_MANOS_DEL_RESPONSABLE = (ABIERTO, EN_CURSO, REABIERTO)
 

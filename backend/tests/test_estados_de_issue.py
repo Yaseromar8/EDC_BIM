@@ -205,6 +205,43 @@ def test_el_borrador_ajeno_no_existe(app, monkeypatch, pelota):
     assert app.test_client().get('/api/issues/55').status_code == 404
 
 
+def test_descartar_un_borrador_lo_quita_para_todos_sin_borrar_la_fila(app, monkeypatch, quien, pelota):
+    # Un borrador nunca llegó a nadie: desaparece (antes quedaba «Anulada» a la vista de toda la obra). La fila no se
+    # borra: la aplicación no tiene DELETE sobre doc_issues desde la migración 26.
+    quien.update(id=ANA, name='Ana', email='ana@obra.pe')
+    cur, conn = _conectar(monkeypatch, [fila('Borrador')])
+    r = app.test_client().post('/api/issues/55/descartar')
+    assert r.status_code == 200 and r.get_json()['descartada'] == 55 and conn.committed
+    assert not [q for q in cur.queries if q[0].startswith('DELETE')]
+    pasa, = [q for q in cur.queries if q[0].startswith('UPDATE doc_issues SET estado')]
+    assert pasa[1] == ('Anulado', 55, 'Borrador')                 # solo si sigue siendo borrador
+    historia, = [q for q in cur.queries if q[0].startswith('UPDATE doc_issues SET history')]
+    assert json.loads(historia[1][0])[-1]['event'] == 'discarded'
+
+
+def test_un_borrador_descartado_no_existe_para_nadie(app, monkeypatch, quien, pelota):
+    quien.update(id=ANA, name='Ana', email='ana@obra.pe')
+    _conectar(monkeypatch, [fila('Anulado', history=[{'event': 'discarded', 'by': 'Ana'}])])
+    assert app.test_client().get('/api/issues/55').status_code == 404
+    cur, _ = _conectar(monkeypatch, [[], []])
+    assert app.test_client().get('/api/issues?model_urn=obra').status_code == 200
+    assert all(iss.SQL_NO_DESCARTADA in sql for sql, _ in cur.queries)
+
+
+def test_lo_enviado_no_se_descarta_se_anula(app, monkeypatch, quien, pelota):
+    quien.update(id=ANA, name='Ana', email='ana@obra.pe')
+    cur, _ = _conectar(monkeypatch, [fila('Abierto')])
+    r = app.test_client().post('/api/issues/55/descartar')
+    assert r.status_code == 409 and r.get_json()['code'] == 'TRANSICION_INVALIDA'
+    assert not [q for q in cur.queries if q[0].startswith('DELETE')]
+
+
+def test_el_borrador_ajeno_no_se_descarta(app, monkeypatch, pelota):
+    cur, _ = _conectar(monkeypatch, [fila('Borrador')])       # quien pide es Luis, no la autora
+    assert app.test_client().post('/api/issues/55/descartar').status_code == 404
+    assert not [q for q in cur.queries if q[0].startswith('DELETE')]
+
+
 def test_la_lista_esconde_los_borradores_ajenos(app, monkeypatch):
     cur, _ = _conectar(monkeypatch, [[], []])
     assert app.test_client().get('/api/issues?model_urn=obra').status_code == 200

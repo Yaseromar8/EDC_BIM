@@ -14,7 +14,13 @@ Detalle en `docs/archivos/18`, `19`, `20` y `21`.
 - **Pruebas:** suite backend 2582 pasan + 1 fallo previo ajeno (`test_reconstruccion_desde_cero`: el bootstrap no
   tiene las tablas de tableros); node 7/7 y 11/11; build de Docs. Banco con la hoja dibujada y clics reales: crear con
   pin, pin en su sitio, abrir desde el pin.
-- EXACT NEXT ACTION: Manual Deploy de `visor-ecd-backend-va` y DESPUÉS de `visor-ecd-portal` con el HEAD de main;
+- `c3144a3d` DESPLEGADO (backend + portal, verificado). `750bd5b3` (lo que vio el dueño en producción: marcas al
+  instante, estado desde el chip, comentarios aparte, lápiz) EMPUJADO; deploy del portal pendiente del dueño.
+- Commit siguiente (docs/archivos/21 §6): descartar un borrador = descarte LÓGICO (`discarded` + Anulado, oculto en
+  toda lectura; la app NO tiene DELETE en doc_issues desde la 26 y así sigue), borrador del plano sin responsable,
+  pines de anuladas fuera de la hoja y el panel rehecho («Lo que te toca», valores que se pulsan, pestañas, caja de
+  comentar fija). Toca backend (ruta nueva `/descartar`, techo 313) y portal: backend PRIMERO.
+- EXACT NEXT ACTION (histórica, ya hecha para c3144a3d): Manual Deploy de `visor-ecd-backend-va` y DESPUÉS de `visor-ecd-portal` con el HEAD de main;
   comprobar `/api/health` y el bundle del portal (Cloudflare ~5 min). Luego, recorrido real con dos personas (correo
   a observadores y subida de fotos sin probar en producción).
 

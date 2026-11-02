@@ -219,7 +219,10 @@ def test_el_recorte_es_real(rutas_portal):
     # 310 -> 312 (2-nov-2026, misma 45): `/estados` pasa a `/configuracion` (estados, subtipos, causas raíz y campos
     # propios de la obra) y dos rutas más de la incidencia: `editar` (reasignar a persona o empresa, observadores,
     # clasificación) y `adjuntar` (fotos y documentos de Docs de la misma obra). Misma guardia de recurso.
-    TECHO = 312
+    # 312 -> 313 (2-nov-2026): `POST /api/issues/<id>/descartar`. Un BORRADOR se borra de verdad, como en ACC (antes
+    # se anulaba y quedaba «Anulada» a la vista de toda la obra); lo enviado sigue sin borrarse. Misma guardia de
+    # recurso que los demás actos, y solo su autor (un borrador ajeno no existe).
+    TECHO = 313
     sin_puente = [r for r in rutas_portal
                   if r not in puente_acc and r not in revision_cad]
     assert len(sin_puente) < TECHO, (

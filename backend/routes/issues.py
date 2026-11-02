@@ -105,7 +105,9 @@ def _fila(r):
 def _leer(cur, iid):
     cur.execute('SELECT %s FROM doc_issues WHERE id = %%s' % _COLS, (iid,))
     r = cur.fetchone()
-    return _fila(r) if r else None
+    d = _fila(r) if r else None
+    # Un borrador descartado ya no existe para nadie: ni se lee ni admite actos.
+    return None if d and iss.es_descartada(d.get('history')) else d
 
 
 def _historial(cur, iid, history, evento, **datos):
@@ -392,15 +394,16 @@ def listar():
             cur = conn.cursor()
             # Un BORRADOR (45) solo lo ve quien lo levantó: todavía no se envió a nadie.
             yo = _usuario().get('id')
-            cur.execute('SELECT %s FROM doc_issues WHERE project_id = %%s '
-                        '   AND (%%s IS NULL OR tipo = %%s) '
-                        '   AND (%%s IS NULL OR estado = %%s) '
-                        "   AND (estado <> 'Borrador' OR autor_id = %%s) "
-                        ' ORDER BY codigo DESC' % _COLS,
+            cur.execute(('SELECT %s FROM doc_issues WHERE project_id = %%s '
+                         '   AND (%%s IS NULL OR tipo = %%s) '
+                         '   AND (%%s IS NULL OR estado = %%s) '
+                         "   AND (estado <> 'Borrador' OR autor_id = %%s) AND " + iss.SQL_NO_DESCARTADA + " "
+                         ' ORDER BY codigo DESC') % _COLS,
                         (obra, tipo, tipo, estado, estado, yo))
             filas = [_fila(r) for r in cur.fetchall()]
             cur.execute("""SELECT tipo, estado, count(*) FROM doc_issues
-                            WHERE project_id = %s AND (estado <> 'Borrador' OR autor_id = %s)
+                            WHERE project_id = %s AND (estado <> 'Borrador' OR autor_id = %s) AND """
+                        + iss.SQL_NO_DESCARTADA + """
                             GROUP BY tipo, estado""", (obra, yo))
             resumen = {}
             for t, e, n in cur.fetchall():
@@ -769,6 +772,36 @@ def enviar(iid):
         log_activity(d['model_urn'], 'SEND', 'ISSUE', str(iid), d['codigo'], _actor(),
                      {'marcas_publicadas': publicadas or None})
         return jsonify(_leer(cur, iid))
+
+
+@issues_bp.route('/<int:iid>/descartar', methods=['POST'])
+def descartar(iid):
+    """Quien la levantó DESCARTA su borrador: desaparece para todos, como el «eliminar borrador» de ACC (2-nov-2026,
+    decisión del dueño).
+
+    Un borrador nunca llegó a nadie: solo lo ve su autor, no abrió encargo ni avisó a observadores. Anularlo lo dejaba
+    «Anulada» a la vista de TODA la obra. Ahora pasa a «Anulado» con el evento `discarded`, y ninguna lectura lo
+    devuelve (`iss.SQL_NO_DESCARTADA`). La fila se queda: la aplicación no puede borrar en doc_issues (migración 26) y
+    así debe seguir. Lo enviado no se descarta nunca: se anula, con su motivo, en el expediente.
+    """
+    corte = guardia_de_recurso('doc_issues', iid)
+    if corte:
+        return corte
+    with get_db_connection() as conn:
+        cur = conn.cursor()
+        d = _leer(cur, iid)
+        if not d or (d['estado'] == iss.BORRADOR and not _es_autor(d)):
+            return jsonify({'error': 'No existe.'}), 404
+        if d['estado'] != iss.BORRADOR:
+            return jsonify({'error': 'Solo se descarta un borrador: lo enviado se anula, con su motivo.',
+                            'code': 'TRANSICION_INVALIDA'}), 409
+        # Sin encargos que cerrar: un borrador no abre ninguno (`_abrir_pelota` va al enviarlo).
+        cur.execute('UPDATE doc_issues SET estado = %s, cerrado_en = CURRENT_TIMESTAMP WHERE id = %s AND estado = %s',
+                    (iss.ANULADO, iid, iss.BORRADOR))
+        _historial(cur, iid, d['history'], iss.EVENTO_DESCARTADA)
+        conn.commit()
+        log_activity(d['model_urn'], 'DISCARD', 'ISSUE', str(iid), d['codigo'], _actor(), {'titulo': d['titulo']})
+        return jsonify({'success': True, 'descartada': iid})
 
 
 @issues_bp.route('/<int:iid>/empezar', methods=['POST'])

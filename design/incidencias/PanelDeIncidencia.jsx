@@ -337,7 +337,7 @@ function Miniatura({ entorno, adjunto, onAbrir, onQuitar }) {
   );
 }
 
-function Detalle({ entorno, obra, ob, issueId, extraDetalle, onCambio, onCargada }) {
+function Detalle({ entorno, obra, ob, issueId, extraDetalle, onCambio, onCargada, onDescartada }) {
   const API = entorno.API ?? '';
   const [i, setI] = useState(null);
   const [acto, setActo] = useState(null);
@@ -346,6 +346,7 @@ function Detalle({ entorno, obra, ob, issueId, extraDetalle, onCambio, onCargada
   const [comentario, setComentario] = useState('');
   const [ocupado, setOcupado] = useState(false);
   const [menuEstado, setMenuEstado] = useState(false);
+  const [pestana, setPestana] = useState('comentarios');
   const comentando = useRef(false);    // un comentario no sale dos veces aunque se pulse dos veces seguidas
 
   const cargar = useCallback(async () => {
@@ -411,6 +412,8 @@ function Detalle({ entorno, obra, ob, issueId, extraDetalle, onCambio, onCargada
     if (p.acto === 'enviar') hacer('enviar', {}, 'Enviada: le llega al responsable');
     else if (p.acto === 'empezar') hacer('empezar', {}, 'En curso');
     else if (p.acto === 'verificar') hacer('verificar', { acepta: true }, 'Verificada y cerrada');
+    // Un BORRADOR se descarta (se borra de verdad, nunca llegó a nadie); lo enviado se anula con su motivo.
+    else if (p.acto === 'anular' && i.estado === 'Borrador') setActo('descartar');
     else setActo(p.acto);
   };
   const ETIQUETA_DEL_PASO = { anular: i.estado === 'Borrador' ? 'Descartar' : null, reabrir: 'No aprobar' };
@@ -422,12 +425,52 @@ function Detalle({ entorno, obra, ob, issueId, extraDetalle, onCambio, onCargada
     try { if (await hacer('comentar', { texto: t })) setComentario(''); } finally { comentando.current = false; }
   };
 
-  const Fila = ({ etiqueta, children, accion = null }) => (
-    <div className="pinc-fila">
-      <dt>{etiqueta}</dt>
-      <dd><span>{children}</span>{accion}</dd>
-    </div>
-  );
+  // LO QUE TE TOCA (2-nov-2026, el dueño: «más profesional e intuitivo»). Arriba, en una frase, a quién le toca y
+  // qué; si te toca a ti, el botón del paso principal y los otros pasos tuyos al lado. El desplegable del estado
+  // sigue teniendo todos los pasos, con quién los da.
+  const esResp = esDelResponsable(i, yo, ob.miEmpresa);
+  const fechaVence = fechaDeDia(vence);
+  const antesDe = fechaVence ? ` antes del ${fechaVence}` : '';
+  let turno = null;
+  if (i.estado === 'Borrador') {
+    const sinResponsable = !i.responsable_id && !i.responsable_empresa;
+    turno = {
+      mio: true,
+      texto: sinResponsable ? 'Es un borrador: solo lo ves tú. Para enviarlo, asígnale antes un responsable (en «Asignada a»).'
+        : 'Es un borrador: solo lo ves tú. Al enviarlo le llega al responsable, con su fecha.',
+      prim: actos.enviar && !sinResponsable ? { etiqueta: 'Enviar', fn: () => dar({ acto: 'enviar' }) } : null,
+      sec: [{ etiqueta: 'Descartar', fn: () => setActo('descartar'), peligro: true }],
+    };
+  } else if (['Abierto', 'Reabierto', 'En curso'].includes(i.estado)) {
+    turno = esResp && actos.corregir ? {
+      mio: true,
+      texto: `Te toca corregirla${antesDe}.${i.estado === 'Reabierto' ? ' La corrección anterior no se aprobó: el motivo está en el historial.' : ''}`,
+      prim: { etiqueta: 'Declarar corregida', fn: () => setActo('corregir') },
+      sec: [actos.empezar && { etiqueta: 'Empezar', fn: () => dar({ acto: 'empezar' }) },
+        actos.disputar && { etiqueta: 'No procede', fn: () => setActo('disputar') }].filter(Boolean),
+    } : { texto: `Le toca a ${quienDa.responsable} corregirla${antesDe}.` };
+  } else if (i.estado === 'En disputa') {
+    turno = actos.reafirmar ? {
+      mio: true, texto: `${quienDa.responsable} dice que no procede. Te toca decidir.`,
+      prim: { etiqueta: 'Reafirmar', fn: () => setActo('reafirmar') },
+      sec: actos.anular ? [{ etiqueta: 'Anular', fn: () => setActo('anular'), peligro: true }] : [],
+    } : { texto: `${quienDa.responsable} dice que no procede. Decide ${quienDa.autor}.` };
+  } else if (i.estado === 'Corregido') {
+    turno = verifica ? {
+      mio: true, texto: 'Te toca verificar la corrección.',
+      prim: { etiqueta: 'Verificar y cerrar', fn: () => dar({ acto: 'verificar' }) },
+      sec: [{ etiqueta: 'No aprobar', fn: () => setActo('reabrir'), peligro: true }],
+    } : {
+      texto: esResp ? `Corregiste tú: la verifica ${quienDa.verificador}. Quien corrige no verifica su propia corrección.`
+        : `Le toca a ${quienDa.verificador} verificar la corrección.`,
+    };
+  } else if (i.estado === 'Verificado') {
+    turno = { fin: true, texto: `Cerrada${i.verificado_en ? ` el ${fechaCorta(i.verificado_en)}` : ''}: la corrección se verificó.` };
+  } else if (i.estado === 'Anulado') {
+    turno = { fin: true, texto: 'Anulada: se levantó por error. El motivo está en el historial.' };
+  }
+  const reasignable = dirige && ESTADOS_DONDE_SE_REASIGNA.includes(i.estado);
+  const nombresObs = (i.observadores || []).map(u => ob.nombres[u] || `usuario ${u}`);
 
   return (
     <div className="pinc-cuerpo pinc-detalle">
@@ -437,7 +480,8 @@ function Detalle({ entorno, obra, ob, issueId, extraDetalle, onCambio, onCargada
           <span className="pinc-estado__caja">
             <button type="button" className="pinc-chip pinc-chip--boton" style={{ '--estado': e.color }}
               aria-haspopup="menu" aria-expanded={menuEstado} disabled={!pasos.length || ocupado || !!acto}
-              title={misPasos.length ? 'Cambiar el estado' : 'Los pasos de estado'}
+              aria-label={`Estado: ${e.etiqueta}${pasos.length ? '. Cambiar el estado' : ''}`}
+              data-tip={misPasos.length ? 'Cambiar el estado' : pasos.length ? 'Ver quién da cada paso' : undefined}
               onClick={() => setMenuEstado(v => !v)}>
               <i />{e.etiqueta}
               {pasos.length > 0 && <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -461,18 +505,65 @@ function Detalle({ entorno, obra, ob, issueId, extraDetalle, onCambio, onCargada
               </>
             )}
           </span>
-          {vencida && <span className="pinc-vencida">Vencida</span>}
-          <small>{aQuienLeTocaIssue(i, { responsable, verificador, autor })}</small>
+          {fechaVence && (
+            <span className={`pinc-vence${vencida ? ' es-vencida' : ''}`}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"
+                strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <rect x="4" y="5.5" width="16" height="14" rx="2" /><path d="M4 10h16M8.5 3.5v4M15.5 3.5v4" /></svg>
+              {vencida ? `Vencida · ${fechaVence}` : fechaVence}
+            </span>
+          )}
+          {i.estado !== 'Borrador' && (
+            <button type="button" className={`pinc-seguir${sigo ? ' es-activo' : ''}`} disabled={ocupado} aria-pressed={sigo}
+              data-tip={sigo ? 'Te avisamos de cada paso. Clic para dejar de seguirla' : 'Recibe un aviso en cada paso'}
+              onClick={() => hacer('editar', { seguir: !sigo }, sigo ? 'Ya no la sigues' : 'La sigues: te avisaremos de cada paso')}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill={sigo ? 'currentColor' : 'none'} stroke="currentColor"
+                strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M6 16.5v-5.5a6 6 0 0 1 12 0v5.5l1.5 2h-15z" /><path d="M10 20.5a2 2 0 0 0 4 0" /></svg>
+              {sigo ? 'Siguiendo' : 'Seguir'}
+            </button>
+          )}
         </div>
       </div>
 
-      {i.estado === 'Borrador' && <p className="pinc-aviso">Borrador: solo lo ves tú. Al enviarlo le llega al responsable, con su fecha.</p>}
-      {i.estado === 'En disputa' && <p className="pinc-aviso pinc-aviso--ambar">{responsable || 'El responsable'} dice que no procede. Decide {autor || 'quien la levantó'}: reafirmarla o anularla.</p>}
-      {i.estado === 'Corregido' && !verifica && esDelResponsable(i, yo, ob.miEmpresa) && (
-        <p className="pinc-aviso">Corregiste tú: la verifica {verificador || 'otra persona'}. Quien corrige no verifica su propia corrección.</p>
+      {turno && !acto && (
+        <div className={`pinc-turno${turno.mio ? ' es-mio' : ''}${turno.fin ? ' es-fin' : ''}`} style={{ '--estado': e.color }}>
+          <p>{turno.texto}</p>
+          {(turno.prim || (turno.sec || []).length > 0) && (
+            <div className="pinc-botones">
+              {turno.prim && <button type="button" className="pinc-btn pinc-btn--prim" disabled={ocupado} onClick={turno.prim.fn}>{turno.prim.etiqueta}</button>}
+              {(turno.sec || []).map(s => (
+                <button key={s.etiqueta} type="button" className={`pinc-btn ${s.peligro ? 'pinc-btn--plano pinc-btn--rojo' : ''}`}
+                  disabled={ocupado} onClick={s.fn}>{s.etiqueta}</button>
+              ))}
+            </div>
+          )}
+          {autoverif && (
+            <button type="button" className="pinc-enlace pinc-enlace--suelto" onClick={() => setActo('autoverificacion')}>
+              Autorizar que el responsable verifique su propia corrección</button>
+          )}
+        </div>
       )}
 
-      {acto && <Acto entorno={entorno} obra={obra} acto={acto} i={i} onCancelar={() => setActo(null)}
+      {acto === 'descartar' && (
+        <div className="pinc-acto">
+          <b>¿Descartar este borrador?</b>
+          <p className="pinc-nota">Se borra. Nadie más lo ha visto: no llegó al responsable ni a los observadores. Lo que
+            ya se envió no se borra nunca, se anula.</p>
+          <div className="pinc-botones">
+            <button type="button" className="pinc-btn pinc-btn--peligro" disabled={ocupado} onClick={async () => {
+              setOcupado(true);
+              try {
+                await enviarJson(entorno, `${API}/api/issues/${issueId}/descartar`, {});
+                entorno.avisar.ok('Borrador descartado');
+                onDescartada?.();
+              } catch (err) { entorno.avisar.error(err.message); setOcupado(false); }
+            }}>Descartar</button>
+            <button type="button" className="pinc-btn pinc-btn--plano" onClick={() => setActo(null)}>Cancelar</button>
+          </div>
+        </div>
+      )}
+      {acto && acto !== 'descartar' && <Acto entorno={entorno} obra={obra} acto={acto} i={i} onCancelar={() => setActo(null)}
         onHacer={(texto, prueba) => {
           if (acto === 'corregir') {
             return hacer('corregir', { evidencia: [{ tipo: 'documento', documento: prueba.documento, nombre: prueba.nombre }], comentario: texto },
@@ -482,11 +573,6 @@ function Detalle({ entorno, obra, ob, issueId, extraDetalle, onCambio, onCargada
           return hacer(acto, { motivo: texto }, { disputar: 'En disputa: decide quien la levantó', reafirmar: 'Reafirmada: vuelve al responsable',
             anular: 'Anulada', autoverificacion: 'Autoverificación autorizada' }[acto]);
         }} />}
-
-      {!acto && autoverif && (
-        <button type="button" className="pinc-enlace pinc-enlace--suelto" onClick={() => setActo('autoverificacion')}>
-          Autorizar que el responsable verifique su propia corrección</button>
-      )}
 
       {(i.evidencia_correccion || []).length > 0 && (
         <div className="pinc-correccion">
@@ -505,10 +591,24 @@ function Detalle({ entorno, obra, ob, issueId, extraDetalle, onCambio, onCargada
       <section className="pinc-seccion">
         <h4>Detalles</h4>
         <dl className="pinc-filas">
-          <Fila etiqueta="Asignada a" accion={dirige && ESTADOS_DONDE_SE_REASIGNA.includes(i.estado) && editando !== 'asignar'
-            ? <button type="button" className="pinc-enlace" onClick={() => { setBorrador({}); setEditando('asignar'); }}>Reasignar</button> : null}>
-            {responsable || '—'}
-          </Fila>
+          <div className="pinc-fila">
+            <dt>Asignada a</dt>
+            <dd>
+              {reasignable && editando !== 'asignar' ? (
+                <button type="button" className="pinc-valor" data-tip="Reasignar"
+                  onClick={() => { setBorrador({}); setEditando('asignar'); }}>
+                  <span className="pinc-avatar pinc-avatar--chico" aria-hidden="true">{iniciales(responsable)}</span>
+                  {responsable || 'Sin asignar'}
+                  <IcoEditar />
+                </button>
+              ) : (
+                <span className="pinc-valor pinc-valor--fijo">
+                  {responsable && <span className="pinc-avatar pinc-avatar--chico" aria-hidden="true">{iniciales(responsable)}</span>}
+                  {responsable || 'Sin asignar'}
+                </span>
+              )}
+            </dd>
+          </div>
           {editando === 'asignar' && (
             <div className="pinc-editor">
               <ResponsableDeAlta miembros={ob.miembros} empresas={ob.empresas} valor={borrador} excluir={i.verificador_id}
@@ -520,22 +620,26 @@ function Detalle({ entorno, obra, ob, issueId, extraDetalle, onCambio, onCargada
               </div>
             </div>
           )}
-          <Fila etiqueta="Verifica">{verificador || (i.tipo === 'OBSERVACION' ? autor : null) || 'Sin designar'}</Fila>
-          <Fila etiqueta="Fecha límite"><span className={vencida ? 'es-vencida' : ''}>{fechaDeDia(vence) || '—'}</span></Fila>
-          <Fila etiqueta="Tipo">{i.tipo_etiqueta || i.tipo}</Fila>
-          {(i.ubicacion || i.progresiva) && <Fila etiqueta="Ubicación">{[i.ubicacion, i.progresiva].filter(Boolean).join(' · ')}</Fila>}
-          <Fila etiqueta="Observadores" accion={<>
-            {i.estado !== 'Borrador' && (
-              <button type="button" className="pinc-enlace" disabled={ocupado}
-                onClick={() => hacer('editar', { seguir: !sigo }, sigo ? 'Ya no la sigues' : 'La sigues: te avisaremos de cada paso')}>
-                {sigo ? 'Dejar de seguir' : 'Seguir'}</button>
-            )}
-            {dirige && editando !== 'observadores' && (
-              <button type="button" className="pinc-enlace" onClick={() => { setBorrador({ observadores: i.observadores || [] }); setEditando('observadores'); }}>Cambiar</button>
-            )}
-          </>}>
-            {(i.observadores || []).length ? i.observadores.map(u => ob.nombres[u] || `usuario ${u}`).join(', ') : 'Nadie'}
-          </Fila>
+          <div className="pinc-fila">
+            <dt>Verifica</dt>
+            <dd><span className="pinc-valor pinc-valor--fijo">{quienDa.verificador}</span></dd>
+          </div>
+          <div className="pinc-fila">
+            <dt>Observadores</dt>
+            <dd>
+              <span className="pinc-chips">
+                {nombresObs.map(n => (
+                  <span key={n} className="pinc-persona"><span className="pinc-avatar pinc-avatar--chico" aria-hidden="true">{iniciales(n)}</span>{n}</span>
+                ))}
+                {!nombresObs.length && editando !== 'observadores' && <span className="pinc-vacio">Nadie</span>}
+                {dirige && editando !== 'observadores' && (
+                  <button type="button" className="pinc-anadir"
+                    onClick={() => { setBorrador({ observadores: i.observadores || [] }); setEditando('observadores'); }}>
+                    {nombresObs.length ? 'Cambiar' : '+ Añadir'}</button>
+                )}
+              </span>
+            </dd>
+          </div>
           {editando === 'observadores' && (
             <div className="pinc-editor">
               <ObservadoresDeAlta miembros={ob.miembros} valor={borrador.observadores || []} onChange={v => setBorrador({ observadores: v })} />
@@ -546,13 +650,24 @@ function Detalle({ entorno, obra, ob, issueId, extraDetalle, onCambio, onCargada
               </div>
             </div>
           )}
+          {(i.ubicacion || i.progresiva) && (
+            <div className="pinc-fila">
+              <dt>Ubicación</dt>
+              <dd><span className="pinc-valor pinc-valor--fijo pinc-valor--largo">{[i.ubicacion, i.progresiva].filter(Boolean).join(' · ')}</span></dd>
+            </div>
+          )}
           {hayClasificacion ? (
-            <Fila etiqueta="Clasificación" accion={interviene && editando !== 'clasificar'
-              ? <button type="button" className="pinc-enlace"
-                  onClick={() => { setBorrador({ subtipo: i.subtipo, causa_raiz: i.causa_raiz, campos: i.campos || {} }); setEditando('clasificar'); }}>
-                  {cerrada ? 'Causa raíz' : 'Editar'}</button> : null}>
-              {clasificacion.join(' · ') || 'Sin clasificar'}
-            </Fila>
+            <div className="pinc-fila">
+              <dt>Clasificación</dt>
+              <dd>
+                {interviene && editando !== 'clasificar' ? (
+                  <button type="button" className="pinc-valor" data-tip={cerrada ? 'Indicar la causa raíz' : 'Editar la clasificación'}
+                    onClick={() => { setBorrador({ subtipo: i.subtipo, causa_raiz: i.causa_raiz, campos: i.campos || {} }); setEditando('clasificar'); }}>
+                    {clasificacion.join(' · ') || 'Sin clasificar'}<IcoEditar />
+                  </button>
+                ) : <span className="pinc-valor pinc-valor--fijo">{clasificacion.join(' · ') || 'Sin clasificar'}</span>}
+              </dd>
+            </div>
           ) : null}
           {editando === 'clasificar' && (
             <div className="pinc-editor">
@@ -564,7 +679,10 @@ function Detalle({ entorno, obra, ob, issueId, extraDetalle, onCambio, onCargada
               </div>
             </div>
           )}
-          <Fila etiqueta="Levantó">{[autor, fechaCorta(i.creado_en)].filter(Boolean).join(' · ') || '—'}</Fila>
+          <div className="pinc-fila">
+            <dt>Levantó</dt>
+            <dd><span className="pinc-valor pinc-valor--fijo">{[autor, fechaCorta(i.creado_en)].filter(Boolean).join(' · ') || '—'}</span></dd>
+          </div>
         </dl>
         {extraDetalle?.(i)}
       </section>
@@ -577,79 +695,132 @@ function Detalle({ entorno, obra, ob, issueId, extraDetalle, onCambio, onCargada
       )}
 
       <section className="pinc-seccion">
-        <h4>Adjuntos <span>{(i.adjuntos || []).length || ''}</span></h4>
-        {(i.adjuntos || []).length === 0 && <p className="pinc-nota">Sin fotos ni documentos.</p>}
-        {(i.adjuntos || []).length > 0 && (
-          <ul className="pinc-minis">
-            {i.adjuntos.map(a => (
-              <Miniatura key={a.documento} entorno={entorno} adjunto={a} onAbrir={() => entorno.abrirDocumento?.(a.documento)}
-                onQuitar={!cerrada && a.por_id != null && String(a.por_id) === String(yo)
-                  ? () => hacer('adjuntar', { quitar: a.documento }, 'Adjunto quitado') : null} />
-            ))}
-          </ul>
-        )}
-        {interviene && !cerrada && (
-          <Adjuntar entorno={entorno} obra={obra} ocupado={ocupado} setOcupado={setOcupado} codigo={i.codigo}
-            onAdjunto={(a) => hacer('adjuntar', { documento: a.documento }, 'Adjuntado')} />
-        )}
+        <h4>Fotos y documentos <span>{(i.adjuntos || []).length || ''}</span></h4>
+        <ul className="pinc-minis">
+          {(i.adjuntos || []).map(a => (
+            <Miniatura key={a.documento} entorno={entorno} adjunto={a} onAbrir={() => entorno.abrirDocumento?.(a.documento)}
+              onQuitar={!cerrada && a.por_id != null && String(a.por_id) === String(yo)
+                ? () => hacer('adjuntar', { quitar: a.documento }, 'Adjunto quitado') : null} />
+          ))}
+          {interviene && !cerrada && (
+            <TeselaDeAdjuntar entorno={entorno} obra={obra} ocupado={ocupado} setOcupado={setOcupado} codigo={i.codigo}
+              onAdjunto={(a) => hacer('adjuntar', { documento: a.documento }, 'Adjuntado')} />
+          )}
+        </ul>
+        {!(i.adjuntos || []).length && !(interviene && !cerrada) && <p className="pinc-nota">Sin fotos ni documentos.</p>}
       </section>
 
-      <section className="pinc-seccion">
-        <h4>Comentarios <span>{comentarios.length || ''}</span></h4>
-        {comentarios.length === 0 && <p className="pinc-nota">Sin comentarios.</p>}
-        {comentarios.length > 0 && (
-          <ol className="pinc-actividad">
-            {comentarios.map((h, n) => {
-            const quien = ob.nombreDeQuien(h.by);
-            return (
-              <li key={`${h.at}-${n}`} className="es-comentario">
-                <span className="pinc-avatar" aria-hidden="true">{iniciales(quien)}</span>
-                <div>
-                  <div className="pinc-actividad__cab">
-                    <b>{quien || 'Alguien'}</b>
-                    <span>comentó</span>
-                    <small>{fechaCorta(h.at)}</small>
+      <section className="pinc-seccion pinc-conversacion">
+        <div className="pinc-pestanas" role="tablist">
+          <button type="button" role="tab" aria-selected={pestana === 'comentarios'} onClick={() => setPestana('comentarios')}>
+            Comentarios <span>{comentarios.length || ''}</span></button>
+          <button type="button" role="tab" aria-selected={pestana === 'historial'} onClick={() => setPestana('historial')}>
+            Historial <span>{historial.length || ''}</span></button>
+        </div>
+        {pestana === 'comentarios' ? (
+          comentarios.length ? (
+            <ol className="pinc-actividad">
+              {comentarios.map((h, n) => {
+                const quien = ob.nombreDeQuien(h.by);
+                return (
+                  <li key={`${h.at}-${n}`} className="es-comentario">
+                    <span className="pinc-avatar" aria-hidden="true">{iniciales(quien)}</span>
+                    <div>
+                      <div className="pinc-actividad__cab"><b>{quien || 'Alguien'}</b><small>{fechaCorta(h.at)}</small></div>
+                      <p>{h.texto}</p>
+                    </div>
+                  </li>
+                );
+              })}
+            </ol>
+          ) : <p className="pinc-nota">Aún no hay comentarios. Escribe abajo para preguntar o aclarar algo a quienes la siguen.</p>
+        ) : (
+          <ol className="pinc-actividad pinc-actividad--historial">
+            {historial.map((h, n) => {
+              const quien = ob.nombreDeQuien(h.by);
+              return (
+                <li key={`${h.at}-${n}`}>
+                  <span className="pinc-punto" style={{ '--estado': e.color }} aria-hidden="true" />
+                  <div>
+                    <div className="pinc-actividad__cab"><span><b>{quien || 'Alguien'}</b> {textoDeEvento(h)}</span><small>{fechaCorta(h.at)}</small></div>
+                    {(h.motivo || h.comentario) && <p>{h.motivo || h.comentario}</p>}
                   </div>
-                  <p>{h.texto}</p>
-                </div>
-              </li>
-            );
+                </li>
+              );
             })}
           </ol>
         )}
-        <div className="pinc-comentar">
-          <textarea value={comentario} onChange={ev => setComentario(ev.target.value)} rows={2} maxLength={2000}
-            placeholder="Escribe un comentario…"
-            onKeyDown={ev => { if (ev.key === 'Enter' && (ev.ctrlKey || ev.metaKey)) { ev.preventDefault(); comentar(); } }} />
-          <div className="pinc-botones">
-            <button type="button" className="pinc-btn pinc-btn--prim" disabled={!comentario.trim() || ocupado} onClick={comentar}>Comentar</button>
-            <small className="pinc-nota">Queda en el expediente: no se edita ni se borra.</small>
-          </div>
-        </div>
       </section>
 
-      <details className="pinc-seccion pinc-historia">
-        <summary>Historial <span>{historial.length}</span></summary>
-        <ol className="pinc-actividad">
-          {historial.map((h, n) => {
-            const quien = ob.nombreDeQuien(h.by);
-            return (
-              <li key={`${h.at}-${n}`}>
-                <span className="pinc-avatar" aria-hidden="true">{iniciales(quien)}</span>
-                <div>
-                  <div className="pinc-actividad__cab">
-                    <b>{quien || 'Alguien'}</b>
-                    <span>{textoDeEvento(h)}</span>
-                    <small>{fechaCorta(h.at)}</small>
-                  </div>
-                  {(h.motivo || h.comentario) && <p>{h.motivo || h.comentario}</p>}
-                </div>
-              </li>
-            );
-          })}
-        </ol>
-      </details>
+      {pestana === 'comentarios' && (
+        <div className="pinc-comentar">
+          <textarea value={comentario} onChange={ev => setComentario(ev.target.value)} rows={/\n/.test(comentario) || comentario.length > 60 ? 3 : 1}
+            maxLength={2000} placeholder="Escribe un comentario…" aria-label="Comentario"
+            data-tip="Queda en el expediente: no se edita ni se borra. Ctrl+Enter envía."
+            onKeyDown={ev => { if (ev.key === 'Enter' && (ev.ctrlKey || ev.metaKey)) { ev.preventDefault(); comentar(); } }} />
+          <button type="button" className="pinc-btn pinc-btn--prim" disabled={!comentario.trim() || ocupado} onClick={comentar}>Comentar</button>
+        </div>
+      )}
     </div>
+  );
+}
+
+const IcoEditar = () => (
+  <svg className="pinc-valor__lapiz" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"
+    strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M14.5 5.5l4 4" /><path d="M16.6 3.4a2 2 0 0 1 2.8 0l1.2 1.2a2 2 0 0 1 0 2.8L9 19l-4.5 1 1-4.5z" /></svg>
+);
+
+/** Añadir una foto o un documento: una tesela más del mosaico de adjuntos, con un menú de dos opciones. */
+function TeselaDeAdjuntar({ entorno, obra, ocupado, setOcupado, onAdjunto, codigo }) {
+  const foto = useRef(null);
+  const [menu, setMenu] = useState(false);
+  const [eligiendo, setEligiendo] = useState(false);
+  const Elegir = entorno.ElegirDocumento;
+  const subir = async (lista) => {
+    for (const f of [...(lista || [])]) {
+      setOcupado(true);
+      try {
+        const s = await entorno.subirFoto(obra, f, codigo ? `Adjunto de ${codigo}` : 'Adjunto de una incidencia');
+        await onAdjunto({ documento: s.id, nombre: s.nombre || f.name });
+      } catch (e) { entorno.avisar.error(`${f.name}: ${e.message}`); } finally { setOcupado(false); }
+    }
+    if (foto.current) foto.current.value = '';
+  };
+  return (
+    <li className="pinc-mini pinc-mini--nuevo">
+      <input ref={foto} type="file" accept="image/*" multiple hidden onChange={e => subir(e.target.files)} />
+      <button type="button" className="pinc-mini__img" disabled={ocupado} aria-haspopup="menu" aria-expanded={menu}
+        onClick={() => setMenu(v => !v)}>
+        {ocupado ? <span className="pinc-nota">Subiendo…</span> : (
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"
+            strokeLinecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+        )}
+      </button>
+      <span className="pinc-mini__nombre">Añadir</span>
+      {menu && (
+        <>
+          <span className="pinc-telon" onClick={() => setMenu(false)} aria-hidden="true" />
+          <span className="pinc-estado-menu pinc-mini__menu" role="menu">
+            {entorno.subirFoto && (
+              <button type="button" role="menuitem" onClick={() => { setMenu(false); foto.current?.click(); }}>
+                <span>Subir fotos</span><small>Del equipo o del móvil; quedan en MULTIMEDIA de la obra</small></button>
+            )}
+            {Elegir && (
+              <button type="button" role="menuitem" onClick={() => { setMenu(false); setEligiendo(true); }}>
+                <span>Documento de la obra</span><small>Un plano, informe o foto que ya está en Docs</small></button>
+            )}
+          </span>
+        </>
+      )}
+      {eligiendo && Elegir && createPortal(
+        <Elegir obra={obra} titulo="Adjuntar un documento"
+          ayuda="Un documento de esta obra: plano, informe, foto… Quien abra la incidencia lo abrirá desde aquí."
+          onElegir={(doc) => { setEligiendo(false); onAdjunto({ documento: doc.file_node_id || doc.id, nombre: doc.nombre || doc.name }); }}
+          onCerrar={() => setEligiendo(false)} />,
+        document.fullscreenElement || document.body,
+      )}
+    </li>
   );
 }
 
@@ -685,13 +856,14 @@ export default function PanelDeIncidencia({ entorno, obra, issueId = null, nueva
         <div className="pinc-cab__tit">
           <b>{cabecera}</b>
           {!id && nueva?.lugar && <small>{nueva.lugar}</small>}
-          {id && cargada && <small>{[cargada.tipo_etiqueta, cargada.ubicacion].filter(Boolean).join(' · ')}</small>}
+          {id && cargada && <small>{cargada.tipo_etiqueta || ''}</small>}
         </div>
         <button type="button" className="pinc-icono" onClick={onCerrar} aria-label="Cerrar"><Ico><path d="M6 6l12 12M18 6 6 18" /></Ico></button>
       </header>
       {id ? (
         <Detalle key={id} entorno={entorno} obra={obra} ob={ob} issueId={id} extraDetalle={extraDetalle}
-          onCargada={(d) => { setCodigo(d?.codigo || null); setCargada(d); }} onCambio={onCambio} />
+          onCargada={(d) => { setCodigo(d?.codigo || null); setCargada(d); }} onCambio={onCambio}
+          onDescartada={() => { onCambio?.(null); if (onVolver) onVolver(); else onCerrar?.(); }} />
       ) : (
         <Alta entorno={entorno} obra={obra} ob={ob} nueva={nueva || {}} crear={crear} extraAlta={extraAlta} onCerrar={onCerrar}
           onCreada={(hecha) => {
