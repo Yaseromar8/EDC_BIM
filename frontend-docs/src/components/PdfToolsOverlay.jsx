@@ -152,6 +152,7 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
   const [pinPendiente, setPinPendiente] = useState(null);
   const [abiertaDelPlano, setAbiertaDelPlano] = useState(null);
   const [pedidoDelPlano, setPedidoDelPlano] = useState(null);
+  const [pedidoDeMarca, setPedidoDeMarca] = useState(null);   // { id, que, n }: abrir el menú de la marca en algo
   const pedirAlPlano = (vista, pin = null) => {
     setPedidoDelPlano(p => ({ vista, pin, n: (p?.n || 0) + 1 }));
     onPanelDelPlano?.(true);
@@ -806,7 +807,10 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
         {n > 0 && (
           <g transform={`translate(${bx} ${by})`}
             style={{ pointerEvents: tocable ? 'all' : 'none', cursor: tool === 'erase' ? 'not-allowed' : tool === 'pan' ? 'pointer' : 'default' }}
-            onClick={tocable ? alTocar(m) : undefined}>
+            onClick={tocable ? (e) => {
+              alTocar(m)(e);
+              if (tool === 'pan') setPedidoDeMarca(p => ({ id: m.id, que: 'referencias', n: (p?.n || 0) + 1 }));
+            } : undefined}>
             <rect width={ancho} height={alto} rx="8" fill="#fff" stroke="#507294" strokeWidth="1" />
             <g transform="translate(4 2.5) scale(0.46)" fill="none" stroke="#507294" strokeWidth="2.6" strokeLinecap="round">
               <path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1" /><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1" />
@@ -923,6 +927,7 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
         return (
           <BarraDeMarca key={marcaElegida.id} API={API} obra={projectPrefix} marca={marcaElegida} colores={COLORS}
             revisionSugerida={(/(?:^|[-_ .])([A-Z]\d{1,2})(?=\.[a-z0-9]+$|[-_ ])/i.exec(nombreDelDocumento || '') || [])[1] || ''}
+            pedido={pedidoDeMarca && pedidoDeMarca.id === marcaElegida.id ? pedidoDeMarca : null}
             esAutor={!!userName && marcaElegida.created_by === userName} editable={editable(marcaElegida)}
             posicion={{ left: `${Math.max(0, Math.min(100, (k.x / vpInfo.w) * 100))}%`,
                         top: arriba ? `calc(${(k.y / vpInfo.h) * 100}% - 48px)` : `calc(${(k.y2 / vpInfo.h) * 100}% + 10px)` }}
@@ -931,7 +936,9 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
               ? () => llevarMarca(marcaElegida) : null}
             onDuplicar={() => duplicarMarca(marcaElegida)}
             onCambio={(nueva) => setMarkups(prev => prev.map(x => x.id === nueva.id ? { ...x, ...nueva } : x))}
-            onPublicar={() => publicarMarkup(marcaElegida)}
+            // Publicar o retirar es un acto terminado: el menú se cierra (antes se quedaba abierto, con el botón
+            // marcado).
+            onPublicar={() => { setElegida(null); publicarMarkup(marcaElegida); }}
             onBorrar={() => { setElegida(null); deleteMarkup(marcaElegida); }}
             onCerrar={() => setElegida(null)} />
         );

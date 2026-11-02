@@ -63,7 +63,7 @@ function Boton({ etiqueta, activo, onClick, disabled, peligro, children, conText
 }
 
 export default function BarraDeMarca({ API, obra, marca, esAutor, editable, colores = [], posicion, versionVigente = null,
-                                       revisionSugerida = '',
+                                       revisionSugerida = '', pedido = null,
                                        onLlevar = null, onDuplicar, onCambio, onPublicar, onBorrar, onCerrar }) {
   const [abierto, setAbierto] = useState(null);         // 'estilo' | 'texto' | 'referencias'
   const [texto, setTexto] = useState(marca.text || '');
@@ -76,6 +76,8 @@ export default function BarraDeMarca({ API, obra, marca, esAutor, editable, colo
   const obs = marca.observacion || null;
   const viva = observacionViva(obs);
   const estilo = marca.style || {};
+  // El chip «🔗 N» de la hoja abre la lista de referencias, no solo elige la marca.
+  useEffect(() => { if (pedido) setAbierto(pedido.que); }, [pedido?.n]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Esc cierra el menú desplegado (y, sin nada desplegado, deja la marca).
   useEffect(() => {

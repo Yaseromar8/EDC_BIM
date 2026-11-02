@@ -168,6 +168,29 @@
 .pinc-actividad li.es-comentario p { padding: var(--a-space-8, 8px) var(--a-space-12, 12px); border-radius: var(--a-radius-md, 4px); background: var(--a-surface-sunken, #faf9f5); }
 .pinc-comentar { display: flex; flex-direction: column; gap: var(--a-space-8, 8px); margin-top: var(--a-space-4, 4px); }
 .pinc-comentar .pinc-botones small { margin-left: auto; }
+.pinc-historia summary { cursor: pointer; list-style: none; font-size: var(--a-type-body-size, 13px); font-weight: 600; color: var(--a-text-secondary, #52524d); display: flex; gap: 6px; align-items: baseline; border-radius: 2px; }
+.pinc-historia summary::-webkit-details-marker { display: none; }
+.pinc-historia summary::before { content: ''; width: 6px; height: 6px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: rotate(-45deg); margin-right: 4px; align-self: center; transition: transform .15s; }
+.pinc-historia[open] summary::before { transform: rotate(45deg); }
+.pinc-historia summary span { font-weight: 400; color: var(--a-text-muted, #72706b); }
+.pinc-historia[open] summary { margin-bottom: var(--a-space-8, 8px); }
+.pinc-historia .pinc-actividad li { font-size: var(--a-type-caption-size, 12px); }
+
+/* El estado se cambia desde su chip (como ACC): desplegable con los pasos que salen del estado actual */
+.pinc-estado__caja { position: relative; display: inline-flex; }
+.pinc-chip--boton { border: var(--a-border-width-1, 1px) solid transparent; cursor: pointer; font-family: var(--a-font-sans, system-ui, sans-serif); }
+.pinc-chip--boton:hover:not(:disabled) { border-color: color-mix(in srgb, var(--estado) 45%, transparent); }
+.pinc-chip--boton:disabled { cursor: default; }
+.pinc-chip--boton svg { margin-left: 2px; color: var(--a-text-secondary, #52524d); }
+.pinc-telon { position: fixed; inset: 0; z-index: 1; }
+.pinc-estado-menu { position: absolute; top: calc(100% + 4px); left: 0; z-index: 2; min-width: 240px; display: flex; flex-direction: column; padding: 4px; background: var(--a-surface-raised, #fff); border: var(--a-border-width-1, 1px) solid var(--a-border-default, #e8e6dc); border-radius: var(--a-radius-md, 4px); box-shadow: var(--a-shadow-md); }
+.pinc-estado-menu button { display: grid; grid-template-columns: 8px 1fr; column-gap: var(--a-space-8, 8px); align-items: center; text-align: left; border: none; background: none; padding: 7px var(--a-space-8, 8px); border-radius: var(--a-radius-md, 4px); font: 500 var(--a-type-body-size, 13px) var(--a-font-sans, system-ui, sans-serif); color: var(--a-text-primary, #141413); cursor: pointer; }
+.pinc-estado-menu button:hover:not(:disabled) { background: var(--a-state-hover, #f1f0e8); }
+.pinc-estado-menu button:disabled { cursor: default; color: var(--a-text-muted, #72706b); }
+.pinc-estado-menu button i { width: 8px; height: 8px; border-radius: 50%; }
+.pinc-estado-menu button:disabled i { opacity: .45; }
+.pinc-estado-menu button small { grid-column: 2; font-weight: 400; font-size: var(--a-type-caption-size, 12px); color: var(--a-text-muted, #72706b); }
+.pinc-enlace--suelto { align-self: flex-start; padding: 0; margin: var(--a-space-8, 8px) var(--a-space-16, 16px) 0; }
 
 /* Las marcas de la versión (alta de la observación del plano) */
 .pinc .obp-marcas ul { list-style: none; margin: 0; padding: 0; max-height: 220px; overflow-y: auto; border: var(--a-border-width-1, 1px) solid var(--a-border-default, #e8e6dc); border-radius: var(--a-radius-md, 4px); background: var(--a-field-surface, #fff); }

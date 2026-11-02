@@ -140,3 +140,35 @@ nuestro:
 - Arrastrar un pin ya puesto para moverlo. ACC lo permite; aquí habría que añadir un acto `mover pin`.
 - Pines en las incidencias de una marca: esas se ven en su marca.
 - Filtrar los pines por estado o responsable en la hoja.
+
+## 5 · Lo que vio el dueño en producción (2-nov-2026, noche) y cómo quedó
+
+| Lo que dijo | Causa | Cambio |
+|---|---|---|
+| «Volví a entrar al archivo y no veo ni la nube ni el pin» | La capa de marcas esperaba a que **terminara** el dibujo del PDF. En un plano con ortofoto eso son decenas de segundos, y mientras tanto las teselas ya enseñan la hoja. | El lector da la medida de la página a la capa en cuanto la conoce, antes de dibujar (`PDFViewer.jsx`). En el banco el pin sale a ~3 s de recargar; antes, a ~11–15 s. |
+| «Cuando se hace clic a la referencia no abre nada» | El chip «🔗 N» de la nube solo elegía la marca. | Ahora la elige y abre su lista de referencias (`pedido` en `BarraDeMarca`). |
+| «Cuando le doy publicar se queda eso» | El menú seguía abierto, con el botón marcado. | Publicar o retirar cierra el menú: es un acto terminado. |
+| «Cuando adjunto la foto solo se ve texto» | El alta listaba los adjuntos por su nombre. | El alta usa las mismas miniaturas que el detalle. |
+| «No veo los estados de revisión» (al crear) | El estado inicial era un segundo botón. | Campo **Estado** arriba: «Abierta» o «Borrador», si la obra usa borradores. El botón dice «Crear» o «Guardar borrador». |
+| «No hay forma de cambiar o pasar al otro» | Los pasos eran botones sueltos, y quien no los tenía no veía nada. | **El estado se cambia desde su chip**, como en ACC: un desplegable con los pasos que salen del estado actual. Los tuyos se eligen; los de otros se ven apagados con «lo da Luis». Los que piden motivo o prueba abren su formulario. Reglas en `pasosDeEstado` (`reglas.js`). |
+| «El chat solo es cuando un usuario quiere comentar algo» | La actividad mezclaba comentarios e historial, con eventos en inglés («edited», «attached»). | La sección **Comentarios** tiene solo lo que escribe la gente. Debajo va el **Historial**, plegado y en español: dice qué se editó («la reasignó», «adjuntó foto.jpg»), con `textoDeEvento`. Un comentario no sale dos veces aunque se pulse dos veces. |
+| «El lápiz, hagámoslo más profesional» (lista de Archivos) | Era un lápiz propio, de trazo 2 y en color de acento. | El icono «editar» del juego oficial (retícula 24, trazo 1,5), en gris y como botón con ayuda: «Cambiar el nombre». |
+| «Levantó · 09:04 p. m.» frente a «levantada 04:04 p. m.» | `creado_en` es TIMESTAMP sin zona, en UTC (Cloud SQL), y se leía como hora local. | El panel lee una fecha sin zona como UTC. **En el banco local** la base desechable va en hora de Lima, así que allí sale 5 h atrás. |
+
+**Pruebas:**
+
+- Suite backend: 2582 pasan y 1 fallo previo, ajeno a esto (`test_reconstruccion_desde_cero`).
+- Node: `estadosDeIssue` 9/9 (dos casos nuevos: pasos de estado y texto del historial) y `marcasConEnlace` 11/11.
+- Build de Docs.
+- Banco con clics y eventos reales:
+  - Ana ve los pasos apagados con «lo da Luis» y solo Anular.
+  - Luis pasa la incidencia a «En curso» y el pin cambia de color en la hoja.
+  - Al comentar pulsando dos veces se guarda un solo comentario, y el historial va aparte.
+  - El alta trae el campo Estado, y en «Borrador» el botón dice «Guardar borrador».
+  - El chip de referencias abre la lista.
+  - Retirar cierra el menú.
+
+**Sin probar:**
+
+- La miniatura en el alta: el banco no sube fotos. Es el mismo componente del detalle, que en producción sí la enseñó.
+- El lápiz nuevo en la lista: el banco del lector no la tiene. Docs compila.

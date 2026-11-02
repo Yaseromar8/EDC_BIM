@@ -3707,6 +3707,13 @@ th {
   transition: opacity 0.2s;
   flex-shrink: 0;
 }
+.name-pencil {
+  display: inline-grid; place-items: center; width: 24px; height: 24px; padding: 0;
+  border: none; border-radius: var(--a-radius-md, 4px); background: none; cursor: pointer;
+  color: var(--a-text-muted, #72706b);
+}
+.name-pencil:hover { background: var(--a-state-hover, #f1f0e8); color: var(--a-text-primary, #141413); }
+.name-pencil:focus-visible { opacity: 1; outline: none; box-shadow: var(--a-focus-ring, 0 0 0 2px #fff, 0 0 0 4px #1f3a5f); }
 
 .description-cell-editable:hover .pencil-icon-acc,
 .name-cell-editable:hover .pencil-icon-acc {

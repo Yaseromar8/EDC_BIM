@@ -3,7 +3,7 @@
 import { readFileSync } from 'node:fs';
 import {
   ESTADOS_DE_ISSUE, OPCIONALES, CODIGOS_VIVOS, estadoDeIssue, issueViva, usaEstado, actosDeIssue, puedeVerificar,
-  aQuienLeTocaIssue, EVENTOS_DE_ISSUE,
+  aQuienLeTocaIssue, EVENTOS_DE_ISSUE, pasosDeEstado, textoDeEvento,
 } from '../src/utils/estadosDeIssue.js';
 import { filasDelInforme } from '../src/utils/informeDeIncidencias.js';
 
@@ -70,6 +70,28 @@ test('el informe: persona o empresa, vencida solo si sigue viva, y los campos pr
     ['Abierta', 'Luis', '01/01/2026', 'Sí', '20/12/2025', '02', '03/02/2026']);
   igual([filas[1][4], filas[1][5], filas[1][8], filas[1][9]], ['Cerrada', 'Contratista SAC', '', 'Diseño']);
   igual(filas[1][1], 'Observación de documento');
+});
+
+test('los pasos del desplegable de estado salen del estado actual y respetan los opcionales', () => {
+  const de = (estado, opc = null) => pasosDeEstado({ estado }, { opcionales: opc }).map(p => `${p.acto}>${p.a}`);
+  igual(de('Borrador'), ['enviar>Abierto', 'anular>Anulado']);
+  igual(de('Abierto'), ['empezar>En curso', 'corregir>Corregido', 'disputar>En disputa', 'anular>Anulado']);
+  igual(de('Abierto', []), ['corregir>Corregido', 'anular>Anulado']);
+  igual(de('En curso'), ['corregir>Corregido', 'disputar>En disputa', 'anular>Anulado']);
+  igual(de('En disputa'), ['reafirmar>Abierto', 'anular>Anulado']);
+  igual(de('Corregido'), ['verificar>Verificado', 'reabrir>Reabierto']);
+  igual(de('Verificado'), []);
+  igual(de('Anulado'), []);
+});
+
+test('el historial se lee en español y dice qué se editó', () => {
+  igual(textoDeEvento({ event: 'edited', cambios: { responsable: { persona: 2 } } }), 'la reasignó');
+  igual(textoDeEvento({ event: 'edited', cambios: { seguir: 3 } }), 'empezó a seguirla');
+  igual(textoDeEvento({ event: 'edited', cambios: { causa_raiz: 'Diseño' } }), 'cambió la clasificación');
+  igual(textoDeEvento({ event: 'attached', nombre: 'foto.jpg' }), 'adjuntó foto.jpg');
+  igual(textoDeEvento({ event: 'detached', nombre: 'foto.jpg' }), 'quitó foto.jpg');
+  igual(textoDeEvento({ event: 'detected' }), 'levantada');
+  for (const e of ['edited', 'attached', 'detached']) if (!EVENTOS_DE_ISSUE[e]) throw new Error(e);
 });
 
 console.log(JSON.stringify({ suite: 'estadosDeIssue', pass, fail }));

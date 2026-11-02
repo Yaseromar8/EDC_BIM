@@ -1344,6 +1344,11 @@ export default function PDFViewer({ url, preparando = false,
 
       const effectiveScale = scale || 1.0;
       const viewport = page.getViewport({ scale: effectiveScale, rotation: giroDeLaHoja(page, rotation) });
+      // LAS MARCAS Y LOS PINES, EN CUANTO SE SABE LA MEDIDA DE LA HOJA (2-nov-2026). El viewport se ponía al
+      // TERMINAR el dibujado: en un plano con ortofoto eso son decenas de segundos en los que las teselas ya
+      // enseñan la hoja y las marcas no estaban (el dueño: «volví a entrar y no veo ni la nube ni el pin»). La
+      // capa sigue a la hoja por su `viewBox`, así que basta con la medida; el dibujado la vuelve a poner al acabar.
+      setVpInfo(prev => prev || { vp: viewport, w: viewport.width, h: viewport.height });
 
       // TOPE DE PÍXELES: sin esto, un plano grande a 8× con dpr 2 pedía un
       // canvas de cientos de megapíxeles → memoria disparada y render lentísimo.

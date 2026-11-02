@@ -298,6 +298,11 @@
    "titulo": "Copiar enlace",
    "svg": "<path d=\"M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1\"/><path d=\"M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1\"/>"
   },
+  "editar": {
+   "grupo": "acciones",
+   "titulo": "Cambiar el nombre",
+   "svg": "<path d=\"M14.5 5.5l4 4\"/><path d=\"M16.6 3.4a2 2 0 0 1 2.8 0l1.2 1.2a2 2 0 0 1 0 2.8L9 19l-4.5 1 1-4.5z\"/>"
+  },
   "version": {
    "grupo": "acciones",
    "titulo": "Versiones",

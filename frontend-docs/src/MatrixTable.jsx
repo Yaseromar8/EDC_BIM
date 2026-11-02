@@ -532,15 +532,13 @@ const TableRow = ({ index, style, data }) => {
             {/* Observaciones del plano (31-oct-2026): ámbar abiertas, rojo alguna vencida, verde todas cerradas.
                 Las nubes sueltas no pintan nada: solo lo que pide una corrección. */}
             {!isFolder && item.observaciones && <AvisoObservaciones obs={item.observaciones} onAbrir={openItem} />}
+            {/* Cambiar el nombre (2-nov-2026): el icono «editar» del juego oficial (retícula 24, trazo 1,5), en gris y
+                como botón con su ayuda; antes un lápiz propio de trazo 2 en el color de acento, que el dueño veía raro. */}
             {puedeEditarFila && !isGrey && (
-              <svg 
-                className="pencil-icon-acc name-pencil" 
-                onClick={startEditingName}
-                width="14" height="14" viewBox="0 0 24 24" fill="none" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" 
-                style={{ cursor: 'pointer', stroke: 'var(--accent)' }}
-              >
-                <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path>
-              </svg>
+              <button type="button" className="pencil-icon-acc name-pencil" onClick={startEditingName}
+                aria-label="Cambiar el nombre" data-tip="Cambiar el nombre">
+                <IconoModulo nombre="editar" tamano={16} />
+              </button>
             )}
           </div>
         )}

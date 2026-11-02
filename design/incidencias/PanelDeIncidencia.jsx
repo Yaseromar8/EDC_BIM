@@ -16,8 +16,8 @@
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { EVENTOS_DE_ISSUE, actosDeIssue, aQuienLeTocaIssue, esDelResponsable, estadoDeIssue, issueViva,
-         puedeVerificar, usaEstado } from './reglas.js';
+import { actosDeIssue, aQuienLeTocaIssue, esDelResponsable, estadoDeIssue, issueViva, pasosDeEstado,
+         puedeVerificar, textoDeEvento, usaEstado } from './reglas.js';
 import { ClasificacionDeAlta, ObservadoresDeAlta, ResponsableDeAlta, camposDelTipo, enviarJson, faltaObligatorio,
          leerJson, useObraDeIncidencias } from './piezas.jsx';
 import './incidencias.css';
@@ -36,8 +36,11 @@ function fechaDeDia(aaaammdd) {
     .toLocaleDateString('es-PE', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
+// Las fechas de la base son TIMESTAMP sin zona, en UTC (Cloud SQL): sin zona, se leen como UTC. Sin esto «Levantó»
+// salía 5 horas adelantada frente al historial, que ya trae su zona.
 function fechaCorta(iso) {
-  const d = iso ? new Date(iso) : null;
+  const s = String(iso || '');
+  const d = s ? new Date(/T\d{2}:\d{2}(:\d{2}(\.\d+)?)?$/.test(s) ? `${s}Z` : s) : null;
   return d && !Number.isNaN(d.getTime())
     ? d.toLocaleString('es-PE', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '';
 }
@@ -104,6 +107,10 @@ function Alta({ entorno, obra, ob, nueva, crear, extraAlta, onCreada, onCerrar }
   const [adjuntos, setAdjuntos] = useState([]);
   const [ocupado, setOcupado] = useState(false);
   const [enviando, setEnviando] = useState(false);
+  // EL ESTADO SE ELIGE AL CREAR (como ACC): «Abierta» le llega ya al responsable; «Borrador» solo la ve quien la
+  // levanta, si la obra usa borradores.
+  const conBorrador = usaEstado('Borrador', ob.config ? ob.config.opcionales : null);
+  const [estadoInicial, setEstadoInicial] = useState('Abierto');
   const yo = ob.yo;
 
   useEffect(() => {
@@ -160,6 +167,15 @@ function Alta({ entorno, obra, ob, nueva, crear, extraAlta, onCreada, onCerrar }
           </select>
         </label>
       )}
+      {conBorrador && (
+        <label className="pinc-campo">
+          <span>Estado</span>
+          <select value={estadoInicial} onChange={e => setEstadoInicial(e.target.value)}>
+            <option value="Abierto">Abierta: le llega al responsable al crearla</option>
+            <option value="Borrador">Borrador: solo la ves tú hasta enviarla</option>
+          </select>
+        </label>
+      )}
       <label className="pinc-campo">
         <span>Qué hay que corregir *</span>
         <input value={titulo} maxLength={180} autoFocus onChange={e => setTitulo(e.target.value)}
@@ -209,13 +225,10 @@ function Alta({ entorno, obra, ob, nueva, crear, extraAlta, onCreada, onCerrar }
       <div className="pinc-campo">
         <span>Fotos y documentos <small>(opcional)</small></span>
         {adjuntos.length > 0 && (
-          <ul className="pinc-adjuntos">
+          <ul className="pinc-minis">
             {adjuntos.map(a => (
-              <li key={a.documento}>
-                <span>{a.nombre}</span>
-                <button type="button" className="pinc-quitar" aria-label={`Quitar ${a.nombre}`}
-                  onClick={() => setAdjuntos(l => l.filter(x => x.documento !== a.documento))}>×</button>
-              </li>
+              <Miniatura key={a.documento} entorno={entorno} adjunto={a} onAbrir={() => entorno.abrirDocumento?.(a.documento)}
+                onQuitar={() => setAdjuntos(l => l.filter(x => x.documento !== a.documento))} />
             ))}
           </ul>
         )}
@@ -227,11 +240,8 @@ function Alta({ entorno, obra, ob, nueva, crear, extraAlta, onCreada, onCerrar }
 
       <div className="pinc-pie">
         <button type="button" className="pinc-btn pinc-btn--prim" disabled={enviando || ocupado || !titulo.trim()}
-          onClick={() => crearla(false)}>{enviando ? 'Creando…' : 'Crear'}</button>
-        {usaEstado('Borrador', ob.config ? ob.config.opcionales : null) && (
-          <button type="button" className="pinc-btn" disabled={enviando || ocupado || !titulo.trim()}
-            onClick={() => crearla(true)}>Guardar borrador</button>
-        )}
+          onClick={() => crearla(conBorrador && estadoInicial === 'Borrador')}>
+          {enviando ? 'Creando…' : conBorrador && estadoInicial === 'Borrador' ? 'Guardar borrador' : 'Crear'}</button>
         <button type="button" className="pinc-btn pinc-btn--plano" onClick={onCerrar} disabled={enviando}>Cancelar</button>
       </div>
     </div>
@@ -335,6 +345,8 @@ function Detalle({ entorno, obra, ob, issueId, extraDetalle, onCambio, onCargada
   const [borrador, setBorrador] = useState({});
   const [comentario, setComentario] = useState('');
   const [ocupado, setOcupado] = useState(false);
+  const [menuEstado, setMenuEstado] = useState(false);
+  const comentando = useRef(false);    // un comentario no sale dos veces aunque se pulse dos veces seguidas
 
   const cargar = useCallback(async () => {
     const d = await leerJson(entorno, `${API}/api/issues/${encodeURIComponent(issueId)}`);
@@ -375,18 +387,39 @@ function Detalle({ entorno, obra, ob, issueId, extraDetalle, onCambio, onCargada
   const autor = ob.nombres[i.autor_id] || null;
   const vence = String(i.vence_en || '').slice(0, 10);
   const vencida = vence && vence < hoyMas(0) && issueViva(i);
-  // LA ACTIVIDAD, como en ACC: comentarios e historial juntos y en orden, lo último abajo, junto a donde se escribe.
-  const actividad = (i.history || []).filter(h => h && typeof h === 'object');
+  // LOS COMENTARIOS SON SOLO LO QUE ESCRIBE LA GENTE (el dueño: «el chat solo es cuando un usuario quiere comentar
+  // algo»); el resto de pasos va al historial, plegado debajo.
+  const lineas = (i.history || []).filter(h => h && typeof h === 'object');
+  const comentarios = lineas.filter(h => h.event === 'commented');
+  const historial = lineas.filter(h => h.event !== 'commented');
   const campos = camposDelTipo(ob.config, i.tipo);
   const clasificacion = [i.subtipo && `Subtipo: ${i.subtipo}`, i.causa_raiz && `Causa raíz: ${i.causa_raiz}`,
     ...campos.filter(c => (i.campos || {})[c.clave] != null).map(c => `${c.etiqueta}: ${(i.campos || {})[c.clave]}`)].filter(Boolean);
   const hayClasificacion = clasificacion.length || ((ob.config?.subtipos || {})[i.tipo] || []).length
     || (ob.config?.causas || []).length || campos.length;
-  const hayActos = actos.enviar || actos.empezar || actos.corregir || actos.disputar || actos.reafirmar || actos.anular || verifica || autoverif;
+  // EL ESTADO SE CAMBIA DESDE EL ESTADO (como ACC): un desplegable con los pasos que salen del actual. Los que esta
+  // persona puede dar se eligen; los de otros se ven apagados con quién los da, para que nadie se quede sin saber
+  // «cómo se pasa al otro».
+  const quienDa = { responsable: responsable || 'el responsable', autor: autor || 'quien la levantó',
+    verificador: verificador || (i.tipo === 'OBSERVACION' ? autor : null) || 'quien verifica' };
+  const puede = (acto) => (acto === 'verificar' || acto === 'reabrir' ? verifica : !!actos[acto]);
+  const pasos = pasosDeEstado(i, { opcionales: ob.config ? ob.config.opcionales : null })
+    .map(p => ({ ...p, puede: puede(p.acto) }));
+  const misPasos = pasos.filter(p => p.puede);
+  const dar = (p) => {
+    setMenuEstado(false);
+    if (p.acto === 'enviar') hacer('enviar', {}, 'Enviada: le llega al responsable');
+    else if (p.acto === 'empezar') hacer('empezar', {}, 'En curso');
+    else if (p.acto === 'verificar') hacer('verificar', { acepta: true }, 'Verificada y cerrada');
+    else setActo(p.acto);
+  };
+  const ETIQUETA_DEL_PASO = { anular: i.estado === 'Borrador' ? 'Descartar' : null, reabrir: 'No aprobar' };
 
   const comentar = async () => {
     const t = comentario.trim();
-    if (t && await hacer('comentar', { texto: t })) setComentario('');
+    if (!t || comentando.current) return;
+    comentando.current = true;
+    try { if (await hacer('comentar', { texto: t })) setComentario(''); } finally { comentando.current = false; }
   };
 
   const Fila = ({ etiqueta, children, accion = null }) => (
@@ -401,7 +434,33 @@ function Detalle({ entorno, obra, ob, issueId, extraDetalle, onCambio, onCargada
       <div className="pinc-cabeza">
         <h3 className="pinc-titulo">{i.titulo}</h3>
         <div className="pinc-estado">
-          <span className="pinc-chip" style={{ '--estado': e.color }}><i />{e.etiqueta}</span>
+          <span className="pinc-estado__caja">
+            <button type="button" className="pinc-chip pinc-chip--boton" style={{ '--estado': e.color }}
+              aria-haspopup="menu" aria-expanded={menuEstado} disabled={!pasos.length || ocupado || !!acto}
+              title={misPasos.length ? 'Cambiar el estado' : 'Los pasos de estado'}
+              onClick={() => setMenuEstado(v => !v)}>
+              <i />{e.etiqueta}
+              {pasos.length > 0 && <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>}
+            </button>
+            {menuEstado && (
+              <>
+                <span className="pinc-telon" onClick={() => setMenuEstado(false)} aria-hidden="true" />
+                <span className="pinc-estado-menu" role="menu" aria-label="Cambiar el estado">
+                  {pasos.map(p => {
+                    const est = estadoDeIssue(p.a);
+                    return (
+                      <button key={p.acto} type="button" role="menuitem" disabled={!p.puede} onClick={() => dar(p)}>
+                        <i style={{ background: est.color }} />
+                        <span>{ETIQUETA_DEL_PASO[p.acto] || est.etiqueta}</span>
+                        {!p.puede && <small>lo da {quienDa[p.quien]}</small>}
+                      </button>
+                    );
+                  })}
+                </span>
+              </>
+            )}
+          </span>
           {vencida && <span className="pinc-vencida">Vencida</span>}
           <small>{aQuienLeTocaIssue(i, { responsable, verificador, autor })}</small>
         </div>
@@ -424,18 +483,9 @@ function Detalle({ entorno, obra, ob, issueId, extraDetalle, onCambio, onCargada
             anular: 'Anulada', autoverificacion: 'Autoverificación autorizada' }[acto]);
         }} />}
 
-      {!acto && hayActos && (
-        <div className="pinc-botones pinc-actos">
-          {actos.enviar && <button type="button" className="pinc-btn pinc-btn--prim" disabled={ocupado} onClick={() => hacer('enviar', {}, 'Enviada: le llega al responsable')}>Enviar</button>}
-          {actos.reafirmar && <button type="button" className="pinc-btn pinc-btn--prim" onClick={() => setActo('reafirmar')}>Reafirmar</button>}
-          {actos.corregir && <button type="button" className="pinc-btn pinc-btn--prim" onClick={() => setActo('corregir')}>Declarar corregida</button>}
-          {verifica && <button type="button" className="pinc-btn pinc-btn--prim" disabled={ocupado} onClick={() => hacer('verificar', { acepta: true }, 'Verificada y cerrada')}>Verificar y cerrar</button>}
-          {verifica && <button type="button" className="pinc-btn" onClick={() => setActo('reabrir')}>No aprobar</button>}
-          {actos.empezar && <button type="button" className="pinc-btn" disabled={ocupado} onClick={() => hacer('empezar', {}, 'En curso')}>Empezar a corregir</button>}
-          {actos.disputar && <button type="button" className="pinc-btn" onClick={() => setActo('disputar')}>No procede</button>}
-          {autoverif && <button type="button" className="pinc-btn" onClick={() => setActo('autoverificacion')}>Autorizar autoverificación</button>}
-          {actos.anular && <button type="button" className="pinc-btn pinc-btn--peligro" onClick={() => setActo('anular')}>{i.estado === 'Borrador' ? 'Descartar' : 'Anular'}</button>}
-        </div>
+      {!acto && autoverif && (
+        <button type="button" className="pinc-enlace pinc-enlace--suelto" onClick={() => setActo('autoverificacion')}>
+          Autorizar que el responsable verifique su propia corrección</button>
       )}
 
       {(i.evidencia_correccion || []).length > 0 && (
@@ -455,7 +505,6 @@ function Detalle({ entorno, obra, ob, issueId, extraDetalle, onCambio, onCargada
       <section className="pinc-seccion">
         <h4>Detalles</h4>
         <dl className="pinc-filas">
-          <Fila etiqueta="Estado"><span className="pinc-chip" style={{ '--estado': e.color }}><i />{e.etiqueta}</span></Fila>
           <Fila etiqueta="Asignada a" accion={dirige && ESTADOS_DONDE_SE_REASIGNA.includes(i.estado) && editando !== 'asignar'
             ? <button type="button" className="pinc-enlace" onClick={() => { setBorrador({}); setEditando('asignar'); }}>Reasignar</button> : null}>
             {responsable || '—'}
@@ -546,25 +595,28 @@ function Detalle({ entorno, obra, ob, issueId, extraDetalle, onCambio, onCargada
       </section>
 
       <section className="pinc-seccion">
-        <h4>Actividad</h4>
-        <ol className="pinc-actividad">
-          {actividad.map((h, n) => {
+        <h4>Comentarios <span>{comentarios.length || ''}</span></h4>
+        {comentarios.length === 0 && <p className="pinc-nota">Sin comentarios.</p>}
+        {comentarios.length > 0 && (
+          <ol className="pinc-actividad">
+            {comentarios.map((h, n) => {
             const quien = ob.nombreDeQuien(h.by);
             return (
-              <li key={`${h.at}-${n}`} className={h.event === 'commented' ? 'es-comentario' : ''}>
+              <li key={`${h.at}-${n}`} className="es-comentario">
                 <span className="pinc-avatar" aria-hidden="true">{iniciales(quien)}</span>
                 <div>
                   <div className="pinc-actividad__cab">
                     <b>{quien || 'Alguien'}</b>
-                    <span>{h.event === 'commented' ? 'comentó' : (EVENTOS_DE_ISSUE[h.event] || h.event).toLowerCase()}</span>
+                    <span>comentó</span>
                     <small>{fechaCorta(h.at)}</small>
                   </div>
-                  {(h.texto || h.motivo || h.comentario) && <p>{h.texto || h.motivo || h.comentario}</p>}
+                  <p>{h.texto}</p>
                 </div>
               </li>
             );
-          })}
-        </ol>
+            })}
+          </ol>
+        )}
         <div className="pinc-comentar">
           <textarea value={comentario} onChange={ev => setComentario(ev.target.value)} rows={2} maxLength={2000}
             placeholder="Escribe un comentario…"
@@ -575,6 +627,28 @@ function Detalle({ entorno, obra, ob, issueId, extraDetalle, onCambio, onCargada
           </div>
         </div>
       </section>
+
+      <details className="pinc-seccion pinc-historia">
+        <summary>Historial <span>{historial.length}</span></summary>
+        <ol className="pinc-actividad">
+          {historial.map((h, n) => {
+            const quien = ob.nombreDeQuien(h.by);
+            return (
+              <li key={`${h.at}-${n}`}>
+                <span className="pinc-avatar" aria-hidden="true">{iniciales(quien)}</span>
+                <div>
+                  <div className="pinc-actividad__cab">
+                    <b>{quien || 'Alguien'}</b>
+                    <span>{textoDeEvento(h)}</span>
+                    <small>{fechaCorta(h.at)}</small>
+                  </div>
+                  {(h.motivo || h.comentario) && <p>{h.motivo || h.comentario}</p>}
+                </div>
+              </li>
+            );
+          })}
+        </ol>
+      </details>
     </div>
   );
 }

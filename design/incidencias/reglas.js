@@ -101,4 +101,44 @@ export const EVENTOS_DE_ISSUE = {
   reopened: 'No aprobada: vuelve al responsable',
   voided: 'Anulada',
   self_verification_allowed: 'Autoverificación autorizada',
+  attached: 'Adjuntó',
+  detached: 'Quitó un adjunto',
+  edited: 'Editó la incidencia',
 };
+
+// Una línea del historial en palabras: «edited» dice QUÉ cambió (reasignar, observadores, seguir, clasificación).
+export function textoDeEvento(h) {
+  if (!h) return '';
+  if (h.event === 'edited') {
+    const c = h.cambios || {};
+    const partes = [];
+    if (c.responsable) partes.push('la reasignó');
+    if (c.observadores) partes.push('cambió los observadores');
+    if (c.seguir != null) partes.push('empezó a seguirla');
+    if (c.dejar_de_seguir != null) partes.push('dejó de seguirla');
+    if (c.subtipo !== undefined || c.causa_raiz !== undefined || c.campos !== undefined) partes.push('cambió la clasificación');
+    if (partes.length) return partes.join(', ');
+  }
+  if ((h.event === 'attached' || h.event === 'detached') && h.nombre) {
+    return `${h.event === 'attached' ? 'adjuntó' : 'quitó'} ${h.nombre}`;
+  }
+  return (EVENTOS_DE_ISSUE[h.event] || h.event || '').replace(/^./, (x) => x.toLowerCase());
+}
+
+// LOS PASOS DE ESTADO desde el que tiene (el desplegable del estado, como ACC): a qué estado se pasa, con qué acto
+// y quién lo da. El panel ofrece los que esta persona puede dar y enseña, apagados, los de otros con su nombre.
+export function pasosDeEstado(i, { opcionales = null } = {}) {
+  const usa = (c) => usaEstado(c, opcionales);
+  switch (i?.estado) {
+    case 'Borrador': return [{ a: 'Abierto', acto: 'enviar', quien: 'autor' }, { a: 'Anulado', acto: 'anular', quien: 'autor' }];
+    case 'Abierto': case 'Reabierto': case 'En curso': return [
+      ...(i.estado !== 'En curso' && usa('En curso') ? [{ a: 'En curso', acto: 'empezar', quien: 'responsable' }] : []),
+      { a: 'Corregido', acto: 'corregir', quien: 'responsable' },
+      ...(usa('En disputa') ? [{ a: 'En disputa', acto: 'disputar', quien: 'responsable' }] : []),
+      { a: 'Anulado', acto: 'anular', quien: 'autor' },
+    ];
+    case 'En disputa': return [{ a: 'Abierto', acto: 'reafirmar', quien: 'autor' }, { a: 'Anulado', acto: 'anular', quien: 'autor' }];
+    case 'Corregido': return [{ a: 'Verificado', acto: 'verificar', quien: 'verificador' }, { a: 'Reabierto', acto: 'reabrir', quien: 'verificador' }];
+    default: return [];
+  }
+}
