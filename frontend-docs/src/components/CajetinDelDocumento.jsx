@@ -45,7 +45,8 @@ function Casilla({ c, clase = '', children, titulo }) {
   );
 }
 
-export default function CajetinDelDocumento({ API, obra, vv, file, historial, modo, onVersiones, onIrVigente, onIrAnterior }) {
+export default function CajetinDelDocumento({ API, obra, vv, file, historial, modo, onVersiones, onIrVigente, onIrAnterior,
+                                              onIrVersion = null }) {
   const fraseDeIdoneidad = useFraseDeIdoneidad(API, obra, file?.codigo_idoneidad);
   const c = cajetinDelDocumento({ vv, file: file || {}, historial, modo, fraseDeIdoneidad,
                                   etiquetaDeEstado: x => estadoDe(x)?.etiqueta || '' });
@@ -90,6 +91,10 @@ export default function CajetinDelDocumento({ API, obra, vv, file, historial, mo
               title={`Ver la vigente (V${alternar.vigente})`}>Vigente</button>
             <button type="button" aria-pressed={alternar.enAnterior} onClick={alternar.enAnterior ? undefined : onIrAnterior}
               title={`Ver la anterior (V${alternar.anterior}), la que sustituyó la vigente`}>Anterior</button>
+            {alternar.masAtras && onIrVersion && (
+              <button type="button" aria-pressed={false} onClick={() => onIrVersion(alternar.masAtras)}
+                title={`Ver la V${alternar.masAtras}, la anterior a esta`}>‹ V{alternar.masAtras}</button>
+            )}
           </span>
         ) : vigencia.boton && onIrVigente
           ? <button type="button" className="cajetin__ir" onClick={onIrVigente}>{vigencia.boton}</button>

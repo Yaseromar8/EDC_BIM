@@ -164,11 +164,12 @@ caso('cajetín sin datos: «—» en vez de huecos (R-C3); título solo si la ob
 
 caso('conmutador Vigente | Anterior: la anterior es la que sustituyó la vigente; sin historial, no hay', () => {
   const v = cajetinDelDocumento({ vv: HIST[0], file: { name: PLANO, version: 3 }, historial: HIST });
-  assert.deepEqual(v.alternar, { vigente: 3, anterior: 2, enVigente: true, enAnterior: false });
+  assert.deepEqual(v.alternar, { vigente: 3, anterior: 2, enVigente: true, enAnterior: false, masAtras: null });
   const a = cajetinDelDocumento({ vv: HIST[1], file: { name: PLANO, version: 3 }, historial: HIST });
-  assert.deepEqual(a.alternar, { vigente: 3, anterior: 2, enVigente: false, enAnterior: true });
+  assert.deepEqual(a.alternar, { vigente: 3, anterior: 2, enVigente: false, enAnterior: true, masAtras: 1 });   // de la V2 se baja a la V1
   const vieja = cajetinDelDocumento({ vv: HIST[2], file: { name: PLANO, version: 3 }, historial: HIST });
   assert.deepEqual([vieja.alternar.enVigente, vieja.alternar.enAnterior], [false, false]);   // V1: ni una ni otra
+  assert.equal(vieja.alternar.masAtras, null);                                                // y no hay más atrás
   assert.equal(cajetinDelDocumento({ file: { name: PLANO, version: 1 }, historial: [HIST[2]] }).alternar, null);
 });
 

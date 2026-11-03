@@ -136,7 +136,9 @@
 
 .sello-sustituida small { display: block; font-size: 12px; font-weight: 600; letter-spacing: 0.04em; }
 /* Sobre la hoja: proporcional a ella (2 % de su ancho), entre 7 y 22 px. */
-.sello-sustituida__hoja { position: absolute; inset: 0; z-index: 3; pointer-events: none; container-type: size; }
+/* z-index 9: por encima de las teselas de la hoja (8) y de su vista previa (7). Con 3 quedaba debajo de ellas: se veía
+   la primera vez, mientras la hoja aún se dibujaba sin teselas, y luego no (el dueño, 3-nov-2026). */
+.sello-sustituida__hoja { position: absolute; inset: 0; z-index: 9; pointer-events: none; container-type: size; }
 .sello-sustituida__hoja .sello-sustituida { font-size: clamp(7px, 2cqw, 22px); padding: 0.3em 0.7em 0.35em; border-width: clamp(1px, 0.22cqw, 2.5px); }
 .sello-sustituida__hoja .sello-sustituida small { font-size: 0.52em; }
 

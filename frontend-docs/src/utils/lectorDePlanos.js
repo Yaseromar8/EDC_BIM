@@ -181,9 +181,13 @@ export function cajetinDelDocumento({ vv = null, file = {}, historial = [], modo
 
   // EL CONMUTADOR [Vigente | Anterior] de la casilla Vigencia: «Anterior» es la versión a la que
   // sustituyó la vigente (la segunda del historial). Solo si hay al menos dos versiones.
+  // `masAtras`: mirando una versión antigua, la que hay justo antes de ella (3-nov-2026, el dueño: «si hay 3
+  // versiones solo llegas a la segunda»). El cajetín la ofrece como «‹ V1», y así hasta la primera.
+  const antes = esVigente ? null
+    : lista.filter(v => v && v.version_number < n).sort((a, b) => b.version_number - a.version_number)[0] || null;
   const alternar = lista.length >= 2 && lista[1] && lista[1].version_number
     ? { vigente: vigente, anterior: lista[1].version_number, enVigente: esVigente,
-        enAnterior: n === lista[1].version_number }
+        enAnterior: n === lista[1].version_number, masAtras: antes ? antes.version_number : null }
     : null;
 
   return {

@@ -488,6 +488,11 @@ export default function DocumentViewer({
   const puedeComparar = !isShared && /\.pdfx?$/i.test(file?.name || '') && versionHistory.length >= 2;
   const irAVigente = setViewedVersionInfo && versionHistory[0] ? () => setViewedVersionInfo(versionHistory[0]) : null;
   const irAAnterior = setViewedVersionInfo && versionHistory[1] ? () => setViewedVersionInfo(versionHistory[1]) : null;
+  // Más atrás de la anterior (con tres versiones o más): a la que se pida por su número.
+  const irAVersion = setViewedVersionInfo ? (numero) => {
+    const v = (versionHistory || []).find(x => x.version_number === numero);
+    if (v) setViewedVersionInfo(v);
+  } : null;
 
   const popoverVersiones = (
               <div className="version-popover" style={{ top: 32, left: 0, width: 350 }}>
@@ -571,7 +576,7 @@ export default function DocumentViewer({
               vv={viewedVersionInfo || versionHistory[0] || null} file={file} historial={versionHistory}
               modo={modoDelDocumento({ nombre: file.name })}
               onVersiones={setShowVersions ? () => setShowVersions(!showVersions) : null}
-              onIrVigente={irAVigente} onIrAnterior={irAAnterior} />
+              onIrVigente={irAVigente} onIrAnterior={irAAnterior} onIrVersion={irAVersion} />
             {showVersions && <div className="file-viewer-cajetin__versiones">{popoverVersiones}</div>}
           </div>
         ) : (
@@ -889,7 +894,7 @@ export default function DocumentViewer({
                 <CajetinDelDocumento API={API} obra={projectPrefix} vv={vv} file={file} historial={versionHistory}
                   modo={modoDelDocumento({ nombre: file.name, apaisada })}
                   onVersiones={setShowVersions ? () => setShowVersions(!showVersions) : null}
-                  onIrVigente={irAVigente} onIrAnterior={irAAnterior} />
+                  onIrVigente={irAVigente} onIrAnterior={irAAnterior} onIrVersion={irAVersion} />
               )}
               accionesDelCajetin={isShared ? null : (
                 <>
