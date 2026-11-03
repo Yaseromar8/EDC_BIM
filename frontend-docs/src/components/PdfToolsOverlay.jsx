@@ -808,6 +808,10 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
   // 3-nov-2026: «¿por qué la flecha debería tener “Abierta”?»). Una incidencia sin ninguna nube en la hoja lo sigue
   // llevando en sus marcas, para no perderla de vista.
   const conNube = new Set(pageMarkups.filter(x => x.kind === 'cloud' && x.observacion).map(x => String(x.observacion.id)));
+  // AL ALEJAR, LOS RÓTULOS ENCOGEN CON LA HOJA (3-nov-2026, el dueño: «me alejo y se agrandan»). Con la hoja a
+  // 700 px o más en pantalla van a su tamaño; por debajo, en proporción a ella, hasta el 40 %. Los pines y la barra
+  // de la marca no: son para pulsar.
+  const esc = Math.min(1, Math.max(0.4, (vpInfo.w || 700) / 700));
   const renderEnlaces = () => pageMarkups.map(m => {
     const n = (m.citas || []).length;
     const nc = (m.style?.comentarios || []).length;
@@ -816,8 +820,9 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
     if (!n && !nc && !esElegida && !obs) return null;
     const k = cajaDe(m);
     if (!k) return null;
-    const ancho = n > 9 ? 34 : 28;
-    const alto = 16;
+    const anchoB = n > 9 ? 34 : 28;                       // lo que se dibuja; `ancho`/`alto`, lo que ocupa en la hoja
+    const ancho = anchoB * esc;
+    const alto = 16 * esc;
     const enBordeSup = k.y < alto + 6;
     const sinSitioDer = k.x2 + ancho + 4 > vpInfo.w;
     const bx = Math.max(4, Math.min(
@@ -826,7 +831,8 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
     ));
     const by = enBordeSup ? Math.max(4, k.y + 4) : k.y - alto - 2;
     // Los comentarios, con el mismo distintivo, a la izquierda del de referencias (o en su sitio si no cita nada).
-    const anchoC = nc > 9 ? 34 : 28;
+    const anchoCB = nc > 9 ? 34 : 28;
+    const anchoC = anchoCB * esc;
     const cx = n > 0 ? Math.max(4, bx - anchoC - 4) : Math.max(4, Math.min(
       enBordeSup || k.x2 + anchoC + 4 > vpInfo.w ? k.x2 - anchoC - 4 : k.x2 + 2, vpInfo.w - anchoC - 4));
     const hx = Math.max(2, k.x - 6);
@@ -838,13 +844,13 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
         {esElegida && <rect x={hx} y={hy} width={Math.max(0, hw)} height={Math.max(0, hh)} rx="4"
           fill="none" stroke="#6a9bcc" strokeWidth="1.5" strokeDasharray="5 3" style={{ pointerEvents: 'none' }} />}
         {n > 0 && (
-          <g transform={`translate(${bx} ${by})`}
+          <g transform={`translate(${bx} ${by}) scale(${esc})`}
             style={{ pointerEvents: tocable ? 'all' : 'none', cursor: tool === 'erase' ? 'not-allowed' : tool === 'pan' ? 'pointer' : 'default' }}
             onClick={tocable ? (e) => {
               alTocar(m)(e);
               if (tool === 'pan') setPedidoDeMarca(p => ({ id: m.id, que: 'referencias', n: (p?.n || 0) + 1 }));
             } : undefined}>
-            <rect width={ancho} height={alto} rx="8" fill="#fff" stroke="#507294" strokeWidth="1" />
+            <rect width={anchoB} height="16" rx="8" fill="#fff" stroke="#507294" strokeWidth="1" />
             <g transform="translate(4 2.5) scale(0.46)" fill="none" stroke="#507294" strokeWidth="2.6" strokeLinecap="round">
               <path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1" /><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1" />
             </g>
@@ -852,14 +858,14 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
           </g>
         )}
         {nc > 0 && (
-          <g transform={`translate(${cx} ${by})`}
+          <g transform={`translate(${cx} ${by}) scale(${esc})`}
             style={{ pointerEvents: tocable ? 'all' : 'none', cursor: tool === 'erase' ? 'not-allowed' : tool === 'pan' ? 'pointer' : 'default' }}
             onClick={tocable ? (e) => {
               alTocar(m)(e);
               if (tool === 'pan') setPedidoDeMarca(p => ({ id: m.id, que: 'comentarios', n: (p?.n || 0) + 1 }));
             } : undefined}>
             <title>{nc === 1 ? '1 comentario' : `${nc} comentarios`}</title>
-            <rect width={anchoC} height={alto} rx="8" fill="#fff" stroke="#507294" strokeWidth="1" />
+            <rect width={anchoCB} height="16" rx="8" fill="#fff" stroke="#507294" strokeWidth="1" />
             <g transform="translate(3.5 2.2) scale(0.48)" fill="none" stroke="#507294" strokeWidth="2.4" strokeLinejoin="round">
               <path d="M5.5 4.5h13a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H11l-4.5 3v-3h-1a2 2 0 0 1-2-2v-9a2 2 0 0 1 2-2z" />
             </g>
@@ -876,10 +882,10 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
           const anchoQ = quien ? quien.length * 7 + 10 : 0;
           const anchoT = Math.round(texto.length * 6.1) + 16;
           const anchoE = anchoT + anchoQ;
-          const ex = Math.max(4, Math.min(k.x, vpInfo.w - anchoE - 4));
-          const ey = k.y2 + 22 > vpInfo.h ? Math.max(4, k.y - 22) : k.y2 + 4;
+          const ex = Math.max(4, Math.min(k.x, vpInfo.w - anchoE * esc - 4));
+          const ey = k.y2 + 22 * esc > vpInfo.h ? Math.max(4, k.y - 22 * esc) : k.y2 + 4 * esc;
           return (
-            <g transform={`translate(${ex} ${ey})`}
+            <g transform={`translate(${ex} ${ey}) scale(${esc})`}
               style={{ pointerEvents: tocable ? 'all' : 'none', cursor: tool === 'pan' ? 'pointer' : 'default' }}
               onClick={tocable ? alTocar(m) : undefined}>
               <title>{`${obs.titulo || ''}${obs.responsable ? ` — ${obs.responsable}` : ''}${m.nube?.destino_nombre

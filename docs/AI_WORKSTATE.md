@@ -52,6 +52,7 @@ Detalle en `docs/archivos/18`, `19`, `20` y `21`.
   encargo (corrige la D6) y no aporta (no se le asigna; no entrega por su empresa). Ensayo 38/38.
 - Commits siguientes (3-nov): lector — con 3 versiones o más se llega a todas («‹ V1»), y el sello SUSTITUIDA ya no
   queda bajo las teselas (z 3 → 9); y la leyenda del plano (quién es cada color) en el marco del lector.
+- Commit siguiente (3-nov): lector — al alejar, los rótulos de las marcas encogen con la hoja (bajo 700 px, hasta 40 %).
 - EXACT NEXT ACTION (histórica, ya hecha para c3144a3d): Manual Deploy de `visor-ecd-backend-va` y DESPUÉS de `visor-ecd-portal` con el HEAD de main;
   comprobar `/api/health` y el bundle del portal (Cloudflare ~5 min). Luego, recorrido real con dos personas (correo
   a observadores y subida de fotos sin probar en producción).
