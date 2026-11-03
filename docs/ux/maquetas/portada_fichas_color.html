@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ALEPHIA · Fichas de la portada · color e icono de View</title>
+<link rel="stylesheet" href="../../../design/fuentes/ibm-plex.css">
+<style>
+/* 3-nov-2026 · el dueño: «a los recuadros de ALEPHIA Docs y ALEPHIA View, ¿les podemos poner un color de acuerdo a
+   nuestra paleta? Y el icono de View me parece muy simple». Paleta D-24 (docs/ux/PALETA_OFICIAL_CLAUDE_DEFINICION.md):
+   el naranja queda reservado (enviar e indicador activo), así que Docs va en AZUL y View en VERDE, los dos con su
+   tinte y su tono oscuro de la lista cerrada. Iconos en la retícula del juego: 24, trazo 1,5, sin relleno. */
+:root { --fondo: #FAF9F5; --sup: #FFFFFF; --linea: #E8E6DC; --t1: #141413; --t2: #52524D; --t3: #72706B;
+  --azul-tinte: #ECF0F1; --azul: #507294; --verde-tinte: #E0E3D7; --verde: #64744E; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--fondo); color: var(--t1); font: 14px/1.45 'IBM Plex Sans', system-ui, sans-serif; padding: 32px 16px 60px; }
+h1 { font-size: 18px; font-weight: 600; margin: 0 0 4px; text-align: center; }
+p.sub { text-align: center; color: var(--t3); margin: 0 0 28px; font-size: 13px; }
+h2 { font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--t3); text-align: center; margin: 34px 0 12px; }
+.fila { display: flex; gap: 16px; justify-content: center; flex-wrap: wrap; }
+svg.i { fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+
+/* la ficha tal como está hoy */
+.hoy { width: 260px; padding: 22px 22px 20px; background: var(--sup); border: 1px solid var(--linea); border-radius: 8px; }
+.hoy svg { width: 22px; height: 22px; color: var(--t2); display: block; margin-bottom: 18px; }
+.hoy span { color: var(--t3); } .hoy b { color: var(--t1); font-weight: 600; }
+
+/* la propuesta: el icono en su tinte, el nombre en su tono; al pasar el ratón, el borde en su color */
+.nueva { width: 260px; padding: 20px 22px; background: var(--sup); border: 1px solid var(--linea); border-radius: 8px;
+  display: flex; flex-direction: column; gap: 16px; cursor: pointer; transition: border-color .18s, box-shadow .18s; position: relative; }
+.nueva .tesela { width: 44px; height: 44px; border-radius: 10px; display: grid; place-items: center; background: var(--tinte); color: var(--tono); }
+.nueva .tesela svg { width: 26px; height: 26px; }
+.nueva .nombre { display: flex; align-items: center; justify-content: space-between; }
+.nueva .nombre span { color: var(--t3); } .nueva .nombre b { color: var(--t1); font-weight: 600; }
+.nueva .flecha { color: var(--tono); opacity: 0; transition: opacity .18s, translate .18s; }
+.nueva:hover { border-color: var(--tono); box-shadow: 0 1px 3px rgb(20 20 19 / .10); }
+.nueva:hover .flecha { opacity: 1; translate: 2px 0; }
+.docs { --tinte: var(--azul-tinte); --tono: var(--azul); }
+.view { --tinte: var(--verde-tinte); --tono: var(--verde); }
+
+/* los candidatos del icono, en grande y en su tamaño */
+.cand { width: 200px; text-align: center; background: var(--sup); border: 1px solid var(--linea); border-radius: 8px; padding: 18px 12px 14px; }
+.cand .g { width: 72px; height: 72px; margin: 0 auto 10px; color: var(--verde); }
+.cand .p { display: inline-grid; place-items: center; width: 44px; height: 44px; border-radius: 10px; background: var(--verde-tinte); color: var(--verde); }
+.cand .p svg { width: 26px; height: 26px; }
+.cand b { display: block; margin-top: 8px; font-weight: 600; }
+.cand small { color: var(--t3); font-size: 12px; }
+</style>
+</head>
+<body>
+<h1>Fichas de la portada</h1>
+<p class="sub">Docs en azul y View en verde (paleta oficial; el naranja queda para «enviar» y lo activo). Pasa el ratón por las fichas nuevas.</p>
+
+<h2>Hoy</h2>
+<div class="fila">
+  <div class="hoy"><svg class="i" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="16" y2="17"/></svg><span>ALEPHIA </span><b>Docs</b></div>
+  <div class="hoy"><svg class="i" viewBox="0 0 24 24"><path d="M12 2l8.66 5v10L12 22l-8.66-5V7L12 2z"/><path d="M12 22V12"/><path d="M3.5 7L12 12l8.5-5"/></svg><span>ALEPHIA </span><b>View</b></div>
+</div>
+
+<h2>Propuesta · con el icono A de View</h2>
+<div class="fila" id="propuesta"></div>
+
+<h2>Icono de View · tres candidatos</h2>
+<div class="fila" id="candidatos"></div>
+
+<script>
+const DOCS = '<path d="M6.5 3.5H14l4.5 4.5v11a1.5 1.5 0 0 1-1.5 1.5H6.5A1.5 1.5 0 0 1 5 19V5a1.5 1.5 0 0 1 1.5-1.5z"/><path d="M13.5 3.5v5h5"/><path d="M8.5 12.5h7M8.5 15.5h7M8.5 9.5h2.5"/>';
+const VIEW = {
+  A: { t: 'Modelo en el visor', d: 'el modelo dentro del encuadre de la cámara',
+       s: '<path d="M3.5 8V5.5a2 2 0 0 1 2-2H8M16 3.5h2.5a2 2 0 0 1 2 2V8M20.5 16v2.5a2 2 0 0 1-2 2H16M8 20.5H5.5a2 2 0 0 1-2-2V16"/><path d="M12 7.2 16 9.4v4.6L12 16.3 8 14V9.4z"/><path d="M8 9.4 12 11.7l4-2.3M12 11.7v4.6"/>' },
+  B: { t: 'Edificio BIM', d: 'un volumen con sus pisos',
+       s: '<path d="M12 3.5 19.5 7.5v9L12 20.5l-7.5-4v-9z"/><path d="M4.5 7.5 12 11.5l7.5-4M12 11.5v9"/><path d="M4.5 12 12 16l7.5-4"/><path d="M7.5 10.6v2.8M16.5 10.6v2.8"/>' },
+  C: { t: 'Modelo con órbita', d: 'el modelo y el giro de la cámara',
+       s: '<path d="M12 5 16.5 7.5v5L12 15l-4.5-2.5v-5z"/><path d="M7.5 7.5 12 10l4.5-2.5M12 10v5"/><path d="M4.6 12.8C3 14 2.7 15.3 3.8 16.4c2 2 8.2 2.9 13.4 1.6"/><path d="m15.6 16.5 1.8 1.5-1.6 1.7"/><path d="M19.4 12.8c1.5 1.1 1.9 2.3 1.1 3.4"/>' },
+};
+const ico = (s, w) => `<svg class="i" viewBox="0 0 24 24" width="${w}" height="${w}">${s}</svg>`;
+const ficha = (clase, s, nombre) => `<div class="nueva ${clase}"><span class="tesela">${ico(s, 26)}</span>
+  <div class="nombre"><div><span>ALEPHIA </span><b>${nombre}</b></div><span class="flecha">→</span></div></div>`;
+document.getElementById('propuesta').innerHTML = ficha('docs', DOCS, 'Docs') + ficha('view', VIEW.A.s, 'View');
+document.getElementById('candidatos').innerHTML = Object.entries(VIEW).map(([k, v]) => `<div class="cand">
+  <div class="g">${ico(v.s, 72)}</div><span class="p">${ico(v.s, 26)}</span><b>${k} · ${v.t}</b><small>${v.d}</small></div>`).join('');
+</script>
+</body>
+</html>

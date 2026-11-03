@@ -18,7 +18,16 @@ import MiCuentaPanel from '../components/MiCuentaPanel';
 import { PaisajeDeObra } from '../components/IlustracionesDeObra';
 import './entradaGris.css';
 
+// COLOR POR PRODUCTO (3-nov-2026, pedido del dueño: «el color es en todo el recuadro» y «las líneas, buen relieve, no
+// tan gruesas»). De la paleta oficial (D-24): Docs en azul y View en verde, cada uno con su tinte de fondo y su tono
+// para el icono y el borde al pasar. El naranja no: queda para enviar y lo activo.
+const COLOR_DE_PRODUCTO = {
+  Docs: { fondo: '#ECF0F1', tono: '#507294', foco: 'rgb(80 114 148 / .30)' },
+  View: { fondo: '#E0E3D7', tono: '#64744E', foco: 'rgb(100 116 78 / .30)' },
+};
+
 function ProductCard({ icon, producto, onClick, locked = false, lockNote }) {
+  const color = COLOR_DE_PRODUCTO[producto] || { fondo: 'var(--eg-sup)', tono: 'var(--eg-texto-2)', foco: 'rgb(80 114 148 / .30)' };
   const [hover, setHover] = useState(false);
   const [foco, setFoco] = useState(false);
   const active = (hover || foco) && !locked;
@@ -34,30 +43,30 @@ function ProductCard({ icon, producto, onClick, locked = false, lockNote }) {
       onBlur={() => setFoco(false)}
       style={{
         width: 260, maxWidth: '88vw', padding: '22px 22px 20px',
-        // Ficha sólida con borde fino; la interacción es Signal.
-        background: 'var(--eg-sup)',
-        border: `1px solid ${active ? 'var(--eg-foco)' : 'var(--eg-linea)'}`,
+        // La ficha entera en el tinte del producto; al pasar, el borde en su tono.
+        background: color.fondo,
+        border: `1px solid ${active ? color.tono : color.fondo}`,
         outline: 'none',
-        boxShadow: foco ? '0 0 0 3px rgb(80 114 148 / .30)' : (active ? 'var(--eg-sombra)' : 'none'),
+        boxShadow: foco ? `0 0 0 3px ${color.foco}` : (active ? 'var(--eg-sombra)' : 'none'),
         borderRadius: 8,
         cursor: locked ? 'default' : 'pointer',
         opacity: locked ? 0.5 : 1,
         transition: 'border-color .18s, box-shadow .18s',
       }}
     >
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--eg-texto-2)"
-           strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke={color.tono}
+           strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round">
         {icon}
       </svg>
       <div style={{ marginTop: 20, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
         {/* MARCA + PRODUCTO en un solo renglón, jerarquía tipográfica:
-            ALEPHIA sereno, el producto con el peso. Sin colores por producto. */}
+            ALEPHIA sereno, el producto con el peso. */}
         <span style={{ fontSize: 15, color: 'var(--eg-texto)' }}>
           <span style={{ fontWeight: 400, color: 'var(--eg-texto-3)' }}>ALEPHIA </span>
           <span style={{ fontWeight: 600 }}>{producto}</span>
         </span>
         {!locked && (
-          <span style={{ fontSize: 15, color: 'var(--eg-foco)', opacity: active ? 1 : 0, transition: 'opacity .18s' }}>→</span>
+          <span style={{ fontSize: 15, color: color.tono, opacity: active ? 1 : 0, transition: 'opacity .18s' }}>→</span>
         )}
       </div>
       {locked && (
@@ -147,7 +156,7 @@ export default function HubPage({ user, onChooseDocs, onLogout, onAbrirRevision,
               producto solo si la función existe de verdad: hoy son estas dos. */}
           <ProductCard
             producto="Docs"
-            icon={<><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /><line x1="8" y1="13" x2="16" y2="13" /><line x1="8" y1="17" x2="16" y2="17" /></>}
+            icon={<><path d="M6.5 3.5H14l4.5 4.5v11a1.5 1.5 0 0 1-1.5 1.5H6.5A1.5 1.5 0 0 1 5 19V5a1.5 1.5 0 0 1 1.5-1.5z" /><path d="M13.5 3.5v5h5" /><path d="M8.5 12.5h7M8.5 15.5h7M8.5 9.5h2.5" /></>}
             onClick={onChooseDocs}
           />
           {/* ALEPHIA View = el visor 3D, entrada funcional independiente.
@@ -157,7 +166,8 @@ export default function HubPage({ user, onChooseDocs, onLogout, onAbrirRevision,
           {VISOR_URL && (
             <ProductCard
               producto="View"
-              icon={<><path d="M12 2l8.66 5v10L12 22l-8.66-5V7L12 2z" /><path d="M12 22V12" /><path d="M3.5 7L12 12l8.5-5" /></>}
+              // «Modelo con órbita» (3-nov-2026, elegido por el dueño): el modelo y el giro de la cámara.
+              icon={<><path d="M12 3.2 17.8 6.4v6.5L12 16.2l-5.8-3.3V6.4z" /><path d="M6.2 6.4 12 9.7l5.8-3.3M12 9.7v6.5" /><path d="M5.3 12.4C2.9 13.6 2 15.1 3.2 16.5c2.2 2.6 10.2 3.5 15.6 1.8" /><path d="m17.1 16.6 1.9 1.7-1.7 1.9" /><path d="M18.7 12.4c2.4 1.2 3.3 2.7 2.2 4.1" /></>}
               onClick={openVisor}
             />
           )}
