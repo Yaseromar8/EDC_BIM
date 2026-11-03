@@ -1,0 +1,189 @@
+/* «Comparar versiones» (3-nov-2026). Con el lenguaje del LECTOR, a pedido del dueño («más profesional y serio»; y
+   después: «los colores de los botones, muy a dibujo animado»): los CONTROLES van en grises; el color solo vive en el
+   dibujo superpuesto y en su leyenda, como una clave de capas de CAD (una raya corta, no un cuadro de color).
+   barra blanca, campo Light 50 liso, líneas #E8E6DC, iconos Gris 600, lo encendido en Light Gray sobre Dark, controles
+   flotantes con radio 10 y la sombra del lector. Paleta oficial D-24: rojo #B93535 = solo en la
+   anterior, azul #507294 = solo en la nueva; nada más lleva color. */
+.cmp {
+  --cmp-a: #B93535; --cmp-b: #507294;
+  --cmp-chrome: #FFFFFF; --cmp-campo: #F1F0E8; --cmp-linea: #E8E6DC; --cmp-linea-f: #CCCAC0;
+  --cmp-t1: #141413; --cmp-t2: #52524D; --cmp-t3: #72706B; --cmp-t4: #B0AEA5;
+  --cmp-on-fondo: #E8E6DC; --cmp-on: #141413;
+  --cmp-sombra: 0 4px 16px rgba(20, 20, 19, 0.12), 0 1px 3px rgba(20, 20, 19, 0.08);
+  position: fixed; inset: 0; z-index: 12500; display: flex; flex-direction: column; background: var(--cmp-campo);
+  font-family: var(--a-font-sans, 'IBM Plex Sans', system-ui, sans-serif); color: var(--cmp-t1); font-size: 13px;
+}
+.cmp button { font: inherit; color: inherit; }
+.cmp button:focus-visible, .cmp input:focus-visible, .cmp select:focus-visible {
+  outline: none; box-shadow: var(--a-focus-ring, 0 0 0 2px #fff, 0 0 0 4px #507294); }
+
+/* ── barra superior ── */
+.cmp-cab { height: 52px; flex: none; display: flex; align-items: center; gap: 10px; padding: 0 10px 0 6px;
+  background: var(--cmp-chrome); border-bottom: 1px solid var(--cmp-linea); }
+.cmp-titulo { display: flex; flex-direction: column; min-width: 0; max-width: 240px; line-height: 1.25; padding-left: 2px; }
+.cmp-titulo b { font-weight: 600; font-size: 14px; }
+.cmp-titulo span { font-size: 12px; color: var(--cmp-t3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cmp-versiones { flex: 1; display: flex; align-items: center; justify-content: center; gap: 4px; min-width: 0; }
+.cmp-version { position: relative; display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 28px 0 12px;
+  border: 1px solid var(--cmp-linea); border-radius: 6px; background: var(--cmp-chrome); min-width: 0; max-width: 300px;
+  cursor: pointer; }
+.cmp-version:hover { border-color: var(--cmp-linea-f); }
+.cmp-version:focus-within { box-shadow: var(--a-focus-ring, 0 0 0 2px #fff, 0 0 0 4px #507294); }
+.cmp-version-rol { font-size: 12px; color: var(--cmp-t3); white-space: nowrap; }
+.cmp-version select { appearance: none; border: 0; background: none; font: 500 13px var(--a-font-sans, sans-serif); color: var(--cmp-t1);
+  min-width: 0; text-overflow: ellipsis; cursor: pointer; outline: none; padding: 0; }
+.cmp-version::after { content: ''; position: absolute; right: 10px; top: 50%; margin-top: -2px; border: 4px solid transparent;
+  border-top-color: var(--cmp-t3); pointer-events: none; }
+
+/* el selector de modo, como un control segmentado sobre el campo */
+.cmp-modos { display: inline-flex; gap: 2px; padding: 2px; border-radius: 8px; background: var(--cmp-campo); flex: none; }
+.cmp-modos button { border: 0; background: none; padding: 0 12px; height: 28px; border-radius: 6px; font-size: 13px; color: var(--cmp-t2); cursor: pointer; }
+.cmp-modos button:hover { color: var(--cmp-t1); }
+.cmp .cmp-modos button[aria-checked="true"] { background: var(--cmp-chrome); color: var(--cmp-t1); font-weight: 500;
+  box-shadow: 0 1px 2px rgba(20, 20, 19, 0.10), 0 0 0 1px var(--cmp-linea); }
+
+/* iconos: los del lector */
+.cmp-icono { min-width: 34px; height: 34px; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  padding: 0; border: 0; border-radius: 6px; background: none; cursor: pointer; flex: none;
+  transition: background .13s ease, color .13s ease; }
+.cmp .cmp-icono { color: var(--cmp-t3); }
+.cmp .cmp-icono:hover:not(:disabled) { background: var(--cmp-campo); color: var(--cmp-t1); }
+.cmp .cmp-icono:disabled { color: var(--cmp-t4); cursor: default; }
+.cmp .cmp-icono--on, .cmp .cmp-icono--on:hover:not(:disabled) { background: var(--cmp-on-fondo); color: var(--cmp-on); }
+.cmp-icono--texto { padding: 0 10px 0 8px; font-size: 13px; }
+.cmp-icono--texto small { font: 500 11px 'IBM Plex Mono', monospace; color: var(--cmp-t3); }
+
+/* ── cuerpo: la escena y la lista ── */
+.cmp-cuerpo { flex: 1; min-height: 0; display: flex; }
+.cmp-escena { flex: 1; min-width: 0; display: flex; position: relative; }
+.cmp-visor { position: relative; flex: 1; min-width: 0; overflow: hidden; cursor: grab; touch-action: none; background: var(--cmp-campo); }
+.cmp-visor:active { cursor: grabbing; }
+.cmp-visor--alineando { cursor: move; }
+.cmp-escena--lado .cmp-visor + .cmp-visor { border-left: 1px solid var(--cmp-linea-f); }
+.cmp-lienzo { position: absolute; left: 0; top: 0; transform-origin: 0 0; background: #fff;
+  box-shadow: 0 1px 2px rgba(20, 20, 19, 0.10), 0 0 0 1px rgba(20, 20, 19, 0.06); will-change: transform; }
+.cmp-lienzo > div { position: absolute; inset: 0; }
+.cmp-canvas { display: block; width: 100%; height: 100%; }
+.cmp-capa-multiplicar { mix-blend-mode: multiply; }
+.cmp-capa > div { position: absolute; inset: 0; }
+.cmp-lienzo .cmp-detalle { position: absolute; right: auto; bottom: auto; }
+
+/* rótulos de cada versión (lado a lado y cortina) */
+.cmp-rotulo, .cmp-cortina-rotulo { position: absolute; top: 10px; z-index: 3; height: 24px; padding: 0 10px 0 12px; display: flex;
+  align-items: center; border-radius: 6px; background: var(--cmp-chrome); font-size: 12px; font-weight: 600; white-space: nowrap;
+  border: 1px solid var(--cmp-linea); color: var(--cmp-t1); }
+.cmp-rotulo { left: 10px; }
+
+/* las marcas de los cambios: rectángulo fino y etiqueta numerada */
+.cmp-nubes { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; }
+.cmp-nube { pointer-events: auto; cursor: pointer; }
+.cmp-nube-caja { fill: transparent; stroke: #52524D; stroke-opacity: .8; stroke-width: 1; vector-effect: non-scaling-stroke; }
+.cmp-nube:hover .cmp-nube-caja { stroke-opacity: 1; }
+.cmp-nube-etiqueta { fill: #52524D; }
+.cmp-nube text { fill: #fff; font-family: 'IBM Plex Mono', monospace; font-weight: 600; text-anchor: middle; pointer-events: none; }
+/* el tipo de cada cambio: el color del propio dibujo y su signo (+ añadido, − quitado, ± modificado) */
+.cmp-nube--anadido .cmp-nube-caja { stroke: var(--cmp-b); }
+.cmp-nube--anadido .cmp-nube-etiqueta { fill: var(--cmp-b); }
+.cmp-nube--quitado .cmp-nube-caja { stroke: var(--cmp-a); stroke-dasharray: 5 3; }
+.cmp-nube--quitado .cmp-nube-etiqueta { fill: var(--cmp-a); }
+.cmp-nube--modificado .cmp-nube-caja { stroke: #141413; }
+.cmp-nube--modificado .cmp-nube-etiqueta { fill: #141413; }
+.cmp-nube--activa .cmp-nube-caja { stroke-opacity: 1; stroke-width: 2.25; }
+
+/* la cortina */
+.cmp-cortina { position: absolute; top: 0; bottom: 0; width: 0; z-index: 4; }
+.cmp-cortina::before { content: ''; position: absolute; top: 0; bottom: 0; left: -0.5px; width: 1px; background: var(--cmp-t1); }
+.cmp-cortina-asa { position: absolute; top: 50%; left: -16px; width: 32px; height: 32px; margin-top: -16px; border-radius: 50%;
+  border: 1px solid var(--cmp-linea-f); background: var(--cmp-chrome); color: var(--cmp-t2); display: grid; place-items: center;
+  cursor: ew-resize; touch-action: none; box-shadow: var(--cmp-sombra); }
+.cmp-cortina-rotulo--a { right: 10px; }
+.cmp-cortina-rotulo--b { left: 10px; }
+
+/* cargando: una barra fina arriba y una línea de texto */
+.cmp-progreso { position: absolute; top: 0; left: 0; right: 0; height: 2px; overflow: hidden; z-index: 6; }
+.cmp-progreso i { position: absolute; top: 0; bottom: 0; width: 30%; background: var(--cmp-t1); animation: cmp-avance 1.1s ease-in-out infinite; }
+@keyframes cmp-avance { from { left: -30%; } to { left: 100%; } }
+.cmp-estado { position: absolute; left: 50%; top: 45%; translate: -50% 0; font-size: 13px; color: var(--cmp-t3); }
+.cmp-estado--error { color: #B93535; }
+.cmp-afinando { position: absolute; right: 12px; top: 10px; z-index: 3; font-size: 12px; color: var(--cmp-t3); }
+
+/* avisos sobre la escena */
+.cmp-aviso { position: absolute; left: 50%; top: 12px; translate: -50% 0; z-index: 5; display: flex; align-items: center; gap: 10px;
+  padding: 6px 6px 6px 14px; background: var(--cmp-chrome); color: var(--cmp-t2); border-radius: 10px; font-size: 13px;
+  max-width: calc(100% - 32px); box-shadow: var(--cmp-sombra); }
+.cmp-aviso-cifra { font: 500 12px 'IBM Plex Mono', monospace; color: var(--cmp-t1); white-space: nowrap; }
+.cmp-aviso button { height: 28px; padding: 0 10px; border-radius: 6px; border: 1px solid var(--cmp-linea-f); background: var(--cmp-chrome);
+  cursor: pointer; white-space: nowrap; }
+.cmp .cmp-aviso .cmp-prim { background: var(--cmp-t1); border-color: var(--cmp-t1); color: #fff; }
+.cmp-aviso--falta { top: auto; bottom: 72px; padding: 6px 14px; }
+
+/* ── el mando flotante y la leyenda ── */
+.cmp-mando { position: absolute; left: 50%; bottom: 14px; translate: -50% 0; z-index: 5; display: flex; align-items: center; gap: 2px;
+  padding: 4px; border: 1px solid var(--cmp-linea); border-radius: 10px; background: var(--cmp-chrome); box-shadow: var(--cmp-sombra);
+  max-width: calc(100% - 24px); }
+.cmp-grupo { display: flex; align-items: center; gap: 2px; }
+.cmp-cifra { min-width: 52px; text-align: center; font-size: 13px; color: var(--cmp-t2); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.cmp-sep { width: 1px; height: 20px; background: var(--cmp-linea); margin: 0 4px; flex: none; }
+.cmp-leyenda { position: absolute; left: 12px; top: 12px; z-index: 5; display: flex; align-items: center; gap: 2px; padding: 4px;
+  border: 1px solid var(--cmp-linea); border-radius: 10px; background: var(--cmp-chrome); box-shadow: var(--cmp-sombra); }
+.cmp-capa-boton, .cmp-atenuar { display: inline-flex; align-items: center; gap: 8px; height: 30px; padding: 0 10px; border: 0; border-radius: 6px;
+  background: none; font-size: 12px; color: var(--cmp-t2); cursor: pointer; white-space: nowrap; }
+.cmp .cmp-capa-boton { color: var(--cmp-t2); }
+.cmp .cmp-capa-boton:hover { background: var(--cmp-campo); color: var(--cmp-t1); }
+.cmp-capa-boton i, .cmp-atenuar i { width: 14px; height: 2px; border-radius: 0; flex: none; }
+.cmp-capa-boton--a i { background: var(--cmp-a); }
+.cmp-capa-boton--b i { background: var(--cmp-b); }
+.cmp-atenuar i { background: #B0AEA5; }
+.cmp .cmp-capa-boton[aria-pressed="false"] { color: var(--cmp-t4); }
+.cmp-capa-boton[aria-pressed="false"] i { background: var(--cmp-t4); }
+.cmp .cmp-capa-boton[aria-pressed="false"] span { text-decoration: line-through; }
+.cmp-atenuar { cursor: default; }
+.cmp-atenuar input { width: 80px; accent-color: #52524D; }
+
+/* ── la lista de cambios ── */
+.cmp-panel { width: 300px; flex: none; display: flex; flex-direction: column; background: var(--cmp-chrome); border-left: 1px solid var(--cmp-linea); min-height: 0; }
+.cmp-panel-cab { height: 44px; flex: none; display: flex; align-items: center; justify-content: space-between; padding: 0 6px 0 16px;
+  border-bottom: 1px solid var(--cmp-linea); }
+.cmp-panel-cab b { font-weight: 600; font-size: 13px; }
+.cmp-panel-nav { display: flex; }
+.cmp-panel-vacio { margin: 0; padding: 16px; color: var(--cmp-t3); font-size: 13px; line-height: 1.5; }
+.cmp-cambios { list-style: none; margin: 0; padding: 0; overflow-y: auto; flex: 1; }
+.cmp-cambios li + li { border-top: 1px solid var(--cmp-campo); }
+.cmp-cambio { width: 100%; display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px 10px 14px; border: 0; background: none;
+  text-align: left; cursor: pointer; position: relative; }
+.cmp-cambio:hover { background: #FAF9F5; }
+.cmp-cambio--activo, .cmp-cambio--activo:hover { background: var(--cmp-campo); }
+.cmp-cambio--activo::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 2px; background: var(--cmp-t1); }
+.cmp-cambio-num { min-width: 30px; height: 16px; padding: 0 5px; white-space: nowrap; border-radius: 2px; background: #52524D; color: #fff;
+  display: grid; place-items: center; font: 600 10.5px/16px 'IBM Plex Mono', monospace; flex: none; margin-top: 2px; }
+.cmp-cambio-num--anadido { background: var(--cmp-b); }
+.cmp-cambio-num--quitado { background: var(--cmp-a); }
+.cmp-cambio-num--modificado { background: #141413; }
+/* el filtro de la lista */
+.cmp-filtro { display: flex; flex-wrap: wrap; gap: 4px; padding: 10px 12px; border-bottom: 1px solid var(--cmp-linea); }
+.cmp-filtro button { display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 8px; border: 1px solid var(--cmp-linea);
+  border-radius: 6px; background: var(--cmp-chrome); font-size: 12px; color: var(--cmp-t2); cursor: pointer; }
+.cmp .cmp-filtro button:hover { border-color: var(--cmp-linea-f); color: var(--cmp-t1); }
+.cmp .cmp-filtro button[aria-checked="true"] { background: var(--cmp-on-fondo); border-color: var(--cmp-linea-f); color: var(--cmp-t1); }
+.cmp-filtro button span { color: var(--cmp-t3); font-variant-numeric: tabular-nums; }
+.cmp-filtro i { font: 600 12px 'IBM Plex Mono', monospace; font-style: normal; }
+.cmp-filtro--anadido i { color: var(--cmp-b); }
+.cmp-filtro--quitado i { color: var(--cmp-a); }
+.cmp-filtro--modificado i { color: #141413; }
+.cmp-cambio img, .cmp-cambio-mini { width: 76px; height: 50px; border-radius: 3px; border: 1px solid var(--cmp-linea); background: #fff; flex: none; object-fit: contain; }
+.cmp-cambio-texto { display: flex; flex-direction: column; gap: 2px; min-width: 0; font-size: 12px; color: var(--cmp-t3); }
+.cmp-tipo { font-weight: 500; font-size: 13px; color: var(--cmp-t1); }
+.cmp-cambio-dice { font: 500 11.5px 'IBM Plex Mono', monospace; color: var(--cmp-t1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+@media (max-width: 900px) {
+  .cmp-titulo { display: none; }
+  .cmp-panel { position: absolute; right: 0; top: 52px; bottom: 0; z-index: 7; box-shadow: -4px 0 12px rgb(20 20 19 / .08); }
+  .cmp-version { max-width: 200px; }
+  .cmp-version-rol { display: none; }
+}
+@media (max-width: 600px) {
+  .cmp-cab { flex-wrap: wrap; height: auto; padding: 6px; }
+  .cmp-versiones { order: 3; flex-basis: 100%; }
+  .cmp-panel { top: 92px; width: 100%; }
+  .cmp-atenuar { display: none; }
+}

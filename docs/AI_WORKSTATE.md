@@ -32,6 +32,11 @@ Detalle en `docs/archivos/18`, `19`, `20` y `21`.
   plano, la herramienta Issues). `encargos.con_su_documento` en `/api/mi-trabajo`. Sin migración. La portada se queda
   como está por decisión del dueño; el análisis y las maquetas (docs/ux/MI_TRABAJO_BANDEJA_UNICA.md, maquetas v1–v3)
   quedan como registro, sin construir. Backend PRIMERO.
+- `83b75683` (Mi trabajo abre el plano de la incidencia; fichas Docs/View con color) DESPLEGADO (health `83b75683e2cd`).
+- Commit siguiente (docs/archivos/22, 3-nov): COMPARAR VERSIONES nuevo, con el lenguaje del lector. Superpuesto, cortina y
+  lado a lado; alinear; cambios detectados solos, marcados y en lista; comparación de textos (cota 21.35 → 24.60). Teselas
+  del servidor (z1 para la hoja, z2/z3 para la zona nítida), con pdf.js de respaldo. Solo portal. Sin probar en producción
+  que el bucket entregue las teselas a fetch con CORS (si no, cae a pdf.js).
 - EXACT NEXT ACTION (histórica, ya hecha para c3144a3d): Manual Deploy de `visor-ecd-backend-va` y DESPUÉS de `visor-ecd-portal` con el HEAD de main;
   comprobar `/api/health` y el bundle del portal (Cloudflare ~5 min). Luego, recorrido real con dos personas (correo
   a observadores y subida de fotos sin probar en producción).

@@ -1128,7 +1128,7 @@ export default function DocumentViewer({
         )}
         {compararAbierto && puedeComparar && (
           <Suspense fallback={null}>
-            <PdfCompareView fileName={file.name}
+            <PdfCompareView fileName={file.name} nodeId={file.id} versiones={versionHistory}
               versionA={enVersionAnterior ? vvActual : versionHistory[1]}
               versionB={versionHistory[0]}
               projectPrefix={projectPrefix} onClose={() => setCompararAbierto(false)} />
