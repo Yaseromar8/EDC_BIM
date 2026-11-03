@@ -168,6 +168,7 @@ def list_markups():
             } for r in cur.fetchall()]
             _con_enlaces(cur, rows)
             _con_observacion(cur, rows, node_id)
+            _con_nube(cur, rows, node_id)
             en_otras = []
             if version:
                 cur.execute("""SELECT v.id::text, v.version_number, count(*)
@@ -1083,6 +1084,38 @@ def _con_observacion(cur, rows, node_id=None):
     _con_empresas(cur, list({id(o): o for o in por_marca.values()}.values()))
     for m in rows:
         m['observacion'] = por_marca.get(str(m.get('id')))
+    return rows
+
+
+def _con_nube(cur, rows, node_id):
+    """Cada NUBE de una incidencia (46) lleva a quién se asignó, su estado y su color en este plano (`nube`, o None).
+
+    Solo las de observación: las de encargo son trabajo en proceso del equipo del plano y no se enseñan en la hoja.
+    """
+    import nubes_de_issue as nub
+    for m in rows:
+        m['nube'] = None
+    ids = [m['id'] for m in rows if m.get('kind') == nub.TIPO_DE_NUBE and m.get('observacion') and m.get('id') is not None]
+    if not ids:
+        return rows
+    cur.execute("""SELECT DISTINCT ON (n.markup_id) n.markup_id, n.estado, n.destino_usuario, n.destino_empresa,
+                          u.name, c.name
+                     FROM doc_issue_nubes n
+                     LEFT JOIN users u ON u.id = n.destino_usuario
+                     LEFT JOIN companies c ON c.id = n.destino_empresa
+                    WHERE n.markup_id = ANY(%s) AND n.clase = %s
+                    ORDER BY n.markup_id, n.id DESC""", (ids, 'observacion'))
+    filas = [f for f in cur.fetchall() if f[2] or f[3]]
+    if not filas:
+        return rows
+    colores = nub.colores_del_plano(cur, node_id)
+    por_marca = {}
+    for mid, estado, uid, eid, persona, empresa in filas:
+        por_marca[mid] = {'estado': estado, 'estado_etiqueta': nub.ETIQUETAS.get(estado, estado),
+                          'destino_nombre': persona or empresa, 'destino_es_empresa': bool(eid),
+                          'color': colores.get(nub.clave_de_destino({'destino_usuario': uid, 'destino_empresa': eid}))}
+    for m in rows:
+        m['nube'] = por_marca.get(m.get('id'))
     return rows
 
 

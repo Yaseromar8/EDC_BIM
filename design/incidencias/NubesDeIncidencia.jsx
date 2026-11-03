@@ -10,7 +10,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { enviarJson } from './piezas.jsx';
-import { colorDePersona } from './reglas.js';
+import { colorDeIndice, colorDePersona } from './reglas.js';
 
 // Las fechas del historial ya traen su zona; las de la base no (UTC sin zona): igual que en el panel.
 function fechaCorta(iso) {
@@ -202,7 +202,8 @@ function Nube({ entorno, obra, ob, i, n, numero, color, abierta, onAbrir, ocupad
               <button type="button" className="pinc-anadir" onClick={() => onIrAMarca(n.markup_id)}>Ver en el plano</button>
             </div>
           )}
-          {n.pedido && <p className="nub-pide">{n.pedido}</p>}
+          {/* Lo pedido ya es el título de la fila: debajo solo si no cabe entero en ella. */}
+          {n.pedido && n.pedido.length > 48 && <p className="nub-pide">{n.pedido}</p>}
           {rondas.map((r, k) => <Ronda key={r.n ?? k} entorno={entorno} r={r} ultima={r === ultima} />)}
 
           {n.verificacion && (
@@ -284,7 +285,7 @@ export default function NubesDeIncidencia({ entorno, obra, ob, i, datos, foco = 
           const quien = n.destino_usuario ? `u${n.destino_usuario}` : n.destino_empresa ? `e${n.destino_empresa}` : null;
           return (
             <Nube key={clave(n)} entorno={entorno} obra={obra} ob={ob} i={i} n={n} numero={k + 1}
-              color={quien ? colorDe(quien) : '#b0aea5'} abierta={abierta === clave(n)} ocupado={ocupado} hacer={hacer}
+              color={n.color != null ? colorDeIndice(n.color) : quien ? colorDe(quien) : '#b0aea5'} abierta={abierta === clave(n)} ocupado={ocupado} hacer={hacer}
               onAbrir={() => setAbierta(a => (a === clave(n) ? null : clave(n)))} onIrAMarca={onIrAMarca} />
           );
         })}

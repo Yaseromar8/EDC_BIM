@@ -10,9 +10,15 @@ import { PanelDeMarca, DialogoDeSello } from './MarcaConEnlace';
 import BarraDeMarca from './BarraDeMarca';
 import ObservacionesDelPlano from './ObservacionesDelPlano';
 import { PinDeIncidencia, numeroDe } from '../../../design/incidencias/PanelDeIncidencia.jsx';
+import { colorDeIndice } from '../../../design/incidencias/reglas.js';
 import { estadoDeIssue } from '../utils/estadosDeIssue';
 import { estadoDeObservacion, observacionViva } from '../utils/marcasConEnlace';
 import { estadoDeSello, marcaDeLaDireccion, fechaCorta } from '../utils/marcasConEnlace';
+
+const inicialesDe = (nombre) => {
+  const p = String(nombre || '?').replace(/@.*/, '').split(/[\s._-]+/).filter(Boolean);
+  return ((p[0] || '?')[0] + (p[1] ? p[1][0] : '')).toUpperCase();
+};
 
 // El sello mide lo mismo EN LA HOJA (puntos PDF), como un sello de goma: al alejar el plano se hace pequeño
 // con él. 150 × 62 pt ≈ 53 × 22 mm de papel.
@@ -861,18 +867,29 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
           // OBSERVACIÓN (37): «ISS-012 · Abierta» bajo la marca, con la barra del color de su estado.
           const est = estadoDeObservacion(obs.estado);
           const texto = `${obs.codigo} · ${obs.vencida ? 'Vencida' : est.etiqueta}`;
-          const anchoE = Math.round(texto.length * 6.1) + 16;
+          // LA NUBE ASIGNADA lleva las iniciales de quien aporta, con SU color en este plano (46): de un vistazo,
+          // a quién le toca cada nube de la hoja.
+          const quien = m.nube?.destino_nombre ? inicialesDe(m.nube.destino_nombre) : null;
+          const anchoQ = quien ? quien.length * 7 + 10 : 0;
+          const anchoT = Math.round(texto.length * 6.1) + 16;
+          const anchoE = anchoT + anchoQ;
           const ex = Math.max(4, Math.min(k.x, vpInfo.w - anchoE - 4));
           const ey = k.y2 + 22 > vpInfo.h ? Math.max(4, k.y - 22) : k.y2 + 4;
           return (
             <g transform={`translate(${ex} ${ey})`}
               style={{ pointerEvents: tocable ? 'all' : 'none', cursor: tool === 'pan' ? 'pointer' : 'default' }}
               onClick={tocable ? alTocar(m) : undefined}>
-              <title>{`${obs.titulo || ''}${obs.responsable ? ` — ${obs.responsable}` : ''}`}</title>
+              <title>{`${obs.titulo || ''}${obs.responsable ? ` — ${obs.responsable}` : ''}${m.nube?.destino_nombre
+                ? `\nNube asignada a ${m.nube.destino_nombre} · ${m.nube.estado_etiqueta}` : ''}`}</title>
               <rect width={anchoE} height="18" rx="3" fill="#fff" stroke={obs.vencida ? '#b93535' : '#cccac0'} strokeWidth="1" />
               <rect x="0.5" y="0.5" width="4" height="17" rx="2" fill={est.color} />
               <text x="10" y="12.6" fontSize="10.5" fontWeight="500" fill={obs.vencida ? '#b93535' : '#141413'}
                 fontFamily="'IBM Plex Sans', sans-serif" style={{ pointerEvents: 'none' }}>{texto}</text>
+              {quien && <>
+                <rect x={anchoT - 2} y="3" width={anchoQ - 2} height="12" rx="2" fill={colorDeIndice(m.nube.color)} />
+                <text x={anchoT + 3} y="12.2" fontSize="9" fontWeight="600" fill="#fff"
+                  fontFamily="'IBM Plex Mono', monospace" style={{ pointerEvents: 'none' }}>{quien}</text>
+              </>}
             </g>
           );
         })()}

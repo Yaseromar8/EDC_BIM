@@ -1254,6 +1254,7 @@ def _contexto(cur, d):
 def _para_la_pantalla(cur, d, nubes, admin, empresa):
     personas, empresas = _nombres(cur, nubes)
     marcas = _marcas(cur, {n['markup_id'] for n in nubes if n.get('markup_id')})
+    colores = _nub.colores_del_plano(cur, _nub.documento_de_la_incidencia(d)[0])
     salida, ocultas = [], 0
     for n in nubes:
         sus = _nub.papeles(_usuario(), d, n, admin, empresa)
@@ -1267,6 +1268,7 @@ def _para_la_pantalla(cur, d, nubes, admin, empresa):
             'por_verificar': _nub.por_verificar(n, d),
             'destino_nombre': personas.get(n.get('destino_usuario')) or empresas.get(n.get('destino_empresa')),
             'destino_es_empresa': bool(n.get('destino_empresa')),
+            'color': colores.get(_nub.clave_de_destino(n)),
             'marca': marcas.get(n.get('markup_id')),
             'mis_papeles': sorted(sus),
             'actos': actos,

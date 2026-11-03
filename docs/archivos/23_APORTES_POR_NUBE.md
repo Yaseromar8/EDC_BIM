@@ -301,9 +301,23 @@ aparece cada persona o empresa. Las nubes de encargo llevan la franja discontinu
     documento sí está en el ensayo).
   - La verificación del revisor en pantalla (sí en el ensayo).
 
-### 6.4 · Lo que sigue
+### 6.4 · El color de cada persona en la hoja
 
-1. La hoja coloreada por persona (la franja de la nube con su color y la leyenda del plano).
+El servidor numera a cada persona o empresa EN EL PLANO, en el orden en que recibió su primera nube
+(`nubes_de_issue.colores_del_plano`), y manda ese número a la hoja (`nube.color` en cada marca de la lista del plano) y
+al panel (`color` en cada nube). Así, una persona tiene el mismo color en todas las incidencias del plano. En la hoja,
+el rótulo de la nube asignada lleva las iniciales de quien aporta sobre su color («ISS-001 · Abierta [M]»); al pasar
+el ratón, «Nube asignada a Mario · Pedida». El trazo de la nube no se toca: lo dibujó quien revisa. Las nubes de
+encargo no salen en la hoja. Ensayo 35/35 (dos casos más: la hoja y el panel dan el mismo color; la flecha no lleva
+nube).
+
+Pendiente de decisión del dueño: hoy aporta cualquiera de la empresa asignada, incluida la persona que revisa la
+incidencia si es de esa empresa (en el banco, Ana ve «Entregar» en la nube de Supervisión SAC). ¿Quien revisa queda
+fuera de las entregas, como quien corrige no verifica?
+
+### 6.5 · Lo que sigue
+
+1. La leyenda del plano (quién es cada color).
 2. Crear nubes de encargo desde la barra de la nube (el servidor ya lo hace; falta el botón).
 3. Verificar con «Comparar versiones» encuadrado en la nube.
 4. Subir los aportes a una carpeta de la incidencia en vez de MULTIMEDIA.

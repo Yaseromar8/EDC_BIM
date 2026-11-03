@@ -118,6 +118,9 @@ export const EVENTOS_DE_ISSUE = {
 export const COLORES_DE_PERSONA = ['#507294', '#b93535', '#64744e', '#9e5943', '#2f6f6a', '#8a6d1f', '#3d4f66',
   '#7d5a3c', '#5b7f3a', '#6b6a65'];
 
+// El servidor numera a cada persona o empresa en el plano (`color`: 0, 1, 2…): el mismo en la hoja y en el panel.
+export const colorDeIndice = (k) => (k == null ? '#b0aea5' : COLORES_DE_PERSONA[k % COLORES_DE_PERSONA.length]);
+
 export function colorDePersona(claves) {
   const orden = [];
   for (const c of claves || []) if (c != null && !orden.includes(c)) orden.push(c);

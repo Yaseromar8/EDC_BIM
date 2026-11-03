@@ -162,6 +162,34 @@ def marcas_de_la_incidencia(issue):
     return salida
 
 
+def clave_de_destino(nube):
+    """'u4' (persona) o 'e40' (empresa): a quién va la nube, para darle su color. None si no está asignada."""
+    if nube.get('destino_usuario'):
+        return 'u%s' % nube['destino_usuario']
+    if nube.get('destino_empresa'):
+        return 'e%s' % nube['destino_empresa']
+    return None
+
+
+def colores_del_plano(cur, nodo):
+    """{'u4': 0, 'e40': 1, …}: el color de cada persona o empresa EN ESTE PLANO (el dueño: «el color por persona,
+    pero por plano»), en el orden en que recibió su primera nube. Lo calcula el servidor para que la hoja y el panel
+    pinten a cada uno igual aunque sus nubes sean de incidencias distintas."""
+    if not nodo:
+        return {}
+    cur.execute("""SELECT n.destino_usuario, n.destino_empresa, min(n.id) AS primera
+                     FROM doc_issue_nubes n JOIN pdf_markups m ON m.id = n.markup_id
+                    WHERE m.file_node_id::text = %s
+                      AND (n.destino_usuario IS NOT NULL OR n.destino_empresa IS NOT NULL)
+                    GROUP BY n.destino_usuario, n.destino_empresa
+                    ORDER BY primera""", (str(nodo),))
+    colores = {}
+    for u, e, _primera in cur.fetchall():
+        clave = clave_de_destino({'destino_usuario': u, 'destino_empresa': e})
+        colores.setdefault(clave, len(colores))
+    return colores
+
+
 def documento_de_la_incidencia(issue):
     """(node_id, version_id) del plano donde vive la incidencia, o (None, None)."""
     for e in issue.get('evidencia') or []:
