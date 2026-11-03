@@ -225,7 +225,7 @@ Así el modelador ve la observación **dentro de Revit**.
 | D3 | Nivel para ser encargado del plano | **Editar y subir** en la carpeta del plano | Sube la revisión nueva |
 | D4 | Nivel para aportar | **Ver** el plano; lo subido va a la carpeta de la incidencia | Lo que se aporta es un contenedor nuevo, no una edición del plano |
 | D5 | Quién verifica y cierra | Quien figura en «Verifica» (el revisor) y el **Administrar** de la obra | ISO 5.7; Supervisor BIM |
-| D6 | Nubes de encargo, ¿quién las ve? | **El equipo del encargado**; el revisor, solo el conteo | ISO: el WIP es del equipo |
+| D6 | Nubes de encargo, ¿quién las ve? | ~~El equipo del encargado; el revisor, solo el conteo~~ → **el equipo y el revisor** (el dueño, 3-nov-2026: «el revisor principal debe ver todo»; doc 23 §6.4) | ISO: el WIP es del equipo; el dueño prima la supervisión |
 | D7 | Devolver | **Con motivo obligatorio**, en rondas de la misma nube | ISO 5.6.4 y 5.7 |
 | D8 | Levantada o no | **Nube por nube**, sobre la revisión nueva compartida (S3), con Comparar versiones | ISO y Guía: la corrección es una revisión nueva del contenedor |
 | D9 | Adjuntos | **Siempre documentos de Docs**: subidos a la carpeta de la incidencia o enlazados | Los 6 requisitos del ECD de la Guía |

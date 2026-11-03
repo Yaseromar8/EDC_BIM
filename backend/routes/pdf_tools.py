@@ -1090,7 +1090,7 @@ def _con_observacion(cur, rows, node_id=None):
 def _con_nube(cur, rows, node_id):
     """Cada NUBE de una incidencia (46) lleva a quién se asignó, su estado y su color en este plano (`nube`, o None).
 
-    Solo las de observación: las de encargo son trabajo en proceso del equipo del plano y no se enseñan en la hoja.
+    Las de encargo también: la marca solo la ve quien puede verla, y quien revisa lo ve todo (el dueño, 3-nov-2026).
     """
     import nubes_de_issue as nub
     for m in rows:
@@ -1103,8 +1103,8 @@ def _con_nube(cur, rows, node_id):
                      FROM doc_issue_nubes n
                      LEFT JOIN users u ON u.id = n.destino_usuario
                      LEFT JOIN companies c ON c.id = n.destino_empresa
-                    WHERE n.markup_id = ANY(%s) AND n.clase = %s
-                    ORDER BY n.markup_id, n.id DESC""", (ids, 'observacion'))
+                    WHERE n.markup_id = ANY(%s)
+                    ORDER BY n.markup_id, n.id DESC""", (ids,))
     filas = [f for f in cur.fetchall() if f[2] or f[3]]
     if not filas:
         return rows

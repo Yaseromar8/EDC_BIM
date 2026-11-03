@@ -1295,6 +1295,8 @@ def _destino_valido(cur, d, data):
         cur.execute('SELECT 1 FROM project_users WHERE project_id = %s AND user_id = %s', (d['project_id'], uid))
         if not cur.fetchone():
             return None, None, 'Esa persona no es de la obra.'
+        if uid in (d.get('autor_id'), d.get('verificador_id')):
+            return None, None, 'Quien revisa la incidencia no aporta en sus nubes: lo ve todo y las verifica.'
         return uid, None, None
     try:
         eid = int(eid)

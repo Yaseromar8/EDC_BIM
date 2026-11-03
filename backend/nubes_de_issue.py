@@ -9,14 +9,16 @@ LOS PAPELES SON DE LA INCIDENCIA, NO CARGOS (D1; Plan BIM Perú: «son funciones
                  observación quedó levantada en la versión nueva;
   · encargado  — el «Asignada a» (`responsable_id`, o alguien de `responsable_empresa`): el dueño de la incidencia;
                  asigna las nubes, acepta o devuelve lo entregado y crea las nubes de encargo de su equipo;
-  · aportante  — a quien se asignó ESA nube (persona, o alguien de su empresa): entrega lo pedido;
+  · aportante  — a quien se asignó ESA nube (persona, o alguien de su empresa): entrega lo pedido. Quien revisa
+                 la incidencia no lo es nunca, ni por su empresa: pide y verifica, no entrega;
   · admin      — el administrador de la obra: puede todo, como corresponde a quien coordina.
 
 DOS CLASES DE NUBE:
   · observación — la dibuja el revisor: lo que hay que corregir. La verifica el revisor, sobre la versión nueva.
   · encargo     — la crea el encargado para repartir trabajo a su equipo (cadista, modelador). Es TRABAJO EN PROCESO
-                  de ese equipo (ISO 19650): solo la ven el encargado, quien la tiene asignada, su empresa y el admin
-                  (D6). No se verifica por separado: el revisor juzga la observación.
+                  de ese equipo: la ven el encargado, quien la tiene asignada, su empresa, el admin y QUIEN REVISA
+                  (el dueño, 3-nov-2026: «el revisor principal debe ver todo»; corrige la D6, que se la ocultaba).
+                  No se verifica por separado: el revisor juzga la observación.
 
 LA VIDA DE UNA NUBE (rondas en la MISMA nube, D7):
   sin_asignar ─asignar→ pedida ─entregar→ entregada ─aceptar→ aceptada
@@ -76,7 +78,7 @@ def papeles(usuario, issue, nube=None, admin=False, empresa_del_usuario=None):
                 (issue.get('responsable_empresa') and empresa_del_usuario
                  and empresa_del_usuario == issue.get('responsable_empresa'))):
         p.add('encargado')
-    if nube and uid and (uid == nube.get('destino_usuario') or
+    if nube and uid and 'revisor' not in p and (uid == nube.get('destino_usuario') or
                          (nube.get('destino_empresa') and empresa_del_usuario
                           and empresa_del_usuario == nube.get('destino_empresa'))):
         p.add('aportante')
@@ -117,10 +119,11 @@ def puede_crear_encargo(sus_papeles):
 
 
 def visible(nube, sus_papeles, empresa_del_usuario=None):
-    """Una nube de encargo es trabajo en proceso del equipo del encargado (D6): no la ve el revisor."""
+    """Quién ve una nube. Las de observación, todo el que ve la incidencia. Las de encargo (trabajo en proceso del
+    equipo del encargado), el equipo y quien revisa: «el revisor principal debe ver todo» (el dueño, 3-nov-2026)."""
     if nube.get('clase') != 'encargo':
         return True
-    if {'encargado', 'aportante', 'admin'} & set(sus_papeles):
+    if {'encargado', 'aportante', 'admin', 'revisor'} & set(sus_papeles):
         return True
     equipo = nube.get('empresa_equipo')
     return bool(equipo and empresa_del_usuario and equipo == empresa_del_usuario)

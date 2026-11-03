@@ -38,6 +38,9 @@ def test_los_papeles_son_de_la_incidencia_no_cargos():
     issue_empresa = {**ISSUE, 'responsable_id': None, 'responsable_empresa': CONTRATISTA}
     assert 'encargado' in nub.papeles(u(OTRO), issue_empresa, empresa_del_usuario=CONTRATISTA)
     assert 'aportante' in nub.papeles(u(OTRO), ISSUE, nube(destino_empresa=SUPERVISION), empresa_del_usuario=SUPERVISION)
+    # Quien revisa no aporta nunca, aunque la nube vaya a su empresa: pide y verifica (el dueño, 3-nov-2026).
+    assert nub.papeles(u(REVISOR), ISSUE, nube(destino_empresa=SUPERVISION), empresa_del_usuario=SUPERVISION) == {'revisor'}
+    assert nub.papeles(u(REVISOR), ISSUE, nube(destino_usuario=REVISOR)) == {'revisor'}
 
 
 def test_cada_acto_tiene_su_dueno():
@@ -86,7 +89,8 @@ def test_por_verificar_es_derivado_de_la_incidencia_corregida():
 
 def test_las_nubes_de_encargo_son_trabajo_en_proceso_del_equipo():
     enc = nube(clase='encargo', empresa_equipo=CONTRATISTA, destino_usuario=CADISTA)
-    assert not nub.visible(enc, {'revisor'}, SUPERVISION)                    # la supervisión no ve el WIP
+    assert nub.visible(enc, {'revisor'}, SUPERVISION)                        # «el revisor principal debe ver todo»
+    assert not nub.visible(enc, set(), SUPERVISION)                          # otro de fuera del equipo, no
     assert nub.visible(enc, {'encargado'}, CONTRATISTA)
     assert nub.visible(enc, {'aportante'}, None)
     assert nub.visible(enc, set(), CONTRATISTA)                              # su equipo, aunque no tenga papel

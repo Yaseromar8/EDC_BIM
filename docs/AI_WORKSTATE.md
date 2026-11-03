@@ -47,8 +47,9 @@ Detalle en `docs/archivos/18`, `19`, `20` y `21`.
   solo una marca de tipo nube es nube (flechas y textos sin estado ni rótulo). Ensayo 33/33 contra PG real y
   recorrido en el navegador con Luis/Mario. Se publica junto con la parte 1: migración 46 → push → backend → portal.
 - Commit siguiente (3-nov, docs/archivos/23 §6.4): el color de cada persona POR PLANO lo da el servidor
-  (`colores_del_plano`), igual en la hoja (iniciales en el rótulo de la nube) y en el panel. Ensayo 35/35. Decisión
-  abierta del dueño: si quien revisa puede entregar en una nube asignada a su empresa.
+  (`colores_del_plano`), igual en la hoja (iniciales en el rótulo de la nube) y en el panel. Ensayo 35/35.
+- Commit siguiente (3-nov, doc 23 §6.4): «el revisor principal debe ver todo» → quien revisa ve también las nubes de
+  encargo (corrige la D6) y no aporta (no se le asigna; no entrega por su empresa). Ensayo 38/38.
 - EXACT NEXT ACTION (histórica, ya hecha para c3144a3d): Manual Deploy de `visor-ecd-backend-va` y DESPUÉS de `visor-ecd-portal` con el HEAD de main;
   comprobar `/api/health` y el bundle del portal (Cloudflare ~5 min). Luego, recorrido real con dos personas (correo
   a observadores y subida de fotos sin probar en producción).

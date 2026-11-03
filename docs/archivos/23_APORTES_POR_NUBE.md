@@ -311,9 +311,16 @@ el ratón, «Nube asignada a Mario · Pedida». El trazo de la nube no se toca: 
 encargo no salen en la hoja. Ensayo 35/35 (dos casos más: la hoja y el panel dan el mismo color; la flecha no lleva
 nube).
 
-Pendiente de decisión del dueño: hoy aporta cualquiera de la empresa asignada, incluida la persona que revisa la
-incidencia si es de esa empresa (en el banco, Ana ve «Entregar» en la nube de Supervisión SAC). ¿Quien revisa queda
-fuera de las entregas, como quien corrige no verifica?
+**Decidido por el dueño (3-nov-2026): «el revisor principal debe ver todo».** Quien revisa la incidencia (quien la
+levantó o la verifica):
+
+- ve todas sus nubes, también las de encargo que el encargado reparte a su equipo. Corrige la D6, que se las ocultaba
+  como trabajo en proceso. Las ve en el panel y en la hoja.
+- no aporta: no se le asigna una nube (400) y, aunque la nube vaya a su empresa, no le sale «Entregar». Pide y
+  verifica, igual que quien corrige no verifica su propia corrección.
+
+Ensayo 38/38, con tres casos más: no se asigna a quien revisa; con la nube asignada a su empresa, ella no entrega; y ve
+las nubes de encargo (y el equipo también).
 
 ### 6.5 · Lo que sigue
 
