@@ -795,11 +795,15 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
   };
 
   // El halo de la marca elegida y el distintivo de las que citan documentos (con su número).
+  // El rótulo «ISS-012 · Abierta» va en las NUBES de la incidencia; sus flechas y textos no llevan estado (el dueño,
+  // 3-nov-2026: «¿por qué la flecha debería tener “Abierta”?»). Una incidencia sin ninguna nube en la hoja lo sigue
+  // llevando en sus marcas, para no perderla de vista.
+  const conNube = new Set(pageMarkups.filter(x => x.kind === 'cloud' && x.observacion).map(x => String(x.observacion.id)));
   const renderEnlaces = () => pageMarkups.map(m => {
     const n = (m.citas || []).length;
     const nc = (m.style?.comentarios || []).length;
     const esElegida = m.id === elegida;
-    const obs = m.observacion;
+    const obs = m.observacion && (m.kind === 'cloud' || !conNube.has(String(m.observacion.id))) ? m.observacion : null;
     if (!n && !nc && !esElegida && !obs) return null;
     const k = cajaDe(m);
     if (!k) return null;

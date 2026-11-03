@@ -104,11 +104,45 @@ export const EVENTOS_DE_ISSUE = {
   attached: 'Adjuntó',
   detached: 'Quitó un adjunto',
   edited: 'Editó la incidencia',
+  // Las nubes (46): el historial de la incidencia cuenta cada paso de cada nube.
+  cloud_assigned: 'Asignó una nube',
+  cloud_delivered: 'Entregó en una nube',
+  cloud_accepted: 'Aceptó lo entregado en una nube',
+  cloud_returned: 'Devolvió una nube: faltaba algo',
+  cloud_verified: 'Verificó una nube',
+  cloud_created: 'Creó una nube de encargo',
+};
+
+// UN COLOR POR PERSONA EN CADA PLANO (3-nov-2026, docs/archivos/23). Diez tonos sobrios de la paleta, en el orden en
+// que aparece cada persona o empresa en las nubes de la incidencia; la undécima repite desde el primero.
+export const COLORES_DE_PERSONA = ['#507294', '#b93535', '#64744e', '#9e5943', '#2f6f6a', '#8a6d1f', '#3d4f66',
+  '#7d5a3c', '#5b7f3a', '#6b6a65'];
+
+export function colorDePersona(claves) {
+  const orden = [];
+  for (const c of claves || []) if (c != null && !orden.includes(c)) orden.push(c);
+  return (clave) => {
+    const k = orden.indexOf(clave);
+    return k < 0 ? '#b0aea5' : COLORES_DE_PERSONA[k % COLORES_DE_PERSONA.length];
+  };
+}
+
+const VERBO_DE_NUBE = {
+  cloud_assigned: 'asignó', cloud_delivered: 'entregó en', cloud_accepted: 'aceptó lo entregado en',
+  cloud_returned: 'devolvió',
 };
 
 // Una línea del historial en palabras: «edited» dice QUÉ cambió (reasignar, observadores, seguir, clasificación).
-export function textoDeEvento(h) {
+export function textoDeEvento(h, numeroDeNube = null) {
   if (!h) return '';
+  if (/^cloud_/.test(h.event || '')) {
+    const n = numeroDeNube ? numeroDeNube(h.nube) : null;
+    const cual = n ? `la nube ${n}` : 'una nube';
+    if (h.event === 'cloud_verified') return `dio ${cual} como ${h.estado === 'levantada' ? 'levantada' : 'no levantada'}`;
+    if (h.event === 'cloud_created') return n ? `creó la nube de encargo ${n}` : 'creó una nube de encargo';
+    const ronda = h.ronda > 1 ? ` (ronda ${h.ronda})` : '';
+    return `${VERBO_DE_NUBE[h.event] || 'cambió'} ${cual}${h.event === 'cloud_returned' ? ': faltaba algo' : ''}${ronda}`;
+  }
   if (h.event === 'edited') {
     const c = h.cambios || {};
     const partes = [];

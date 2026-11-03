@@ -17,7 +17,11 @@ export async function leerJson(entorno, url) {
 export async function enviarJson(entorno, url, cuerpo, metodo = 'POST') {
   const r = await entorno.pedir(url, { method: metodo, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(cuerpo || {}) });
   const d = await r.json().catch(() => ({}));
-  if (!r.ok || d.success === false) throw new Error(d.error || 'No se pudo guardar.');
+  if (!r.ok || d.success === false) {
+    const e = new Error(d.error || 'No se pudo guardar.');
+    e.code = d.code || null;     // p. ej. NUBES_SIN_LEVANTAR: el panel lleva a la pestaña que lo resuelve
+    throw e;
+  }
   return d;
 }
 
@@ -64,7 +68,8 @@ export function useObraDeIncidencias(entorno, obra) {
 // ── PIEZAS DEL ALTA ─────────────────────────────────────────────────────────
 
 /** Persona o empresa. `valor` = { responsable_id } o { responsable_empresa }. */
-export function ResponsableDeAlta({ miembros, empresas, valor, onChange, excluir = null, etiqueta = 'Responsable de corregir' }) {
+export function ResponsableDeAlta({ miembros, empresas, valor, onChange, excluir = null, etiqueta = 'Responsable de corregir',
+                                    notaEmpresa = 'La corrige cualquiera de esa empresa; nadie de ella la verifica.' }) {
   const [modo, setModo] = useState(valor?.responsable_empresa != null ? 'empresa' : 'persona');
   const personas = miembros.filter(m => m.id != null && String(m.id) !== String(excluir));
   return (
@@ -91,7 +96,7 @@ export function ResponsableDeAlta({ miembros, empresas, valor, onChange, excluir
           {empresas.map(e => <option key={e.company_id} value={e.company_id}>{e.nombre}{e.funcion ? ` · ${e.funcion.toLowerCase()}` : ''}</option>)}
         </select>
       )}
-      {modo === 'empresa' && <small>La corrige cualquiera de esa empresa; nadie de ella la verifica.</small>}
+      {modo === 'empresa' && notaEmpresa && <small>{notaEmpresa}</small>}
     </div>
   );
 }

@@ -159,6 +159,7 @@ export default function ObservacionesDelPlano({ API, obra, nodeId, nombre = '', 
         nueva={vista === 'nueva' ? { tipo: 'OBSERVACION', lugar: [nombre, version?.numero ? `V${version.numero}` : null].filter(Boolean).join(' · ') } : null}
         titulo={pin ? 'Nueva incidencia' : 'Nueva incidencia del plano'}
         crear={crearDelPlano}
+        onIrAMarca={(id) => { const m = porId.get(String(id)); if (m) onIrAMarca?.(m); }}
         extraAlta={<>
           {pin && (
             <div className="pinc-campo">

@@ -1201,15 +1201,23 @@ def _nubes_guardadas(cur, iid):
 
 
 def _nubes_de(cur, d):
-    """Las guardadas y, de las marcas de la incidencia que aún no tienen fila, una «sin asignar» virtual (id None)."""
+    """Las guardadas y, de las NUBES de la incidencia que aún no tienen fila, una «sin asignar» virtual (id None).
+
+    Solo una marca de tipo nube es una nube: sus flechas, textos o recuadros acompañan a la incidencia pero no se
+    asignan ni llevan estado (el dueño, 3-nov-2026: «¿por qué la flecha debería tener “Abierta”?»)."""
     guardadas = _nubes_guardadas(cur, int(d['id']))
     con_fila = {n['markup_id'] for n in guardadas if n['markup_id']}
+    marcas = [m for m in _nub.marcas_de_la_incidencia(d) if m not in con_fila]
+    if marcas:
+        cur.execute('SELECT id FROM pdf_markups WHERE id = ANY(%s) AND kind = %s', (marcas, _nub.TIPO_DE_NUBE))
+        de_nube = {r[0] for r in cur.fetchall()}
+        marcas = [m for m in marcas if m in de_nube]
     virtuales = [{'id': None, 'issue_id': int(d['id']), 'markup_id': m, 'model_urn': d['model_urn'],
                   'clase': 'observacion', 'padre_id': None, 'empresa_equipo': None, 'destino_usuario': None,
                   'destino_empresa': None, 'pedido': None, 'vence_en': None, 'estado': _nub.SIN_ASIGNAR,
                   'ronda': 0, 'rondas': [], 'verificacion': None, 'history': [], 'creado_por': None,
                   'creado_en': None, 'actualizado_en': None}
-                 for m in _nub.marcas_de_la_incidencia(d) if m not in con_fila]
+                 for m in marcas]
     return guardadas + virtuales
 
 
@@ -1521,6 +1529,8 @@ def _crear_encargo(cur, d, data, admin, empresa):
     m = _marcas(cur, [marca]).get(marca)
     if not m or not nodo or m.get('documento') != nodo:
         return jsonify({'error': 'La marca tiene que ser de este plano.'}), 400
+    if m.get('kind') != _nub.TIPO_DE_NUBE:
+        return jsonify({'error': 'Solo una nube se reparte: dibuja una nube sobre lo que hay que hacer.'}), 400
     nubes = _nubes_de(cur, d)
     if any(x.get('markup_id') == marca for x in nubes):
         return jsonify({'error': 'Esa marca ya es una nube de la incidencia.'}), 409

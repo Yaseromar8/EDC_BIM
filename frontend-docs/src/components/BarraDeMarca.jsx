@@ -27,6 +27,7 @@ import { conSuConversacion, estadoDeObservacion, etiquetaDeCita, fechaCorta, fec
 import SelectorDeDocumento from './SelectorDeDocumento';
 import IconoModulo from './IconoModulo';
 import IncidenciaLateral from './IncidenciaLateral';
+import AsignacionDeNube, { useNubeDeLaMarca } from './AsignacionDeNube';
 import { destinoDelLector } from './ObservacionesDelPlano';
 import { DialogoDeSello } from './MarcaConEnlace';
 import { AISLADO } from '../../../design/incidencias/PanelDeIncidencia.jsx';
@@ -93,6 +94,9 @@ export default function BarraDeMarca({ API, obra, marca, esAutor, editable, colo
   const comentarios = marca.style?.comentarios || [];
   const obs = marca.observacion || null;
   const viva = observacionViva(obs);
+  // Si esta marca es una NUBE de su incidencia (46), a quién le toca aportar va en su nota, arriba de los comentarios.
+  const [nube, setNube] = useNubeDeLaMarca(API, marca);
+  const asignable = !!nube && (nube.actos || []).includes('asignar');
   const estilo = marca.style || {};
   // El chip «🔗 N» de la hoja abre la lista de referencias, no solo elige la marca.
   useEffect(() => { if (pedido) setAbierto(pedido.que); }, [pedido?.n]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -238,6 +242,8 @@ export default function BarraDeMarca({ API, obra, marca, esAutor, editable, colo
   const notaDeComentarios = (
         // Una nota discreta junto a la nube, no un panel (el dueño, 3-nov-2026: «solo para anotar… que no tape todo»).
         <div className="bdm-menu bdm-nota-de-marca" role="dialog" aria-label="Comentarios">
+          <AsignacionDeNube API={API} obra={obra} marca={marca} nube={nube} onCambio={setNube}
+            pedidoSugerido={comentario.trim() || comentarios[comentarios.length - 1]?.texto || ''} />
           {comentarios.length > 0 && (
             <ol className="bdm-comentarios" ref={listaDeComentarios}>
               {comentarios.map(c => (
@@ -289,7 +295,8 @@ export default function BarraDeMarca({ API, obra, marca, esAutor, editable, colo
         </Boton>
 
         {!marca._unsaved && (
-          <Boton etiqueta={comentarios.length ? `Comentarios (${comentarios.length})` : 'Comentar'}
+          <Boton etiqueta={comentarios.length ? `Comentarios (${comentarios.length})${asignable ? ' y asignación' : ''}`
+            : asignable ? 'Comentar o asignar' : 'Comentar'}
             activo={abierto === 'comentarios'} onClick={() => alternar('comentarios')} conTexto={comentarios.length > 0}>
             <IcoComentario />{comentarios.length > 0 && <b>{comentarios.length}</b>}
           </Boton>
@@ -298,7 +305,8 @@ export default function BarraDeMarca({ API, obra, marca, esAutor, editable, colo
         {obs ? (
           <button type="button" className="bdm-obs" style={{ '--estado': est.color }} data-tip={obs.titulo}
             onClick={() => setLateral(String(obs.id))}>
-            <i />{obs.codigo} · {obs.vencida ? 'Vencida' : est.etiqueta}
+            {/* El estado lo lleva la NUBE; una flecha o un texto de la incidencia solo dice de cuál es. */}
+            {marca.kind === 'cloud' ? <><i />{obs.codigo} · {obs.vencida ? 'Vencida' : est.etiqueta}</> : obs.codigo}
           </button>
         ) : esAutor && (
           <Boton etiqueta="Crear observación" onClick={() => setLateral('nueva')}><IcoIssue /></Boton>
@@ -439,6 +447,8 @@ export default function BarraDeMarca({ API, obra, marca, esAutor, editable, colo
       {lateral && (
         <IncidenciaLateral API={API} obra={obra} contenedor={destinoDelLector()} onVolver={() => setLateral(null)}
           issueId={lateral === 'nueva' ? null : lateral}
+          // Abierta desde su marca: el panel va a la pestaña «Nubes», a ESTA nube.
+          nube={lateral === 'nueva' ? null : marca.id}
           nueva={lateral === 'nueva' ? { tipo: 'OBSERVACION', lugar: `Desde una marca · pág. ${marca.page}` } : null}
           titulo="Nueva observación de la marca" crear={crearDesdeLaMarca}
           onCreada={releerObservacion} onCambio={releerObservacion} onCerrar={() => setLateral(null)} />

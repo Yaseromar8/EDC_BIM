@@ -262,3 +262,44 @@ button.pinc-valor:hover .pinc-valor__lapiz, button.pinc-valor:focus-visible .pin
 
 /* La caja de comentar, fija abajo como en una conversación */
 .pinc-comentar { position: sticky; bottom: 0; z-index: 1; display: flex; align-items: flex-end; gap: var(--a-space-8, 8px); padding: var(--a-space-12, 12px) var(--a-space-16, 16px); border-top: var(--a-border-width-1, 1px) solid var(--a-border-default, #e8e6dc); background: var(--a-surface-raised, #fff); }
+
+/* ── LAS NUBES DE UNA INCIDENCIA (3-nov-2026, docs/archivos/23) ─────────────────────────────────────────────────
+   Tres pestañas en el panel. Cada nube es una tarjeta con el color de quien aporta (un dato: la persona en este
+   plano); los controles siguen en grises. */
+.pinc-pestanas--panel { position: sticky; top: 0; z-index: 2; background: var(--a-surface-raised, #fff); margin-top: var(--a-space-16, 16px); padding: var(--a-space-8, 8px) var(--a-space-16, 16px) 0; }
+.pinc-pestanas--panel + .pinc-seccion { margin-top: 0; border-top: none; }
+.pinc-detalle > .pinc-actividad--historial { padding: var(--a-space-16, 16px); }
+.nub-pestana { display: flex; flex-direction: column; gap: var(--a-space-8, 8px); padding: var(--a-space-12, 12px) var(--a-space-16, 16px) var(--a-space-16, 16px); }
+.nub-resumen { color: var(--a-text-secondary, #52524d); }
+.nub-lista { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--a-space-8, 8px); }
+.nub { position: relative; border: var(--a-border-width-1, 1px) solid var(--a-border-default, #e8e6dc); border-radius: var(--a-radius-md, 4px); overflow: hidden; background: var(--a-surface-raised, #fff); }
+.nub::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--nube, #b0aea5); }
+.nub.es-encargo::before { background: repeating-linear-gradient(to bottom, var(--nube, #b0aea5) 0 6px, transparent 6px 10px); }
+.nub.es-abierta { border-color: var(--a-border-strong, #d1cfc5); }
+.nub-cab { display: flex; align-items: center; gap: var(--a-space-8, 8px); width: 100%; padding: 9px 12px 9px 14px; border: none; background: none; cursor: pointer; text-align: left; font: inherit; color: var(--a-text-primary, #141413); }
+.nub-cab:hover { background: var(--a-surface-sunken, #faf9f5); }
+.nub-cab b { flex: 1; min-width: 0; font-weight: 600; font-size: var(--a-type-body-size, 13px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.nub-num { flex: none; min-width: 20px; text-align: center; font: 600 11px/1.6 var(--a-font-mono, ui-monospace, monospace); color: #fff; background: var(--nube, #b0aea5); border-radius: 2px; padding: 0 5px; }
+.nub-chip { flex: none; font-size: var(--a-type-caption-size, 12px); color: var(--a-text-secondary, #52524d); background: var(--a-surface-sunken, #f1f0e8); border-radius: var(--a-radius-md, 4px); padding: 2px 7px; white-space: nowrap; }
+.nub-chip.es-mal { background: #fbebeb; color: #7a2626; }
+.nub-chip.es-bien { background: #eef1e8; color: #3f4a30; }
+.nub-chip.es-entregada { background: #ecf0f1; color: #33475c; }
+.nub-cuerpo { display: flex; flex-direction: column; gap: var(--a-space-8, 8px); padding: var(--a-space-8, 8px) 12px 12px 14px; border-top: var(--a-border-width-1, 1px) solid var(--a-border-subtle, #f1f0e8); }
+.nub-fila { display: flex; align-items: center; flex-wrap: wrap; gap: var(--a-space-8, 8px); font-size: var(--a-type-body-size, 13px); }
+.nub-rol { color: var(--a-text-muted, #72706b); font-size: var(--a-type-caption-size, 12px); }
+.nub-quien { display: inline-flex; align-items: center; gap: 6px; flex: 1; min-width: 0; }
+.nub-pide { margin: 0; font-size: var(--a-type-body-size, 13px); line-height: 1.45; color: var(--a-text-primary, #141413); white-space: pre-wrap; }
+.nub-ronda { padding-left: 12px; border-left: 2px solid var(--a-border-default, #e8e6dc); display: flex; flex-direction: column; gap: 6px; }
+.nub-ronda h5 { margin: 0; display: flex; align-items: center; gap: 8px; font-size: var(--a-type-caption-size, 12px); font-weight: 600; color: var(--a-text-secondary, #52524d); }
+.nub-entregas { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.nub-ent { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: var(--a-radius-md, 4px); background: var(--a-surface-sunken, #faf9f5); font-size: var(--a-type-body-size, 13px); }
+.nub-ent__nombre { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nub-ent__nota { flex: 1; white-space: pre-wrap; color: var(--a-text-primary, #141413); }
+.nub-ent small { color: var(--a-text-muted, #72706b); white-space: nowrap; }
+.nub-devuelto { margin: 0; padding: 6px 8px; border-radius: var(--a-radius-md, 4px); background: #fbebeb; color: #7a2626; font-size: var(--a-type-body-size, 13px); }
+.nub-verif { margin: 0; padding: 8px 10px; border-radius: var(--a-radius-md, 4px); border: var(--a-border-width-1, 1px) dashed var(--a-border-strong, #d1cfc5); font-size: var(--a-type-body-size, 13px); color: var(--a-text-secondary, #52524d); }
+.nub-verif.es-bien { border-style: solid; border-color: #c9d1bd; background: #f5f7f1; }
+.nub-verif.es-mal { border-style: solid; border-color: #e7c3c3; background: #fdf5f5; }
+.nub-verif p { margin: 4px 0 0; color: var(--a-text-primary, #141413); }
+.nub-cuerpo .pinc-acto { padding: var(--a-space-8, 8px) var(--a-space-12, 12px) var(--a-space-12, 12px); }
+.nub-cuerpo .pinc-acto > b { font-size: var(--a-type-body-size, 13px); }

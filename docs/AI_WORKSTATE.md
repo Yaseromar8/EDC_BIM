@@ -42,6 +42,10 @@ Detalle en `docs/archivos/18`, `19`, `20` y `21`.
   `backend/sql/46_nubes_de_issue.sql`: aplicar como ecd_migrator ANTES del backend (el manifiesto ya declara NUBE y
   SUBCONTRATISTA: sin ella no arranca). Ruta `/api/issues/<id>/nubes`, encargo NUBE, guardia de cierre y «marcar»
   exige view_markup en la carpeta (cambia lo de hoy para quien solo tiene «Ver»). Sin frontend todavía (parte 2).
+- Commit siguiente (3-nov, docs/archivos/23 §6): NUBES, parte 2 (pantalla). El panel de la incidencia con tres pestañas
+  (Incidencia · Nubes · Historial); la nube se asigna en SU nota de comentarios del plano («Comentar o asignar»);
+  solo una marca de tipo nube es nube (flechas y textos sin estado ni rótulo). Ensayo 33/33 contra PG real y
+  recorrido en el navegador con Luis/Mario. Se publica junto con la parte 1: migración 46 → push → backend → portal.
 - EXACT NEXT ACTION (histórica, ya hecha para c3144a3d): Manual Deploy de `visor-ecd-backend-va` y DESPUÉS de `visor-ecd-portal` con el HEAD de main;
   comprobar `/api/health` y el bundle del portal (Cloudflare ~5 min). Luego, recorrido real con dos personas (correo
   a observadores y subida de fotos sin probar en producción).

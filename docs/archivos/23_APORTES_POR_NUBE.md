@@ -241,6 +241,73 @@ Sobre la calidad «HD»:
 4. **«Declarar corregida» con aportes sin incorporar: ¿solo avisar (recomendado) o impedirlo?**
 5. **¿Un aporte puede pedirse a una empresa** (por ejemplo, la supervisión), como ya se asigna una incidencia?
 
+## 6 · Parte 2 construida: el panel y la nota de la nube (3-nov-2026)
+
+En local, sin commit todavía. Encima de la parte 1 (`1adc9b38`, datos y servidor, sin empujar).
+
+### 6.1 · Correcciones del dueño viendo el banco
+
+1. **Una flecha no es una nube** («¿por qué la flecha debería tener “Abierta”?»). Solo una marca de tipo nube
+   (`kind = 'cloud'`, `nubes_de_issue.TIPO_DE_NUBE`) es nube de la incidencia: se asigna, lleva estado y cuenta para
+   cerrar. Flechas, textos y recuadros acompañan a la incidencia sin estado. En la hoja, el rótulo «ISS-001 · Abierta»
+   va solo en la nube; si una incidencia no tiene ninguna nube en esa hoja, sus marcas lo siguen llevando para no
+   perderla. En la barra de una flecha, el distintivo dice solo «ISS-001». Un recuadro tampoco se reparte como encargo
+   (400).
+2. **Se asigna desde la nube misma, en su nota de comentarios** («como ya tenemos una opción para dejar comentario,
+   debería ser ahí mismo»). El botón de la nota pasa a «Comentar o asignar» para el encargado. Arriba de los
+   comentarios: «Asignar a una persona o empresa…»; al pulsarlo, un desplegable (personas y empresas de la obra), «Qué
+   se le pide» (propone el comentario que estés escribiendo, o el último) y la fecha. Ya asignada: «Asignada a
+   **Mario** · Pedida · vence 20 nov.», con lo pedido debajo y «Cambiar».
+3. **El panel solo enseña lo que importa.** Sin formulario de asignar, sin resumen de conteos, sin notas de relleno.
+
+### 6.2 · El panel de la incidencia: tres pestañas
+
+`design/incidencias/PanelDeIncidencia.jsx` (el panel de siempre, el de todas las herramientas):
+
+| Pestaña | Qué tiene |
+|---|---|
+| **Incidencia** | Lo de siempre: detalles, descripción, fotos y documentos, comentarios y la caja de comentar. |
+| **Nubes (N)** | `NubesDeIncidencia.jsx`. Solo aparece si la incidencia tiene nubes (o encargos internos). Cada nube es una fila: número y franja con el color de quien aporta, lo pedido, sus iniciales y el estado. Abierta: las rondas (lo entregado, quién, cuándo; si se devolvió, quién y por qué) y SOLO el botón que le toca a quien mira. |
+| **Historial (N)** | El historial que antes iba bajo los comentarios, con los pasos de cada nube: «Luis asignó la nube 1», «Mario entregó en la nube 1», «Luis devolvió la nube 1: faltaba algo (ronda 2)», «Ana dio la nube 2 como levantada». |
+
+Pulsar una nube en el plano y abrir su incidencia (el distintivo de la barra) lleva el panel a **Nubes**, con esa nube
+abierta. Si el revisor intenta cerrar con nubes sin dar por levantadas (409 `NUBES_SIN_LEVANTAR`), el panel salta a
+**Nubes**.
+
+Botones por papel, los que el servidor dice (`actos`):
+
+- **Quien aporta**: «Entregar» → subir a Docs (queda en MULTIMEDIA de la obra), «Enlazar de Docs» y una nota opcional.
+- **Encargado**: «Aceptar» o «Devolver (falta algo)», con motivo obligatorio; devolver abre la ronda siguiente en la
+  misma nube.
+- **Revisor**, con la incidencia «Corregida»: «Levantada» o «No levantada» (motivo obligatorio). Queda escrita la
+  versión sobre la que se decidió.
+
+El color es por persona en cada plano: diez tonos sobrios (`reglas.js → COLORES_DE_PERSONA`), en el orden en que
+aparece cada persona o empresa. Las nubes de encargo llevan la franja discontinua.
+
+### 6.3 · Probado
+
+- **Ensayo contra PostgreSQL real** (`ensayo_nubes.py`, banco 5196, como `ecd_app`): **33/33**. Se añadieron tres casos
+  por la regla nueva: Ana dibuja una segunda nube; la flecha de la incidencia no es nube; un recuadro no se reparte
+  como encargo (400).
+- **En el navegador, como cada persona** (banco del plano):
+  - Luis asigna la nube desde su nota → «Asignada a Mario · Pedida».
+  - Mario ve una sola nube (la flecha no cuenta), con su inicial y «Entregar», y entrega una nota → «Entregado: le
+    llega al encargado del plano».
+  - Luis la devuelve con motivo → ronda 2 en la misma nube.
+  - El historial cuenta los cuatro pasos.
+- **No probado en el navegador:**
+  - «Enlazar de Docs», porque el banco no tiene el buscador de documentos (el selector es el de siempre; la entrega con
+    documento sí está en el ensayo).
+  - La verificación del revisor en pantalla (sí en el ensayo).
+
+### 6.4 · Lo que sigue
+
+1. La hoja coloreada por persona (la franja de la nube con su color y la leyenda del plano).
+2. Crear nubes de encargo desde la barra de la nube (el servidor ya lo hace; falta el botón).
+3. Verificar con «Comparar versiones» encuadrado en la nube.
+4. Subir los aportes a una carpeta de la incidencia en vez de MULTIMEDIA.
+
 ## Fuentes
 
 - Procore, flujo de Punch List: https://support.procore.com/faq/what-is-the-punch-list-work-flow

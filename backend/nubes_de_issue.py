@@ -48,6 +48,9 @@ ESTADOS_QUE_DEBE_EL_APORTANTE = (PEDIDA, DEVUELTA)
 CORREGIDO = 'Corregido'
 
 TOPE_TEXTO = 2000
+
+# Solo una marca de este tipo es una nube de la incidencia; las demás (flechas, textos…) la acompañan sin estado.
+TIPO_DE_NUBE = 'cloud'
 TOPE_ENTREGAS = 20
 
 # acto → (estados de origen, estado de destino, papeles que pueden, solo de esta clase)

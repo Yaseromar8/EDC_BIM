@@ -84,6 +84,8 @@ export default function ObservacionDeMarca({ API, obra, marca, esAutor, onCambio
       {lateral && (
         <IncidenciaLateral API={API} obra={obra} contenedor={destinoDelLector()} onVolver={() => setLateral(null)}
           issueId={lateral === 'nueva' ? null : lateral}
+          // Abierta desde su marca: el panel va a la pestaña «Nubes», a ESTA nube.
+          nube={lateral === 'nueva' ? null : marca.id}
           nueva={lateral === 'nueva' ? { tipo: 'OBSERVACION', lugar: `Desde una marca · pág. ${marca.page}` } : null}
           titulo="Nueva observación de la marca" crear={crearDesdeLaMarca}
           onCreada={releer} onCambio={releer} onCerrar={() => setLateral(null)} />

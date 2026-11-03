@@ -20,6 +20,7 @@ import { actosDeIssue, aQuienLeTocaIssue, esDelResponsable, estadoDeIssue, issue
          puedeVerificar, textoDeEvento, usaEstado } from './reglas.js';
 import { ClasificacionDeAlta, ObservadoresDeAlta, ResponsableDeAlta, camposDelTipo, enviarJson, faltaObligatorio,
          leerJson, useObraDeIncidencias } from './piezas.jsx';
+import NubesDeIncidencia from './NubesDeIncidencia.jsx';
 import './incidencias.css';
 
 const hoyMas = (dias) => {
@@ -337,7 +338,7 @@ function Miniatura({ entorno, adjunto, onAbrir, onQuitar }) {
   );
 }
 
-function Detalle({ entorno, obra, ob, issueId, extraDetalle, onCambio, onCargada, onDescartada }) {
+function Detalle({ entorno, obra, ob, issueId, extraDetalle, nube = null, onIrAMarca = null, onCambio, onCargada, onDescartada }) {
   const API = entorno.API ?? '';
   const [i, setI] = useState(null);
   const [acto, setActo] = useState(null);
@@ -346,7 +347,11 @@ function Detalle({ entorno, obra, ob, issueId, extraDetalle, onCambio, onCargada
   const [comentario, setComentario] = useState('');
   const [ocupado, setOcupado] = useState(false);
   const [menuEstado, setMenuEstado] = useState(false);
-  const [pestana, setPestana] = useState('comentarios');
+  // TRES PESTAÑAS (3-nov-2026, el dueño: «lo que le corresponde al issue, lo que corresponde a cada nube y el
+  // historial; si hago clic a la nube se abre en esa pestaña»).
+  const [pestana, setPestana] = useState(nube != null ? 'nubes' : 'incidencia');
+  const [nubes, setNubes] = useState(null);
+  useEffect(() => { if (nube != null) setPestana('nubes'); }, [nube]);
   const comentando = useRef(false);    // un comentario no sale dos veces aunque se pulse dos veces seguidas
 
   const cargar = useCallback(async () => {
@@ -355,6 +360,11 @@ function Detalle({ entorno, obra, ob, issueId, extraDetalle, onCambio, onCargada
     if (d) onCargada?.(d);
   }, [API, issueId]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { cargar(); }, [cargar]);
+  // Las nubes van aparte: un servidor sin la 46 responde que no, y el panel sigue con sus dos pestañas de siempre.
+  const cargarNubes = useCallback(async () => {
+    setNubes(await leerJson(entorno, `${API}/api/issues/${encodeURIComponent(issueId)}/nubes`));
+  }, [API, issueId]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { cargarNubes(); }, [cargarNubes]);
 
   const hacer = async (ruta, cuerpo, ok) => {
     setOcupado(true);
@@ -365,8 +375,13 @@ function Detalle({ entorno, obra, ob, issueId, extraDetalle, onCambio, onCargada
       setActo(null); setEditando(null);
       if (ok) entorno.avisar.ok(ok);
       onCambio?.(d);
+      cargarNubes();                // el estado de la incidencia cambia el de sus nubes («por verificar»)
       return true;
-    } catch (e) { entorno.avisar.error(e.message); return false; } finally { setOcupado(false); }
+    } catch (e) {
+      entorno.avisar.error(e.message);
+      if (e.code === 'NUBES_SIN_LEVANTAR') { setActo(null); setPestana('nubes'); }
+      return false;
+    } finally { setOcupado(false); }
   };
 
   if (i === null) return <div className="pinc-cuerpo"><p className="pinc-nota">Cargando…</p></div>;
@@ -470,6 +485,13 @@ function Detalle({ entorno, obra, ob, issueId, extraDetalle, onCambio, onCargada
     turno = { fin: true, texto: 'Anulada: se levantó por error. El motivo está en el historial.' };
   }
   const reasignable = dirige && ESTADOS_DONDE_SE_REASIGNA.includes(i.estado);
+  const listaDeNubes = nubes?.nubes || [];
+  const hayNubes = listaDeNubes.length > 0 || (nubes?.encargos_internos || 0) > 0;
+  const numeroDeNube = (id) => {
+    const k = listaDeNubes.findIndex(n => n.id != null && String(n.id) === String(id));
+    return k < 0 ? null : k + 1;
+  };
+  const verPestana = hayNubes ? pestana : (pestana === 'nubes' ? 'incidencia' : pestana);
   const nombresObs = (i.observadores || []).map(u => ob.nombres[u] || `usuario ${u}`);
 
   return (
@@ -588,6 +610,40 @@ function Detalle({ entorno, obra, ob, issueId, extraDetalle, onCambio, onCargada
         </div>
       )}
 
+      <div className="pinc-pestanas pinc-pestanas--panel" role="tablist">
+        <button type="button" role="tab" aria-selected={verPestana === 'incidencia'} onClick={() => setPestana('incidencia')}>
+          Incidencia <span>{comentarios.length || ''}</span></button>
+        {hayNubes && (
+          <button type="button" role="tab" aria-selected={verPestana === 'nubes'} onClick={() => setPestana('nubes')}>
+            Nubes <span>{listaDeNubes.length || ''}</span></button>
+        )}
+        <button type="button" role="tab" aria-selected={verPestana === 'historial'} onClick={() => setPestana('historial')}>
+          Historial <span>{historial.length || ''}</span></button>
+      </div>
+
+      {verPestana === 'nubes' && (
+        <NubesDeIncidencia entorno={entorno} obra={obra} ob={ob} i={i} datos={nubes} foco={nube} onIrAMarca={onIrAMarca}
+          onCambio={(d) => { setNubes(d); cargar(); }} />
+      )}
+
+      {verPestana === 'historial' && (
+        <ol className="pinc-actividad pinc-actividad--historial">
+          {historial.map((h, n) => {
+            const quien = ob.nombreDeQuien(h.by);
+            return (
+              <li key={`${h.at}-${n}`}>
+                <span className="pinc-punto" style={{ '--estado': e.color }} aria-hidden="true" />
+                <div>
+                  <div className="pinc-actividad__cab"><span><b>{quien || 'Alguien'}</b> {textoDeEvento(h, numeroDeNube)}</span><small>{fechaCorta(h.at)}</small></div>
+                  {(h.motivo || h.comentario) && <p>{h.motivo || h.comentario}</p>}
+                </div>
+              </li>
+            );
+          })}
+        </ol>
+      )}
+
+      {verPestana === 'incidencia' && <>
       <section className="pinc-seccion">
         <h4>Detalles</h4>
         <dl className="pinc-filas">
@@ -711,56 +767,33 @@ function Detalle({ entorno, obra, ob, issueId, extraDetalle, onCambio, onCargada
       </section>
 
       <section className="pinc-seccion pinc-conversacion">
-        <div className="pinc-pestanas" role="tablist">
-          <button type="button" role="tab" aria-selected={pestana === 'comentarios'} onClick={() => setPestana('comentarios')}>
-            Comentarios <span>{comentarios.length || ''}</span></button>
-          <button type="button" role="tab" aria-selected={pestana === 'historial'} onClick={() => setPestana('historial')}>
-            Historial <span>{historial.length || ''}</span></button>
-        </div>
-        {pestana === 'comentarios' ? (
-          comentarios.length ? (
-            <ol className="pinc-actividad">
-              {comentarios.map((h, n) => {
-                const quien = ob.nombreDeQuien(h.by);
-                return (
-                  <li key={`${h.at}-${n}`} className="es-comentario">
-                    <span className="pinc-avatar" aria-hidden="true">{iniciales(quien)}</span>
-                    <div>
-                      <div className="pinc-actividad__cab"><b>{quien || 'Alguien'}</b><small>{fechaCorta(h.at)}</small></div>
-                      <p>{h.texto}</p>
-                    </div>
-                  </li>
-                );
-              })}
-            </ol>
-          ) : <p className="pinc-nota">Aún no hay comentarios. Escribe abajo para preguntar o aclarar algo a quienes la siguen.</p>
-        ) : (
-          <ol className="pinc-actividad pinc-actividad--historial">
-            {historial.map((h, n) => {
+        <h4>Comentarios <span>{comentarios.length || ''}</span></h4>
+        {comentarios.length ? (
+          <ol className="pinc-actividad">
+            {comentarios.map((h, n) => {
               const quien = ob.nombreDeQuien(h.by);
               return (
-                <li key={`${h.at}-${n}`}>
-                  <span className="pinc-punto" style={{ '--estado': e.color }} aria-hidden="true" />
+                <li key={`${h.at}-${n}`} className="es-comentario">
+                  <span className="pinc-avatar" aria-hidden="true">{iniciales(quien)}</span>
                   <div>
-                    <div className="pinc-actividad__cab"><span><b>{quien || 'Alguien'}</b> {textoDeEvento(h)}</span><small>{fechaCorta(h.at)}</small></div>
-                    {(h.motivo || h.comentario) && <p>{h.motivo || h.comentario}</p>}
+                    <div className="pinc-actividad__cab"><b>{quien || 'Alguien'}</b><small>{fechaCorta(h.at)}</small></div>
+                    <p>{h.texto}</p>
                   </div>
                 </li>
               );
             })}
           </ol>
-        )}
+        ) : <p className="pinc-nota">Aún no hay comentarios. Escribe abajo para preguntar o aclarar algo a quienes la siguen.</p>}
       </section>
 
-      {pestana === 'comentarios' && (
-        <div className="pinc-comentar">
-          <textarea value={comentario} onChange={ev => setComentario(ev.target.value)} rows={/\n/.test(comentario) || comentario.length > 60 ? 3 : 1}
-            maxLength={2000} placeholder="Escribe un comentario…" aria-label="Comentario"
-            data-tip="Queda en el expediente: no se edita ni se borra. Ctrl+Enter envía."
-            onKeyDown={ev => { if (ev.key === 'Enter' && (ev.ctrlKey || ev.metaKey)) { ev.preventDefault(); comentar(); } }} />
-          <button type="button" className="pinc-btn pinc-btn--prim" disabled={!comentario.trim() || ocupado} onClick={comentar}>Comentar</button>
-        </div>
-      )}
+      <div className="pinc-comentar">
+        <textarea value={comentario} onChange={ev => setComentario(ev.target.value)} rows={/\n/.test(comentario) || comentario.length > 60 ? 3 : 1}
+          maxLength={2000} placeholder="Escribe un comentario…" aria-label="Comentario"
+          data-tip="Queda en el expediente: no se edita ni se borra. Ctrl+Enter envía."
+          onKeyDown={ev => { if (ev.key === 'Enter' && (ev.ctrlKey || ev.metaKey)) { ev.preventDefault(); comentar(); } }} />
+        <button type="button" className="pinc-btn pinc-btn--prim" disabled={!comentario.trim() || ocupado} onClick={comentar}>Comentar</button>
+      </div>
+      </>}
     </div>
   );
 }
@@ -837,6 +870,7 @@ export const AISLADO = Object.fromEntries(['onMouseDown', 'onMouseUp', 'onMouseM
 
 export default function PanelDeIncidencia({ entorno, obra, issueId = null, nueva = null, crear = null, titulo = null,
                                             extraAlta = null, extraDetalle = null, contenedor = null,
+                                            nube = null, onIrAMarca = null,
                                             onVolver = null, onCreada, onCambio, onCerrar }) {
   const ob = useObraDeIncidencias(entorno, obra);
   const [id, setId] = useState(issueId);
@@ -862,6 +896,7 @@ export default function PanelDeIncidencia({ entorno, obra, issueId = null, nueva
       </header>
       {id ? (
         <Detalle key={id} entorno={entorno} obra={obra} ob={ob} issueId={id} extraDetalle={extraDetalle}
+          nube={nube} onIrAMarca={onIrAMarca}
           onCargada={(d) => { setCodigo(d?.codigo || null); setCargada(d); }} onCambio={onCambio}
           onDescartada={() => { onCambio?.(null); if (onVolver) onVolver(); else onCerrar?.(); }} />
       ) : (
