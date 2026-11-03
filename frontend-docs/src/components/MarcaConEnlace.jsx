@@ -20,7 +20,7 @@ import SelectorDeDocumento from './SelectorDeDocumento';
 import {
   ESTADOS_DE_SELLO, estadoDeSello,
   CARPETA_DE_FOTOS, TOPE_FOTOS, TOPE_CITAS, esFoto,
-  textoDeCitas, citasPorPlano, etiquetaDeCita, siguienteAngulo, fechaCorta, observacionViva,
+  textoDeCitas, citasPorPlano, etiquetaDeCita, siguienteAngulo, fechaCorta, observacionViva, conSuConversacion,
 } from '../utils/marcasConEnlace';
 import ObservacionDeMarca, { EtiquetaDeObservacion } from './ObservacionDeMarca';
 import { AISLADO } from '../../../design/incidencias/PanelDeIncidencia.jsx';
@@ -234,7 +234,7 @@ export function PanelDeMarca({ API, obra, marca, esAutor, versionVigente = null,
       });
       const d = await r.json().catch(() => ({}));
       if (!r.ok || !d.success) throw new Error(d.error || 'No se pudo guardar.');
-      onCambio({ ...marca, ...d.markup });
+      onCambio(conSuConversacion(marca, d.markup));
       if (okMsg) toast.success(okMsg);
       return true;
     } catch (e) { toast.error(e.message); return false; }

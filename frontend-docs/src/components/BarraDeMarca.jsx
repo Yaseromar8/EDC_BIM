@@ -7,6 +7,8 @@
  *   Texto        en las marcas de texto
  *   Sello        editar el sello (su diálogo)
  *   Referencia   los documentos que cita, con su número; añadir (como el menú «Referencia» de ACC)
+ *   Comentarios  la conversación sobre la marca (3-nov-2026): cualquiera que la ve comenta; solo se añade, con autor
+ *                y fecha, y sin estado ni responsable (eso es la observación)
  *   Observación  la suya, si la tiene (abre el panel de la incidencia) o crearla
  *   Llevar a la vigente · Duplicar · Publicar o retirar · Suprimir
  * Solo la FOTO tiene panel propio (como «Referencias a fotos» de ACC), y la INCIDENCIA el suyo.
@@ -14,13 +16,14 @@
  * Lo que la marca puede cambiar lo decide el servidor (routes/pdf_tools.py `editar_markup`): la figura —estilo y
  * texto— solo en un borrador tuyo sin observación abierta; referencias y publicar, su autor.
  */
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import toast from 'react-hot-toast';
 import { apiFetch } from '../utils/apiFetch';
 import { abrirDocumento } from '../utils/enlaceDeMarcas';
 import { confirmAction } from '../utils/confirm';
-import { estadoDeObservacion, etiquetaDeCita, fechaCorta, observacionViva, textoDeCitas, TOPE_CITAS } from '../utils/marcasConEnlace';
+import { conSuConversacion, estadoDeObservacion, etiquetaDeCita, fechaCorta, fechaYHora, observacionViva, textoDeCitas,
+  TOPE_CITAS } from '../utils/marcasConEnlace';
 import SelectorDeDocumento from './SelectorDeDocumento';
 import IconoModulo from './IconoModulo';
 import IncidenciaLateral from './IncidenciaLateral';
@@ -45,6 +48,16 @@ const Ico = ({ children, size = 16 }) => (
 const IcoTexto = () => <Ico><path d="M5 6h14M12 6v13" /></Ico>;
 const IcoRef = () => <Ico><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1" /><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1" /></Ico>;
 const IcoIssue = () => <IconoModulo nombre="incidencia" tamano={16} />;
+const IcoComentario = () => <IconoModulo nombre="comentario" tamano={16} />;
+const TOPE_COMENTARIO = 2000;
+// «11:14» si es de hoy; si no, «03 nov.»: la fecha entera va en el título.
+const horaCorta = (iso) => {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  return d.toDateString() === new Date().toDateString()
+    ? d.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' })
+    : d.toLocaleDateString('es-PE', { day: '2-digit', month: 'short' });
+};
 const IcoDuplicar = () => <Ico><rect x="8" y="8" width="12" height="12" rx="2" /><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3" /></Ico>;
 const IcoPublicar = () => <Ico><path d="M12 16V4" /><path d="M7 9l5-5 5 5" /><path d="M5 20h14" /></Ico>;
 const IcoRetirar = () => <Ico><path d="M12 4v12" /><path d="M7 11l5 5 5-5" /><path d="M5 20h14" /></Ico>;
@@ -63,31 +76,71 @@ function Boton({ etiqueta, activo, onClick, disabled, peligro, children, conText
 }
 
 export default function BarraDeMarca({ API, obra, marca, esAutor, editable, colores = [], posicion, versionVigente = null,
-                                       revisionSugerida = '', pedido = null,
+                                       revisionSugerida = '', pedido = null, bajoLaMarca = null,
                                        onLlevar = null, onDuplicar, onCambio, onPublicar, onBorrar, onCerrar }) {
-  const [abierto, setAbierto] = useState(null);         // 'estilo' | 'texto' | 'referencias'
+  const [abierto, setAbierto] = useState(null);         // 'estilo' | 'texto' | 'referencias' | 'comentarios'
+  const [comentario, setComentario] = useState('');
+  const [comentando, setComentando] = useState(false);
+  const listaDeComentarios = useRef(null);
   const [texto, setTexto] = useState(marca.text || '');
   const [eligiendo, setEligiendo] = useState(false);
   const [sello, setSello] = useState(false);
   const [lateral, setLateral] = useState(null);         // 'nueva' | id de la observación
   const [triangulo, setTriangulo] = useState(marca.style?.triangulo || revisionSugerida || '');
   const raiz = useRef(null);
+  const nota = useRef(null);
   const citas = marca.citas || [];
+  const comentarios = marca.style?.comentarios || [];
   const obs = marca.observacion || null;
   const viva = observacionViva(obs);
   const estilo = marca.style || {};
   // El chip «🔗 N» de la hoja abre la lista de referencias, no solo elige la marca.
   useEffect(() => { if (pedido) setAbierto(pedido.que); }, [pedido?.n]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Esc cierra el menú desplegado (y, sin nada desplegado, deja la marca).
+  // Esc cierra el menú desplegado (y, sin nada desplegado, deja la marca). Dentro del menú las teclas no salen (AISLADO,
+  // para que escribir no dispare los atajos del lector): por eso el Esc de dentro se atiende en `alTeclearDentro`.
+  const alEscape = useCallback(() => {
+    if (lateral || eligiendo || sello) return;
+    if (abierto) setAbierto(null); else onCerrar?.();
+  }, [abierto, lateral, eligiendo, sello, onCerrar]);
   useEffect(() => {
-    const alTeclear = (e) => {
-      if (e.key !== 'Escape' || lateral || eligiendo || sello) return;
-      if (abierto) setAbierto(null); else onCerrar?.();
-    };
+    const alTeclear = (e) => { if (e.key === 'Escape') alEscape(); };
     window.addEventListener('keydown', alTeclear);
     return () => window.removeEventListener('keydown', alTeclear);
-  }, [abierto, lateral, eligiendo, sello, onCerrar]);
+  }, [alEscape]);
+  const alTeclearDentro = (e) => {
+    e.stopPropagation();
+    if (e.key === 'Escape') { e.preventDefault(); alEscape(); }
+  };
+
+  // Un clic fuera deja la marca, como en ACC (3-nov-2026: «cuando le doy clic afuera sigue viéndose»). Arrastrar la hoja
+  // no cuenta como clic, y lo de dentro del menú, las marcas y sus distintivos no llegan aquí (paran el clic).
+  // onCerrar llega nuevo en cada dibujado del lector: va en una ref para que el escuchador no se quite y se ponga en
+  // cada uno (al soltar el ratón el lector se redibuja, y el clic caía justo en el hueco).
+  const cerrar = useRef(onCerrar);
+  cerrar.current = onCerrar;
+  useEffect(() => {
+    if (lateral || eligiendo || sello) return undefined;
+    let desde = null;
+    const alBajar = (e) => { desde = [e.clientX, e.clientY]; };
+    const alClicar = (e) => {
+      const t = e.target;
+      if (raiz.current?.contains(t) || nota.current?.contains(t)) return;
+      if (t?.closest?.('[role="dialog"], [role="alertdialog"]')) return;
+      if (desde && Math.hypot(e.clientX - desde[0], e.clientY - desde[1]) > 5) return;
+      cerrar.current?.();
+    };
+    // Después del clic que la abrió: React monta el menú mientras ese mismo clic aún sube hasta el documento.
+    const espera = setTimeout(() => {
+      document.addEventListener('pointerdown', alBajar, true);
+      document.addEventListener('click', alClicar);
+    }, 0);
+    return () => {
+      clearTimeout(espera);
+      document.removeEventListener('pointerdown', alBajar, true);
+      document.removeEventListener('click', alClicar);
+    };
+  }, [lateral, eligiendo, sello]);
 
   const cambiar = useCallback(async (cuerpo, ok) => {
     try {
@@ -96,7 +149,7 @@ export default function BarraDeMarca({ API, obra, marca, esAutor, editable, colo
       });
       const d = await r.json().catch(() => ({}));
       if (!r.ok || !d.success) throw new Error(d.error || 'No se pudo guardar.');
-      onCambio({ ...marca, ...d.markup });
+      onCambio(conSuConversacion(marca, d.markup));
       if (ok) toast.success(ok);
       return true;
     } catch (e) { toast.error(e.message); return false; }
@@ -120,6 +173,52 @@ export default function BarraDeMarca({ API, obra, marca, esAutor, editable, colo
     return d.observacion;
   };
 
+  // Que el menú y lo desplegado queden enteros a la vista: si chocan con la columna de herramientas del lector o con el
+  // borde de la ventana, se corren a la izquierda (el de comentarios, con su botón, quedaba debajo, 3-nov-2026).
+  useLayoutEffect(() => {
+    for (const el of [raiz.current, nota.current]) {
+      if (!el) continue;
+      el.style.marginLeft = '';
+      let derecha = 0;
+      let caja = null;
+      for (const hijo of el.querySelectorAll(':scope > .bdm-barra, :scope > .bdm-menu')) {
+        const r = hijo.getBoundingClientRect();
+        derecha = Math.max(derecha, r.right);
+        caja = caja ? { top: Math.min(caja.top, r.top), bottom: Math.max(caja.bottom, r.bottom), left: Math.min(caja.left, r.left) }
+          : { top: r.top, bottom: r.bottom, left: r.left };
+      }
+      if (!caja) continue;
+      let tope = window.innerWidth - 8;
+      const columna = document.querySelector('.pdf-rail')?.getBoundingClientRect();
+      if (columna && columna.width && columna.top < caja.bottom && columna.bottom > caja.top) tope = Math.min(tope, columna.left - 8);
+      const sobra = Math.min(derecha - tope, caja.left - 8);
+      if (sobra > 0) el.style.marginLeft = `${-sobra}px`;
+    }
+  }, [abierto, posicion?.left, posicion?.top, bajoLaMarca?.top, comentarios.length]);
+
+  // Al abrir la conversación, se ve lo último.
+  useEffect(() => {
+    if (abierto === 'comentarios' && listaDeComentarios.current) {
+      listaDeComentarios.current.scrollTop = listaDeComentarios.current.scrollHeight;
+    }
+  }, [abierto, comentarios.length]);
+
+  const comentar = async () => {
+    const t = comentario.trim();
+    if (!t || comentando) return;
+    setComentando(true);
+    try {
+      const r = await apiFetch(`${API}/api/pdf/markups/${marca.id}/comentarios`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ texto: t }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok || !d.success) throw new Error(d.error || 'No se pudo comentar.');
+      onCambio({ ...marca, style: { ...(marca.style || {}), comentarios: d.comentarios } });
+      setComentario('');
+    } catch (e) { toast.error(e.message); }
+    finally { setComentando(false); }
+  };
+
   const suprimir = async () => {
     const ok = await confirmAction({
       title: `¿Suprimir esta ${(NOMBRE[marca.kind] || 'marca').toLowerCase()}?`,
@@ -133,9 +232,37 @@ export default function BarraDeMarca({ API, obra, marca, esAutor, editable, colo
   const motivoFijo = viva ? 'Tiene una observación abierta: queda fija mientras el responsable la corrige.'
     : marca.publicado ? 'Publicada: retírala de la obra para cambiarla.' : null;
 
+  // La nota de comentarios va DEBAJO de la marca, no debajo del menú: el menú está encima de la marca y lo que despliega
+  // la tapaba (el dueño, 3-nov-2026).
+  const notaAparte = abierto === 'comentarios' && bajoLaMarca;
+  const notaDeComentarios = (
+        // Una nota discreta junto a la nube, no un panel (el dueño, 3-nov-2026: «solo para anotar… que no tape todo»).
+        <div className="bdm-menu bdm-nota-de-marca" role="dialog" aria-label="Comentarios">
+          {comentarios.length > 0 && (
+            <ol className="bdm-comentarios" ref={listaDeComentarios}>
+              {comentarios.map(c => (
+                <li key={c.id}>
+                  <span className="bdm-quien"><b>{c.autor}</b><time dateTime={c.en} title={fechaYHora(c.en)}>{horaCorta(c.en)}</time></span>
+                  <p>{c.texto}</p>
+                </li>
+              ))}
+            </ol>
+          )}
+          <form className="bdm-anotar" onSubmit={e => { e.preventDefault(); comentar(); }}>
+            <input value={comentario} maxLength={TOPE_COMENTARIO} autoFocus aria-label="Comentario"
+              placeholder={comentarios.length ? 'Responder…' : 'Anotar un comentario…'}
+              title="Queda con tu nombre y la hora; no se edita ni se borra."
+              onChange={e => setComentario(e.target.value)} />
+            <button type="submit" aria-label="Comentar" data-tip="Comentar" disabled={!comentario.trim() || comentando}>
+              <Ico size={14}><path d="M5 12h13" /><path d="M13 6l6 6-6 6" /></Ico>
+            </button>
+          </form>
+        </div>
+  );
   return (
+    <>
     <div ref={raiz} className="bdm" style={posicion} role="toolbar" aria-label={`${NOMBRE[marca.kind] || 'Marca'} elegida`}
-      {...AISLADO}>
+      {...AISLADO} onKeyDown={alTeclearDentro}>
       <div className="bdm-barra">
         <span className="bdm-info" data-tip={[marca.version_number ? `V${marca.version_number}` : '', marca.created_by,
           fechaCorta(marca.created_at), marca.publicado ? 'Publicada' : 'Borrador'].filter(Boolean).join(' · ')}>
@@ -160,6 +287,13 @@ export default function BarraDeMarca({ API, obra, marca, esAutor, editable, colo
           onClick={() => alternar('referencias')} conTexto={citas.length > 0}>
           <IcoRef />{citas.length > 0 && <b>{citas.length}</b>}
         </Boton>
+
+        {!marca._unsaved && (
+          <Boton etiqueta={comentarios.length ? `Comentarios (${comentarios.length})` : 'Comentar'}
+            activo={abierto === 'comentarios'} onClick={() => alternar('comentarios')} conTexto={comentarios.length > 0}>
+            <IcoComentario />{comentarios.length > 0 && <b>{comentarios.length}</b>}
+          </Boton>
+        )}
 
         {obs ? (
           <button type="button" className="bdm-obs" style={{ '--estado': est.color }} data-tip={obs.titulo}
@@ -284,6 +418,8 @@ export default function BarraDeMarca({ API, obra, marca, esAutor, editable, colo
         </div>
       )}
 
+      {abierto === 'comentarios' && !notaAparte && notaDeComentarios}
+
       {eligiendo && createPortal(
         <SelectorDeDocumento API={API} project={{ id: obra, model_urn: obra }} titulo="Añadir una referencia"
           ayuda="Elige el documento que esta marca cita. No se copia ni se mueve, y quien no pueda abrirlo no verá su nombre."
@@ -308,5 +444,11 @@ export default function BarraDeMarca({ API, obra, marca, esAutor, editable, colo
           onCreada={releerObservacion} onCambio={releerObservacion} onCerrar={() => setLateral(null)} />
       )}
     </div>
+    {notaAparte && (
+      <div ref={nota} className="bdm bdm-suelta" style={bajoLaMarca} {...AISLADO} onKeyDown={alTeclearDentro}>
+        {notaDeComentarios}
+      </div>
+    )}
+    </>
   );
 }

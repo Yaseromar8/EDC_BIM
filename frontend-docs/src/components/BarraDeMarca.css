@@ -58,3 +58,20 @@
 .bdm-triangulo { display: flex; gap: 6px; align-items: center; }
 .bdm-triangulo input { width: 72px; height: 28px; box-sizing: border-box; border: 1px solid #cccac0; border-radius: 6px; padding: 0 8px;
   font: 600 13px 'IBM Plex Mono', monospace; text-transform: uppercase; }
+
+/* Comentarios de la marca (3-nov-2026): una nota discreta, estrecha y en letra pequeña; no tapa la hoja. */
+.bdm-nota-de-marca { width: 240px; min-width: 0; gap: 6px; padding: 8px; box-shadow: var(--a-shadow-md, 0 4px 12px rgba(20, 20, 19, .10)); }
+.bdm-comentarios { list-style: none; margin: 0; padding: 0 2px; max-height: 128px; overflow-y: auto;
+  display: flex; flex-direction: column; gap: 6px; }
+.bdm-comentarios li { display: flex; flex-direction: column; gap: 1px; }
+.bdm-quien { display: flex; align-items: baseline; gap: 6px; font-size: 11px; color: #72706b; }
+.bdm-quien b { font-weight: 600; color: #3d3d3a; }
+.bdm-comentarios p { margin: 0; font-size: 12px; line-height: 1.4; color: #141413; white-space: pre-wrap; overflow-wrap: anywhere; }
+.bdm-anotar { display: flex; align-items: center; gap: 4px; }
+.bdm-anotar input { flex: 1; min-width: 0; height: 26px; box-sizing: border-box; border: 1px solid #e8e6dc; border-radius: 6px;
+  padding: 0 8px; font: 12px var(--a-font-sans); color: #141413; background: #faf9f5; }
+.bdm-anotar input:focus { background: #fff; border-color: #cccac0; }
+.bdm-anotar button { width: 26px; height: 26px; flex: none; display: inline-flex; align-items: center; justify-content: center;
+  border: none; border-radius: 6px; background: var(--a-action-primary, #1f3a5f); color: var(--a-text-on-action, #fff); cursor: pointer; }
+.bdm-anotar button:disabled { background: #f1f0e8; color: #b0aea5; cursor: default; }
+.bdm-suelta > .bdm-nota-de-marca { position: static; }

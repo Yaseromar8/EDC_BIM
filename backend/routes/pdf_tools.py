@@ -204,6 +204,7 @@ def create_markup():
     estilo = dict(d.get('style') or {})
     estilo.pop('citas', None)
     estilo.pop('fotos', None)
+    estilo.pop('comentarios', None)     # al duplicar, la conversación se queda en la original
     # Grosor, relleno y festones (al duplicar una marca, 2-nov-2026): las mismas reglas que al cambiarlos.
     pedido = {k: estilo.pop(k) for k in ('grosor', 'relleno', 'festones', 'triangulo') if k in estilo}
     if pedido:
@@ -674,11 +675,16 @@ def editar_markup(markup_id):
                     geometria['ang'] = round(float(d['angulo']) % 360, 1)
                 except (TypeError, ValueError):
                     return jsonify({"success": False, "error": "Ángulo no válido."}), 400
+            # Los comentarios no se tocan aquí: se conservan los que haya en la base, por si alguien comentó mientras.
+            # La respuesta va sin ellos; el lector se queda con los que ya tenía.
+            estilo.pop('comentarios', None)
             if texto is not None:
-                cur.execute("UPDATE pdf_markups SET style = %s, geometry = %s, text_content = %s WHERE id = %s",
+                cur.execute("UPDATE pdf_markups SET style = %s::jsonb || " + _COMENTARIOS_QUE_HAY
+                            + ", geometry = %s, text_content = %s WHERE id = %s",
                             (json.dumps(estilo), json.dumps(geometria), texto, markup_id))
             else:
-                cur.execute("UPDATE pdf_markups SET style = %s, geometry = %s WHERE id = %s",
+                cur.execute("UPDATE pdf_markups SET style = %s::jsonb || " + _COMENTARIOS_QUE_HAY
+                            + ", geometry = %s WHERE id = %s",
                             (json.dumps(estilo), json.dumps(geometria), markup_id))
             marca = {'id': markup_id, 'kind': kind, 'style': estilo, 'geometry': geometria}
             if texto is not None:
@@ -686,6 +692,60 @@ def editar_markup(markup_id):
             _con_enlaces(cur, [marca])
             conn.commit()
         return jsonify({"success": True, "markup": marca})
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+# ══ COMENTARIOS DE UNA MARCA (3-nov-2026) ════════════════════════════════════
+#
+# Pedido del propietario: «en la nube, ¿hay forma de colocar comentarios? No crear su panel, sino comentarios».
+# Es la opción B de docs/ux/MARCAS_REVISION_LO_PROFESIONAL.md, y con sus mismas garantías: SOLO SE AÑADEN
+# (nadie borra ni cambia lo que dijo otro, ni el autor de la marca), cada uno con su autor y su fecha, y sin
+# estado ni responsables: eso sigue siendo la observación. Viven en `style.comentarios`, sin migración.
+
+TOPE_COMENTARIO = 2000
+TOPE_COMENTARIOS = 200
+_COMENTARIOS_QUE_HAY = ("jsonb_build_object('comentarios', COALESCE(style->'comentarios', '[]'::jsonb))")
+
+
+@pdf_tools_bp.route('/api/pdf/markups/<int:markup_id>/comentarios', methods=['POST'])
+def comentar_marca(markup_id):
+    """{texto} → añade un comentario a una marca que el usuario ve (publicada, o suya). Cualquiera de la obra."""
+    negativa = guardia_de_recurso('pdf_markups', markup_id)
+    if negativa:
+        return negativa
+    autor = _user().get('name') or ''
+    if not autor:
+        return jsonify({"success": False, "error": "Autenticación requerida."}), 401
+    texto = str((request.get_json(silent=True) or {}).get('texto') or '').strip()
+    if not texto or len(texto) > TOPE_COMENTARIO:
+        return jsonify({"success": False, "error": "El comentario va de 1 a %d caracteres." % TOPE_COMENTARIO}), 400
+    from datetime import datetime, timezone
+    comentario = {'id': uuid.uuid4().hex[:12], 'autor': autor, 'autor_id': _user().get('id'), 'texto': texto,
+                  'en': datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')}
+    try:
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            # Se AÑADE en la base (`||`), no se reescribe la lista: dos personas comentando a la vez no se pisan.
+            cur.execute("""UPDATE pdf_markups
+                              SET style = jsonb_set(COALESCE(style, '{}'::jsonb), '{comentarios}',
+                                                    COALESCE(style->'comentarios', '[]'::jsonb) || %s::jsonb)
+                            WHERE id = %s AND (publicado OR created_by = %s)
+                              AND jsonb_array_length(COALESCE(style->'comentarios', '[]'::jsonb)) < %s
+                        RETURNING style->'comentarios'""",
+                        (json.dumps([comentario]), markup_id, autor, TOPE_COMENTARIOS))
+            fila = cur.fetchone()
+            if not fila:
+                cur.execute("SELECT 1 FROM pdf_markups WHERE id = %s AND (publicado OR created_by = %s)",
+                            (markup_id, autor))
+                if cur.fetchone():
+                    return jsonify({"success": False, "code": "TOPE_COMENTARIOS",
+                                    "error": "La marca ya tiene %d comentarios: sigue la conversación en una observación."
+                                    % TOPE_COMENTARIOS}), 409
+                return jsonify({"success": False, "error": "La marca no existe."}), 404
+            conn.commit()
+        return jsonify({"success": True, "comentario": comentario, "comentarios": fila[0] or []})
     except Exception as e:
         traceback.print_exc()
         return jsonify({"success": False, "error": str(e)}), 500
@@ -798,6 +858,7 @@ def llevar_a_la_vigente(markup_id):
                 return jsonify({"success": False, "error": "El documento no tiene versión vigente."}), 409
             if version == vigente:
                 return jsonify({"success": False, "error": "Esta marca ya está en la versión vigente."}), 409
+            estilo = {k: v for k, v in (estilo or {}).items() if k != 'comentarios'}   # la conversación es de la V anterior
             cur.execute("""INSERT INTO pdf_markups (file_node_id, model_urn, page, kind, geometry, style, text_content,
                                                     created_by, file_version_id, llevada_de)
                            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id""",

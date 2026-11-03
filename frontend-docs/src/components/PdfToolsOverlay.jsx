@@ -319,7 +319,7 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
   const duplicarMarca = async (m) => {
     const d = 12 / (vp?.scale || 1);
     const id = await saveMarkup(m.kind, trasladar(m.geometry || {}, d, -d), m.text || null,
-      { ...(m.style || {}) });
+      { ...(m.style || {}), comentarios: undefined });          // la conversación se queda en la original
     if (id) { setElegida(id); toast.success('Duplicada: la copia es un borrador tuyo'); }
   };
 
@@ -782,9 +782,10 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
   // El halo de la marca elegida y el distintivo de las que citan documentos (con su número).
   const renderEnlaces = () => pageMarkups.map(m => {
     const n = (m.citas || []).length;
+    const nc = (m.style?.comentarios || []).length;
     const esElegida = m.id === elegida;
     const obs = m.observacion;
-    if (!n && !esElegida && !obs) return null;
+    if (!n && !nc && !esElegida && !obs) return null;
     const k = cajaDe(m);
     if (!k) return null;
     const ancho = n > 9 ? 34 : 28;
@@ -796,6 +797,10 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
       vpInfo.w - ancho - 4,
     ));
     const by = enBordeSup ? Math.max(4, k.y + 4) : k.y - alto - 2;
+    // Los comentarios, con el mismo distintivo, a la izquierda del de referencias (o en su sitio si no cita nada).
+    const anchoC = nc > 9 ? 34 : 28;
+    const cx = n > 0 ? Math.max(4, bx - anchoC - 4) : Math.max(4, Math.min(
+      enBordeSup || k.x2 + anchoC + 4 > vpInfo.w ? k.x2 - anchoC - 4 : k.x2 + 2, vpInfo.w - anchoC - 4));
     const hx = Math.max(2, k.x - 6);
     const hy = Math.max(2, k.y - 6);
     const hw = Math.min(vpInfo.w - 2, k.x2 + 6) - hx;
@@ -816,6 +821,21 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
               <path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1" /><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1" />
             </g>
             <text x="18" y="11.6" fontSize="10" fontWeight="600" fill="#507294" fontFamily="'IBM Plex Mono', monospace" style={{ pointerEvents: 'none' }}>{n}</text>
+          </g>
+        )}
+        {nc > 0 && (
+          <g transform={`translate(${cx} ${by})`}
+            style={{ pointerEvents: tocable ? 'all' : 'none', cursor: tool === 'erase' ? 'not-allowed' : tool === 'pan' ? 'pointer' : 'default' }}
+            onClick={tocable ? (e) => {
+              alTocar(m)(e);
+              if (tool === 'pan') setPedidoDeMarca(p => ({ id: m.id, que: 'comentarios', n: (p?.n || 0) + 1 }));
+            } : undefined}>
+            <title>{nc === 1 ? '1 comentario' : `${nc} comentarios`}</title>
+            <rect width={anchoC} height={alto} rx="8" fill="#fff" stroke="#507294" strokeWidth="1" />
+            <g transform="translate(3.5 2.2) scale(0.48)" fill="none" stroke="#507294" strokeWidth="2.4" strokeLinejoin="round">
+              <path d="M5.5 4.5h13a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H11l-4.5 3v-3h-1a2 2 0 0 1-2-2v-9a2 2 0 0 1 2-2z" />
+            </g>
+            <text x="18" y="11.6" fontSize="10" fontWeight="600" fill="#507294" fontFamily="'IBM Plex Mono', monospace" style={{ pointerEvents: 'none' }}>{nc}</text>
           </g>
         )}
         {obs && (() => {
@@ -932,6 +952,8 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
             esAutor={!!userName && marcaElegida.created_by === userName} editable={editable(marcaElegida)}
             posicion={{ left: `${Math.max(0, Math.min(100, (k.x / vpInfo.w) * 100))}%`,
                         top: arriba ? `calc(${(k.y / vpInfo.h) * 100}% - 48px)` : `calc(${(k.y2 / vpInfo.h) * 100}% + 10px)` }}
+            bajoLaMarca={{ left: `${Math.max(0, Math.min(100, (k.x / vpInfo.w) * 100))}%`,
+                           top: `calc(${(k.y2 / vpInfo.h) * 100}% + ${arriba ? 8 : 52}px)` }}
             versionVigente={versionVigente?.version_number ?? null}
             onLlevar={vigenteId && marcaElegida.version_id && String(marcaElegida.version_id) !== String(vigenteId)
               ? () => llevarMarca(marcaElegida) : null}

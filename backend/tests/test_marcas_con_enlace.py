@@ -558,3 +558,51 @@ def test_reescribir_el_texto_solo_en_una_marca_de_texto(app, monkeypatch):
         cur, _ = _conectar(monkeypatch, [_figura(kind=kind, geo={'p': [1, 2]}), (False,), None])
         assert app.test_client().patch('/api/pdf/markups/5', json={'texto': texto}).status_code == 400
         assert not _update(cur)
+
+
+# ── Comentarios de una marca (3-nov-2026): solo se añaden, sin estado ni responsables ──
+
+def test_comentar_anade_en_la_base_con_autor_y_fecha(app, monkeypatch):
+    cur, conn = _conectar(monkeypatch, [([{'id': 'x', 'texto': 'antes'}, {'id': 'y', 'texto': 'Revisar cota'}],)])
+    r = app.test_client().post('/api/pdf/markups/5/comentarios', json={'texto': '  Revisar cota  '})
+    assert r.status_code == 200 and conn.committed
+    d = r.get_json()
+    assert d['comentario']['texto'] == 'Revisar cota' and d['comentario']['autor'] == 'Ana'
+    assert d['comentario']['autor_id'] == 7 and d['comentario']['en'].endswith('Z')
+    assert len(d['comentarios']) == 2
+    sql, p = cur.queries[0]
+    assert "|| %s::jsonb" in sql and 'publicado OR created_by = %s' in sql      # se añade, no se reescribe
+    assert json.loads(p[0])[0]['texto'] == 'Revisar cota' and p[1:] == (5, 'Ana', pdf.TOPE_COMENTARIOS)
+
+
+def test_comentario_vacio_largo_o_sin_ver_la_marca(app, monkeypatch):
+    _, conn = _conectar(monkeypatch, [])
+    assert app.test_client().post('/api/pdf/markups/5/comentarios', json={'texto': '   '}).status_code == 400
+    largo = 'x' * (pdf.TOPE_COMENTARIO + 1)
+    assert app.test_client().post('/api/pdf/markups/5/comentarios', json={'texto': largo}).status_code == 400
+    _, conn = _conectar(monkeypatch, [None, None])                    # borrador ajeno: no existe para él
+    assert app.test_client().post('/api/pdf/markups/5/comentarios', json={'texto': 'hola'}).status_code == 404
+    assert not conn.committed
+    _, conn = _conectar(monkeypatch, [None, (1,)])                    # la ve, pero está llena
+    r = app.test_client().post('/api/pdf/markups/5/comentarios', json={'texto': 'hola'})
+    assert r.status_code == 409 and r.get_json()['code'] == 'TOPE_COMENTARIOS' and not conn.committed
+
+
+def test_cambiar_la_marca_no_pisa_los_comentarios(app, monkeypatch):
+    docs = [(INFORME, 'obra', 'Informe.pdf', 'FILE')]
+    cur, _ = _conectar(monkeypatch, [_marca(estilo={'comentarios': [{'id': 'x'}]}), docs, docs])
+    app.test_client().patch('/api/pdf/markups/5', json={'citas': [INFORME]})
+    sql, p = [q for q in cur.queries if q[0].startswith('UPDATE pdf_markups')][0]
+    assert "jsonb_build_object('comentarios', COALESCE(style->'comentarios'" in sql
+    assert 'comentarios' not in json.loads(p[0])           # los de la base, no los que leyó
+
+
+def test_duplicar_y_llevar_no_copian_la_conversacion(app, monkeypatch):
+    cur, _ = _conectar(monkeypatch, [(VIGENTE,), (43,)])
+    app.test_client().post('/api/pdf/markups', json={'node_id': PLANO, 'model_urn': 'obra', 'page': 1, 'kind': 'cloud',
+                                                     'geometry': {}, 'style': {'comentarios': [{'id': 'x'}]}})
+    assert 'comentarios' not in json.loads(cur.queries[-1][1][5])
+    fila = (PLANO, 'obra', 2, 'cloud', {}, {'color': '#d97757', 'comentarios': [{'id': 'x'}]}, None, ANTERIOR, VIGENTE, 1)
+    cur, _ = _conectar(monkeypatch, [fila, (77,)])
+    app.test_client().post('/api/pdf/markups/5/llevar')
+    assert json.loads(cur.queries[-1][1][5]) == {'color': '#d97757'}

@@ -164,6 +164,22 @@ export function siguienteAngulo(angulo, paso = 45) {
 }
 
 // «16 oct 2026»: la fecha de una marca, corta.
+// El PATCH de una marca no devuelve sus comentarios (no los toca): se queda con los que ya tenía.
+export function conSuConversacion(marca, nueva) {
+  const comentarios = marca?.style?.comentarios;
+  return nueva?.style && comentarios
+    ? { ...marca, ...nueva, style: { ...nueva.style, comentarios } }
+    : { ...marca, ...nueva };
+}
+
+// «03 nov. 2026 · 10:42» para un comentario (llega en UTC con su Z: se muestra en la hora del navegador).
+export function fechaYHora(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  return `${fechaCorta(iso)} · ${d.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' })}`;
+}
+
 export function fechaCorta(iso) {
   if (!iso) return '';
   const d = new Date(iso);

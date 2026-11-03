@@ -241,3 +241,72 @@ tocaba hacer. Ahora:
   - como Luis: la tarjeta con *Declarar corregida / Empezar / No procede*;
   - el menú de «+ Añadir» ofrece sus dos opciones;
   - la pestaña Historial no muestra la caja de comentar.
+
+## 7 · Comentarios en la nube (3-nov-2026)
+
+Pedido: «en la nube, ¿hay forma de colocar comentarios? No crear su panel, sino colocarle comentarios».
+
+Choca en apariencia con lo decidido el 20-oct (docs/ux/MARCAS_REVISION_LO_PROFESIONAL.md): entonces se quitaron los
+comentarios de la marca *junto con* el estado libre y los asignados, porque los tres juntos eran una incidencia paralela,
+y en aquella versión el autor de la marca podía borrar lo que habían escrito otros. Lo que se construye ahora es la
+**opción B** de ese mismo documento, con sus garantías:
+
+- **Solo se añaden.** Nadie edita ni borra un comentario, tampoco el autor de la marca. Cada uno queda con autor, id y
+  hora (UTC).
+- **Sin estado ni responsable.** Pedir una corrección con responsable y fecha sigue siendo «Crear observación».
+- **Lo comenta cualquiera que vea la marca**: si está publicada, toda la obra; si es un borrador, solo su autor.
+
+Cómo:
+
+- **Ruta.** `POST /api/pdf/markups/<id>/comentarios` `{texto}` (1–2000 caracteres, hasta 200 por marca). Lleva la misma
+  guardia de recurso que el resto de la marca.
+- **Almacenamiento.** En `style.comentarios`, sin migración. Se añaden en la base con `||`, de modo que dos personas
+  comentando a la vez no se pisan.
+- **PATCH de la marca.** Conserva los comentarios que haya en la base (`style || {comentarios: los de la base}`). La
+  respuesta no los devuelve y el lector se queda con los que tenía (`conSuConversacion`).
+- **Duplicar y llevar a la vigente.** No copian la conversación: se queda en la original.
+- **Menú de la marca.** Botón «Comentar» o «Comentarios (N)» con el icono `comentario` del juego. Despliega una NOTA
+  DISCRETA de 240 px, no un panel. El dueño la vio grande: «solo para anotar… que no tape todo, que sea disimulado».
+  - Cada comentario: autor y hora en 11 px, y el texto en 12 px. Si no es de hoy, sale la fecha corta; la completa
+    va en el título.
+  - La lista es de 128 px como máximo, con desplazamiento.
+  - Abajo, un campo de una línea («Anotar un comentario…» / «Responder…») con una flecha para enviar; Enter también
+    envía.
+  - Sin texto de ayuda a la vista: «no se edita ni se borra» va en el título del campo.
+- **Segunda vuelta del dueño:** «tapa la nube, y cuando le doy escape sigue viéndose, o cuando le doy clic afuera
+  sigue viéndose».
+  - La nota va DEBAJO de la nube (`bajoLaMarca`), no bajo el menú, que está encima.
+  - Esc desde dentro del campo cierra la nota, y un segundo Esc deja la marca. Antes no llegaba: AISLADO para las
+    teclas dentro del menú, a propósito, para que escribir no dispare los atajos.
+  - Un clic fuera deja la marca, como en ACC. Arrastrar la hoja no cuenta.
+  - Dos trampas de React:
+    - el clic que abre el menú llegaba al documento después de montarse, y lo cerraba al instante;
+    - `onCerrar`, nuevo en cada redibujo, quitaba y ponía el escuchador justo entre soltar el ratón y el clic.
+  - Se arreglan registrando el escuchador tras un `setTimeout(0)` y guardando `onCerrar` en una ref.
+  - Comprobado en el banco: abrir, Esc, Esc, clic fuera, arrastrar y comentar.
+- **En la hoja.** Un distintivo con el número de comentarios, igual que el de referencias y a su izquierda. Al pulsarlo,
+  se abre la marca en sus comentarios.
+- **Colocación.** El menú y lo que despliega se corren a la izquierda si chocan con la columna de herramientas o con el
+  borde de la ventana. Antes, el botón «Comentar» quedaba debajo de la columna.
+- **Techo de rutas del portal.** Pasa de 313 a 314.
+
+Evidencia:
+
+- **Backend.** La suite da 2591 pasan y 1 falla; el fallo ya existía y no tiene que ver (`test_reconstruccion_desde_cero`).
+  Pruebas nuevas:
+  - se añade en la base con autor y fecha;
+  - vacío y demasiado largo devuelven 400;
+  - un borrador ajeno devuelve 404;
+  - una marca llena devuelve 409;
+  - el PATCH no pisa los comentarios;
+  - duplicar y llevar no copian la conversación.
+- **Docs.** El build pasa.
+- **Banco con PostgreSQL real, como `ecd_app`:**
+  - Luis comenta la nube publicada de Ana y Ana contesta;
+  - Luis no puede comentar el borrador de Ana (404);
+  - un comentario vacío da 400;
+  - Ana cambia el color de su borrador ya comentado y el comentario sigue en la base.
+- **Pantalla:**
+  - el distintivo «2» en la hoja abre la nube en sus comentarios;
+  - Luis comenta y el contador pasa a 3 en el menú y en la hoja;
+  - al recargar como Ana, el comentario sigue y su menú completo queda fuera de la columna de herramientas.

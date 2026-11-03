@@ -20,6 +20,13 @@ Detalle en `docs/archivos/18`, `19`, `20` y `21`.
   toda lectura; la app NO tiene DELETE en doc_issues desde la 26 y así sigue), borrador del plano sin responsable,
   pines de anuladas fuera de la hoja y el panel rehecho («Lo que te toca», valores que se pulsan, pestañas, caja de
   comentar fija). Toca backend (ruta nueva `/descartar`, techo 313) y portal: backend PRIMERO.
+- `70e62e23` (§6) DESPLEGADO y verificado (health `70e62e2357e6`, bundle del portal en las dos direcciones).
+- Commit siguiente (docs/archivos/21 §7, 3-nov): COMENTARIOS EN LA MARCA, pedidos por el dueño («no crear su panel sino
+  colocarle comentarios»). Es la opción B de docs/ux/MARCAS_REVISION_LO_PROFESIONAL.md: solo se añaden, sin estado ni
+  responsable. Van en `style.comentarios`, SIN migración, por la ruta nueva `POST /api/pdf/markups/<id>/comentarios`
+  (techo 314). En la hoja, una nota discreta bajo la nube y un distintivo con el número; Esc y un clic fuera cierran
+  el menú de la marca. Suite 2591 pasan + el mismo fallo previo; banco con PostgreSQL real como `ecd_app`. Toca
+  backend y portal: backend PRIMERO.
 - EXACT NEXT ACTION (histórica, ya hecha para c3144a3d): Manual Deploy de `visor-ecd-backend-va` y DESPUÉS de `visor-ecd-portal` con el HEAD de main;
   comprobar `/api/health` y el bundle del portal (Cloudflare ~5 min). Luego, recorrido real con dos personas (correo
   a observadores y subida de fotos sin probar en producción).

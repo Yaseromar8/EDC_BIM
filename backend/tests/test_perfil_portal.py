@@ -222,7 +222,10 @@ def test_el_recorte_es_real(rutas_portal):
     # 312 -> 313 (2-nov-2026): `POST /api/issues/<id>/descartar`. Un BORRADOR se borra de verdad, como en ACC (antes
     # se anulaba y quedaba «Anulada» a la vista de toda la obra); lo enviado sigue sin borrarse. Misma guardia de
     # recurso que los demás actos, y solo su autor (un borrador ajeno no existe).
-    TECHO = 313
+    # 313 -> 314 (3-nov-2026): `POST /api/pdf/markups/<id>/comentarios`. Comentarios en una marca, pedidos por el
+    # dueño («no crear su panel sino colocarle comentarios»): solo se añaden, sin estado ni responsable (la opción B
+    # de docs/ux/MARCAS_REVISION_LO_PROFESIONAL.md). Misma guardia de recurso que el resto de la marca.
+    TECHO = 314
     sin_puente = [r for r in rutas_portal
                   if r not in puente_acc and r not in revision_cad]
     assert len(sin_puente) < TECHO, (
