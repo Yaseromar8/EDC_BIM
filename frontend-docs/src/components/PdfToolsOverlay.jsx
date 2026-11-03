@@ -2,6 +2,7 @@
 // Mediciones (distancia/área/conteo), anotaciones (nube, flecha, rect, lápiz, texto)
 // y calibración de escala. Geometrías en coordenadas PDF (independientes del zoom).
 import React, { useState, useEffect, useRef, useCallback, useLayoutEffect } from 'react';
+import { incidenciaDeLaDireccion, sinIncidencia } from '../utils/enlacesDeArchivos';
 import toast from 'react-hot-toast';
 import { API } from '../utils/helpers';
 import { apiFetch } from '../utils/apiFetch';
@@ -157,6 +158,20 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
     setPedidoDelPlano(p => ({ vista, pin, n: (p?.n || 0) + 1 }));
     onPanelDelPlano?.(true);
   };
+  // Desde «Mi trabajo» (3-nov-2026): la dirección trae una incidencia de ESTE plano; se abre en su panel una vez.
+  useEffect(() => {
+    if (!nodeId) return undefined;
+    const id = incidenciaDeLaDireccion(window.location.search, nodeId);
+    if (id === null) return undefined;
+    // Tras el arranque del lector: al cambiar de documento, PDFViewer cierra el panel del plano en SU efecto, que corre
+    // después de este.
+    const t = setTimeout(() => {
+      window.history.replaceState(window.history.state, '',
+        window.location.pathname + sinIncidencia(window.location.search) + window.location.hash);
+      pedirAlPlano(id);
+    }, 0);
+    return () => clearTimeout(t);
+  }, [nodeId]); // eslint-disable-line react-hooks/exhaustive-deps
   const avisarDelPlano = useRef(onObservacionesDelPlano);
   avisarDelPlano.current = onObservacionesDelPlano;
   // LAS MARCAS SON DE LA VERSIÓN QUE SE MIRA (migración 36). Sin versión (enlace compartido, banco viejo),

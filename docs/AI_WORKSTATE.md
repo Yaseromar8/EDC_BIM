@@ -27,6 +27,11 @@ Detalle en `docs/archivos/18`, `19`, `20` y `21`.
   (techo 314). En la hoja, una nota discreta bajo la nube y un distintivo con el número; Esc y un clic fuera cierran
   el menú de la marca. Suite 2591 pasan + el mismo fallo previo; banco con PostgreSQL real como `ecd_app`. Toca
   backend y portal: backend PRIMERO.
+- `646f0e26` (comentarios en la marca) DESPLEGADO (health `646f0e2688af`).
+- Commit siguiente (3-nov): «Mi trabajo» abre el plano de una incidencia, con ella abierta (`&incidencia=<id>`; sin
+  plano, la herramienta Issues). `encargos.con_su_documento` en `/api/mi-trabajo`. Sin migración. La portada se queda
+  como está por decisión del dueño; el análisis y las maquetas (docs/ux/MI_TRABAJO_BANDEJA_UNICA.md, maquetas v1–v3)
+  quedan como registro, sin construir. Backend PRIMERO.
 - EXACT NEXT ACTION (histórica, ya hecha para c3144a3d): Manual Deploy de `visor-ecd-backend-va` y DESPUÉS de `visor-ecd-portal` con el HEAD de main;
   comprobar `/api/health` y el bundle del portal (Cloudflare ~5 min). Luego, recorrido real con dos personas (correo
   a observadores y subida de fotos sin probar en producción).

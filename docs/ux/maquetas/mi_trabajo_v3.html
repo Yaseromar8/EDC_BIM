@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ALEPHIA · Portada · tres ejemplos (v3)</title>
+<link rel="stylesheet" href="../../../design/fuentes/ibm-plex.css">
+<style>
+/* MAQUETA v3 (3-nov-2026). El dueño, sobre la v2: «se sigue viendo confuso, ¿no hay otro ejemplo?».
+   Tres ejemplos MÁS SIMPLES, con los mismos datos, para elegir uno (botones abajo a la derecha):
+     A · Tres preguntas  — tres números grandes; se ve UNA lista a la vez.
+     B · Agenda          — una sola lista por días, como un calendario: Hoy, Mañana, Esta semana.
+     C · Por obra        — una tarjeta por obra con lo que toca en ella.
+   Reglas comunes: una línea principal por fila (verbo + qué), una línea gris corta (dónde), la fecha a la derecha.
+   Nada más en la fila. Paleta D-24, IBM Plex, iconos del juego. No es código de la app. */
+:root { --fondo: #FAF9F5; --sup: #FFFFFF; --cab: #302F2E; --cab-texto: #E8E6DC; --linea: #E8E6DC; --linea-f: #CCCAC0;
+  --fila: #F1F0E8; --t1: #141413; --t2: #52524D; --t3: #72706B; --t4: #B0AEA5; --acento: #141413; --indicador: #D97757;
+  --enlace: #507294; --peligro: #B93535; --peligro-f: #FBEBEB; --ok: #788C5D; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--fondo); color: var(--t1); font: 14px/1.45 'IBM Plex Sans', system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+button { font: inherit; color: inherit; }
+svg.i { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+.cab { height: 36px; background: var(--cab); color: var(--cab-texto); display: flex; align-items: center; padding: 0 16px; gap: 18px; font-size: 13px; }
+.cab b { letter-spacing: .28em; font-weight: 500; font-size: 12px; } .cab .esp { flex: 1; }
+.pag { max-width: 720px; margin: 0 auto; padding: 36px 16px 90px; }
+.saludo { display: flex; align-items: center; gap: 12px; margin-bottom: 22px; }
+.saludo h1 { flex: 1; margin: 0; font-size: 24px; font-weight: 400; }
+.prod { display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 0 12px; border: 1px solid var(--linea); border-radius: 8px;
+  background: var(--sup); color: var(--t3); cursor: pointer; font-size: 13px; white-space: nowrap; }
+.prod b { color: var(--t1); font-weight: 600; } .prod svg { color: var(--t2); width: 16px; height: 16px; }
+.caja { background: var(--sup); border: 1px solid var(--linea); border-radius: 8px; }
+.ej { display: none; } .ej.on { display: block; }
+.nota { margin: 0 0 14px; font-size: 12.5px; color: var(--t3); }
+
+/* La fila, igual en los tres */
+ul { list-style: none; margin: 0; padding: 4px 0; }
+.f { display: flex; align-items: center; gap: 12px; padding: 11px 18px; cursor: pointer; }
+.f + .f { border-top: 1px solid var(--fila); }
+.f:hover { background: var(--fila); }
+.f .ico { width: 32px; height: 32px; border-radius: 8px; background: var(--fila); display: grid; place-items: center; color: var(--t2); flex: none; }
+.f.tarde .ico { background: var(--peligro-f); color: var(--peligro); }
+.f .que { flex: 1; min-width: 0; }
+.f .uno { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.f .uno b { font-weight: 600; }
+.f .dos { font-size: 12.5px; color: var(--t3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.f .cuando { font-size: 13px; color: var(--t2); white-space: nowrap; }
+.f.tarde .cuando { color: var(--peligro); font-weight: 600; }
+.f .ir { color: var(--t4); }
+.f:hover .ir { color: var(--t1); }
+.vacio { padding: 18px; color: var(--t3); }
+.pie { padding: 10px 18px 12px; border-top: 1px solid var(--linea); font-size: 13px; }
+.pie button { border: 0; background: none; padding: 0; color: var(--enlace); cursor: pointer; }
+
+/* A · Tres preguntas */
+.tres { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 12px; }
+.preg { text-align: left; border: 1px solid var(--linea); border-radius: 8px; background: var(--sup); padding: 14px 16px; cursor: pointer; position: relative; }
+.preg:hover { border-color: var(--linea-f); }
+.preg[aria-pressed="true"] { border-color: var(--t1); box-shadow: inset 0 0 0 1px var(--t1); }
+.preg .n { font-size: 28px; font-weight: 500; line-height: 1.1; }
+.preg .t { color: var(--t2); font-size: 13.5px; margin-top: 2px; }
+.preg .s { color: var(--t3); font-size: 12px; margin-top: 6px; }
+.preg .s.rojo { color: var(--peligro); font-weight: 600; }
+
+/* B · Agenda */
+.dia { padding: 12px 18px 2px; font-size: 12px; font-weight: 600; color: var(--t2); display: flex; gap: 8px; }
+.dia span { color: var(--t3); font-weight: 400; }
+.dia.rojo { color: var(--peligro); }
+.filtro { display: flex; gap: 6px; padding: 12px 18px 4px; flex-wrap: wrap; }
+.filtro button { border: 1px solid var(--linea-f); background: var(--sup); border-radius: 6px; padding: 3px 10px; font-size: 12.5px; color: var(--t2); cursor: pointer; }
+.filtro button[aria-pressed="true"] { background: var(--acento); border-color: var(--acento); color: #fff; }
+
+/* C · Por obra */
+.obra { margin-bottom: 12px; }
+.obra-cab { display: flex; align-items: center; gap: 10px; padding: 14px 18px; cursor: pointer; }
+.obra-cab h2 { flex: 1; margin: 0; font-size: 15px; font-weight: 600; }
+.obra-cab .cifras { font-size: 12.5px; color: var(--t3); }
+.obra-cab .cifras b { color: var(--peligro); font-weight: 600; }
+.obra-cab .flecha { color: var(--t3); transition: rotate .15s; }
+.obra.abierta .flecha { rotate: 90deg; }
+.obra ul { display: none; border-top: 1px solid var(--linea); }
+.obra.abierta ul { display: block; }
+
+.conm { position: fixed; right: 16px; bottom: 16px; display: flex; gap: 4px; background: var(--sup); border: 1px solid var(--linea);
+  border-radius: 8px; padding: 4px; box-shadow: 0 1px 3px rgb(20 20 19 / .1); z-index: 9; }
+.conm button { border: 0; background: none; padding: 6px 10px; border-radius: 6px; cursor: pointer; font-size: 12.5px; color: var(--t2); }
+.conm button[aria-pressed="true"] { background: var(--acento); color: #fff; }
+@media (max-width: 560px) { .tres { grid-template-columns: 1fr 1fr 1fr; gap: 8px; } .preg { padding: 10px; } .preg .n { font-size: 22px; }
+  .preg .s { display: none; } .saludo { flex-wrap: wrap; } .saludo h1 { flex-basis: 100%; } .f { padding: 10px 14px; } .f .ir { display: none; } }
+</style>
+</head>
+<body>
+<header class="cab"><b>ALEPHIA</b><span class="esp"></span><span>Mi cuenta</span><span>Cerrar sesión</span></header>
+<div class="pag">
+  <div class="saludo">
+    <h1>Hola, Milene</h1>
+    <span class="prod"><svg class="i" viewBox="0 0 24 24"><path d="M6.5 3.5H14l4.5 4.5v11a1.5 1.5 0 0 1-1.5 1.5H6.5A1.5 1.5 0 0 1 5 19V5a1.5 1.5 0 0 1 1.5-1.5z"/><path d="M13.5 3.5v5h5"/></svg>ALEPHIA <b>Docs</b></span>
+    <span class="prod"><svg class="i" viewBox="0 0 24 24"><path d="M12 3.5 19.5 7.7v8.6L12 20.5l-7.5-4.2V7.7z"/><path d="M4.5 7.7 12 12l7.5-4.3M12 12v8.5"/></svg>ALEPHIA <b>View</b></span>
+  </div>
+
+  <!-- A · TRES PREGUNTAS -->
+  <section class="ej on" id="A">
+    <p class="nota">Ejemplo A · Tres números responden las tres preguntas del día. Al tocar uno, debajo sale solo esa lista.</p>
+    <div class="tres" id="tres"></div>
+    <div class="caja"><ul id="listaA"></ul></div>
+  </section>
+
+  <!-- B · AGENDA -->
+  <section class="ej" id="B">
+    <p class="nota">Ejemplo B · Una sola lista ordenada por días, como una agenda. Arriba, un filtro opcional.</p>
+    <div class="caja"><div class="filtro" id="filtroB"></div><div id="listaB"></div></div>
+  </section>
+
+  <!-- C · POR OBRA -->
+  <section class="ej" id="C">
+    <p class="nota">Ejemplo C · Una tarjeta por obra con sus cifras. Se abre la obra y aparece lo que toca en ella.</p>
+    <div id="obras"></div>
+  </section>
+</div>
+
+<div class="conm" role="group" aria-label="Ejemplo">
+  <button aria-pressed="true" data-e="A">A · Tres preguntas</button>
+  <button aria-pressed="false" data-e="B">B · Agenda</button>
+  <button aria-pressed="false" data-e="C">C · Por obra</button>
+</div>
+
+<script>
+const ICO = {
+  corregir: '<path d="M12 21s-6.5-5.6-6.5-10.8a6.5 6.5 0 0 1 13 0C18.5 15.4 12 21 12 21z"/><path d="M12 6.7v3.8"/><circle cx="12" cy="13.2" r="1" fill="currentColor" stroke="none"/>',
+  revisar: '<circle cx="12" cy="12" r="8.5"/><path d="m8.5 12.3 2.4 2.4 4.6-4.9"/>',
+  responder: '<path d="M5.5 4.5h13a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H11l-4.5 3v-3h-1a2 2 0 0 1-2-2v-9a2 2 0 0 1 2-2z"/><path d="M10 9.2a2 2 0 1 1 2.8 1.8c-.5.3-.8.6-.8 1.2"/><circle cx="12" cy="14.6" r="1" fill="currentColor" stroke="none"/>',
+  entregar: '<path d="M6.5 3.5H14l4.5 4.5v11a1.5 1.5 0 0 1-1.5 1.5H6.5A1.5 1.5 0 0 1 5 19V5a1.5 1.5 0 0 1 1.5-1.5z"/><path d="M13.5 3.5v5h5"/><path d="M11.8 17.5V12M9.3 14.5l2.5-2.5 2.5 2.5"/>',
+  recibir: '<path d="M20.5 3.5 3.5 10.5l7 3 3 7z"/><path d="m10.5 13.5 10-10"/>',
+  firmar: '<path d="M8.5 4.5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-12a2 2 0 0 0-2-2h-1.5"/><rect x="8.5" y="3" width="7" height="3" rx="1"/><path d="m9 13.5 2 2 4-4"/>',
+  espera: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>',
+  ir: '<path d="m9 6 6 6-6 6"/>',
+};
+const svg = (k) => `<svg class="i" viewBox="0 0 24 24">${ICO[k]}</svg>`;
+// lista: 'hacer' | 'espera' | 'entregar'.  dia: 0 hoy/vencido … para la agenda.
+const COSAS = [
+  { lista: 'hacer', ico: 'corregir', verbo: 'Corregir', que: 'la incidencia ISS-002 del plano DR-803', donde: 'PQT8_TALARA · la levantó Ana Ríos', cuando: 'venció ayer', dia: 'tarde', obra: 'PQT8_TALARA', tipo: 'Corregir' },
+  { lista: 'hacer', ico: 'revisar', verbo: 'Revisar', que: 'los planos de drenaje C03 (12)', donde: 'PQT8_TALARA · te lo pidió Luis Paz', cuando: 'miércoles', dia: 'semana', obra: 'PQT8_TALARA', tipo: 'Revisar' },
+  { lista: 'hacer', ico: 'responder', verbo: 'Responder', que: 'la consulta RFI-031 sobre el buzón B-12', donde: 'PQT8_TALARA · plazo legal de 5 días (art. 190)', cuando: 'jueves', dia: 'semana', obra: 'PQT8_TALARA', tipo: 'Responder' },
+  { lista: 'hacer', ico: 'recibir', verbo: 'Confirmar que recibiste', que: 'los planos de estructuras (8)', donde: 'PQT8_TALARA · los envió Oficina técnica', cuando: 'viernes', dia: 'semana', obra: 'PQT8_TALARA', tipo: 'Recibir' },
+  { lista: 'hacer', ico: 'corregir', verbo: 'Verificar', que: 'la corrección de ISS-019 que hizo Luis', donde: 'PQT5_PIURA · la levantaste tú', cuando: '12 nov.', dia: 'despues', obra: 'PQT5_PIURA', tipo: 'Corregir' },
+  { lista: 'hacer', ico: 'firmar', verbo: 'Firmar', que: 'el protocolo de prueba hidráulica, tramo 3', donde: 'PQT8_TALARA', cuando: 'sin fecha', dia: 'sin', obra: 'PQT8_TALARA', tipo: 'Firmar' },
+  { lista: 'espera', ico: 'espera', verbo: 'Contratista SAC', que: 'tiene que corregir ISS-021 (viga V-104)', donde: 'PQT8_TALARA · lo pediste tú', cuando: 'hasta el 8 nov.', dia: 'semana', obra: 'PQT8_TALARA', tipo: 'Otros' },
+  { lista: 'espera', ico: 'espera', verbo: 'El proyectista', que: 'tiene que responder la consulta RFI-029', donde: 'PQT8_TALARA · va en el día 5 de 10', cuando: 'hasta el 10 nov.', dia: 'despues', obra: 'PQT8_TALARA', tipo: 'Otros' },
+  { lista: 'espera', ico: 'espera', verbo: 'Supervisión', que: 'tiene que aprobar las EE.TT. de concreto', donde: 'PQT8_TALARA · paso 3 de 3', cuando: 'miércoles', dia: 'semana', obra: 'PQT8_TALARA', tipo: 'Otros' },
+  { lista: 'entregar', ico: 'entregar', verbo: 'Entregar', que: 'el modelo hidráulico C04', donde: 'PQT8_TALARA · plan de entregas · va al 60 %', cuando: '8 nov.', dia: 'semana', obra: 'PQT8_TALARA', tipo: 'Entregar' },
+  { lista: 'entregar', ico: 'entregar', verbo: 'Entregar', que: 'los planos de estructuras C02', donde: 'PQT8_TALARA · plan de entregas · va al 30 %', cuando: '15 nov.', dia: 'despues', obra: 'PQT8_TALARA', tipo: 'Entregar' },
+];
+const fila = (c) => `<li class="f${c.dia === 'tarde' ? ' tarde' : ''}"><span class="ico">${svg(c.ico)}</span>
+  <div class="que"><div class="uno"><b>${c.verbo}</b> ${c.que}</div><div class="dos">${c.donde}</div></div>
+  <span class="cuando">${c.cuando}</span><span class="ir">${svg('ir')}</span></li>`;
+
+// A
+const PREG = [
+  ['hacer', 'Te toca hacer', '1 vencida'],
+  ['espera', 'Esperas de otros', '1 vence esta semana'],
+  ['entregar', 'Tus entregas', 'la próxima, el 8 nov.'],
+];
+let elegida = 'hacer';
+function pintarA() {
+  document.getElementById('tres').innerHTML = PREG.map(([k, t, s]) => `<button class="preg" data-k="${k}" aria-pressed="${k === elegida}">
+    <div class="n">${COSAS.filter(c => c.lista === k).length}</div><div class="t">${t}</div><div class="s${k === 'hacer' ? ' rojo' : ''}">${s}</div></button>`).join('');
+  document.querySelectorAll('.preg').forEach(b => b.onclick = () => { elegida = b.dataset.k; pintarA(); });
+  document.getElementById('listaA').innerHTML = COSAS.filter(c => c.lista === elegida).map(fila).join('');
+}
+
+// B
+const DIAS = [['tarde', 'Vencido'], ['semana', 'Esta semana'], ['despues', 'Más adelante'], ['sin', 'Sin fecha']];
+const FILTROS = ['Todo', 'Me toca a mí', 'Espero de otros'];
+let filtro = 'Todo';
+function pintarB() {
+  document.getElementById('filtroB').innerHTML = FILTROS.map(f => `<button aria-pressed="${f === filtro}">${f}</button>`).join('');
+  document.querySelectorAll('#filtroB button').forEach(b => b.onclick = () => { filtro = b.textContent; pintarB(); });
+  const cosas = COSAS.filter(c => filtro === 'Todo' || (filtro === 'Espero de otros' ? c.lista === 'espera' : c.lista !== 'espera'));
+  document.getElementById('listaB').innerHTML = DIAS.map(([k, t]) => {
+    const de = cosas.filter(c => c.dia === k);
+    return de.length ? `<div class="dia${k === 'tarde' ? ' rojo' : ''}">${t}<span>${de.length}</span></div><ul>${de.map(fila).join('')}</ul>` : '';
+  }).join('');
+}
+
+// C
+const abiertas = new Set(['PQT8_TALARA']);
+function pintarC() {
+  const obras = [...new Set(COSAS.map(c => c.obra))];
+  document.getElementById('obras').innerHTML = obras.map(o => {
+    const de = COSAS.filter(c => c.obra === o);
+    const hacer = de.filter(c => c.lista !== 'espera').length, espera = de.filter(c => c.lista === 'espera').length;
+    const tarde = de.filter(c => c.dia === 'tarde').length;
+    return `<div class="caja obra${abiertas.has(o) ? ' abierta' : ''}" data-o="${o}"><div class="obra-cab">
+      <h2>${o}</h2><span class="cifras">${tarde ? `<b>${tarde} vencida</b> · ` : ''}${hacer} te tocan · ${espera} esperas</span>
+      <span class="flecha">${svg('ir')}</span></div><ul>${de.map(fila).join('')}</ul></div>`;
+  }).join('');
+  document.querySelectorAll('.obra-cab').forEach(h => h.onclick = () => {
+    const o = h.parentNode.dataset.o; abiertas.has(o) ? abiertas.delete(o) : abiertas.add(o); pintarC();
+  });
+}
+document.querySelectorAll('.conm button').forEach(b => b.onclick = () => {
+  document.querySelectorAll('.conm button').forEach(x => x.setAttribute('aria-pressed', x === b));
+  document.querySelectorAll('.ej').forEach(s => s.classList.toggle('on', s.id === b.dataset.e));
+});
+pintarA(); pintarB(); pintarC();
+</script>
+</body>
+</html>

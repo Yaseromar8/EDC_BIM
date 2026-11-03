@@ -305,3 +305,33 @@ def test_los_motivos_de_sobrante_son_constantes_distinguibles():
     assert enc.YA_RESUELTO not in enc._DE_EXISTENCIA, (
         'la divergencia de ESTADO se cuenta como huerfano: son cosas distintas')
     assert enc.SIN_OBJETO in enc._DE_EXISTENCIA
+
+
+def test_una_incidencia_sobre_un_plano_lleva_a_ese_plano():
+    """«Al hacer clic no te lleva al archivo» (3-nov-2026): la bandeja dice el documento de la incidencia."""
+    import encargos as enc
+
+    class Cur:
+        def __init__(self):
+            self.q = []
+
+        def execute(self, sql, params=None):
+            self.q.append((sql, params))
+
+        def fetchall(self):
+            return [(12, [{'tipo': 'plano', 'documento': 'doc-a', 'version_id': 'v-1'}]),
+                    (13, [{'tipo': 'foto', 'documento': 'img'}]),
+                    (14, [{'tipo': 'marca', 'marca': 5, 'documento': 'doc-b'}])]
+
+    cur = Cur()
+    pendientes = [{'objeto_tipo': 'ISSUE', 'objeto_id': '12'}, {'objeto_tipo': 'ISSUE', 'objeto_id': '13'},
+                  {'objeto_tipo': 'ISSUE', 'objeto_id': '14'}, {'objeto_tipo': 'REVIEW', 'objeto_id': '12'}]
+    salida = enc.con_su_documento(cur, pendientes)
+    assert cur.q[0][1] == ([12, 13, 14],)
+    assert salida[0]['documento'] == 'doc-a' and salida[0]['version'] == 'v-1'
+    assert 'documento' not in salida[1]                       # sin plano: no se inventa destino
+    assert salida[2] == {'objeto_tipo': 'ISSUE', 'objeto_id': '14', 'documento': 'doc-b', 'version': None}
+    assert 'documento' not in salida[3]                       # solo incidencias
+    cur = Cur()
+    assert enc.con_su_documento(cur, [{'objeto_tipo': 'RFI', 'objeto_id': '3'}]) and not cur.q
+

@@ -16,6 +16,10 @@
  * ABRIR UNA REVISIÓN (REVIEWS · E1). Con `onAbrir`, las filas de tipo Revisión
  * llevan a su detalle. Una fila con asunto neutro también se abre: el detalle
  * dice que no hay acceso a todos sus documentos, sin nombrar ninguno.
+ *
+ * ABRIR UNA INCIDENCIA (3-nov-2026, «al hacer clic no te lleva al archivo»). Con
+ * `onAbrirIncidencia`: si vive en un plano, al plano con la incidencia abierta;
+ * si no, a la herramienta Issues de su obra, con ella abierta.
  */
 import React, { useEffect, useState } from 'react';
 import { apiFetch } from '../utils/apiFetch';
@@ -38,7 +42,9 @@ function diasPara(iso) {
   return Math.ceil(ms / 86400000);
 }
 
-export default function MiTrabajo({ compacto = false, onAbrir = null }) {
+const ETIQUETA_ISSUE = 'Incidencia';
+
+export default function MiTrabajo({ compacto = false, onAbrir = null, onAbrirIncidencia = null }) {
   const [estado, setEstado] = useState('cargando');
   const [pendientes, setPendientes] = useState([]);
 
@@ -84,11 +90,13 @@ export default function MiTrabajo({ compacto = false, onAbrir = null }) {
           {pendientes.slice(0, compacto ? 5 : 50).map((p, i) => {
             const dias = diasPara(p.vence_en);
             const vencido = dias !== null && dias < 0;
-            const abrible = Boolean(onAbrir) && p.objeto_tipo === 'REVIEW' && p.objeto_id && p.project_id;
+            const esRevision = Boolean(onAbrir) && p.objeto_tipo === 'REVIEW' && p.objeto_id && p.project_id;
+            const esIncidencia = Boolean(onAbrirIncidencia) && p.objeto_tipo === 'ISSUE' && p.objeto_id && p.project_id;
+            const abrible = esRevision || esIncidencia;
             const contenido = (
               <>
                 <span style={{ ...S.tipo, ...(vencido ? S.tipoVencido : {}) }}>
-                  {ETIQUETA[p.objeto_tipo] || p.objeto_tipo}
+                  {p.objeto_tipo === 'ISSUE' ? ETIQUETA_ISSUE : (ETIQUETA[p.objeto_tipo] || p.objeto_tipo)}
                 </span>
                 <div style={S.centro}>
                   <div style={S.asunto}>{p.asunto}</div>
@@ -107,8 +115,12 @@ export default function MiTrabajo({ compacto = false, onAbrir = null }) {
             return (
               <li key={p.id} style={{ ...(abrible ? S.filaAbrible : S.fila), ...(i === 0 ? S.primera : {}) }}>
                 {abrible ? (
-                  <button type="button" className="mt-abrir" title="Abrir la revisión"
-                          onClick={() => onAbrir({ obra: p.project_id, revision: p.objeto_id })}>
+                  <button type="button" className="mt-abrir"
+                          title={esRevision ? 'Abrir la revisión' : p.documento ? 'Abrir el plano y la incidencia' : 'Abrir la incidencia'}
+                          onClick={() => (esRevision
+                            ? onAbrir({ obra: p.project_id, revision: p.objeto_id })
+                            : onAbrirIncidencia({ obra: p.project_id, incidencia: p.objeto_id,
+                                                  documento: p.documento || null, version: p.version || null }))}>
                     {contenido}
                   </button>
                 ) : contenido}

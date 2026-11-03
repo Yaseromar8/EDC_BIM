@@ -1,0 +1,278 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ALEPHIA · Portada con Mi trabajo · maqueta v2</title>
+<link rel="stylesheet" href="../../../design/fuentes/ibm-plex.css">
+<style>
+/* MAQUETA v2 (3-nov-2026) · TODO EN LA PORTADA, a pedido del dueño: «la idea sería que todo se vea en la portada…
+   que se vea intuitivo y no esté desordenado». No es código de la app.
+   Orden de lectura: 1) saludo + resumen de una línea, 2) lo que me toca (columna ancha), 3) lo que sigo (columna
+   estrecha), 4) los dos productos, arriba a la derecha y pequeños. Una sola tarjeta principal; las otras, más quietas.
+   Paleta D-24 (pages/entradaGris.css), IBM Plex, iconos del juego. Análisis: docs/ux/MI_TRABAJO_BANDEJA_UNICA.md */
+:root {
+  --fondo: #FAF9F5; --sup: #FFFFFF; --cab: #302F2E; --cab-texto: #E8E6DC;
+  --linea: #E8E6DC; --linea-f: #CCCAC0; --fila: #F1F0E8;
+  --t1: #141413; --t2: #52524D; --t3: #72706B; --t4: #B0AEA5;
+  --acento: #141413; --indicador: #D97757; --enlace: #507294;
+  --peligro: #B93535; --peligro-f: #FBEBEB; --chip: #F1F0E8;
+  --abierta: #D97757; --curso: #6A9BCC; --revision: #B08D3C; --ok: #788C5D;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--fondo); color: var(--t1); font: 14px/1.4 'IBM Plex Sans', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased; }
+button { font: inherit; color: inherit; }
+svg.i { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round;
+  stroke-linejoin: round; flex: none; }
+code { font: 500 12.5px 'IBM Plex Mono', monospace; color: var(--t2); }
+.cab { height: 36px; background: var(--cab); color: var(--cab-texto); display: flex; align-items: center; padding: 0 16px; gap: 18px; font-size: 13px; }
+.cab b { letter-spacing: .28em; font-weight: 500; font-size: 12px; }
+.cab .esp { flex: 1; }
+
+.portada { max-width: 1120px; margin: 0 auto; padding: 32px 24px 64px; }
+
+/* 1 · saludo, resumen y productos */
+.arriba { display: flex; align-items: flex-end; gap: 24px; margin-bottom: 24px; }
+.saludo { flex: 1; min-width: 0; }
+.saludo h1 { margin: 0 0 4px; font-size: 24px; font-weight: 400; }
+.resumen { color: var(--t2); font-size: 14px; }
+.resumen b { font-weight: 600; color: var(--t1); }
+.resumen .rojo { color: var(--peligro); font-weight: 600; }
+.prods { display: flex; gap: 10px; }
+.prod { display: flex; align-items: center; gap: 10px; height: 44px; padding: 0 16px 0 12px; background: var(--sup);
+  border: 1px solid var(--linea); border-radius: 8px; cursor: pointer; color: var(--t3); white-space: nowrap; }
+.prod:hover { border-color: var(--linea-f); }
+.prod svg { color: var(--t2); }
+.prod b { color: var(--t1); font-weight: 600; }
+
+/* 2 y 3 · las dos columnas */
+.cuerpo-portada { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 20px; align-items: start; }
+.tarjeta { background: var(--sup); border: 1px solid var(--linea); border-radius: 8px; }
+.t-cab { display: flex; align-items: center; gap: 8px; padding: 14px 18px 0; }
+.t-cab h2 { margin: 0; font-size: 15px; font-weight: 600; }
+.t-cab .esp { flex: 1; }
+.num { background: var(--acento); color: #fff; border-radius: 9px; padding: 0 7px; font-size: 12px; font-weight: 600; line-height: 18px; }
+.obra-sel { height: 28px; border: 1px solid var(--linea-f); border-radius: 6px; background: var(--sup); padding: 0 26px 0 10px;
+  font-size: 12.5px; color: var(--t2); cursor: pointer; position: relative; }
+.obra-sel::after { content: ''; position: absolute; right: 10px; top: 12px; border: 4px solid transparent; border-top-color: var(--t3); }
+.pest { display: flex; gap: 2px; padding: 8px 12px 0; border-bottom: 1px solid var(--linea); overflow-x: auto; scrollbar-width: none; }
+.pest::-webkit-scrollbar { display: none; }
+.pest button { border: 0; background: none; padding: 8px 8px 9px; font-size: 13px; color: var(--t3); cursor: pointer;
+  border-bottom: 2px solid transparent; margin-bottom: -1px; white-space: nowrap; }
+.pest button:hover { color: var(--t1); }
+.pest button[aria-selected="true"] { color: var(--t1); font-weight: 600; border-bottom-color: var(--indicador); }
+.pest button span { color: var(--t4); font-weight: 500; margin-left: 3px; }
+.pest button span.rojo { color: var(--peligro); }
+.grupo { padding: 14px 18px 2px; font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--t3); }
+.grupo.rojo { color: var(--peligro); }
+ul.lista { list-style: none; margin: 0; padding: 0 8px; }
+.fila { display: flex; align-items: center; gap: 12px; padding: 9px 10px; border-radius: 6px; cursor: pointer; position: relative; }
+.fila + .fila { border-top: 1px solid var(--fila); }
+.fila:hover { background: var(--fila); }
+.fila:hover + .fila { border-top-color: transparent; }
+.ico { width: 30px; height: 30px; border-radius: 6px; background: var(--chip); display: grid; place-items: center; color: var(--t2); flex: none; }
+.fila.vencida .ico { background: var(--peligro-f); color: var(--peligro); }
+.cuerpo { flex: 1; min-width: 0; }
+.titulo { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.titulo .verbo { font-weight: 600; }
+.meta { font-size: 12.5px; color: var(--t3); margin-top: 2px; display: flex; gap: 6px; align-items: center; white-space: nowrap; overflow: hidden; }
+.meta > span:last-child { overflow: hidden; text-overflow: ellipsis; }
+.meta .doc { color: var(--enlace); }
+.meta i { font-style: normal; color: var(--t4); }
+.estado { display: inline-flex; align-items: center; gap: 5px; color: var(--t2); }
+.estado::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--c, var(--t4)); }
+.plazo { text-align: right; font-size: 12.5px; color: var(--t3); white-space: nowrap; flex: none; min-width: 96px; }
+.plazo b { display: block; font-weight: 500; color: var(--t2); }
+.plazo.rojo b { color: var(--peligro); font-weight: 600; }
+.plazo .ley { font-size: 11.5px; border-bottom: 1px dotted var(--t4); cursor: help; }
+.accion { position: absolute; right: 10px; top: 50%; translate: 0 -50%; display: none; }
+.fila:hover .accion { display: flex; }
+.fila:hover .plazo { visibility: hidden; }
+.btn { height: 28px; padding: 0 10px; border-radius: 6px; border: 1px solid var(--linea-f); background: var(--sup); font-size: 12.5px; cursor: pointer; white-space: nowrap; }
+.btn.prim { background: var(--acento); color: #fff; border-color: transparent; }
+.t-pie { display: flex; justify-content: space-between; align-items: center; padding: 10px 18px 12px; margin-top: 6px; border-top: 1px solid var(--linea); font-size: 13px; }
+.t-pie button { border: 0; background: none; padding: 0; color: var(--enlace); cursor: pointer; font-size: 13px; }
+.t-pie button:hover { text-decoration: underline; }
+.t-pie span { color: var(--t3); font-size: 12px; }
+.vacio { padding: 20px 18px 8px; color: var(--t3); }
+
+/* la columna de lo que sigo: más quieta, sin iconos grandes */
+.lado { display: flex; flex-direction: column; gap: 16px; }
+.lado .t-cab { padding: 12px 14px 4px; }
+.lado .t-cab h2 { font-size: 13.5px; }
+.lado .t-cab small { color: var(--t3); font-size: 12px; }
+.mini { padding: 8px 14px; cursor: pointer; }
+.mini + .mini { border-top: 1px solid var(--fila); }
+.mini:hover { background: var(--fila); }
+.mini .uno { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mini .meta { font-size: 12px; }
+.barra { height: 4px; background: var(--fila); border-radius: 2px; margin-top: 6px; overflow: hidden; }
+.barra i { display: block; height: 100%; background: var(--t2); border-radius: 2px; }
+.lado .t-pie { padding: 8px 14px 10px; margin-top: 0; }
+.hecho .uno { color: var(--t2); }
+.hecho .uno::before { content: '✓'; color: var(--ok); margin-right: 6px; font-weight: 600; }
+.tip { position: fixed; z-index: 20; max-width: 300px; background: var(--cab); color: #FAF9F5; font-size: 12px;
+  line-height: 1.45; padding: 8px 10px; border-radius: 6px; pointer-events: none; display: none; }
+
+@media (max-width: 920px) {
+  .cuerpo-portada { grid-template-columns: minmax(0, 1fr); }
+  .arriba { flex-direction: column; align-items: stretch; }
+  .prods { order: 3; }
+}
+@media (max-width: 560px) { .portada { padding: 20px 16px 48px; } .accion { display: none !important; } .fila:hover .plazo { visibility: visible; }
+  .meta .quien, .meta .q-sep { display: none; } .prod { flex: 1; }
+  .t-pie span { display: none; } .plazo { min-width: 0; } .fila { gap: 10px; align-items: flex-start; }
+  .fila .titulo { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; } }
+</style>
+</head>
+<body>
+<header class="cab"><b>ALEPHIA</b><span class="esp"></span><span>Mi cuenta</span><span>Cerrar sesión</span></header>
+
+<div class="portada">
+  <!-- 1 · Saludo con el resumen en una línea, y los dos productos a la derecha -->
+  <div class="arriba">
+    <div class="saludo">
+      <h1>Hola, Milene</h1>
+      <div class="resumen"><b>7 pendientes</b> · <span class="rojo">1 vencido</span> · 4 esta semana · tu próxima entrega, el 8 nov.</div>
+    </div>
+    <div class="prods">
+      <div class="prod"><svg class="i" viewBox="0 0 24 24"><path d="M6.5 3.5H14l4.5 4.5v11a1.5 1.5 0 0 1-1.5 1.5H6.5A1.5 1.5 0 0 1 5 19V5a1.5 1.5 0 0 1 1.5-1.5z"/><path d="M13.5 3.5v5h5"/><path d="M8.5 13h7M8.5 16h5"/></svg><span>ALEPHIA <b>Docs</b></span></div>
+      <div class="prod"><svg class="i" viewBox="0 0 24 24"><path d="M12 3.5 19.5 7.7v8.6L12 20.5l-7.5-4.2V7.7z"/><path d="M4.5 7.7 12 12l7.5-4.3M12 12v8.5"/></svg><span>ALEPHIA <b>View</b></span></div>
+    </div>
+  </div>
+
+  <div class="cuerpo-portada">
+    <!-- 2 · LO QUE ME TOCA: la tarjeta principal -->
+    <section class="tarjeta" aria-label="Mi trabajo">
+      <div class="t-cab"><h2>Lo que te toca</h2><span class="num">7</span><span class="esp"></span>
+        <span class="obra-sel">Todas las obras</span></div>
+      <div class="pest" role="tablist" id="pest"></div>
+      <div id="lista"></div>
+      <div class="t-pie"><button id="mas"></button><span>Ordenado por plazo · cada fila abre su documento listo para actuar</span></div>
+    </section>
+
+    <!-- 3 · LO QUE SIGO: tres tarjetas pequeñas -->
+    <aside class="lado">
+      <section class="tarjeta">
+        <div class="t-cab"><h2>Esperando a otros</h2><span class="esp"></span><small>3</small></div>
+        <div id="otros"></div>
+      </section>
+      <section class="tarjeta">
+        <div class="t-cab"><h2>Tus entregas del plan</h2><span class="esp"></span><small>próximas 3</small></div>
+        <div id="entregas"></div>
+      </section>
+      <section class="tarjeta">
+        <div class="t-cab"><h2>Hecho esta semana</h2><span class="esp"></span><small>3</small></div>
+        <div id="hecho" class="hecho"></div>
+      </section>
+    </aside>
+  </div>
+</div>
+<div class="tip" id="tip"></div>
+
+<script>
+const ICO = {
+  corregir: '<path d="M12 21s-6.5-5.6-6.5-10.8a6.5 6.5 0 0 1 13 0C18.5 15.4 12 21 12 21z"/><path d="M12 6.7v3.8"/><circle cx="12" cy="13.2" r="1" fill="currentColor" stroke="none"/>',
+  verificar: '<circle cx="12" cy="12" r="8.5"/><path d="m8.5 12.3 2.4 2.4 4.6-4.9"/>',
+  revisar: '<circle cx="12" cy="12" r="8.5"/><path d="m8.5 12.3 2.4 2.4 4.6-4.9"/>',
+  responder: '<path d="M5.5 4.5h13a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H11l-4.5 3v-3h-1a2 2 0 0 1-2-2v-9a2 2 0 0 1 2-2z"/><path d="M10 9.2a2 2 0 1 1 2.8 1.8c-.5.3-.8.6-.8 1.2"/><circle cx="12" cy="14.6" r="1" fill="currentColor" stroke="none"/>',
+  entregar: '<path d="M6.5 3.5H14l4.5 4.5v11a1.5 1.5 0 0 1-1.5 1.5H6.5A1.5 1.5 0 0 1 5 19V5a1.5 1.5 0 0 1 1.5-1.5z"/><path d="M13.5 3.5v5h5"/><path d="M11.8 17.5V12M9.3 14.5l2.5-2.5 2.5 2.5"/>',
+  recibir: '<path d="M20.5 3.5 3.5 10.5l7 3 3 7z"/><path d="m10.5 13.5 10-10"/>',
+  firmar: '<path d="M8.5 4.5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-12a2 2 0 0 0-2-2h-1.5"/><rect x="8.5" y="3" width="7" height="3" rx="1"/><path d="m9 13.5 2 2 4-4"/>',
+};
+const svg = (k) => `<svg class="i" viewBox="0 0 24 24">${ICO[k]}</svg>`;
+const FILAS = [
+  { acto: 'corregir', verbo: 'Corregir', codigo: 'ISS-002', titulo: 'VISTAS_3D_DESCRIPCION_CALCULO no coincide con el cuadro',
+    doc: 'DR-803.pdf · pág. 2', obra: 'PQT8_TALARA', quien: 'Ana Ríos (Supervisión)', estado: ['Abierta', 'var(--abierta)'],
+    grupo: 'vencido', plazo: 'vencido hace 1 d', accion: 'Abrir el plano' },
+  { acto: 'revisar', verbo: 'Revisar', codigo: 'REV-014', titulo: 'Planos de drenaje C03 · 12 documentos',
+    doc: 'paso 2 de 3: tu decisión', obra: 'PQT8_TALARA', quien: 'Luis Paz', estado: ['En revisión', 'var(--revision)'],
+    grupo: 'semana', plazo: 'en 2 d', accion: 'Abrir la revisión' },
+  { acto: 'responder', verbo: 'Absolver', codigo: 'RFI-031', titulo: 'Cota de fondo del buzón B-12',
+    doc: 'DR-805.pdf · pág. 1', obra: 'PQT8_TALARA', quien: 'Contratista SAC', estado: ['Abierta', 'var(--abierta)'],
+    grupo: 'semana', plazo: 'en 3 d', ley: '5 días · art. 190',
+    leyTexto: 'Consulta en obra (Reglamento de la Ley 32069, art. 190): la supervisión absuelve en 5 días calendario. Si nadie la absuelve, el contratista puede pedir ampliación de plazo por la demora.',
+    accion: 'Responder' },
+  { acto: 'recibir', verbo: 'Acusar recibo', codigo: 'TRN-022', titulo: 'Emisión de planos de estructuras · 8 documentos',
+    doc: 'Para construcción (A1)', obra: 'PQT8_TALARA', quien: 'Oficina técnica', estado: ['Enviada', 'var(--curso)'],
+    grupo: 'semana', plazo: 'en 4 d', accion: 'Ver la emisión' },
+  { acto: 'entregar', verbo: 'Entregar', codigo: 'P8-HID-MOD-001', titulo: 'Modelo hidráulico C04',
+    doc: 'Plan de entregas · «Expediente técnico»', obra: 'PQT8_TALARA', quien: 'tu equipo', estado: ['En curso (S0)', 'var(--t4)'],
+    grupo: 'semana', plazo: 'en 5 d', accion: 'Subir la versión' },
+  { acto: 'corregir', verbo: 'Verificar', codigo: 'ISS-019', titulo: 'Junta de dilatación sin detalle · corregida por Luis',
+    doc: 'ES-210.pdf · pág. 3', obra: 'PQT5_PIURA', quien: 'la levantaste tú', estado: ['Corregida', 'var(--revision)'],
+    grupo: 'adelante', plazo: 'en 9 d', accion: 'Verificar' },
+  { acto: 'firmar', verbo: 'Firmar', codigo: 'PRT-118', titulo: 'Prueba hidráulica · tramo 3',
+    doc: 'Protocolo · 0+620 a 0+690', obra: 'PQT8_TALARA', quien: 'Residente', estado: ['Por firmar', 'var(--curso)'],
+    grupo: 'sinplazo', plazo: 'sin plazo', accion: 'Firmar' },
+];
+const GRUPOS = { vencido: 'Vencido', semana: 'Esta semana', adelante: 'Más adelante', sinplazo: 'Sin plazo' };
+const ACTOS = [['todo', 'Todo'], ['corregir', 'Corregir'], ['revisar', 'Revisar'], ['responder', 'Responder'],
+  ['entregar', 'Entregar'], ['recibir', 'Recibir'], ['firmar', 'Firmar']];
+const OTROS = [
+  { codigo: 'ISS-021', titulo: 'Falta armadura en viga V-104', a: 'Contratista SAC', estado: ['En curso', 'var(--curso)'], plazo: 'vence 8 nov.' },
+  { codigo: 'RFI-029', titulo: 'Diámetro de la tubería de rebose', a: 'Proyectista', estado: ['Abierta', 'var(--abierta)'], plazo: 'día 5 de 10' },
+  { codigo: 'REV-012', titulo: 'EE.TT. de concreto', a: 'Supervisión', estado: ['En revisión', 'var(--revision)'], plazo: 'en 2 d' },
+];
+const ENTREGAS = [
+  { codigo: 'P8-HID-MOD-001', titulo: 'Modelo hidráulico C04', fecha: '8 nov.', hecho: 60 },
+  { codigo: 'P8-EST-PLA-014', titulo: 'Planos de estructuras C02', fecha: '15 nov.', hecho: 30 },
+  { codigo: 'P8-GEN-MEM-003', titulo: 'Memoria descriptiva C01', fecha: '22 nov.', hecho: 0 },
+];
+const HECHO = [
+  { t: 'Corregiste ISS-015', d: 'ayer · la verificó Ana Ríos' },
+  { t: 'Aprobaste REV-011', d: 'lun. 2 nov.' },
+  { t: 'Acusaste recibo de TRN-019', d: 'vie. 30 oct.' },
+];
+const VISIBLES = 5;
+let acto = 'todo', todo = false;
+
+function fila(f) {
+  const rojo = f.grupo === 'vencido';
+  return `<li class="fila${rojo ? ' vencida' : ''}" tabindex="0">
+    <span class="ico">${svg(f.verbo === 'Verificar' ? 'verificar' : f.acto)}</span>
+    <div class="cuerpo">
+      <div class="titulo"><span class="verbo">${f.verbo}</span> <code>${f.codigo}</code> ${f.titulo}</div>
+      <div class="meta"><span class="estado" style="--c:${f.estado[1]}">${f.estado[0]}</span><i>·</i><span class="doc">${f.doc}</span>
+        <i>·</i><span>${f.obra}</span><i class="q-sep">·</i><span class="quien">${f.quien}</span></div>
+    </div>
+    <div class="plazo${rojo ? ' rojo' : ''}"><b>${f.plazo}</b>${f.ley ? `<span class="ley" data-tip="${f.leyTexto}">${f.ley}</span>` : ''}</div>
+    <div class="accion"><button class="btn prim">${f.accion}</button></div>
+  </li>`;
+}
+function pintar() {
+  document.getElementById('pest').innerHTML = ACTOS.map(([k, t]) => {
+    const n = FILAS.filter(f => k === 'todo' || f.acto === k).length;
+    const venc = FILAS.some(f => (k === 'todo' || f.acto === k) && f.grupo === 'vencido');
+    return n || k === 'todo' ? `<button role="tab" data-a="${k}" aria-selected="${k === acto}">${t}<span class="${venc ? 'rojo' : ''}">${n}</span></button>` : '';
+  }).join('');
+  document.querySelectorAll('#pest button').forEach(b => b.onclick = () => { acto = b.dataset.a; todo = false; pintar(); });
+  const filas = FILAS.filter(f => acto === 'todo' || f.acto === acto);
+  const vistas = todo ? filas : filas.slice(0, VISIBLES);
+  document.getElementById('lista').innerHTML = vistas.length ? Object.keys(GRUPOS).map(g => {
+    const de = vistas.filter(f => f.grupo === g);
+    return de.length ? `<div class="grupo${g === 'vencido' ? ' rojo' : ''}">${GRUPOS[g]}</div><ul class="lista">${de.map(fila).join('')}</ul>` : '';
+  }).join('') : '<div class="vacio">No tienes nada pendiente aquí.</div>';
+  const mas = document.getElementById('mas');
+  mas.textContent = filas.length > VISIBLES ? (todo ? 'Ver menos' : `Ver las ${filas.length - VISIBLES} restantes`) : '';
+  mas.onclick = () => { todo = !todo; pintar(); };
+}
+document.getElementById('otros').innerHTML = OTROS.map(o => `<div class="mini"><div class="uno"><code>${o.codigo}</code> ${o.titulo}</div>
+  <div class="meta"><span class="estado" style="--c:${o.estado[1]}">${o.estado[0]}</span><i>·</i><span>${o.a} · ${o.plazo}</span></div></div>`).join('');
+document.getElementById('entregas').innerHTML = ENTREGAS.map(e => `<div class="mini"><div class="uno">${e.titulo}</div>
+  <div class="meta"><code style="font-size:11.5px">${e.codigo}</code><i>·</i><span>${e.fecha} · ${e.hecho} %</span></div>
+  <div class="barra"><i style="width:${e.hecho}%"></i></div></div>`).join('');
+document.getElementById('hecho').innerHTML = HECHO.map(h => `<div class="mini"><div class="uno">${h.t}</div><div class="meta"><span>${h.d}</span></div></div>`).join('');
+const tip = document.getElementById('tip');
+document.addEventListener('mouseover', e => {
+  const t = e.target.closest('[data-tip]');
+  if (!t) { tip.style.display = 'none'; return; }
+  tip.textContent = t.dataset.tip; tip.style.display = 'block';
+  const r = t.getBoundingClientRect();
+  tip.style.left = Math.max(8, Math.min(innerWidth - 310, r.right - 300)) + 'px'; tip.style.top = (r.bottom + 6) + 'px';
+});
+pintar();
+</script>
+</body>
+</html>

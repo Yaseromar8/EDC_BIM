@@ -437,6 +437,31 @@ def mi_trabajo(cur, user_id, project_id=None):
     return salida
 
 
+def con_su_documento(cur, pendientes):
+    """A cada encargo de ISSUE le pone el documento donde vive, si vive en uno (3-nov-2026).
+
+    El dueño: «aparece lo que le corresponde, pero al hacer clic no te lleva al archivo». Una
+    incidencia levantada sobre un plano o una marca guarda el documento en su evidencia
+    (`{'tipo': 'plano'|'marca', 'documento', 'version_id'}`); con eso la portada abre el plano y
+    la incidencia. Solo se dice el id: abrirlo vuelve a pasar por los guardias del documento.
+    """
+    ids = sorted({int(p['objeto_id']) for p in pendientes
+                  if p.get('objeto_tipo') == 'ISSUE' and str(p.get('objeto_id') or '').isdigit()})
+    if not ids:
+        return pendientes
+    cur.execute("SELECT id, evidencia FROM doc_issues WHERE id = ANY(%s)", (ids,))
+    donde = {}
+    for iid, evidencia in cur.fetchall():
+        for e in (evidencia or []):
+            if isinstance(e, dict) and e.get('tipo') in ('plano', 'marca') and e.get('documento'):
+                donde[str(iid)] = {'documento': str(e['documento']), 'version': e.get('version_id') or None}
+                break
+    for p in pendientes:
+        if p.get('objeto_tipo') == 'ISSUE' and str(p.get('objeto_id')) in donde:
+            p.update(donde[str(p['objeto_id'])])
+    return pendientes
+
+
 # ── Conciliacion ───────────────────────────────────────────────────────────
 
 # Los motivos por los que un encargo sobra. Son CONSTANTES y no cadenas sueltas

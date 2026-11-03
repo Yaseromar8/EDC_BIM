@@ -67,7 +67,7 @@ function ProductCard({ icon, producto, onClick, locked = false, lockNote }) {
   );
 }
 
-export default function HubPage({ user, onChooseDocs, onLogout, onAbrirRevision }) {
+export default function HubPage({ user, onChooseDocs, onLogout, onAbrirRevision, onAbrirIncidencia = null }) {
   // P6 v1: «Mi cuenta» (contraseña · 2FA · sesiones). El panel del segundo
   // factor se conserva tal cual y se abre DESDE Mi cuenta.
   const [panel, setPanel] = useState(null); // null | 'cuenta' | '2fa'
@@ -169,7 +169,7 @@ export default function HubPage({ user, onChooseDocs, onLogout, onAbrirRevision 
             partiendo de la membresía, así que no muestra ni una obra de las que
             el usuario no forme parte. */}
         <div style={{ marginTop: 24, width: '100%', display: 'flex', justifyContent: 'center' }}>
-          <MiTrabajo compacto onAbrir={onAbrirRevision} />
+          <MiTrabajo compacto onAbrir={onAbrirRevision} onAbrirIncidencia={onAbrirIncidencia} />
         </div>
       </main>
     </div>

@@ -145,7 +145,10 @@ export function useFileExplorer(project, user) {
   // (`?tablero=<id>`, docs/visor/63) abre Tableros, y `TablerosModule` abre ese tablero.
   const [sidebarView, fijarVista] = useState(() => (
     /[?&]revision=\d+(&|$)/.test(window.location.search) ? 'reviews'
-      : /[?&]tablero=[0-9a-f-]{36}(&|$)/i.test(window.location.search) ? 'tableros' : 'files'));
+      : /[?&]tablero=[0-9a-f-]{36}(&|$)/i.test(window.location.search) ? 'tableros'
+      // Una incidencia sin plano, desde «Mi trabajo» (3-nov-2026): la herramienta Issues.
+        : /[?&]incidencia=\d+(&|$)/.test(window.location.search) && !/[?&]documento=/.test(window.location.search) ? 'punch'
+          : 'files'));
   const vistaActual = useRef(sidebarView);
   useEffect(() => { vistaActual.current = sidebarView; }, [sidebarView]);
 

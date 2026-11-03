@@ -33,6 +33,7 @@ import { ESTADOS_DE_ISSUE, OPCIONALES, estadoDeIssue, usaEstado } from '../utils
 import { exportarExcel, exportarPdf, filasDelInforme } from '../utils/informeDeIncidencias';
 import { useObraDeIncidencias } from '../../../design/incidencias/piezas.jsx';
 import IncidenciaLateral, { useEntornoDocs } from './IncidenciaLateral';
+import { incidenciaDeLaDireccion, sinIncidencia } from '../utils/enlacesDeArchivos';
 
 const COLOR_TIPO = {
   PUNCH:          { fondo: '#f1f0e8', texto: '#507294' },
@@ -108,7 +109,16 @@ export default function PunchModule({ project, API, user, isAdmin }) {
   const [catalogo, setCatalogo] = useState({ tipos: [], estados: [] });
   const [miembros, setMiembros] = useState([]);
   const [filtro, setFiltro] = useState({ tipo: '', estado: '', mios: false });
-  const [abierto, setAbierto] = useState(null);
+  // Desde «Mi trabajo» (3-nov-2026) la dirección trae la incidencia a abrir: se toma una vez y se quita.
+  const [abierto, setAbierto] = useState(() => {
+    const id = incidenciaDeLaDireccion(window.location.search);
+    return id ? { id } : null;
+  });
+  useEffect(() => {
+    if (incidenciaDeLaDireccion(window.location.search) === null) return;
+    window.history.replaceState(window.history.state, '',
+      window.location.pathname + sinIncidencia(window.location.search) + window.location.hash);
+  }, []);
   const [creando, setCreando] = useState(false);
   const [error, setError] = useState('');
   const [configurando, setConfigurando] = useState(false);

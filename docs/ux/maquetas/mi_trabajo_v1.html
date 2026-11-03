@@ -1,0 +1,341 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ALEPHIA · Mi trabajo · maqueta v1</title>
+<link rel="stylesheet" href="../../../design/fuentes/ibm-plex.css">
+<style>
+/* MAQUETA (3-nov-2026) · «Mi trabajo» como bandeja única. No es código de la app.
+   Paleta D-24 (la de la portada, pages/entradaGris.css), IBM Plex, iconos del juego (design/iconos, trazo 1,5).
+   Análisis: docs/ux/MI_TRABAJO_BANDEJA_UNICA.md */
+:root {
+  --fondo: #FAF9F5; --sup: #FFFFFF; --cab: #302F2E; --cab-texto: #E8E6DC;
+  --linea: #E8E6DC; --linea-f: #CCCAC0; --fila: #F1F0E8;
+  --t1: #141413; --t2: #52524D; --t3: #72706B; --t4: #B0AEA5;
+  --acento: #141413; --indicador: #D97757; --enlace: #507294;
+  --peligro: #B93535; --peligro-f: #FBEBEB; --chip: #F1F0E8;
+  --abierta: #D97757; --curso: #6A9BCC; --revision: #B08D3C; --ok: #788C5D;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--fondo); color: var(--t1); font: 14px/1.4 'IBM Plex Sans', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased; }
+button { font: inherit; color: inherit; }
+svg.i { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round;
+  stroke-linejoin: round; flex: none; }
+.cab { height: 36px; background: var(--cab); color: var(--cab-texto); display: flex; align-items: center;
+  padding: 0 16px; gap: 18px; font-size: 13px; }
+.cab b { letter-spacing: .28em; font-weight: 500; font-size: 12px; }
+.cab .esp { flex: 1; }
+.cab a { color: var(--cab-texto); text-decoration: none; }
+.conm { position: fixed; right: 16px; bottom: 16px; display: flex; gap: 4px; background: var(--sup);
+  border: 1px solid var(--linea); border-radius: 8px; padding: 4px; box-shadow: 0 1px 3px rgb(20 20 19 / .1); z-index: 9; }
+.conm button { border: 0; background: none; padding: 6px 10px; border-radius: 6px; cursor: pointer; font-size: 12px; color: var(--t2); }
+.conm button[aria-pressed="true"] { background: var(--acento); color: #fff; }
+.vista { display: none; } .vista.on { display: block; }
+
+/* ── PORTADA ─────────────────────────────────────────────────────────────── */
+.portada { max-width: 640px; margin: 0 auto; padding: 56px 16px 80px; }
+.portada h1 { font-weight: 400; font-size: 26px; text-align: center; margin: 0 0 22px; }
+.prods { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px; }
+.prod { background: var(--sup); border: 1px solid var(--linea); border-radius: 8px; padding: 22px 22px 20px; }
+.prod svg { color: var(--t2); margin-bottom: 18px; }
+.prod div { color: var(--t3); } .prod b { color: var(--t1); font-weight: 600; }
+
+.mt { background: var(--sup); border: 1px solid var(--linea); border-radius: 8px; }
+.mt-cab { display: flex; align-items: center; gap: 8px; padding: 14px 18px 0; }
+.mt-cab h2 { margin: 0; font-size: 14px; font-weight: 600; }
+.num { background: var(--acento); color: #fff; border-radius: 9px; padding: 0 7px; font-size: 12px; font-weight: 600; line-height: 18px; }
+.num.rojo { background: var(--peligro); }
+.mt-cab .esp { flex: 1; }
+.mt-cab .vencidas { font-size: 12px; color: var(--peligro); }
+.pest { display: flex; gap: 2px; padding: 8px 12px 0; border-bottom: 1px solid var(--linea); overflow-x: auto; scrollbar-width: none; }
+.pest::-webkit-scrollbar { display: none; }
+.pest button { border: 0; background: none; padding: 8px 8px 9px; font-size: 13px; color: var(--t3); cursor: pointer;
+  border-bottom: 2px solid transparent; margin-bottom: -1px; white-space: nowrap; }
+.pest button:hover { color: var(--t1); }
+.pest button[aria-selected="true"] { color: var(--t1); font-weight: 600; border-bottom-color: var(--indicador); }
+.pest button span { color: var(--t4); font-weight: 500; margin-left: 3px; }
+.grupo { padding: 10px 18px 0; font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--t3); }
+.grupo.rojo { color: var(--peligro); }
+ul.lista { list-style: none; margin: 0; padding: 0 8px 6px; }
+.fila { display: flex; align-items: flex-start; gap: 12px; padding: 10px 10px; border-radius: 6px; cursor: pointer; position: relative; }
+.fila + .fila { border-top: 1px solid var(--fila); }
+.fila:hover { background: var(--fila); }
+.fila:hover + .fila { border-top-color: transparent; }
+.ico { width: 30px; height: 30px; border-radius: 6px; background: var(--chip); display: grid; place-items: center; color: var(--t2); flex: none; margin-top: 1px; }
+.fila.vencida .ico { background: var(--peligro-f); color: var(--peligro); }
+.cuerpo { flex: 1; min-width: 0; }
+.titulo { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.titulo .verbo { font-weight: 600; }
+.titulo code { font: 500 12.5px 'IBM Plex Mono', monospace; color: var(--t2); margin-right: 2px; }
+.meta { font-size: 12.5px; color: var(--t3); margin-top: 2px; display: flex; gap: 6px; align-items: center; white-space: nowrap; overflow: hidden; }
+.meta > span:last-child { overflow: hidden; text-overflow: ellipsis; }
+.portada .meta .quien, .portada .meta .quien-sep { display: none; }
+.meta .doc { color: var(--enlace); }
+.meta i { font-style: normal; color: var(--t4); }
+.estado { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--t2); }
+.estado::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--c, var(--t4)); }
+.plazo { text-align: right; font-size: 12.5px; color: var(--t3); white-space: nowrap; flex: none; min-width: 92px; }
+.plazo b { display: block; font-weight: 500; color: var(--t2); }
+.plazo.rojo b { color: var(--peligro); font-weight: 600; }
+.plazo .ley { font-size: 11.5px; color: var(--t3); border-bottom: 1px dotted var(--t4); cursor: help; }
+.accion { position: absolute; right: 10px; top: 50%; translate: 0 -50%; display: none; gap: 6px; }
+.fila:hover .accion { display: flex; }
+.fila:hover .plazo { visibility: hidden; }
+.btn { height: 28px; padding: 0 10px; border-radius: 6px; border: 1px solid var(--linea-f); background: var(--sup);
+  font-size: 12.5px; cursor: pointer; white-space: nowrap; display: inline-flex; align-items: center; gap: 6px; }
+.btn.prim { background: var(--acento); color: #fff; border-color: transparent; }
+.mt-pie { display: flex; justify-content: space-between; align-items: center; padding: 10px 18px 12px; border-top: 1px solid var(--linea); font-size: 13px; }
+.mt-pie a { color: var(--enlace); text-decoration: none; cursor: pointer; }
+.mt-pie a:hover { text-decoration: underline; }
+.mt-pie span { color: var(--t3); font-size: 12px; }
+.tip { position: fixed; z-index: 20; max-width: 300px; background: var(--cab); color: #FAF9F5; font-size: 12px;
+  line-height: 1.45; padding: 8px 10px; border-radius: 6px; pointer-events: none; display: none; }
+
+/* ── PÁGINA COMPLETA ─────────────────────────────────────────────────────── */
+.pagina { display: grid; grid-template-columns: 208px minmax(0, 1fr) 300px; gap: 0; min-height: calc(100vh - 36px); }
+.lado { border-right: 1px solid var(--linea); padding: 18px 12px; background: var(--fondo); }
+.lado h3, .der h3 { margin: 14px 8px 6px; font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--t3); }
+.lado h3:first-child { margin-top: 0; }
+.op { display: flex; align-items: center; gap: 10px; width: 100%; border: 0; background: none; padding: 7px 8px;
+  border-radius: 6px; cursor: pointer; text-align: left; color: var(--t2); font-size: 13.5px; position: relative; }
+.op:hover { background: var(--fila); color: var(--t1); }
+.op[aria-pressed="true"] { background: var(--sup); color: var(--t1); font-weight: 600; box-shadow: inset 0 0 0 1px var(--linea); }
+.op[aria-pressed="true"]::before { content: ''; position: absolute; left: -12px; top: 6px; bottom: 6px; width: 3px; border-radius: 2px; background: var(--indicador); }
+.op .n { margin-left: auto; font-size: 12px; color: var(--t3); font-weight: 500; }
+.op .n.rojo { color: var(--peligro); }
+.centro { padding: 22px 28px 60px; background: var(--sup); }
+.centro-cab { display: flex; align-items: center; gap: 12px; margin-bottom: 4px; }
+.centro-cab h1 { margin: 0; font-size: 20px; font-weight: 600; }
+.centro-cab .esp { flex: 1; }
+.buscar { display: flex; align-items: center; gap: 8px; height: 32px; width: 260px; padding: 0 10px; border: 1px solid var(--linea-f);
+  border-radius: 6px; color: var(--t3); font-size: 13px; }
+.sub { color: var(--t3); font-size: 13px; margin-bottom: 14px; }
+.pest2 { display: flex; gap: 2px; border-bottom: 1px solid var(--linea); margin-bottom: 6px; }
+.pest2 button { border: 0; background: none; padding: 8px 10px 9px; font-size: 13.5px; color: var(--t3); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.pest2 button[aria-selected="true"] { color: var(--t1); font-weight: 600; border-bottom-color: var(--indicador); }
+.centro .grupo { padding: 16px 10px 4px; }
+.centro ul.lista { padding: 0; }
+.der { border-left: 1px solid var(--linea); padding: 18px 16px; background: var(--fondo); }
+.der h3 { margin: 0 0 8px; display: flex; align-items: center; gap: 6px; }
+.der h3 { flex-wrap: wrap; }
+.der h3 small { flex-basis: 100%; font-weight: 400; letter-spacing: 0; text-transform: none; color: var(--t3); font-size: 12px; }
+.tarj { background: var(--sup); border: 1px solid var(--linea); border-radius: 8px; padding: 4px 0; margin-bottom: 18px; }
+.mini { padding: 8px 12px; display: flex; gap: 10px; align-items: flex-start; cursor: pointer; }
+.mini + .mini { border-top: 1px solid var(--fila); }
+.mini:hover { background: var(--fila); }
+.mini .cuerpo div:first-child { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mini .meta { font-size: 12px; }
+.barra { height: 4px; background: var(--fila); border-radius: 2px; margin-top: 6px; overflow: hidden; }
+.barra i { display: block; height: 100%; background: var(--t2); border-radius: 2px; }
+.norma { font-size: 11.5px; color: var(--t3); line-height: 1.5; padding: 0 2px; }
+.norma b { color: var(--t2); font-weight: 600; }
+.hecho .titulo { color: var(--t2); }
+.hecho .ico { background: #EEF1EA; color: var(--ok); }
+@media (max-width: 1100px) { .pagina { grid-template-columns: 1fr; } .lado, .der { border: 0; } }
+@media (max-width: 560px) { .prods { grid-template-columns: 1fr; } .accion { display: none !important; } .fila:hover .plazo { visibility: visible; } }
+</style>
+</head>
+<body>
+<header class="cab"><b>ALEPHIA</b><span class="esp"></span><a href="#">Mi cuenta</a><a href="#">Cerrar sesión</a></header>
+
+<!-- ═══ VISTA 1 · LA PORTADA ═══ -->
+<section class="vista on" id="v-portada">
+  <div class="portada">
+    <h1>Hola, Milene</h1>
+    <div class="prods">
+      <div class="prod"><svg class="i" viewBox="0 0 24 24"><path d="M6.5 3.5H14l4.5 4.5v11a1.5 1.5 0 0 1-1.5 1.5H6.5A1.5 1.5 0 0 1 5 19V5a1.5 1.5 0 0 1 1.5-1.5z"/><path d="M13.5 3.5v5h5"/><path d="M8.5 13h7M8.5 16h5"/></svg><div>ALEPHIA <b>Docs</b></div></div>
+      <div class="prod"><svg class="i" viewBox="0 0 24 24"><path d="M12 3.5 19.5 7.7v8.6L12 20.5l-7.5-4.2V7.7z"/><path d="M4.5 7.7 12 12l7.5-4.3M12 12v8.5"/></svg><div>ALEPHIA <b>View</b></div></div>
+    </div>
+
+    <div class="mt">
+      <div class="mt-cab"><h2>Mi trabajo</h2><span class="num">7</span><span class="esp"></span><span class="vencidas">1 vencido</span></div>
+      <div class="pest" role="tablist" data-lista="lp">
+        <button role="tab" aria-selected="true" data-acto="todo">Todo<span>7</span></button>
+        <button role="tab" data-acto="corregir">Corregir<span>2</span></button>
+        <button role="tab" data-acto="revisar">Revisar<span>1</span></button>
+        <button role="tab" data-acto="responder">Responder<span>1</span></button>
+        <button role="tab" data-acto="entregar">Entregar<span>1</span></button>
+        <button role="tab" data-acto="recibir">Recibir<span>1</span></button>
+        <button role="tab" data-acto="firmar">Firmar<span>1</span></button>
+      </div>
+      <div id="lp"></div>
+      <div class="mt-pie"><a data-ir="pagina">Ver todo mi trabajo →</a><span>Ordenado por plazo · solo tus obras</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ VISTA 2 · LA PÁGINA COMPLETA ═══ -->
+<section class="vista" id="v-pagina">
+  <div class="pagina">
+    <nav class="lado" aria-label="Filtros">
+      <h3>Qué tengo que hacer</h3>
+      <div id="actos"></div>
+      <h3>Obra</h3>
+      <button class="op" aria-pressed="true">Todas<span class="n">7</span></button>
+      <button class="op">PQT8_TALARA<span class="n">6</span></button>
+      <button class="op">PQT5_PIURA<span class="n">1</span></button>
+      <h3>Plazo</h3>
+      <button class="op">Vencido<span class="n rojo">1</span></button>
+      <button class="op">Esta semana<span class="n">4</span></button>
+      <button class="op">Con plazo legal<span class="n">2</span></button>
+    </nav>
+
+    <main class="centro">
+      <div class="centro-cab">
+        <h1>Mi trabajo</h1><span class="esp"></span>
+        <div class="buscar"><svg class="i" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="m15.8 15.8 4.7 4.7"/></svg>Buscar por código, plano o persona</div>
+      </div>
+      <div class="sub">Lo que espera por ti en todas tus obras. Cada fila abre su documento con el panel listo para actuar.</div>
+      <div class="pest2" role="tablist">
+        <button role="tab" aria-selected="true" data-p="pendiente">Pendiente</button>
+        <button role="tab" data-p="hecho">Hecho · 30 días</button>
+      </div>
+      <div id="lc"></div>
+    </main>
+
+    <aside class="der">
+      <h3>Esperando a otros <small>lo que levantaste o enviaste</small></h3>
+      <div class="tarj" id="otros"></div>
+      <h3>Mis entregas del plan <small>TIDP</small></h3>
+      <div class="tarj" id="entregas"></div>
+      <p class="norma"><b>Por qué así.</b> ISO 19650-2 ordena la entrega por <b>actos</b> con responsable y fecha
+        (producir 5.6, revisar y autorizar 5.7.1–5.7.2, aceptar 5.7.3–5.7.4). La Guía Nacional BIM pide <b>usuario y fecha</b>
+        en cada cambio. El Reglamento de la Ley 32069 fija <b>plazos con consecuencia</b>: la fila dice el artículo y
+        qué pasa si nadie actúa.</p>
+    </aside>
+  </div>
+</section>
+
+<div class="conm" role="group" aria-label="Vista de la maqueta">
+  <button aria-pressed="true" data-ir="portada">Portada</button>
+  <button aria-pressed="false" data-ir="pagina">Ver todo</button>
+</div>
+<div class="tip" id="tip"></div>
+
+<script>
+// Iconos del juego (design/iconos/iconos-obra.json), por acto.
+const ICO = {
+  corregir: '<path d="M12 21s-6.5-5.6-6.5-10.8a6.5 6.5 0 0 1 13 0C18.5 15.4 12 21 12 21z"/><path d="M12 6.7v3.8"/><circle cx="12" cy="13.2" r="1" fill="currentColor" stroke="none"/>',
+  verificar: '<circle cx="12" cy="12" r="8.5"/><path d="m8.5 12.3 2.4 2.4 4.6-4.9"/>',
+  revisar: '<circle cx="12" cy="12" r="8.5"/><path d="m8.5 12.3 2.4 2.4 4.6-4.9"/>',
+  responder: '<path d="M5.5 4.5h13a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H11l-4.5 3v-3h-1a2 2 0 0 1-2-2v-9a2 2 0 0 1 2-2z"/><path d="M10 9.2a2 2 0 1 1 2.8 1.8c-.5.3-.8.6-.8 1.2"/><circle cx="12" cy="14.6" r="1" fill="currentColor" stroke="none"/>',
+  entregar: '<path d="M6.5 3.5H14l4.5 4.5v11a1.5 1.5 0 0 1-1.5 1.5H6.5A1.5 1.5 0 0 1 5 19V5a1.5 1.5 0 0 1 1.5-1.5z"/><path d="M13.5 3.5v5h5"/><path d="M11.8 17.5V12M9.3 14.5l2.5-2.5 2.5 2.5"/>',
+  recibir: '<path d="M20.5 3.5 3.5 10.5l7 3 3 7z"/><path d="m10.5 13.5 10-10"/>',
+  firmar: '<path d="M8.5 4.5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-12a2 2 0 0 0-2-2h-1.5"/><rect x="8.5" y="3" width="7" height="3" rx="1"/><path d="m9 13.5 2 2 4-4"/>',
+  plan: '<rect x="3.5" y="5" width="17" height="15.5" rx="2"/><path d="M8 3v4M16 3v4M3.5 10h17"/><path d="M7 13.5h5M10 17h6"/>',
+};
+const svg = (k) => `<svg class="i" viewBox="0 0 24 24">${ICO[k]}</svg>`;
+
+// Datos de ejemplo. Cada fila: el acto, el objeto, dónde vive, quién lo pidió, el plazo y la acción principal.
+const FILAS = [
+  { acto: 'corregir', verbo: 'Corregir', codigo: 'ISS-002', titulo: 'VISTAS_3D_DESCRIPCION_CALCULO no coincide con el cuadro',
+    doc: 'DR-803.pdf · pág. 2', obra: 'PQT8_TALARA', quien: 'Ana Ríos (Supervisión)', estado: ['Abierta', 'var(--abierta)'],
+    grupo: 'vencido', plazo: 'vencido hace 1 d', accion: 'Abrir el plano' },
+  { acto: 'revisar', verbo: 'Revisar', codigo: 'REV-014', titulo: 'Planos de drenaje C03 · 12 documentos',
+    doc: 'paso 2 de 3: tu decisión', obra: 'PQT8_TALARA', quien: 'Luis Paz', estado: ['En revisión', 'var(--revision)'],
+    grupo: 'semana', plazo: 'en 2 d', accion: 'Abrir la revisión' },
+  { acto: 'responder', verbo: 'Absolver', codigo: 'RFI-031', titulo: 'Cota de fondo del buzón B-12',
+    doc: 'DR-805.pdf · pág. 1', obra: 'PQT8_TALARA', quien: 'Contratista SAC', estado: ['Abierta', 'var(--abierta)'],
+    grupo: 'semana', plazo: 'en 3 d', ley: '5 días · art. 190',
+    leyTexto: 'Consulta en obra (Reglamento Ley 32069, art. 190): la supervisión absuelve en 5 días calendario. Si nadie la absuelve, el contratista puede pedir ampliación de plazo por la demora.',
+    accion: 'Responder' },
+  { acto: 'recibir', verbo: 'Acusar recibo', codigo: 'TRN-022', titulo: 'Emisión de planos de estructuras · 8 documentos',
+    doc: 'Para construcción (A1)', obra: 'PQT8_TALARA', quien: 'Oficina técnica', estado: ['Enviada', 'var(--curso)'],
+    grupo: 'semana', plazo: 'en 4 d', accion: 'Ver la emisión' },
+  { acto: 'entregar', verbo: 'Entregar', codigo: 'P8-HID-MOD-001', titulo: 'Modelo hidráulico C04',
+    doc: 'Plan de entregas · hito «Expediente técnico»', obra: 'PQT8_TALARA', quien: 'comprometido por tu equipo', estado: ['En curso (S0)', 'var(--t4)'],
+    grupo: 'semana', plazo: 'en 5 d', accion: 'Subir la versión' },
+  { acto: 'corregir', verbo: 'Verificar', codigo: 'ISS-019', titulo: 'Junta de dilatación sin detalle · corregida por Luis',
+    doc: 'ES-210.pdf · pág. 3', obra: 'PQT5_PIURA', quien: 'la levantaste tú', estado: ['Corregida', 'var(--revision)'],
+    grupo: 'adelante', plazo: 'en 9 d', accion: 'Verificar' },
+  { acto: 'firmar', verbo: 'Firmar', codigo: 'PRT-118', titulo: 'Prueba hidráulica · tramo 3',
+    doc: 'Protocolo · progresiva 0+620 a 0+690', obra: 'PQT8_TALARA', quien: 'Residente', estado: ['Por firmar', 'var(--curso)'],
+    grupo: 'sinplazo', plazo: 'sin plazo', accion: 'Firmar' },
+];
+const GRUPOS = { vencido: 'Vencido', semana: 'Esta semana', adelante: 'Más adelante', sinplazo: 'Sin plazo' };
+const HECHO = [
+  { verbo: 'Corregiste', codigo: 'ISS-015', titulo: 'Tapa de buzón sin cota', cuando: 'ayer, 16:20 · la verificó Ana Ríos' },
+  { verbo: 'Aprobaste', codigo: 'REV-011', titulo: 'Memoria de cálculo estructural C02', cuando: 'lun. 2 nov., 10:05' },
+  { verbo: 'Acusaste recibo de', codigo: 'TRN-019', titulo: 'Planos de arquitectura A1', cuando: 'vie. 30 oct., 09:12' },
+];
+const OTROS = [
+  { codigo: 'ISS-021', titulo: 'Falta armadura en viga V-104', a: 'Contratista SAC', estado: ['En curso', 'var(--curso)'], plazo: 'vence 8 nov.' },
+  { codigo: 'RFI-029', titulo: 'Diámetro de la tubería de rebose', a: 'Proyectista', estado: ['Abierta', 'var(--abierta)'], plazo: '5 de 10 días · art. 190' },
+  { codigo: 'REV-012', titulo: 'Especificaciones técnicas de concreto', a: 'Supervisión · paso 3', estado: ['En revisión', 'var(--revision)'], plazo: 'en 2 d' },
+];
+const ENTREGAS = [
+  { codigo: 'P8-HID-MOD-001', titulo: 'Modelo hidráulico C04', fecha: '8 nov.', hecho: 60 },
+  { codigo: 'P8-EST-PLA-014', titulo: 'Planos de estructuras C02', fecha: '15 nov.', hecho: 30 },
+  { codigo: 'P8-GEN-MEM-003', titulo: 'Memoria descriptiva C01', fecha: '22 nov.', hecho: 0 },
+];
+
+function fila(f) {
+  const rojo = f.grupo === 'vencido';
+  return `<li class="fila${rojo ? ' vencida' : ''}" tabindex="0">
+    <span class="ico">${svg(f.verbo === 'Verificar' ? 'verificar' : f.acto)}</span>
+    <div class="cuerpo">
+      <div class="titulo"><span class="verbo">${f.verbo}</span> <code>${f.codigo}</code> ${f.titulo}</div>
+      <div class="meta"><span class="estado" style="--c:${f.estado[1]}">${f.estado[0]}</span><i>·</i>
+        <span class="doc">${f.doc}</span><i>·</i><span>${f.obra}</span><i class="quien-sep">·</i><span class="quien">${f.quien}</span></div>
+    </div>
+    <div class="plazo${rojo ? ' rojo' : ''}"><b>${f.plazo}</b>${f.ley ? `<span class="ley" data-tip="${f.leyTexto}">${f.ley}</span>` : ''}</div>
+    <div class="accion"><button class="btn prim">${f.accion}</button></div>
+  </li>`;
+}
+function lista(acto, conGrupos) {
+  const filas = FILAS.filter(f => acto === 'todo' || f.acto === acto);
+  if (!filas.length) return '<div class="grupo" style="text-transform:none;letter-spacing:0;font-weight:400;padding:16px 18px">Nada pendiente.</div>';
+  if (!conGrupos) return `<ul class="lista">${filas.map(fila).join('')}</ul>`;
+  return Object.keys(GRUPOS).map(g => {
+    const de = filas.filter(f => f.grupo === g);
+    return de.length ? `<div class="grupo${g === 'vencido' ? ' rojo' : ''}">${GRUPOS[g]} · ${de.length}</div><ul class="lista">${de.map(fila).join('')}</ul>` : '';
+  }).join('');
+}
+const ACTOS = [['todo', 'Todo'], ['corregir', 'Corregir y verificar'], ['revisar', 'Revisar'], ['responder', 'Responder'],
+  ['entregar', 'Entregar'], ['recibir', 'Recibir'], ['firmar', 'Firmar']];
+let actoPagina = 'todo', pestPagina = 'pendiente';
+function pintarPagina() {
+  document.getElementById('actos').innerHTML = ACTOS.map(([k, t]) => {
+    const n = FILAS.filter(f => k === 'todo' || f.acto === k).length;
+    return `<button class="op" data-a="${k}" aria-pressed="${k === actoPagina}">${k === 'todo' ? '' : svg(k)}${t}<span class="n${k === 'corregir' ? ' rojo' : ''}">${n}</span></button>`;
+  }).join('');
+  document.getElementById('lc').innerHTML = pestPagina === 'pendiente' ? lista(actoPagina, true)
+    : `<ul class="lista hecho">${HECHO.map(h => `<li class="fila"><span class="ico">${svg('verificar')}</span><div class="cuerpo"><div class="titulo"><span class="verbo">${h.verbo}</span> <code>${h.codigo}</code> ${h.titulo}</div><div class="meta">${h.cuando}</div></div></li>`).join('')}</ul>`;
+  document.querySelectorAll('#actos .op').forEach(b => b.onclick = () => { actoPagina = b.dataset.a; pintarPagina(); });
+}
+document.getElementById('otros').innerHTML = OTROS.map(o => `<div class="mini"><div class="cuerpo">
+  <div><code style="font:500 12px 'IBM Plex Mono',monospace;color:var(--t2)">${o.codigo}</code> ${o.titulo}</div>
+  <div class="meta"><span class="estado" style="--c:${o.estado[1]}">${o.estado[0]}</span><i>·</i>le toca a ${o.a}<i>·</i>${o.plazo}</div></div></div>`).join('');
+document.getElementById('entregas').innerHTML = ENTREGAS.map(e => `<div class="mini"><span class="ico" style="width:26px;height:26px">${svg('plan')}</span><div class="cuerpo">
+  <div><code style="font:500 12px 'IBM Plex Mono',monospace;color:var(--t2)">${e.codigo}</code></div>
+  <div class="meta">${e.titulo}<i>·</i>${e.fecha}</div><div class="barra"><i style="width:${e.hecho}%"></i></div></div></div>`).join('');
+
+function pintarPortada(acto) { document.getElementById('lp').innerHTML = lista(acto, false); }
+document.querySelectorAll('.pest button').forEach(b => b.onclick = () => {
+  document.querySelectorAll('.pest button').forEach(x => x.setAttribute('aria-selected', x === b));
+  pintarPortada(b.dataset.acto);
+});
+document.querySelectorAll('.pest2 button').forEach(b => b.onclick = () => {
+  document.querySelectorAll('.pest2 button').forEach(x => x.setAttribute('aria-selected', x === b));
+  pestPagina = b.dataset.p; pintarPagina();
+});
+function ir(v) {
+  document.querySelectorAll('.vista').forEach(s => s.classList.toggle('on', s.id === 'v-' + v));
+  document.querySelectorAll('.conm button').forEach(b => b.setAttribute('aria-pressed', b.dataset.ir === v));
+  window.scrollTo(0, 0);
+}
+document.querySelectorAll('[data-ir]').forEach(b => b.onclick = () => ir(b.dataset.ir));
+const tip = document.getElementById('tip');
+document.addEventListener('mouseover', e => {
+  const t = e.target.closest('[data-tip]');
+  if (!t) { tip.style.display = 'none'; return; }
+  tip.textContent = t.dataset.tip; tip.style.display = 'block';
+  const r = t.getBoundingClientRect();
+  tip.style.left = Math.max(8, Math.min(innerWidth - 310, r.right - 300)) + 'px'; tip.style.top = (r.bottom + 6) + 'px';
+});
+pintarPortada('todo'); pintarPagina();
+</script>
+</body>
+</html>

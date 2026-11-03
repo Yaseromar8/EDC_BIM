@@ -304,6 +304,8 @@ def mi_trabajo():
             # no se toca. La regla vive en el dominio del flujo, no en otra ruta.
             import flujo_de_revision as flujo_rev
             pendientes = flujo_rev.encargos_presentables(cur, u, pendientes)
+            # Una incidencia sobre un plano lleva a ese plano (3-nov-2026).
+            pendientes = enc.con_su_documento(cur, pendientes)
         return jsonify({'pendientes': pendientes, 'total': len(pendientes)}), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500

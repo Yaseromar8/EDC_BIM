@@ -152,6 +152,21 @@ export default function App() {
   });
   const [avisoDeEnlace, setAvisoDeEnlace] = useState(null);
 
+  // DESDE «MI TRABAJO», UNA INCIDENCIA (3-nov-2026): es un enlace de Archivos —la obra y, si vive en un plano, ese
+  // documento— con `&incidencia=<id>`, que abre el lector de ese plano o, sin documento, la herramienta Issues.
+  const abrirIncidencia = ({ obra, incidencia, documento = null, version = null }) => {
+    const numero = Number(incidencia);
+    if (!obra || !Number.isSafeInteger(numero) || numero < 1) return;
+    const destino = { obra: String(obra), carpeta: null, documento: documento ? String(documento) : null,
+                      version: documento && version ? String(version) : null };
+    const p = new URLSearchParams(conArchivos(window.location.search, destino));
+    p.set('incidencia', String(numero));
+    window.history.pushState(null, '', `${window.location.pathname}?${p}`);
+    sessionStorage.removeItem(CLAVE_DEL_ENLACE_PENDIENTE);
+    sessionStorage.setItem(CLAVE_DEL_ENLACE_DE_ARCHIVOS, JSON.stringify(destino));
+    setEnlaceArchivos(destino);
+  };
+
   const abrirRevision = ({ obra, revision }) => {
     const numero = Number(revision);
     if (!obra || !Number.isSafeInteger(numero) || numero < 1) return;
@@ -522,6 +537,7 @@ export default function App() {
         onChooseDocs={chooseDocs}
         onLogout={logoutFull}
         onAbrirRevision={abrirRevision}
+        onAbrirIncidencia={abrirIncidencia}
       />
     );
   }

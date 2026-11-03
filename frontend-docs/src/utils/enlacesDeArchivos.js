@@ -49,6 +49,22 @@ export function leerEnlaceDeArchivos(search) {
 
 // La `search` con este enlace, o sin ninguno (null), conservando lo demás. Quita también
 // `revision`: la dirección no puede decir dos cosas a la vez.
+// `&incidencia=<id>` (3-nov-2026, desde «Mi trabajo»): la incidencia que se abre al llegar. Con documento la abre el
+// lector de ese plano; sin él, la herramienta Issues. Se lee UNA vez y se quita de la dirección.
+export function incidenciaDeLaDireccion(search, documento = undefined) {
+  const p = new URLSearchParams(search || '');
+  const id = (p.get('incidencia') || '').trim();
+  if (!/^\d+$/.test(id)) return null;
+  if (documento !== undefined && (p.get('documento') || null) !== (documento == null ? null : String(documento))) return null;
+  return Number(id);
+}
+
+export function sinIncidencia(search) {
+  const p = new URLSearchParams(search || '');
+  p.delete('incidencia');
+  return cadena(p);
+}
+
 export function conArchivos(search, enlace) {
   const p = new URLSearchParams(search || '');
   p.delete('revision');
