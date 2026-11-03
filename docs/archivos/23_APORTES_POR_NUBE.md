@@ -322,12 +322,17 @@ levantó o la verifica):
 Ensayo 38/38, con tres casos más: no se asigna a quien revisa; con la nube asignada a su empresa, ella no entrega; y ve
 las nubes de encargo (y el equipo también).
 
-### 6.5 · Lo que sigue
+### 6.5 · La leyenda del plano
 
-1. La leyenda del plano (quién es cada color).
-2. Crear nubes de encargo desde la barra de la nube (el servidor ya lo hace; falta el botón).
-3. Verificar con «Comparar versiones» encuadrado en la nube.
-4. Subir los aportes a una carpeta de la incidencia en vez de MULTIMEDIA.
+Arriba a la izquierda del lector, en su marco (no en la hoja: no se mueve ni se corta al mover el plano). Plegada:
+«Nubes» y las iniciales de color de cada persona o empresa con nubes asignadas en el plano. Abierta: su nombre y cuántas
+le faltan por entregar (o cuántas tiene). Solo aparece si hay alguna nube asignada.
+
+### 6.6 · Lo que sigue
+
+1. Crear nubes de encargo desde la barra de la nube (el servidor ya lo hace; falta el botón).
+2. Verificar con «Comparar versiones» encuadrado en la nube.
+3. Subir los aportes a una carpeta de la incidencia en vez de MULTIMEDIA.
 
 ## Fuentes
 

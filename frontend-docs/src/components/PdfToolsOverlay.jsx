@@ -2,6 +2,7 @@
 // Mediciones (distancia/área/conteo), anotaciones (nube, flecha, rect, lápiz, texto)
 // y calibración de escala. Geometrías en coordenadas PDF (independientes del zoom).
 import React, { useState, useEffect, useRef, useCallback, useLayoutEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { incidenciaDeLaDireccion, sinIncidencia } from '../utils/enlacesDeArchivos';
 import toast from 'react-hot-toast';
 import { API } from '../utils/helpers';
@@ -153,6 +154,8 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
   // OBSERVACIONES DEL PLANO (docs/archivos/18): tras un acto se vuelven a pedir las marcas (su etiqueta de
   // observación) y cuántas del plano siguen sin cerrar (el número del botón del rail).
   const [vuelta, setVuelta] = useState(0);
+  // LA LEYENDA DEL PLANO (46): plegada, las iniciales de color de quien tiene nubes; abierta, sus nombres.
+  const [leyendaAbierta, setLeyendaAbierta] = useState(false);
   // LOS PINES (2-nov-2026, docs/archivos/21): las incidencias del plano con su punto en la hoja; el que se está
   // levantando (fantasma, gris) y el pedido al panel del plano (abrir el alta con un pin, o una incidencia).
   const [obsPlano, setObsPlano] = useState([]);
@@ -973,6 +976,49 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
           ))}
         </div>
       )}
+
+      {/* LA LEYENDA DEL PLANO (3-nov-2026, doc 23 §6.4): quién es cada color. Una fila por persona o empresa con
+          nubes asignadas en el plano, con cuántas le faltan por entregar. Arriba a la izquierda: arriba al centro va
+          el aviso de la versión. Va en el MARCO del lector, no en la hoja: no se mueve ni se corta al mover el plano. */}
+      {(() => {
+        const gente = new Map();
+        for (const m of markups) {
+          const n = m.nube;
+          if (!n || !n.destino_nombre) continue;
+          const k = `${n.color}|${n.destino_nombre}`;
+          const g = gente.get(k) || { nombre: n.destino_nombre, empresa: n.destino_es_empresa, color: n.color, nubes: 0, deben: 0 };
+          g.nubes += 1;
+          if (n.estado === 'pedida' || n.estado === 'devuelta') g.deben += 1;
+          gente.set(k, g);
+        }
+        const lista = [...gente.values()].sort((a, b) => (a.color ?? 99) - (b.color ?? 99));
+        if (!lista.length) return null;
+        const marco = document.querySelector('.pdf-viewer .pdf-lienzo-zona');
+        const leyenda = (
+          <div className={`leyenda-nubes${leyendaAbierta ? ' es-abierta' : ''}`} onPointerDown={e => e.stopPropagation()}>
+            <button type="button" className="leyenda-nubes__cab" aria-expanded={leyendaAbierta}
+              onClick={() => setLeyendaAbierta(v => !v)}
+              title={leyendaAbierta ? 'Plegar la leyenda' : 'Quién es cada color'}>
+              <span>Nubes</span>
+              {!leyendaAbierta && lista.map(g => (
+                <i key={`${g.color}|${g.nombre}`} style={{ background: colorDeIndice(g.color) }}>{inicialesDe(g.nombre)}</i>
+              ))}
+            </button>
+            {leyendaAbierta && (
+              <ul>
+                {lista.map(g => (
+                  <li key={`${g.color}|${g.nombre}`}>
+                    <i style={{ background: colorDeIndice(g.color) }}>{inicialesDe(g.nombre)}</i>
+                    <span className="leyenda-nubes__quien">{g.nombre}{g.empresa ? ' · empresa' : ''}</span>
+                    <small>{g.deben ? `${g.deben} por entregar` : g.nubes === 1 ? '1 nube' : `${g.nubes} nubes`}</small>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        );
+        return marco ? createPortal(leyenda, marco) : leyenda;
+      })()}
 
       {/* El panel de la marca elegida: referencias, fotos, sello, publicar y borrar. */}
       {marcaElegida && marcaElegida.kind !== 'foto' && (() => {
