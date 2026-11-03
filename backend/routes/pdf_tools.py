@@ -188,6 +188,26 @@ def list_markups():
         return jsonify({"success": False, "error": str(e)}), 500
 
 
+def _negativa_para_marcar(node_id):
+    """Dibujar en un plano o levantar una observación sobre él exige «Ver, descargar y marcar» en su carpeta.
+
+    Revisar no es editar (docs/archivos/24, D2; ISO 19650): quien revisa observa lo compartido y no modifica el
+    trabajo de otro equipo, así que basta ese nivel, que existe para eso, y no hace falta «Editar». Hasta el 3-nov-2026
+    aquí bastaba ser de la obra, y el lector CAD sí lo exigía (`cad_review._node`). La obra sale del NODO, no del
+    cuerpo: el `model_urn` lo elige quien llama.
+    """
+    try:
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            cur.execute('SELECT model_urn FROM file_nodes WHERE id::text = %s AND NOT is_deleted', (str(node_id),))
+            fila = cur.fetchone()
+    except Exception:
+        return jsonify({"success": False, "error": "No se pudo comprobar el permiso."}), 503
+    if not fila:
+        return jsonify({"success": False, "error": "Documento no encontrado."}), 404
+    return check_folder_permission(_user(), str(node_id), fila[0], 'view_markup', 'marcar este plano')
+
+
 @pdf_tools_bp.route('/api/pdf/markups', methods=['POST'])
 def create_markup():
     d = request.get_json() or {}
@@ -196,7 +216,7 @@ def create_markup():
         return jsonify({"success": False, "error": f"Faltan campos {required}"}), 400
     # Se comprueba contra el NODO del documento, no contra el model_urn del
     # cuerpo: el model_urn lo elige quien llama, el nodo dice de que obra es.
-    negativa = guardia_de_recurso('file_nodes', d['node_id'])
+    negativa = guardia_de_recurso('file_nodes', d['node_id']) or _negativa_para_marcar(d['node_id'])
     if negativa:
         return negativa
     # Las citas y las fotos NO entran al crear: van por el PATCH, que comprueba
@@ -1408,6 +1428,9 @@ def observacion_del_plano(node_id):
         return negativa
     if request.method == 'GET':
         return _leer_observaciones_del_plano(nodo)
+    negativa = _negativa_para_marcar(nodo)
+    if negativa:
+        return negativa
     d = request.get_json(silent=True) or {}
     u = _user()
     uid, autor = u.get('id'), u.get('name') or ''

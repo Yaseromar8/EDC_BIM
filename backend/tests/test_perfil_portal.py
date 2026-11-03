@@ -225,7 +225,10 @@ def test_el_recorte_es_real(rutas_portal):
     # 313 -> 314 (3-nov-2026): `POST /api/pdf/markups/<id>/comentarios`. Comentarios en una marca, pedidos por el
     # dueño («no crear su panel sino colocarle comentarios»): solo se añaden, sin estado ni responsable (la opción B
     # de docs/ux/MARCAS_REVISION_LO_PROFESIONAL.md). Misma guardia de recurso que el resto de la marca.
-    TECHO = 314
+    # 314 -> 315 (3-nov-2026): `GET/POST /api/issues/<id>/nubes`. Las nubes de una incidencia: a quién se asigna
+    # cada una, sus rondas de entrega y devolución y si quedó levantada (migración 46, docs/archivos/23 y 24). Una
+    # sola ruta para leer y para todos los actos, con la misma guardia de recurso que la incidencia.
+    TECHO = 315
     sin_puente = [r for r in rutas_portal
                   if r not in puente_acc and r not in revision_cad]
     assert len(sin_puente) < TECHO, (

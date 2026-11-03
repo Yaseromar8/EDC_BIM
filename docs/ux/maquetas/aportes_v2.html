@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ALEPHIA · Aportes por nube · maqueta v2</title>
+<link rel="stylesheet" href="../../../design/fuentes/ibm-plex.css">
+<style>
+/* MAQUETA v2 (3-nov-2026) · docs/archivos/23_APORTES_POR_NUBE.md §0 bis. No es código de la app.
+   EL MISMO PANEL DE LA INCIDENCIA, con tres pestañas: Incidencia · Nubes · Historial. Pulsar una nube en el plano abre
+   «Nubes» en ESA nube. Cada nube: a quién se asigna (persona o empresa), qué se le pide, sus RONDAS (entrega → devolución
+   en la misma nube → nueva entrega), lo adjuntado (todo guardado en Docs o enlazado desde Docs) y si quedó LEVANTADA en
+   la versión nueva (se verifica nube por nube, con Comparar versiones en esa zona). Controles en grises; el color es el
+   de cada persona en ESTE plano. */
+:root { --campo: #F1F0E8; --sup: #fff; --linea: #E8E6DC; --linea-f: #CCCAC0; --t1: #141413; --t2: #52524D; --t3: #72706B; --t4: #B0AEA5;
+  --sombra: 0 4px 16px rgba(20,20,19,.12), 0 1px 3px rgba(20,20,19,.08); --p1: #507294; --p2: #b93535; --p3: #64744e; --p4: #9e5943; }
+* { box-sizing: border-box; }
+body { margin: 0; font: 13px/1.45 'IBM Plex Sans', system-ui, sans-serif; color: var(--t1); background: var(--campo); height: 100vh; display: flex; flex-direction: column; }
+button { font: inherit; color: inherit; }
+.cab { height: 44px; flex: none; display: flex; align-items: center; gap: 12px; padding: 0 14px; background: #302F2E; color: #E8E6DC; font-size: 12px; }
+.cab b { letter-spacing: .28em; font-weight: 500; } .cab .esp { flex: 1; }
+.como { display: inline-flex; gap: 2px; padding: 2px; border-radius: 8px; background: #4a4947; }
+.como button { border: 0; background: none; color: #E8E6DC; padding: 4px 10px; border-radius: 6px; cursor: pointer; font-size: 12px; }
+.como button[aria-pressed="true"] { background: #FAF9F5; color: #141413; }
+.cuerpo { flex: 1; min-height: 0; display: flex; }
+.hoja { flex: 1; min-width: 0; position: relative; overflow: hidden; }
+.hoja svg.lamina { position: absolute; inset: 16px; width: calc(100% - 32px); height: calc(100% - 32px); background: #fff; box-shadow: 0 1px 2px rgba(20,20,19,.1), 0 0 0 1px rgba(20,20,19,.06); }
+.nube { cursor: pointer; }
+.nube rect.caja { fill: transparent; stroke-width: 2; }
+.nube.activa rect.caja { stroke-width: 3.5; }
+.leyenda { position: absolute; left: 28px; top: 28px; background: var(--sup); border: 1px solid var(--linea); border-radius: 10px; box-shadow: var(--sombra); padding: 8px 10px; font-size: 12px; color: var(--t2); }
+.leyenda b { display: block; font-weight: 600; color: var(--t1); margin-bottom: 4px; }
+.leyenda div { display: flex; align-items: center; gap: 8px; padding: 2px 0; }
+.leyenda i { width: 14px; height: 2px; }
+.ayuda { position: absolute; left: 50%; bottom: 26px; translate: -50% 0; background: var(--sup); border: 1px solid var(--linea); border-radius: 10px; box-shadow: var(--sombra); padding: 6px 12px; font-size: 12px; color: var(--t2); }
+
+.panel { width: 420px; flex: none; background: var(--sup); border-left: 1px solid var(--linea); display: flex; flex-direction: column; min-height: 0; }
+.p-cab { padding: 14px 16px 0; }
+.p-cab .cod { font: 600 18px 'IBM Plex Sans'; } .p-cab .tipo { font-size: 12px; color: var(--t3); font-weight: 400; }
+.p-cab h2 { margin: 6px 0 8px; font-size: 15px; font-weight: 600; }
+.estado { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 8px; border-radius: 6px; background: var(--campo); font-size: 12px; font-weight: 500; }
+.estado::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: #9e5943; }
+.chip { font-size: 11.5px; padding: 1px 7px; border-radius: 4px; background: var(--campo); color: var(--t2); white-space: nowrap; }
+.chip.ok { background: #E0E3D7; color: #4f5c3e; } .chip.dev { background: #FBEBEB; color: #9a2c2c; } .chip.ver { background: #ECF0F1; color: #3d5a75; }
+.pest { display: flex; gap: 2px; margin-top: 12px; border-bottom: 1px solid var(--linea); padding: 0 8px; }
+.pest button { border: 0; background: none; padding: 8px 10px 9px; font-size: 13px; color: var(--t3); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.pest button[aria-selected="true"] { color: var(--t1); font-weight: 600; border-bottom-color: var(--t1); }
+.pest button span { color: var(--t4); font-weight: 500; margin-left: 3px; }
+.p-cuerpo { flex: 1; overflow-y: auto; }
+.vista { display: none; } .vista.on { display: block; }
+.turno { margin: 12px 16px 4px; padding: 10px 12px; border: 1px solid var(--linea); border-left: 3px solid var(--t1); border-radius: 6px; background: #FAF9F5; font-size: 13px; }
+.acc { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+.btn { height: 28px; padding: 0 10px; border-radius: 6px; border: 1px solid var(--linea-f); background: var(--sup); cursor: pointer; font-size: 12.5px; }
+.btn.prim { background: var(--t1); border-color: var(--t1); color: #fff; }
+.sec { padding: 12px 16px; border-top: 1px solid var(--campo); }
+.sec h3 { margin: 0 0 8px; font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--t3); }
+.fila { display: flex; gap: 10px; padding: 4px 0; } .fila > span:first-child { width: 124px; color: var(--t3); flex: none; }
+.av { width: 22px; height: 22px; border-radius: 50%; display: inline-grid; place-items: center; font: 600 10px 'IBM Plex Sans'; color: #fff; flex: none; vertical-align: middle; margin-right: 6px; }
+.av.gris { background: #E8E6DC; color: var(--t2); }
+.rol { font-size: 11.5px; color: var(--t3); }
+.resumen-nubes { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; }
+.resumen-nubes div { background: #FAF9F5; border: 1px solid var(--linea); border-radius: 6px; padding: 6px 8px; font-size: 12px; color: var(--t2); }
+.resumen-nubes b { display: block; font-size: 16px; color: var(--t1); }
+
+/* pestaña Nubes */
+.nubes { padding: 8px 12px 16px; }
+.nb { border: 1px solid var(--linea); border-radius: 8px; margin-bottom: 8px; position: relative; overflow: hidden; }
+.nb::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--c); }
+.nb-cab { display: flex; align-items: center; gap: 8px; padding: 9px 12px 9px 14px; cursor: pointer; }
+.nb-cab .n { font: 600 11px 'IBM Plex Mono'; color: #fff; background: var(--c); border-radius: 2px; padding: 1px 6px; }
+.nb-cab b { font-weight: 600; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.nb-cuerpo { display: none; padding: 0 12px 12px 14px; border-top: 1px solid var(--campo); }
+.nb.abierta .nb-cuerpo { display: block; }
+.nb.abierta { border-color: var(--linea-f); }
+.asignar { display: flex; align-items: center; gap: 8px; margin: 10px 0 6px; font-size: 13px; }
+.asignar .sel { flex: 1; display: flex; align-items: center; height: 30px; padding: 0 8px; border: 1px solid var(--linea); border-radius: 6px; }
+.asignar .sel::after { content: '▾'; margin-left: auto; color: var(--t3); font-size: 11px; }
+.pide { font-size: 13px; margin: 6px 0 2px; } .meta { font-size: 12px; color: var(--t3); }
+.ronda { margin-top: 10px; padding-left: 12px; border-left: 2px solid var(--linea); }
+.ronda h4 { margin: 0 0 6px; font-size: 12px; font-weight: 600; color: var(--t2); display: flex; gap: 8px; align-items: center; }
+.ent { display: flex; align-items: center; gap: 8px; font-size: 12.5px; padding: 6px 8px; border-radius: 6px; background: #FAF9F5; margin-bottom: 4px; }
+.ent .mini { width: 40px; height: 28px; border-radius: 3px; border: 1px solid var(--linea); background: linear-gradient(135deg,#e8e6dc,#fff); flex: none; }
+.ent a { color: #507294; text-decoration: none; } .ent small { color: var(--t3); margin-left: auto; white-space: nowrap; }
+.devuelto { font-size: 12.5px; padding: 6px 8px; border-radius: 6px; background: #FBEBEB; color: #7a2626; margin-top: 4px; }
+.verif { margin-top: 10px; padding: 8px 10px; border-radius: 6px; border: 1px dashed var(--linea-f); font-size: 12.5px; color: var(--t2); }
+.verif b { color: var(--t1); }
+.historia { list-style: none; margin: 0; padding: 12px 16px; font-size: 12.5px; }
+.historia li { display: grid; grid-template-columns: 92px 1fr; gap: 8px; padding: 5px 0; color: var(--t2); border-bottom: 1px solid var(--campo); }
+.historia time { color: var(--t3); font-variant-numeric: tabular-nums; }
+.oculto { display: none !important; }
+</style>
+</head>
+<body>
+<header class="cab"><b>ALEPHIA</b><span>DR-HD-000800.pdf · V2</span><span class="esp"></span><span>Ver como</span>
+  <div class="como" role="group">
+    <button data-v="encargado" aria-pressed="true">Encargado del plano</button>
+    <button data-v="aportante" aria-pressed="false">Aportante (Jorge · BIM)</button>
+    <button data-v="revisor" aria-pressed="false">Revisor</button>
+  </div>
+</header>
+<div class="cuerpo">
+  <div class="hoja">
+    <svg class="lamina" viewBox="0 0 1000 640" preserveAspectRatio="xMidYMid meet">
+      <g stroke="#B0AEA5" fill="none" stroke-width="1">
+        <rect x="20" y="20" width="960" height="600" />
+        <path d="M60 520 C 220 420, 330 460, 470 330 S 700 150, 900 90" stroke-width="2" stroke="#72706B" />
+        <path d="M60 545 C 220 445, 330 485, 470 355 S 700 175, 900 115" />
+        <path d="M120 80 l140 0 l0 90 l-140 0 z M300 120 l90 0 l0 60 l-90 0 z M560 400 l160 0 l0 120 l-160 0 z" />
+        <g stroke="#CCCAC0"><path d="M600 420h120M600 440h120M600 460h120M600 480h120M600 500h120"/><path d="M630 400v120M660 400v120M690 400v120"/></g>
+        <path d="M110 380 l120 -40 l40 80 l-120 40 z" stroke="#72706B" />
+        <path d="M780 200 l120 0 l0 70 l-120 0 z" />
+      </g>
+      <g font-family="IBM Plex Mono" font-size="11" font-weight="600">
+        <g class="nube" data-n="1"><rect class="caja" x="95" y="325" width="200" height="140" stroke="var(--p1)"/><rect x="95" y="309" width="62" height="16" fill="var(--p1)"/><text x="101" y="321" fill="#fff">1 · JR</text></g>
+        <g class="nube" data-n="2"><rect class="caja" x="545" y="390" width="190" height="140" stroke="var(--p2)"/><rect x="545" y="374" width="72" height="16" fill="var(--p2)"/><text x="551" y="386" fill="#fff">2 · CTR</text></g>
+        <g class="nube" data-n="3"><rect class="caja" x="440" y="290" width="70" height="70" stroke="var(--p3)"/><rect x="440" y="274" width="60" height="16" fill="var(--p3)"/><text x="446" y="286" fill="#fff">3 · TP</text></g>
+        <g class="nube" data-n="4"><rect class="caja" x="765" y="185" width="150" height="100" stroke="#B0AEA5" stroke-dasharray="5 3"/><rect x="765" y="169" width="64" height="16" fill="#B0AEA5"/><text x="771" y="181" fill="#fff">4 · —</text></g>
+      </g>
+    </svg>
+    <div class="leyenda"><b>En este plano</b>
+      <div><i style="background:var(--p1)"></i>JR · Jorge Ríos · BIM</div>
+      <div><i style="background:var(--p2)"></i>CTR · Contratista SAC</div>
+      <div><i style="background:var(--p3)"></i>TP · Ana Paz · Topografía</div>
+      <div><i style="background:#B0AEA5"></i>sin asignar</div>
+    </div>
+    <div class="ayuda">Pulsa una nube: el panel se abre en esa nube.</div>
+  </div>
+
+  <aside class="panel">
+    <div class="p-cab">
+      <div class="cod">ISS-002 <span class="tipo">· Observación de documento</span></div>
+      <h2>VISTAS_3D_DESCRIPCION_CALCULO_HIDRAULICO</h2>
+      <span class="estado">En curso</span> <span class="chip" style="margin-left:6px">vence 06 nov. 2026</span>
+      <div class="pest" role="tablist">
+        <button role="tab" aria-selected="false" data-t="incidencia">Incidencia</button>
+        <button role="tab" aria-selected="true" data-t="nubes">Nubes <span>4</span></button>
+        <button role="tab" aria-selected="false" data-t="historial">Historial</button>
+      </div>
+    </div>
+    <div class="p-cuerpo">
+
+      <!-- ── INCIDENCIA ── -->
+      <section class="vista" data-t="incidencia">
+        <div class="turno" data-para="encargado">Te toca corregir el plano. Cuando subas la <b>V3</b>, cada nube pasa a «por verificar» y el revisor dice si quedó levantada.
+          <div class="acc"><button class="btn prim">Subir V3 corregida</button><button class="btn">Declarar corregida</button></div></div>
+        <div class="turno oculto" data-para="aportante">Tienes <b>1 nube</b> asignada en esta incidencia (nube 1).</div>
+        <div class="turno oculto" data-para="revisor">Le toca a Milene Amaya. Verificarás nube por nube cuando suba la V3.</div>
+        <div class="sec"><h3>Quién</h3>
+          <div class="fila"><span>Levantó y verifica</span><span><i class="av gris">YO</i>Yaser Omar <span class="rol">· Líder BIM</span></span></div>
+          <div class="fila"><span>Encargado del plano</span><span><i class="av gris">MA</i>Milene Amaya <span class="rol">· arma el plano</span></span></div>
+          <div class="fila"><span>Observadores</span><span>Nadie · <a href="#" style="color:#507294;text-decoration:none">+ Añadir</a></span></div>
+        </div>
+        <div class="sec"><h3>Cómo van las nubes</h3>
+          <div class="resumen-nubes">
+            <div><b>1</b>con entrega por revisar</div><div><b>1</b>pedida, sin entregar</div>
+            <div><b>1</b>aceptada, para la V3</div><div><b>1</b>sin asignar</div>
+          </div>
+        </div>
+        <div class="sec"><h3>Descripción</h3><div>Las vistas 3D y la descripción del cálculo hidráulico no coinciden con el cuadro de la lámina.</div></div>
+      </section>
+
+      <!-- ── NUBES ── -->
+      <section class="vista on nubes" data-t="nubes">
+        <div class="nb abierta" data-n="1" style="--c:var(--p1)">
+          <div class="nb-cab"><span class="n">1</span><b>Imagen 3D del detalle de la junta</b><span class="chip">Entregado · ronda 2</span></div>
+          <div class="nb-cuerpo">
+            <div class="asignar"><span class="rol">Asignada a</span><span class="sel"><i class="av" style="background:var(--p1)">JR</i>Jorge Ríos · BIM</span></div>
+            <div class="pide">Vista isométrica de la junta y vista en planta, con cotas.</div>
+            <div class="meta">Pedido por Milene Amaya el 03 nov. 12:10 · vence el 05 nov.</div>
+            <div class="ronda"><h4>Ronda 1 <span class="chip dev">Devuelta</span></h4>
+              <div class="ent"><span class="mini"></span><a href="#">junta_iso_4K.png</a> <small>Docs · Incidencias/ISS-002 · 4,2 MB</small></div>
+              <div class="devuelto"><b>Milene Amaya</b> · 04 nov. 10:05 — Falta la vista en planta con cotas.</div>
+            </div>
+            <div class="ronda"><h4>Ronda 2 <span class="chip">Entregada · 04 nov. 15:20</span></h4>
+              <div class="ent"><span class="mini"></span><a href="#">junta_planta_cotas.png</a> <small>Docs · subida aquí · 3,1 MB</small></div>
+              <div class="ent"><span class="mini"></span><a href="#">Vista 3D guardada · ALEPHIA View</a> <small>abre la cámara</small></div>
+              <div class="ent"><span class="mini"></span><a href="#">MOD-HID-001.rvt · V7</a> <small>enlazado desde Docs</small></div>
+            </div>
+            <div class="acc" data-para="encargado"><button class="btn prim">Aceptar</button><button class="btn">Devolver… (falta algo)</button><button class="btn">Reasignar</button></div>
+            <div class="acc oculto" data-para="aportante"><button class="btn">Subir a Docs</button><button class="btn">Enlazar de Docs</button><button class="btn">Desde View</button><button class="btn prim">Entregar ronda 2</button></div>
+            <div class="verif">Al subir la V3: <b>por verificar</b>. El revisor la abre con <i>Comparar versiones</i> en esta zona y dice si quedó <b>levantada</b> o <b>no</b>.</div>
+          </div>
+        </div>
+
+        <div class="nb" data-n="2" style="--c:var(--p2)">
+          <div class="nb-cab"><span class="n">2</span><b>Cuadro de metrados del canal, 0+600 a 0+700</b><span class="chip">Pedido</span></div>
+          <div class="nb-cuerpo">
+            <div class="asignar"><span class="rol">Asignada a</span><span class="sel"><i class="av" style="background:var(--p2)">CTR</i>Contratista SAC · empresa</span></div>
+            <div class="pide">El cuadro actualizado con las cantidades del tramo.</div>
+            <div class="meta">Le llega a cualquiera de Contratista SAC en la obra · vence el 06 nov.</div>
+          </div>
+        </div>
+
+        <div class="nb" data-n="3" style="--c:var(--p3)">
+          <div class="nb-cab"><span class="n">3</span><b>Cota de fondo del buzón B-12</b><span class="chip ok">Aceptado · para la V3</span></div>
+          <div class="nb-cuerpo">
+            <div class="asignar"><span class="rol">Asignada a</span><span class="sel"><i class="av" style="background:var(--p3)">TP</i>Ana Paz · Topografía</span></div>
+            <div class="ronda"><h4>Ronda 1 <span class="chip ok">Aceptada · 04 nov. 08:15</span></h4>
+              <div class="ent"><span class="mini"></span><a href="#">Levantamiento_B12.pdf · V1</a> <small>enlazado desde Docs</small></div></div>
+            <div class="verif">Pendiente de la V3 · <b>por verificar</b> cuando se suba.</div>
+          </div>
+        </div>
+
+        <div class="nb" data-n="4" style="--c:#B0AEA5">
+          <div class="nb-cab"><span class="n">4</span><b>Rótulo del cajetín sin revisión</b><span class="chip">Sin asignar</span></div>
+          <div class="nb-cuerpo">
+            <div class="asignar"><span class="rol">Asignar a</span><span class="sel" style="color:var(--t3)">Elegir persona o empresa…</span></div>
+            <div class="meta">Si nadie aporta, la corrige el encargado del plano.</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── HISTORIAL ── -->
+      <section class="vista" data-t="historial">
+        <ol class="historia">
+          <li><time>03 nov. 11:58</time><span><b>Yaser Omar</b> levantó la incidencia con 4 nubes en la V2</span></li>
+          <li><time>03 nov. 12:10</time><span><b>Milene Amaya</b> asignó la nube 1 a Jorge Ríos (BIM)</span></li>
+          <li><time>03 nov. 12:14</time><span><b>Milene Amaya</b> asignó la nube 2 a Contratista SAC</span></li>
+          <li><time>03 nov. 16:40</time><span><b>Ana Paz</b> entregó en la nube 3 · Levantamiento_B12.pdf</span></li>
+          <li><time>04 nov. 08:15</time><span><b>Milene Amaya</b> aceptó la nube 3</span></li>
+          <li><time>04 nov. 09:32</time><span><b>Jorge Ríos</b> entregó la ronda 1 de la nube 1</span></li>
+          <li><time>04 nov. 10:05</time><span><b>Milene Amaya</b> devolvió la nube 1: «Falta la vista en planta con cotas»</span></li>
+          <li><time>04 nov. 15:20</time><span><b>Jorge Ríos</b> entregó la ronda 2 de la nube 1 · 3 archivos</span></li>
+        </ol>
+      </section>
+    </div>
+  </aside>
+</div>
+<script>
+const pest = (t) => {
+  document.querySelectorAll('.pest button').forEach(b => b.setAttribute('aria-selected', b.dataset.t === t));
+  document.querySelectorAll('.vista').forEach(v => v.classList.toggle('on', v.dataset.t === t));
+};
+document.querySelectorAll('.pest button').forEach(b => b.onclick = () => pest(b.dataset.t));
+const abrirNube = (n) => {
+  pest('nubes');
+  document.querySelectorAll('.nb').forEach(x => x.classList.toggle('abierta', x.dataset.n === n));
+  document.querySelectorAll('.nube').forEach(x => x.classList.toggle('activa', x.dataset.n === n));
+  document.querySelector(`.nb[data-n="${n}"]`)?.scrollIntoView({ block: 'nearest' });
+};
+document.querySelectorAll('.nube').forEach(g => g.onclick = () => abrirNube(g.dataset.n));
+document.querySelectorAll('.nb-cab').forEach(c => c.onclick = () => abrirNube(c.parentNode.dataset.n));
+document.querySelectorAll('.como button').forEach(b => b.onclick = () => {
+  document.querySelectorAll('.como button').forEach(x => x.setAttribute('aria-pressed', x === b));
+  document.querySelectorAll('[data-para]').forEach(e => e.classList.toggle('oculto', e.dataset.para !== b.dataset.v));
+});
+abrirNube('1');
+</script>
+</body>
+</html>

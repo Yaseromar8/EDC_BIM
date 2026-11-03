@@ -48,7 +48,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 TIPOS = ('REVIEW', 'RFI', 'REDLINE', 'TRANSMITTAL', 'SUBMITTAL', 'PROTOCOLO',
-         'ISSUE', 'PARTE', 'ASIENTO', 'INSTRUCCION', 'AVANCE')
+         'ISSUE', 'PARTE', 'ASIENTO', 'INSTRUCCION', 'AVANCE', 'NUBE')
 
 # De donde sale cada objeto: (tabla, columna de alcance). El id se compara
 # siempre en texto, porque unos son SERIAL y otros UUID.
@@ -64,6 +64,8 @@ _ORIGEN = {
     'ASIENTO':     ('doc_asientos', 'project_id'),
     'INSTRUCCION': ('doc_instrucciones', 'project_id'),
     'AVANCE':      ('avance_campo', 'model_urn'),
+    # 46: la nube de una incidencia que alguien tiene que alimentar (nubes_de_issue.py).
+    'NUBE':        ('doc_issue_nubes', 'model_urn'),
 }
 
 _TABLA = """
@@ -96,7 +98,7 @@ _CLAVES = (
 _CHECKS = (
     ('ck_encargos_tipo',
      "CHECK (objeto_tipo IN ('REVIEW','RFI','REDLINE','TRANSMITTAL','SUBMITTAL',"
-     "'PROTOCOLO','ISSUE','PARTE','ASIENTO','INSTRUCCION','AVANCE'))"),
+     "'PROTOCOLO','ISSUE','PARTE','ASIENTO','INSTRUCCION','AVANCE','NUBE'))"),
     ('ck_encargos_estado',
      "CHECK (estado IN ('abierto','cerrado'))"),
     # Un encargo sin destinatario no es un encargo. La tercera forma de destino
@@ -437,6 +439,13 @@ def mi_trabajo(cur, user_id, project_id=None):
     return salida
 
 
+def asunto_de_nube(codigo, pedido):
+    """«Aportar en ISS-002: imagen 3D de la junta» (lo que se lee en «Mi trabajo»)."""
+    texto = (pedido or '').strip()
+    texto = texto if len(texto) <= 120 else texto[:119] + '…'
+    return 'Aportar en %s%s' % (codigo or 'la incidencia', ': %s' % texto if texto else '')
+
+
 def con_su_documento(cur, pendientes):
     """A cada encargo de ISSUE le pone el documento donde vive, si vive en uno (3-nov-2026).
 
@@ -458,6 +467,29 @@ def con_su_documento(cur, pendientes):
                 break
     for p in pendientes:
         if p.get('objeto_tipo') == 'ISSUE' and str(p.get('objeto_id')) in donde:
+            p.update(donde[str(p['objeto_id'])])
+    return _nubes_con_su_documento(cur, pendientes)
+
+
+def _nubes_con_su_documento(cur, pendientes):
+    """Una NUBE (46) lleva a su incidencia y a su plano: la portada la abre como una incidencia."""
+    ids = sorted({int(p['objeto_id']) for p in pendientes
+                  if p.get('objeto_tipo') == 'NUBE' and str(p.get('objeto_id') or '').isdigit()})
+    if not ids:
+        return pendientes
+    cur.execute("""SELECT n.id, n.issue_id, i.evidencia
+                     FROM doc_issue_nubes n JOIN doc_issues i ON i.id = n.issue_id
+                    WHERE n.id = ANY(%s)""", (ids,))
+    donde = {}
+    for nid, iid, evidencia in cur.fetchall():
+        d = {'incidencia': str(iid)}
+        for e in (evidencia or []):
+            if isinstance(e, dict) and e.get('tipo') in ('plano', 'marca') and e.get('documento'):
+                d.update({'documento': str(e['documento']), 'version': e.get('version_id') or None})
+                break
+        donde[str(nid)] = d
+    for p in pendientes:
+        if p.get('objeto_tipo') == 'NUBE' and str(p.get('objeto_id')) in donde:
             p.update(donde[str(p['objeto_id'])])
     return pendientes
 
@@ -914,6 +946,21 @@ def _sigue_debiendose(cur, tipo, objeto_id, destino_usuario):
         # no lo debe. Mismo razonamiento que en REVIEW.
         return uid == destino_usuario
 
+    if tipo == 'NUBE':
+        # La debe quien la tiene asignada mientras le toque entregar (pedida o devuelta).
+        cur.execute("""SELECT estado, destino_usuario, destino_empresa
+                         FROM doc_issue_nubes WHERE id::text = %s""", (str(objeto_id),))
+        fila = cur.fetchone()
+        if not fila:
+            return None
+        import nubes_de_issue as nubes
+        uid, empresa = nubes.deudor({'estado': fila[0], 'destino_usuario': fila[1], 'destino_empresa': fila[2]})
+        if uid is None and empresa is None:
+            return False
+        if uid is None:
+            return destino_usuario is None
+        return True if destino_usuario is None else uid == destino_usuario
+
     if tipo == 'ISSUE':
         cur.execute("""SELECT id, codigo, titulo, estado, autor_id, responsable_id,
                               verificador_id, vence_en, responsable_empresa
@@ -1198,6 +1245,27 @@ def _faltantes(cur):
                         "   AND destino_usuario=%s AND estado='abierto'", (str(fila[0]), uid))
             if not cur.fetchone():
                 faltan.append(('ISSUE', str(fila[0]), uid, asunto, vence))
+    except Exception:
+        cur.connection.rollback()
+
+    # Nubes que alguien tiene que alimentar (46): pedidas o devueltas, con su destino.
+    try:
+        cur.execute("""SELECT n.id, n.model_urn, n.destino_usuario, n.destino_empresa, n.vence_en,
+                                i.codigo, n.pedido
+                           FROM doc_issue_nubes n JOIN doc_issues i ON i.id = n.issue_id
+                          WHERE n.estado IN ('pedida', 'devuelta')""")
+        for nid, obra, uid, empresa, vence, codigo, pedido in cur.fetchall():
+            asunto = asunto_de_nube(codigo, pedido)
+            if uid:
+                cur.execute("SELECT 1 FROM encargos WHERE objeto_tipo='NUBE' AND objeto_id=%s "
+                            "   AND destino_usuario=%s AND estado='abierto'", (str(nid), uid))
+                if not cur.fetchone():
+                    faltan.append(('NUBE', str(nid), uid, asunto, vence))
+            elif empresa:
+                cur.execute("SELECT 1 FROM encargos WHERE objeto_tipo='NUBE' AND objeto_id=%s "
+                            "   AND destino_empresa=%s AND estado='abierto'", (str(nid), empresa))
+                if not cur.fetchone():
+                    faltan.append(('NUBE', str(nid), None, asunto, vence, empresa))
     except Exception:
         cur.connection.rollback()
 

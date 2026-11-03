@@ -655,6 +655,21 @@ def verificar(iid):
                 return jsonify({'error': por_que.capitalize() + '.',
                                 'code': 'NO_PUEDE_VERIFICAR'}), 403
 
+            # Con nubes (46), la incidencia se da por verificada solo si TODAS sus nubes de observación quedaron
+            # levantadas en la versión nueva: el revisor las juzga una a una (docs/archivos/24, D8). Todas: también
+            # las marcas que nadie tocó todavía (virtuales, sin fila; el banco lo destapó el 3-nov). Pero solo si la
+            # incidencia USA las nubes —alguna ya tiene fila—: las de antes de la 46 se siguen cerrando como siempre,
+            # porque hasta que el panel tenga su pestaña Nubes no habría desde dónde verificarlas una a una.
+            if acepta:
+                nubes = _nubes_de(cur, d)
+                usa_nubes = any(n['id'] is not None for n in nubes)
+                pendientes = len(_nub.observaciones_sin_levantar(nubes)) if usa_nubes else 0
+                if pendientes:
+                    return jsonify({'error': ('Falta 1 nube por dar como levantada' if pendientes == 1 else
+                                              'Faltan %d nubes por dar como levantadas' % pendientes)
+                                             + ': verifícalas una a una en la pestaña Nubes.',
+                                    'code': 'NUBES_SIN_LEVANTAR'}), 409
+
             if not acepta and not motivo_txt:
                 return jsonify({'error': 'Rechazar exige un motivo: sin él, el '
                                          'responsable no sabe qué volver a hacer.',
@@ -1152,3 +1167,373 @@ def permitir_autoverificacion(iid):
         log_activity(d['model_urn'], 'SELF_VERIFY_ALLOWED', 'ISSUE', str(iid),
                      d['codigo'], _actor(), {'motivo': motivo_txt})
         return jsonify(_leer(cur, iid))
+
+
+# ══ LAS NUBES DE UNA INCIDENCIA (46, 3-nov-2026) ═════════════════════════════════════════════════════════════════
+#
+# Quién alimenta cada nube y si quedó levantada. La lógica (papeles, actos, transiciones, visibilidad) está en
+# `nubes_de_issue.py`; aquí se lee, se le pregunta y se escribe. Diseño y normas: docs/archivos/23 y 24.
+#
+# UNA SOLA RUTA, a propósito (el perfil portal vigila cuántas sirve): GET lee las nubes; POST hace un acto
+# —crear · asignar · entregar · aceptar · devolver · verificar— sobre una nube.
+
+import nubes_de_issue as _nub
+
+_COLS_NUBE = ('id, issue_id, markup_id, model_urn, clase, padre_id, empresa_equipo, destino_usuario, '
+              'destino_empresa, pedido, vence_en, estado, ronda, rondas, verificacion, history, creado_por, '
+              'creado_en, actualizado_en')
+
+
+def _nube_de_fila(r):
+    return {
+        'id': r[0], 'issue_id': r[1], 'markup_id': r[2], 'model_urn': r[3], 'clase': r[4], 'padre_id': r[5],
+        'empresa_equipo': r[6], 'destino_usuario': r[7], 'destino_empresa': r[8], 'pedido': r[9],
+        'vence_en': r[10].isoformat() if r[10] else None, 'estado': r[11], 'ronda': r[12] or 0,
+        'rondas': r[13] or [], 'verificacion': r[14], 'history': r[15] or [], 'creado_por': r[16],
+        'creado_en': r[17].isoformat() if r[17] else None,
+        'actualizado_en': r[18].isoformat() if r[18] else None,
+    }
+
+
+def _nubes_guardadas(cur, iid):
+    cur.execute('SELECT %s FROM doc_issue_nubes WHERE issue_id = %%s ORDER BY id' % _COLS_NUBE, (iid,))
+    return [_nube_de_fila(r) for r in cur.fetchall()]
+
+
+def _nubes_de(cur, d):
+    """Las guardadas y, de las marcas de la incidencia que aún no tienen fila, una «sin asignar» virtual (id None)."""
+    guardadas = _nubes_guardadas(cur, int(d['id']))
+    con_fila = {n['markup_id'] for n in guardadas if n['markup_id']}
+    virtuales = [{'id': None, 'issue_id': int(d['id']), 'markup_id': m, 'model_urn': d['model_urn'],
+                  'clase': 'observacion', 'padre_id': None, 'empresa_equipo': None, 'destino_usuario': None,
+                  'destino_empresa': None, 'pedido': None, 'vence_en': None, 'estado': _nub.SIN_ASIGNAR,
+                  'ronda': 0, 'rondas': [], 'verificacion': None, 'history': [], 'creado_por': None,
+                  'creado_en': None, 'actualizado_en': None}
+                 for m in _nub.marcas_de_la_incidencia(d) if m not in con_fila]
+    return guardadas + virtuales
+
+
+def _nombres(cur, nubes):
+    """Los nombres de personas y empresas que aparecen, para la pantalla."""
+    uids = sorted({u for n in nubes for u in (n.get('destino_usuario'),) if u})
+    eids = sorted({e for n in nubes for e in (n.get('destino_empresa'),) if e})
+    personas, empresas = {}, {}
+    if uids:
+        cur.execute('SELECT id, name FROM users WHERE id = ANY(%s)', (uids,))
+        personas = {r[0]: r[1] for r in cur.fetchall()}
+    if eids:
+        cur.execute('SELECT id, name FROM companies WHERE id = ANY(%s)', (eids,))
+        empresas = {r[0]: r[1] for r in cur.fetchall()}
+    return personas, empresas
+
+
+def _marcas(cur, ids):
+    """{markup_id: {page, kind, created_by, version_id}} de esas marcas."""
+    if not ids:
+        return {}
+    cur.execute("""SELECT id, page, kind, created_by, file_version_id::text, file_node_id::text
+                     FROM pdf_markups WHERE id = ANY(%s)""", (list(ids),))
+    return {r[0]: {'page': r[1], 'kind': r[2], 'created_by': r[3], 'version_id': r[4], 'documento': r[5]}
+            for r in cur.fetchall()}
+
+
+def _contexto(cur, d):
+    """(admin, empresa del usuario) de quien pregunta."""
+    admin = es_admin_de_obra(cur, _usuario(), d['project_id'])
+    return admin, _empresa_de(cur, _usuario().get('id'))
+
+
+def _para_la_pantalla(cur, d, nubes, admin, empresa):
+    personas, empresas = _nombres(cur, nubes)
+    marcas = _marcas(cur, {n['markup_id'] for n in nubes if n.get('markup_id')})
+    salida, ocultas = [], 0
+    for n in nubes:
+        sus = _nub.papeles(_usuario(), d, n, admin, empresa)
+        if not _nub.visible(n, sus, empresa):
+            ocultas += 1
+            continue
+        actos = [a for a in _nub.ACTOS if _nub.puede(a, n, d, sus)[0]]
+        salida.append({
+            **{k: v for k, v in n.items() if k != 'history'},
+            'estado_etiqueta': _nub.ETIQUETAS.get(n['estado'], n['estado']),
+            'por_verificar': _nub.por_verificar(n, d),
+            'destino_nombre': personas.get(n.get('destino_usuario')) or empresas.get(n.get('destino_empresa')),
+            'destino_es_empresa': bool(n.get('destino_empresa')),
+            'marca': marcas.get(n.get('markup_id')),
+            'mis_papeles': sorted(sus),
+            'actos': actos,
+        })
+    papeles_issue = _nub.papeles(_usuario(), d, None, admin, empresa)
+    return {'nubes': salida,
+            # El revisor no ve el contenido de las nubes de encargo (trabajo en proceso del equipo), sí cuántas hay.
+            'encargos_internos': ocultas,
+            'mis_papeles': sorted(papeles_issue),
+            'puedo_crear_encargo': _nub.puede_crear_encargo(papeles_issue)}
+
+
+def _destino_valido(cur, d, data):
+    """(usuario, empresa, error) de a quién se asigna: miembro de la obra o empresa que participa."""
+    uid = data.get('destino_usuario')
+    eid = data.get('destino_empresa')
+    if bool(uid) == bool(eid):
+        return None, None, 'Asigna la nube a una persona O a una empresa.'
+    if uid:
+        try:
+            uid = int(uid)
+        except (TypeError, ValueError):
+            return None, None, 'Persona no válida.'
+        cur.execute('SELECT 1 FROM project_users WHERE project_id = %s AND user_id = %s', (d['project_id'], uid))
+        if not cur.fetchone():
+            return None, None, 'Esa persona no es de la obra.'
+        return uid, None, None
+    try:
+        eid = int(eid)
+    except (TypeError, ValueError):
+        return None, None, 'Empresa no válida.'
+    cur.execute('SELECT 1 FROM project_companies WHERE project_id = %s AND company_id = %s', (d['project_id'], eid))
+    if not cur.fetchone():
+        return None, None, 'Esa empresa no participa en la obra.'
+    return None, eid, None
+
+
+def _version_del_plano(cur, d):
+    """(version_id, numero) vigente del plano de la incidencia, para dejar escrito sobre qué versión se verificó."""
+    nodo, _v = _nub.documento_de_la_incidencia(d)
+    if not nodo:
+        return None, None
+    cur.execute("""SELECT n.current_version_id::text, v.version_number
+                     FROM file_nodes n LEFT JOIN file_versions v ON v.id = n.current_version_id
+                    WHERE n.id::text = %s""", (nodo,))
+    f = cur.fetchone()
+    return (f[0], f[1]) if f else (None, None)
+
+
+def _guardar_nube(cur, n):
+    cur.execute("""UPDATE doc_issue_nubes
+                      SET destino_usuario=%s, destino_empresa=%s, pedido=%s, vence_en=%s, estado=%s, ronda=%s,
+                          rondas=%s, verificacion=%s, history=%s, actualizado_en=CURRENT_TIMESTAMP
+                    WHERE id=%s""",
+                (n['destino_usuario'], n['destino_empresa'], n['pedido'], n['vence_en'], n['estado'], n['ronda'],
+                 json.dumps(n['rondas']), json.dumps(n['verificacion']) if n['verificacion'] else None,
+                 json.dumps(n['history']), n['id']))
+
+
+def _crear_fila(cur, d, markup_id, clase='observacion', padre_id=None, empresa_equipo=None):
+    cur.execute("""INSERT INTO doc_issue_nubes (issue_id, markup_id, model_urn, clase, padre_id, empresa_equipo,
+                                                creado_por)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s)
+                   ON CONFLICT (issue_id, markup_id) DO NOTHING
+                   RETURNING id""",
+                (int(d['id']), markup_id, d['model_urn'], clase, padre_id, empresa_equipo, _usuario().get('id')))
+    f = cur.fetchone()
+    if f:
+        return f[0]
+    cur.execute('SELECT id FROM doc_issue_nubes WHERE issue_id = %s AND markup_id = %s', (int(d['id']), markup_id))
+    f = cur.fetchone()
+    return f[0] if f else None
+
+
+def _abrir_encargo_de_nube(cur, d, n):
+    try:
+        uid, empresa = _nub.deudor(n)
+        if not uid and not empresa:
+            return
+        eid = _enc.abrir(cur, 'NUBE', n['id'], _enc.asunto_de_nube(d['codigo'], n['pedido']),
+                         destino_usuario=uid, destino_empresa=empresa, vence_en=n.get('vence_en'),
+                         creado_por=_actor())
+        if eid:
+            _enc.avisar(cur, eid)
+    except Exception as e:
+        logger.warning('[nube %s] sin encargo: %s', n.get('id'), str(e)[:120])
+
+
+def _cerrar_encargo_de_nube(cur, n):
+    try:
+        _enc.cerrar_los_de(cur, 'NUBE', n['id'], cerrado_por=_actor())
+    except Exception as e:
+        logger.warning('[nube %s] no se cerraron sus encargos: %s', n.get('id'), str(e)[:120])
+
+
+def _evento(n, evento, **datos):
+    n['history'] = list(n['history'] or []) + [reg.entrada(evento, _actor(), **{k: v for k, v in datos.items()
+                                                                                if v is not None})]
+
+
+@issues_bp.route('/<int:iid>/nubes', methods=['GET', 'POST'])
+def nubes_de_la_incidencia(iid):
+    corte = guardia_de_recurso('doc_issues', iid)
+    if corte:
+        return corte
+    try:
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            d = _leer(cur, iid)
+            if not d or (d['estado'] == iss.BORRADOR and not _es_autor(d)):
+                return jsonify({'error': 'No existe.'}), 404
+            admin, empresa = _contexto(cur, d)
+            if request.method == 'GET':
+                return jsonify(_para_la_pantalla(cur, d, _nubes_de(cur, d), admin, empresa))
+            respuesta = _acto_sobre_nube(cur, d, request.get_json(silent=True) or {}, admin, empresa)
+            if isinstance(respuesta, tuple):
+                conn.rollback()
+                return respuesta
+            conn.commit()
+            return jsonify(_para_la_pantalla(cur, d, _nubes_de(cur, d), admin, empresa))
+    except Exception as e:
+        logger.error('nubes de la incidencia %s: %s', iid, e)
+        return jsonify({'error': 'No se pudo.'}), 500
+
+
+def _acto_sobre_nube(cur, d, data, admin, empresa):
+    """Hace el acto. Devuelve None si salió bien, o (cuerpo, código) si no."""
+    acto = str(data.get('acto') or '')
+    if d.get('cerrado'):
+        return jsonify({'error': 'La incidencia está cerrada.', 'code': 'CERRADA'}), 409
+
+    if acto == 'crear':
+        return _crear_encargo(cur, d, data, admin, empresa)
+
+    # La nube: por su id, o por su marca si aún es virtual (una marca de la incidencia sin fila todavía).
+    nubes = _nubes_de(cur, d)
+    n = None
+    if data.get('nube') is not None:
+        n = next((x for x in nubes if x['id'] is not None and str(x['id']) == str(data['nube'])), None)
+    elif data.get('marca') is not None:
+        n = next((x for x in nubes if str(x.get('markup_id')) == str(data['marca'])), None)
+    if not n:
+        return jsonify({'error': 'Esa nube no es de esta incidencia.'}), 404
+    sus = _nub.papeles(_usuario(), d, n, admin, empresa)
+    if not _nub.visible(n, sus, empresa):
+        return jsonify({'error': 'Esa nube no es de esta incidencia.'}), 404
+    ok, por_que = _nub.puede(acto, n, d, sus)
+    if not ok:
+        return jsonify({'error': por_que[0].upper() + por_que[1:] + '.', 'code': 'NO_PUEDE'}), \
+            (400 if por_que == 'acto desconocido' else 403 if por_que.startswith('solo') else 409)
+    if n['id'] is None:
+        n['id'] = _crear_fila(cur, d, n['markup_id'])
+        if not n['id']:
+            return jsonify({'error': 'No se pudo preparar la nube.'}), 500
+
+    yo = _usuario()
+    ahora = reg.entrada('x', _actor())['at']          # la hora del servidor, en UTC, como el resto del historial
+    rondas = [dict(r) for r in (n['rondas'] or [])]
+
+    if acto == 'asignar':
+        uid, eid, error = _destino_valido(cur, d, data)
+        if error:
+            return jsonify({'error': error}), 400
+        pedido = str(data.get('pedido') or '').strip()
+        if not pedido or len(pedido) > _nub.TOPE_TEXTO:
+            return jsonify({'error': 'Escribe qué se pide (de 1 a %d caracteres).' % _nub.TOPE_TEXTO}), 400
+        vence = str(data.get('vence_en') or '').strip() or None
+        _cerrar_encargo_de_nube(cur, n)
+        n.update({'destino_usuario': uid, 'destino_empresa': eid, 'pedido': pedido, 'vence_en': vence,
+                  'estado': _nub.PEDIDA, 'ronda': (n['ronda'] or 0) + 1})
+        rondas.append({'n': n['ronda'], 'pedido': pedido, 'pedido_por': yo.get('name') or _actor(),
+                       'pedido_por_id': yo.get('id'), 'pedido_en': ahora, 'destino_usuario': uid,
+                       'destino_empresa': eid, 'entregas': []})
+        _evento(n, 'cloud_assigned', destino_usuario=uid, destino_empresa=eid, ronda=n['ronda'])
+        evento_issue = 'cloud_assigned'
+
+    elif acto == 'entregar':
+        entregas, error = _nub.entregas_validas(data.get('entregas'))
+        if error:
+            return jsonify({'error': error}), 400
+        docs = [e['documento'] for e in entregas if e['tipo'] == 'documento']
+        nombres = _documentos_de_la_obra(cur, d['project_id'], docs) if docs else {}
+        if nombres is None or any(x not in nombres for x in docs):
+            return jsonify({'error': 'Solo se entregan documentos de Docs de esta obra.'}), 400
+        for e in entregas:
+            if e['tipo'] == 'documento':
+                e['nombre'] = nombres[e['documento']]
+        if not rondas:
+            rondas.append({'n': n['ronda'] or 1, 'entregas': []})
+        r = rondas[-1]
+        r['entregas'] = list(r.get('entregas') or []) + entregas
+        r.update({'entregado_por': yo.get('name') or _actor(), 'entregado_por_id': yo.get('id'), 'entregado_en': ahora})
+        n['estado'] = _nub.ENTREGADA
+        _evento(n, 'cloud_delivered', ronda=n['ronda'], cuantas=len(entregas))
+        evento_issue = 'cloud_delivered'
+
+    elif acto in ('aceptar', 'devolver'):
+        motivo = str(data.get('motivo') or '').strip()
+        if acto == 'devolver' and not motivo:
+            return jsonify({'error': 'Devolver exige decir qué falta: sin eso no se sabe qué volver a entregar.',
+                            'code': 'SIN_MOTIVO'}), 400
+        if rondas:
+            rondas[-1].update({'decision': 'aceptada' if acto == 'aceptar' else 'devuelta',
+                               'decidido_por': yo.get('name') or _actor(), 'decidido_por_id': yo.get('id'),
+                               'decidido_en': ahora, 'motivo': motivo or None})
+        if acto == 'devolver':
+            # La MISMA nube abre la ronda siguiente para el mismo aportante (D7).
+            n['ronda'] = (n['ronda'] or 0) + 1
+            rondas.append({'n': n['ronda'], 'pedido': motivo, 'pedido_por': yo.get('name') or _actor(),
+                           'pedido_por_id': yo.get('id'), 'pedido_en': ahora, 'devuelta': True,
+                           'destino_usuario': n['destino_usuario'], 'destino_empresa': n['destino_empresa'],
+                           'entregas': []})
+        n['estado'] = _nub.destino(acto)
+        _evento(n, 'cloud_accepted' if acto == 'aceptar' else 'cloud_returned', ronda=n['ronda'], motivo=motivo or None)
+        evento_issue = 'cloud_accepted' if acto == 'aceptar' else 'cloud_returned'
+
+    elif acto == 'verificar':
+        resultado = str(data.get('resultado') or '')
+        if resultado not in (_nub.LEVANTADA, _nub.NO_LEVANTADA):
+            return jsonify({'error': 'Di si quedó levantada o no.'}), 400
+        motivo = str(data.get('motivo') or '').strip()
+        if resultado == _nub.NO_LEVANTADA and not motivo:
+            return jsonify({'error': 'Si no quedó levantada, di por qué: es lo que el encargado tiene que volver '
+                                     'a hacer.', 'code': 'SIN_MOTIVO'}), 400
+        version_id, numero = _version_del_plano(cur, d)
+        n['verificacion'] = {'resultado': resultado, 'motivo': motivo or None, 'version_id': version_id,
+                             'version_number': numero, 'por': yo.get('name') or _actor(), 'por_id': yo.get('id'),
+                             'en': ahora}
+        n['estado'] = _nub.destino('verificar', resultado)
+        _evento(n, 'cloud_verified', resultado=resultado, motivo=motivo or None, version=numero)
+        evento_issue = 'cloud_verified'
+    else:
+        return jsonify({'error': 'Acto desconocido.'}), 400
+
+    n['rondas'] = rondas
+    _guardar_nube(cur, n)
+    # La pelota de la nube: la tiene quien debe entregar, y solo mientras le toque.
+    _cerrar_encargo_de_nube(cur, n)
+    if n['estado'] in _nub.ESTADOS_QUE_DEBE_EL_APORTANTE:
+        _abrir_encargo_de_nube(cur, d, n)
+    # El historial de la incidencia también lo cuenta (la pestaña Historial).
+    _historial(cur, int(d['id']), d['history'], evento_issue, nube=n['id'], marca=n.get('markup_id'),
+               estado=n['estado'], ronda=n['ronda'])
+    log_activity(d['model_urn'], 'CLOUD_' + acto.upper(), 'ISSUE', str(d['id']), d['codigo'], _actor(),
+                 {'nube': n['id'], 'estado': n['estado']})
+    return None
+
+
+def _crear_encargo(cur, d, data, admin, empresa):
+    """El encargado convierte una marca suya de este plano en una NUBE DE ENCARGO para su equipo (D6)."""
+    sus = _nub.papeles(_usuario(), d, None, admin, empresa)
+    if not _nub.puede_crear_encargo(sus):
+        return jsonify({'error': 'Solo el encargado del plano reparte trabajo con nubes de encargo.',
+                        'code': 'NO_PUEDE'}), 403
+    try:
+        marca = int(data.get('marca'))
+    except (TypeError, ValueError):
+        return jsonify({'error': 'Falta la marca.'}), 400
+    nodo, _v = _nub.documento_de_la_incidencia(d)
+    m = _marcas(cur, [marca]).get(marca)
+    if not m or not nodo or m.get('documento') != nodo:
+        return jsonify({'error': 'La marca tiene que ser de este plano.'}), 400
+    nubes = _nubes_de(cur, d)
+    if any(x.get('markup_id') == marca for x in nubes):
+        return jsonify({'error': 'Esa marca ya es una nube de la incidencia.'}), 409
+    padre = data.get('padre')
+    if padre is not None:
+        p = next((x for x in nubes if x['id'] is not None and str(x['id']) == str(padre)), None)
+        if not p or p['clase'] != 'observacion':
+            return jsonify({'error': 'Un encargo cuelga de una nube de observación de esta incidencia.'}), 400
+        padre = p['id']
+    nid = _crear_fila(cur, d, marca, clase='encargo', padre_id=padre, empresa_equipo=empresa)
+    if not nid:
+        return jsonify({'error': 'No se pudo crear la nube.'}), 500
+    _historial(cur, int(d['id']), d['history'], 'cloud_created', nube=nid, marca=marca, clase='encargo',
+               padre=padre)
+    log_activity(d['model_urn'], 'CLOUD_CREATE', 'ISSUE', str(d['id']), d['codigo'], _actor(), {'nube': nid})
+    return None

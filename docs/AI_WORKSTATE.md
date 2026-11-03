@@ -37,6 +37,11 @@ Detalle en `docs/archivos/18`, `19`, `20` y `21`.
   lado a lado; alinear; cambios detectados solos, marcados y en lista; comparación de textos (cota 21.35 → 24.60). Teselas
   del servidor (z1 para la hoja, z2/z3 para la zona nítida), con pdf.js de respaldo. Solo portal. Sin probar en producción
   que el bucket entregue las teselas a fetch con CORS (si no, cae a pdf.js).
+- `2a5ca0ca` (Comparar versiones) EMPUJADO; deploy del portal pendiente del dueño.
+- Commit siguiente (3-nov, docs/archivos/23 y 24 §5): NUBES DE UNA INCIDENCIA, parte 1 (base y servidor). MIGRACIÓN 46
+  `backend/sql/46_nubes_de_issue.sql`: aplicar como ecd_migrator ANTES del backend (el manifiesto ya declara NUBE y
+  SUBCONTRATISTA: sin ella no arranca). Ruta `/api/issues/<id>/nubes`, encargo NUBE, guardia de cierre y «marcar»
+  exige view_markup en la carpeta (cambia lo de hoy para quien solo tiene «Ver»). Sin frontend todavía (parte 2).
 - EXACT NEXT ACTION (histórica, ya hecha para c3144a3d): Manual Deploy de `visor-ecd-backend-va` y DESPUÉS de `visor-ecd-portal` con el HEAD de main;
   comprobar `/api/health` y el bundle del portal (Cloudflare ~5 min). Luego, recorrido real con dos personas (correo
   a observadores y subida de fotos sin probar en producción).

@@ -42,7 +42,7 @@ logger = logging.getLogger(__name__)
 # pocas: cinco cubren el reparto real (entidad, quien supervisa, quien ejecuta,
 # quien proyecto). Si el piloto pide mas, se anaden -- pero de una lista corta se
 # sale; de una lista larga que nadie usa, no.
-FUNCIONES = ('ENTIDAD', 'SUPERVISION', 'CONTRATISTA', 'PROYECTISTA', 'OTRO')
+FUNCIONES = ('ENTIDAD', 'SUPERVISION', 'CONTRATISTA', 'PROYECTISTA', 'OTRO', 'SUBCONTRATISTA')
 
 _TABLA = """
 CREATE TABLE IF NOT EXISTS project_companies (
@@ -65,7 +65,7 @@ _CLAVES = (
 
 _CHECK = """
 ALTER TABLE project_companies ADD CONSTRAINT ck_project_companies_funcion
-    CHECK (funcion IN ('ENTIDAD','SUPERVISION','CONTRATISTA','PROYECTISTA','OTRO'))
+    CHECK (funcion IN ('ENTIDAD','SUPERVISION','CONTRATISTA','PROYECTISTA','OTRO','SUBCONTRATISTA'))
 """
 
 _INDICE = """

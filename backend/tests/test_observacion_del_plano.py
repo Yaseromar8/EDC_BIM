@@ -63,6 +63,7 @@ def app(monkeypatch):
     app.register_blueprint(pdf.pdf_tools_bp)
     app.before_request(lambda: setattr(g, 'current_user', {'id': 7, 'name': 'Ana', 'email': 'ana@obra.pe'}))
     monkeypatch.setattr(pdf, 'guardia_de_recurso', lambda tabla, valor: None)
+    monkeypatch.setattr(pdf, '_negativa_para_marcar', lambda nodo: None)   # la prueba propia va aparte
     return app
 
 

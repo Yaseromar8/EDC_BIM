@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ALEPHIA · Aportes por nube · maqueta v1</title>
+<link rel="stylesheet" href="../../../design/fuentes/ibm-plex.css">
+<style>
+/* MAQUETA (3-nov-2026) · docs/archivos/23_APORTES_POR_NUBE.md. No es código de la app.
+   Revisor (BIM) levanta la incidencia y sus nubes → el ENCARGADO DEL PLANO es el dueño y pide aportes → los APORTANTES
+   (personas o empresas) adjuntan o enlazan lo pedido → el encargado lo incorpora en su CAD y sube la versión.
+   Controles en grises; el color es SOLO dato: el de cada persona en ESTE plano (hasta 10, lista cerrada de la paleta). */
+:root { --campo: #F1F0E8; --sup: #fff; --linea: #E8E6DC; --linea-f: #CCCAC0; --t1: #141413; --t2: #52524D; --t3: #72706B; --t4: #B0AEA5;
+  --on: #E8E6DC; --sombra: 0 4px 16px rgba(20,20,19,.12), 0 1px 3px rgba(20,20,19,.08);
+  --p1: #507294; --p2: #b93535; --p3: #64744e; }
+* { box-sizing: border-box; }
+body { margin: 0; font: 13px/1.45 'IBM Plex Sans', system-ui, sans-serif; color: var(--t1); background: var(--campo); height: 100vh; display: flex; flex-direction: column; }
+button { font: inherit; color: inherit; }
+svg.i { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+.cab { height: 44px; flex: none; display: flex; align-items: center; gap: 12px; padding: 0 14px; background: #302F2E; color: #E8E6DC; font-size: 12px; }
+.cab b { letter-spacing: .28em; font-weight: 500; }
+.cab .esp { flex: 1; }
+.como { display: inline-flex; gap: 2px; padding: 2px; border-radius: 8px; background: #4a4947; }
+.como button { border: 0; background: none; color: #E8E6DC; padding: 4px 10px; border-radius: 6px; cursor: pointer; font-size: 12px; }
+.como button[aria-pressed="true"] { background: #FAF9F5; color: #141413; }
+.cuerpo { flex: 1; min-height: 0; display: flex; }
+.hoja { flex: 1; min-width: 0; position: relative; overflow: hidden; }
+.hoja svg.lamina { position: absolute; inset: 16px; width: calc(100% - 32px); height: calc(100% - 32px); background: #fff; box-shadow: 0 1px 2px rgba(20,20,19,.1), 0 0 0 1px rgba(20,20,19,.06); }
+.leyenda { position: absolute; left: 28px; top: 28px; background: var(--sup); border: 1px solid var(--linea); border-radius: 10px; box-shadow: var(--sombra); padding: 8px 10px; font-size: 12px; color: var(--t2); }
+.leyenda b { display: block; font-weight: 600; color: var(--t1); margin-bottom: 4px; }
+.leyenda div { display: flex; align-items: center; gap: 8px; padding: 2px 0; }
+.leyenda i { width: 14px; height: 2px; }
+
+.panel { width: 400px; flex: none; background: var(--sup); border-left: 1px solid var(--linea); display: flex; flex-direction: column; min-height: 0; }
+.p-cab { padding: 14px 16px 10px; border-bottom: 1px solid var(--linea); }
+.p-cab .cod { font: 600 18px 'IBM Plex Sans'; }
+.p-cab .tipo { font-size: 12px; color: var(--t3); }
+.p-cab h2 { margin: 8px 0 8px; font-size: 15px; font-weight: 600; }
+.estado { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 8px; border-radius: 6px; background: var(--campo); font-size: 12px; font-weight: 500; }
+.estado::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: #9e5943; }
+.p-cuerpo { flex: 1; overflow-y: auto; }
+.turno { margin: 12px 16px 4px; padding: 10px 12px; border: 1px solid var(--linea); border-left: 3px solid var(--t1); border-radius: 6px; background: #FAF9F5; font-size: 13px; }
+.turno .acc { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+.btn { height: 28px; padding: 0 10px; border-radius: 6px; border: 1px solid var(--linea-f); background: var(--sup); cursor: pointer; font-size: 12.5px; display: inline-flex; align-items: center; gap: 6px; }
+.btn.prim { background: var(--t1); border-color: var(--t1); color: #fff; }
+.sec { padding: 12px 16px; border-top: 1px solid var(--campo); }
+.sec h3 { margin: 0 0 8px; font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--t3); display: flex; align-items: center; gap: 8px; }
+.sec h3 .esp { flex: 1; }
+.fila { display: flex; gap: 10px; padding: 4px 0; font-size: 13px; }
+.fila span:first-child { width: 120px; color: var(--t3); flex: none; }
+.persona { display: inline-flex; align-items: center; gap: 6px; }
+.av { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font: 600 10px 'IBM Plex Sans'; color: #fff; flex: none; }
+.av.gris { background: #E8E6DC; color: var(--t2); }
+.rol { font-size: 11.5px; color: var(--t3); }
+.aporte { border: 1px solid var(--linea); border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; position: relative; }
+.aporte::before { content: ''; position: absolute; left: -1px; top: 10px; bottom: 10px; width: 3px; border-radius: 2px; background: var(--c); }
+.aporte .uno { display: flex; align-items: center; gap: 8px; }
+.aporte .uno b { font-weight: 600; }
+.aporte .uno .esp { flex: 1; }
+.chip { font-size: 11.5px; padding: 1px 7px; border-radius: 4px; background: var(--campo); color: var(--t2); white-space: nowrap; }
+.chip.ok { background: #E0E3D7; color: #4f5c3e; }
+.chip.dev { background: #FBEBEB; color: #9a2c2c; }
+.aporte .pide { margin: 6px 0 4px; font-size: 13px; }
+.aporte .meta { font-size: 12px; color: var(--t3); }
+.entregas { margin-top: 8px; display: flex; flex-direction: column; gap: 4px; }
+.ent { display: flex; align-items: center; gap: 8px; font-size: 12.5px; padding: 6px 8px; border-radius: 6px; background: #FAF9F5; }
+.ent .mini { width: 40px; height: 28px; border-radius: 3px; border: 1px solid var(--linea); background: linear-gradient(135deg,#e8e6dc,#fff); flex: none; }
+.ent a { color: #507294; text-decoration: none; }
+.ent small { color: var(--t3); margin-left: auto; white-space: nowrap; }
+.aporte .acc { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+.historia { list-style: none; margin: 0; padding: 0; font-size: 12.5px; }
+.historia li { display: grid; grid-template-columns: 96px 1fr; gap: 8px; padding: 4px 0; color: var(--t2); }
+.historia time { color: var(--t3); font-variant-numeric: tabular-nums; }
+.oculto { display: none !important; }
+.nota { margin: 6px 16px 14px; font-size: 12px; color: var(--t3); }
+</style>
+</head>
+<body>
+<header class="cab"><b>ALEPHIA</b><span>DR-HD-000800.pdf · V2</span><span class="esp"></span>
+  <span>Ver como</span>
+  <div class="como" role="group">
+    <button data-v="encargado" aria-pressed="true">Encargado del plano</button>
+    <button data-v="aportante" aria-pressed="false">Aportante (BIM)</button>
+    <button data-v="revisor" aria-pressed="false">Revisor</button>
+  </div>
+</header>
+<div class="cuerpo">
+  <div class="hoja">
+    <svg class="lamina" viewBox="0 0 1000 640" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
+      <g stroke="#B0AEA5" fill="none" stroke-width="1">
+        <rect x="20" y="20" width="960" height="600" />
+        <path d="M60 520 C 220 420, 330 460, 470 330 S 700 150, 900 90" stroke-width="2" stroke="#72706B" />
+        <path d="M60 545 C 220 445, 330 485, 470 355 S 700 175, 900 115" />
+        <path d="M120 80 l140 0 l0 90 l-140 0 z M300 120 l90 0 l0 60 l-90 0 z M560 400 l160 0 l0 120 l-160 0 z" />
+        <path d="M40 300 L 960 300 M500 40 L 500 600" stroke-dasharray="4 6" />
+        <g stroke="#CCCAC0"><path d="M600 420h120M600 440h120M600 460h120M600 480h120M600 500h120"/><path d="M630 400v120M660 400v120M690 400v120"/></g>
+        <path d="M110 380 l120 -40 l40 80 l-120 40 z" stroke="#72706B" />
+      </g>
+      <!-- nubes: el color de la persona a quien se pidió el aporte en ESTE plano -->
+      <g fill="none" stroke-width="2.2">
+        <rect x="95" y="325" width="200" height="140" rx="2" stroke="var(--p1)" />
+        <rect x="545" y="390" width="190" height="140" rx="2" stroke="var(--p2)" />
+        <rect x="440" y="290" width="70" height="70" rx="2" stroke="var(--p3)" />
+      </g>
+      <g font-family="IBM Plex Mono" font-size="11" font-weight="600" fill="#fff">
+        <rect x="95" y="309" width="62" height="16" rx="2" fill="var(--p1)" /><text x="101" y="321">1 · JR</text>
+        <rect x="545" y="374" width="72" height="16" rx="2" fill="var(--p2)" /><text x="551" y="386">2 · CTR</text>
+        <rect x="440" y="274" width="60" height="16" rx="2" fill="var(--p3)" /><text x="446" y="286">3 · TP</text>
+      </g>
+    </svg>
+    <div class="leyenda"><b>En este plano</b>
+      <div><i style="background:var(--p1)"></i>JR · Jorge Ríos (BIM)</div>
+      <div><i style="background:var(--p2)"></i>CTR · Contratista SAC</div>
+      <div><i style="background:var(--p3)"></i>TP · Topografía (Ana Paz)</div>
+    </div>
+  </div>
+
+  <aside class="panel">
+    <div class="p-cab">
+      <div class="cod">ISS-002 <span class="tipo">· Observación de documento</span></div>
+      <h2>VISTAS_3D_DESCRIPCION_CALCULO_HIDRAULICO</h2>
+      <span class="estado">En curso</span> <span class="chip" style="margin-left:6px">vence 06 nov. 2026</span>
+    </div>
+    <div class="p-cuerpo">
+      <!-- lo que le toca a cada uno -->
+      <div class="turno" data-para="encargado">Te toca corregir el plano. <b>1 de 3 aportes</b> está entregado y espera que lo revises.
+        <div class="acc"><button class="btn prim">Pedir aporte</button><button class="btn">Subir versión corregida</button><button class="btn">Declarar corregida</button></div></div>
+      <div class="turno oculto" data-para="aportante">Milene Amaya te pidió <b>la imagen 3D del detalle</b> (nube 1) para el 05 nov.
+        <div class="acc"><button class="btn">Adjuntar archivos</button><button class="btn">Enlazar documento del ECD</button><button class="btn">Enviar desde View</button><button class="btn prim">Entregar</button></div></div>
+      <div class="turno oculto" data-para="revisor">Le toca a Milene Amaya corregir el plano. Verificarás tú cuando lo declare corregido.</div>
+
+      <div class="sec">
+        <h3>Quién</h3>
+        <div class="fila"><span>Levantó y verifica</span><span class="persona"><i class="av gris">YO</i>Yaser Omar <span class="rol">· Líder BIM</span></span></div>
+        <div class="fila"><span>Encargado del plano</span><span class="persona"><i class="av gris">MA</i>Milene Amaya <span class="rol">· arma el plano</span></span></div>
+        <div class="fila"><span>Aportan</span><span>3 · personas y empresas</span></div>
+      </div>
+
+      <div class="sec">
+        <h3>Aportes <span class="esp"></span><span class="rol" style="text-transform:none;letter-spacing:0">1 entregado · 1 pedido · 1 incorporado</span></h3>
+
+        <div class="aporte" style="--c:var(--p1)">
+          <div class="uno"><i class="av" style="background:var(--p1)">JR</i><b>Jorge Ríos</b><span class="rol">BIM</span><span class="esp"></span><span class="chip">Entregado</span></div>
+          <div class="pide">Imagen 3D del detalle de la junta, vista isométrica</div>
+          <div class="meta">Nube 1 · pedido el 03 nov. 12:10 · vence el 05 nov.</div>
+          <div class="entregas">
+            <div class="ent"><span class="mini"></span>junta_iso_4K.png <small>3840 × 2160 · 4,2 MB</small></div>
+            <div class="ent"><span class="mini"></span><a href="#">Vista 3D guardada · ALEPHIA View</a> <small>abre la cámara</small></div>
+            <div class="ent">«La junta va a 45°, ver detalle D-12 del modelo.» <small>04 nov. 09:32</small></div>
+          </div>
+          <div class="acc" data-para="encargado"><button class="btn prim">Incorporado</button><button class="btn">Devolver…</button></div>
+        </div>
+
+        <div class="aporte" style="--c:var(--p2)">
+          <div class="uno"><i class="av" style="background:var(--p2)">CTR</i><b>Contratista SAC</b><span class="rol">empresa · contratista</span><span class="esp"></span><span class="chip">Pedido</span></div>
+          <div class="pide">Cuadro de metrados actualizado del canal, tramo 0+600 a 0+700</div>
+          <div class="meta">Nube 2 · pedido el 03 nov. 12:14 · vence el 06 nov. · le llega a cualquiera de su empresa</div>
+        </div>
+
+        <div class="aporte" style="--c:var(--p3)">
+          <div class="uno"><i class="av" style="background:var(--p3)">TP</i><b>Ana Paz</b><span class="rol">Topografía</span><span class="esp"></span><span class="chip ok">Incorporado</span></div>
+          <div class="pide">Cota de fondo del buzón B-12, levantada en campo</div>
+          <div class="meta">Nube 3 · entregado el 03 nov. 16:40 · incorporado en la V2 el 04 nov. 08:15</div>
+          <div class="entregas"><div class="ent"><span class="mini"></span><a href="#">Levantamiento_B12.pdf</a> <small>documento del ECD · V1</small></div></div>
+        </div>
+      </div>
+
+      <div class="sec">
+        <h3>Historial</h3>
+        <ol class="historia">
+          <li><time>03 nov. 11:58</time><span><b>Yaser Omar</b> levantó la incidencia con 3 nubes</span></li>
+          <li><time>03 nov. 12:10</time><span><b>Milene Amaya</b> pidió un aporte a Jorge Ríos (BIM) · nube 1</span></li>
+          <li><time>03 nov. 12:14</time><span><b>Milene Amaya</b> pidió un aporte a Contratista SAC · nube 2</span></li>
+          <li><time>03 nov. 16:40</time><span><b>Ana Paz</b> entregó el levantamiento · nube 3</span></li>
+          <li><time>04 nov. 08:15</time><span><b>Milene Amaya</b> lo incorporó y subió la V2</span></li>
+          <li><time>04 nov. 09:32</time><span><b>Jorge Ríos</b> entregó 2 archivos y una nota · nube 1</span></li>
+        </ol>
+      </div>
+      <p class="nota">Todo queda aquí, con fecha y hora. El correo solo avisa con un enlace; nada se responde por correo ni por WhatsApp.</p>
+    </div>
+  </aside>
+</div>
+<script>
+document.querySelectorAll('.como button').forEach(b => b.onclick = () => {
+  document.querySelectorAll('.como button').forEach(x => x.setAttribute('aria-pressed', x === b));
+  document.querySelectorAll('[data-para]').forEach(e => e.classList.toggle('oculto', e.dataset.para !== b.dataset.v));
+});
+</script>
+</body>
+</html>

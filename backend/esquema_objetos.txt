@@ -1087,7 +1087,7 @@ restriccion	element_docs not null url
 restriccion	element_docs primary key (id)
 restriccion	encargos check (((destino_usuario is not null) or (destino_funcion is not null) or (destino_empresa is not null)))
 restriccion	encargos check ((estado = any (array['abierto'::text, 'cerrado'::text])))
-restriccion	encargos check ((objeto_tipo = any (array['review'::text, 'rfi'::text, 'redline'::text, 'transmittal'::text, 'submittal'::text, 'protocolo'::text, 'issue'::text, 'parte'::text, 'asiento'::text, 'instruccion'::text, 'avance'::text])))
+restriccion	encargos check ((objeto_tipo = any (array['review'::text, 'rfi'::text, 'redline'::text, 'transmittal'::text, 'submittal'::text, 'protocolo'::text, 'issue'::text, 'parte'::text, 'asiento'::text, 'instruccion'::text, 'avance'::text, 'nube'::text])))
 restriccion	encargos foreign key (destino_usuario) references users(id) on delete cascade
 restriccion	encargos foreign key (project_id) references projects(id) on delete cascade
 restriccion	encargos not null asunto
@@ -1395,7 +1395,7 @@ restriccion	presupuesto_maestro not null model_urn
 restriccion	presupuesto_maestro not null nivel
 restriccion	presupuesto_maestro primary key (id)
 restriccion	presupuesto_maestro unique (model_urn, item)
-restriccion	project_companies check ((funcion = any (array['entidad'::text, 'supervision'::text, 'contratista'::text, 'proyectista'::text, 'otro'::text])))
+restriccion	project_companies check ((funcion = any (array['entidad'::text, 'supervision'::text, 'contratista'::text, 'proyectista'::text, 'otro'::text, 'subcontratista'::text])))
 restriccion	project_companies foreign key (company_id) references companies(id) on delete cascade
 restriccion	project_companies foreign key (project_id) references projects(id) on delete cascade
 restriccion	project_companies not null company_id
