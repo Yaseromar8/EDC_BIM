@@ -63,6 +63,8 @@ Detalle en `docs/archivos/18`, `19`, `20` y `21`.
   textos de ayuda, orden estable. Ensayo 41/41.
 - Commits siguientes (4-nov, docs/ux/TOOLTIPS_ACC_PROCORE.md): un solo tooltip a la vez (manda el de dentro) y los
   tooltips del portal en una a tres palabras, sin explicaciones ni la huella SHA; ancho máximo 200 px como Procore.
+- Commit siguiente (4-nov): pestaña Nubes como lista ligera, asignar sin fecha (manda la de la incidencia, también en
+  «Mi trabajo»), la barra de la nube sin el código; y se devuelve el tooltip de «el móvil marcó» que exige GAP 07.
 - EXACT NEXT ACTION (histórica, ya hecha para c3144a3d): Manual Deploy de `visor-ecd-backend-va` y DESPUÉS de `visor-ecd-portal` con el HEAD de main;
   comprobar `/api/health` y el bundle del portal (Cloudflare ~5 min). Luego, recorrido real con dos personas (correo
   a observadores y subida de fotos sin probar en producción).

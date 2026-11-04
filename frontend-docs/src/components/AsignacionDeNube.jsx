@@ -9,15 +9,6 @@ import React, { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
 import { apiFetch } from '../utils/apiFetch';
 
-const hoy = () => {
-  const d = new Date();
-  const dos = n => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${dos(d.getMonth() + 1)}-${dos(d.getDate())}`;
-};
-const fechaDeDia = (s) => {
-  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(s || ''));
-  return m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])).toLocaleDateString('es-PE', { day: '2-digit', month: 'short' }) : '';
-};
 
 /**
  * «COMPARAR EN ESTA NUBE» (doc 23 §6.7): el panel de la incidencia lo pide y el lector del plano (DocumentViewer) abre
@@ -97,7 +88,6 @@ function Formulario({ API, obra, obsId, marcaId, nube, pedidoSugerido, onHecha, 
   const [empresas, setEmpresas] = useState([]);
   const [quien, setQuien] = useState(nube.destino_usuario ? `u${nube.destino_usuario}` : nube.destino_empresa ? `e${nube.destino_empresa}` : '');
   const [pedido, setPedido] = useState(nube.pedido || pedidoSugerido || '');
-  const [vence, setVence] = useState(String(nube.vence_en || '').slice(0, 10));
   const [ocupado, setOcupado] = useState(false);
   useEffect(() => {
     let vivo = true;
@@ -116,7 +106,7 @@ function Formulario({ API, obra, obsId, marcaId, nube, pedidoSugerido, onHecha, 
         body: JSON.stringify({
           acto: 'asignar', ...(nube.id != null ? { nube: nube.id } : { marca: marcaId }),
           ...(quien.startsWith('u') ? { destino_usuario: Number(quien.slice(1)) } : { destino_empresa: Number(quien.slice(1)) }),
-          pedido: pedido.trim(), vence_en: vence || undefined,
+          pedido: pedido.trim(),
         }),
       });
       const d = await r.json().catch(() => ({}));
@@ -143,8 +133,6 @@ function Formulario({ API, obra, obsId, marcaId, nube, pedidoSugerido, onHecha, 
       <input value={pedido} maxLength={2000} aria-label="Qué se le pide" placeholder="Qué se le pide"
         onChange={e => setPedido(e.target.value)} />
       <div className="bdm-asignar__fila">
-        <input type="date" value={vence} min={hoy()} aria-label="Para cuándo"
-          onChange={e => setVence(e.target.value)} />
         <button type="button" className="bdm-accion" onClick={onCancelar}>Cancelar</button>
         <button type="submit" className="bdm-accion bdm-accion--prim" disabled={!quien || !pedido.trim() || ocupado}>
           {nube.estado === 'sin_asignar' ? 'Asignar' : 'Reasignar'}</button>
@@ -174,7 +162,7 @@ export default function AsignacionDeNube({ API, obra, marca, nube, onCambio, ped
         Asignar a una persona o empresa…</button>
     );
   }
-  const detalle = [nube.estado_etiqueta, nube.vence_en && `vence ${fechaDeDia(nube.vence_en)}`].filter(Boolean).join(' · ');
+  const detalle = nube.estado_etiqueta;
   return (
     <div className="bdm-asignada">
       <span>

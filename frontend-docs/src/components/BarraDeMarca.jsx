@@ -338,7 +338,7 @@ export default function BarraDeMarca({ API, obra, marca, esAutor, editable, colo
           </Boton>
         )}
 
-        {obs ? (
+        {obs && marca.kind === 'cloud' ? null : obs ? (
           // Solo su código, con el punto de su estado: el detalle, en el panel (el dueño: «quita espacio»).
           <button type="button" className="bdm-obs" style={{ '--estado': est.color }}
             data-tip={`${obs.titulo || obs.codigo} · ${obs.vencida ? 'Vencida' : est.etiqueta}`}

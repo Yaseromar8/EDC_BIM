@@ -132,7 +132,7 @@ function Fila({ op, onDescartar, onVerConflicto }) {
                 {' · '}
                 {/* DECLARADO por el dispositivo. No es un reloj autoritativo, y
                     la pantalla no puede insinuar que lo sea. */}
-                <span title="Hora del dispositivo">
+                <span title="Hora que declaró este dispositivo cuando lo capturaste. No es un reloj verificado por el servidor.">
                   el móvil marcó {cuando(op.capturado_en)}
                 </span>
               </>

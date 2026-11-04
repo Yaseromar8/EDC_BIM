@@ -1357,8 +1357,9 @@ def _abrir_encargo_de_nube(cur, d, n):
         uid, empresa = _nub.deudor(n)
         if not uid and not empresa:
             return
+        # El plazo es el de la incidencia (4-nov-2026, el dueño: «basta con la fecha del issue principal»).
         eid = _enc.abrir(cur, 'NUBE', n['id'], _enc.asunto_de_nube(d['codigo'], n['pedido']),
-                         destino_usuario=uid, destino_empresa=empresa, vence_en=n.get('vence_en'),
+                         destino_usuario=uid, destino_empresa=empresa, vence_en=n.get('vence_en') or d.get('vence_en'),
                          creado_por=_actor())
         if eid:
             _enc.avisar(cur, eid)

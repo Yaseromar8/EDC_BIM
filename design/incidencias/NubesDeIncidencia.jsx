@@ -19,11 +19,6 @@ function fechaCorta(iso) {
   return d && !Number.isNaN(d.getTime())
     ? d.toLocaleString('es-PE', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '';
 }
-function fechaDeDia(aaaammdd) {
-  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(aaaammdd || ''));
-  return m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]))
-    .toLocaleDateString('es-PE', { day: '2-digit', month: 'short' }) : '';
-}
 function iniciales(nombre) {
   const p = String(nombre || '?').replace(/@.*/, '').split(/[\s._-]+/).filter(Boolean);
   return ((p[0] || '?')[0] + (p[1] ? p[1][0] : '')).toUpperCase();
@@ -37,11 +32,9 @@ const TONO = { devuelta: 'es-mal', no_levantada: 'es-mal', aceptada: 'es-bien', 
 
 /** «Entregado · ronda 2», «Pedida · vence el 05 nov.»… lo que se lee en la cabecera de la nube. */
 function rotulo(n) {
+  // Sin fechas: manda la de la incidencia (el dueño: «basta con la fecha del issue principal»).
   const r = n.ronda > 1 ? ` · ronda ${n.ronda}` : '';
-  if (n.estado === 'pedida' || n.estado === 'devuelta') {
-    return `${n.estado_etiqueta}${r}${n.vence_en ? ` · vence el ${fechaDeDia(n.vence_en)}` : ''}`;
-  }
-  if (n.estado === 'aceptada') return `Aceptada${r}${n.clase === 'encargo' ? '' : ' · para la versión corregida'}`;
+  if (n.estado === 'aceptada') return `Aceptada${r}`;
   if (n.estado === 'levantada' || n.estado === 'no_levantada') {
     const v = n.verificacion?.version_number;
     return `${n.estado_etiqueta}${v ? ` en la V${v}` : ''}`;
@@ -135,14 +128,12 @@ function Motivo({ titulo, boton, peligro, ocupado, onHacer, onCancelar }) {
   );
 }
 
-function Ronda({ entorno, r, ultima }) {
-  const decision = r.decision === 'aceptada' ? { t: `Aceptada${r.decidido_en ? ` · ${fechaCorta(r.decidido_en)}` : ''}`, c: 'es-bien' }
-    : r.decision === 'devuelta' ? { t: 'Devuelta', c: 'es-mal' }
-    : r.entregado_en ? { t: `Entregada · ${fechaCorta(r.entregado_en)}`, c: 'es-entregada' }
-    : { t: ultima ? 'Sin entregar' : '—', c: '' };
+function Ronda({ entorno, r, conCabecera }) {
+  // Una ronda sin nada entregado no se pinta; con una sola, sin cabecera.
+  if (!(r.entregas || []).length && r.decision !== 'devuelta') return null;
   return (
     <div className="nub-ronda">
-      <h5>Ronda {r.n} <span className={`nub-chip ${decision.c}`}>{decision.t}</span></h5>
+      {conCabecera && <h5>Ronda {r.n}</h5>}
       {(r.entregas || []).length > 0 && (
         <ul className="nub-entregas">
           {r.entregas.map((e, k) => (
@@ -158,7 +149,7 @@ function Ronda({ entorno, r, ultima }) {
           ))}
         </ul>
       )}
-      {r.entregado_por && <p className="pinc-nota">Entregó {r.entregado_por}</p>}
+      {r.entregado_por && <p className="pinc-nota">{r.entregado_por}{r.entregado_en ? ` · ${fechaCorta(r.entregado_en)}` : ''}</p>}
       {r.decision === 'devuelta' && r.motivo && (
         <p className="nub-devuelto"><b>{r.decidido_por || 'El encargado'}</b>{r.decidido_en ? ` · ${fechaCorta(r.decidido_en)}` : ''} — {r.motivo}</p>
       )}
@@ -177,32 +168,28 @@ function Nube({ entorno, obra, ob, i, n, numero, color, abierta, onAbrir, ocupad
   const dar = async (cuerpo, ok) => { if (await hacer({ ...sobre, ...cuerpo }, ok)) setActo(null); };
   const marca = n.marca || {};
   const tipo = TIPO_DE_MARCA[marca.kind] || 'Marca';
-  const titulo = n.pedido || `${tipo}${marca.page != null ? ` · pág. ${marca.page}` : ''}`;
+  const titulo = n.pedido || (n.estado === 'sin_asignar' ? 'Sin asignar' : `${tipo}${marca.page != null ? ` · pág. ${marca.page}` : ''}`);
   const rondas = n.rondas || [];
-  const ultima = rondas[rondas.length - 1];
   const debeEntregar = puede('entregar') && (n.estado === 'pedida' || n.estado === 'devuelta');
   return (
     <li ref={caja} className={`nub${abierta ? ' es-abierta' : ''}${n.clase === 'encargo' ? ' es-encargo' : ''}`}
       style={{ '--nube': color }}>
       <button type="button" className="nub-cab" aria-expanded={abierta} onClick={onAbrir}>
         <span className="nub-num">{numero}</span>
-        <b>{titulo}</b>
+        <b className={n.pedido ? undefined : 'es-vacio'}>{titulo}</b>
         {n.destino_nombre && (
           <span className="pinc-avatar pinc-avatar--chico" style={{ background: color, color: '#fff' }}
             title={`${n.destino_nombre}${n.destino_es_empresa ? ' (empresa)' : ''}`} aria-hidden="true">{iniciales(n.destino_nombre)}</span>
         )}
-        <span className={`nub-chip ${TONO[n.estado] || ''}`}>{n.por_verificar && n.estado !== 'no_levantada' ? 'Por verificar' : rotulo(n)}</span>
+        {n.estado !== 'sin_asignar' && (
+          <span className={`nub-estado ${TONO[n.estado] || ''}`}>{n.por_verificar && n.estado !== 'no_levantada' ? 'Por verificar' : rotulo(n)}</span>
+        )}
       </button>
       {abierta && (
         <div className="nub-cuerpo">
-          {onIrAMarca && n.markup_id != null && (
-            <div className="nub-fila">
-              <button type="button" className="pinc-anadir" onClick={() => onIrAMarca(n.markup_id)}>Ver en el plano</button>
-            </div>
-          )}
           {/* Lo pedido ya es el título de la fila: debajo solo si no cabe entero en ella. */}
           {n.pedido && n.pedido.length > 48 && <p className="nub-pide">{n.pedido}</p>}
-          {rondas.map((r, k) => <Ronda key={r.n ?? k} entorno={entorno} r={r} ultima={r === ultima} />)}
+          {rondas.map((r, k) => <Ronda key={r.n ?? k} entorno={entorno} r={r} conCabecera={rondas.length > 1} />)}
 
           {n.verificacion && (
             <div className={`nub-verif ${n.estado === 'levantada' ? 'es-bien' : 'es-mal'}`}>
@@ -227,7 +214,7 @@ function Nube({ entorno, obra, ob, i, n, numero, color, abierta, onAbrir, ocupad
               {puede('aceptar') && <button type="button" className="pinc-btn pinc-btn--prim" disabled={ocupado}
                 onClick={() => dar({ acto: 'aceptar' }, 'Aceptado')}>Aceptar</button>}
               {puede('devolver') && <button type="button" className="pinc-btn" disabled={ocupado}
-                onClick={() => setActo('devolver')}>Devolver (falta algo)</button>}
+                onClick={() => setActo('devolver')}>Devolver</button>}
               {puede('verificar') && n.por_verificar && <>
                 {/* Antes de decidir, mirarlo: «Comparar versiones» encuadrado en ESTA nube (doc 23 §6.7). */}
                 {onComparar && n.marca?.geometria && (
