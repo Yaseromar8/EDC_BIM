@@ -1,6 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { apiJson } from '../utils/apiFetch';
 import { accReadOnlyPath } from '../utils/accPreviewLocal';
+import { guardarUbicacion, leerUbicacion, nivelDeUbicacion } from '../utils/ultimaUbicacionAcc';
 
 const nameOf = entry => entry?.attributes?.displayName || entry?.attributes?.name || entry?.id || 'Sin nombre';
 
@@ -17,23 +18,47 @@ export default function AccFolderBridge({ API, folder, modelUrn, onClose, onSave
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const params = new URLSearchParams({ local_folder_id: folder.id, model_urn: modelUrn });
+  // Se recuerda dónde se está solo después de saber dónde empezar: si no, el estado vacío del primer dibujo borraría
+  // la ubicación guardada.
+  const recordar = useRef(false);
 
-  const load = async (level, ids = {}) => {
+  // Devuelve si ACC respondió. `callar`: no enseñar el error (al probar la ubicación recordada).
+  const load = async (level, ids = {}, callar = false) => {
     setLoading(true); setError(''); setEntries([]);
     try {
       const data = await apiJson(`${API}${accReadOnlyPath(level, ids)}`, { retries: 0 });
       setEntries((data?.data || []).filter(entry => level === 'contents'
         ? entry.type === 'folders' : true));
-    } catch (cause) { setError(cause.message); }
+      return true;
+    } catch (cause) { if (!callar) setError(cause.message); return false; }
     finally { setLoading(false); }
   };
+
+  // EMPEZAR DONDE SE QUEDÓ LA ÚLTIMA VEZ en esta obra (5-nov-2026, el dueño). Si ya no se llega (sin acceso, carpeta
+  // borrada en ACC), se empieza por los centros y se olvida.
+  const empezar = async () => {
+    const antes = leerUbicacion(modelUrn);
+    if (antes) {
+      setHub(antes.hub); setProject(antes.project); setAncestors(antes.ancestors);
+      setSelected(antes.ancestors.at(-1) || null);
+      const [nivel, ids] = nivelDeUbicacion(antes);
+      if (await load(nivel, ids, true)) { recordar.current = true; return; }
+      setHub(null); setProject(null); setAncestors([]); setSelected(null);
+      guardarUbicacion(modelUrn, {});
+    }
+    recordar.current = true;
+    load('hubs');
+  };
+  useEffect(() => {
+    if (recordar.current) guardarUbicacion(modelUrn, { hub, project, ancestors });
+  }, [modelUrn, hub, project, ancestors]);
 
   useEffect(() => {
     let alive = true;
     apiJson(`${API}/api/docs/cad/acc-bridge/folder?${params}`, { retries: 0 })
       .then(data => { if (alive) { setConfig(data.bridge || null); setServiceEnabled(data.service_enabled === true); } })
       .catch(cause => { if (alive) setError(cause.message); });
-    load('hubs');
+    empezar();
     return () => { alive = false; };
   }, [API, folder.id, modelUrn]); // eslint-disable-line react-hooks/exhaustive-deps
 
