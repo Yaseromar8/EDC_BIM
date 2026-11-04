@@ -29,6 +29,10 @@ CREATE TABLE IF NOT EXISTS doc_enlaces (
 -- El segundo lo cubre el índice de la UNIQUE (documento_id primero).
 CREATE INDEX IF NOT EXISTS idx_doc_enlaces_carpeta ON doc_enlaces (carpeta_id);
 
+-- REVOKE ALL antes del GRANT: en producción hay privilegios por defecto que dan a ecd_app TODO sobre cada tabla nueva
+-- de ecd_migrator (medido el 5-nov-2026: tras el GRANT, UPDATE seguía en true). Un enlace se crea o se quita; no se
+-- modifica.
+REVOKE ALL ON doc_enlaces FROM ecd_app;
 GRANT SELECT, INSERT, DELETE ON doc_enlaces TO ecd_app;
 
 COMMIT;
