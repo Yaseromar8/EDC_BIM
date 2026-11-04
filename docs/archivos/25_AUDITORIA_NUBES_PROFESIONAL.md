@@ -276,5 +276,8 @@ lista sin fechas, asignar desde la barra, entrega como respuesta.
    - **Aplicado el estándar (4-nov):** la barra no encoge; si el dueño quiere otra cosa, se cambia.
 4. **Separación de funciones.** ¿Puede el encargado asignarse una nube a sí mismo y aceptar su propia entrega? En ACC y
    Procore quien aprueba no es quien entrega. Recomendación: no.
+   - **Decidido por el dueño (4-nov): no.** Quien entregó una ronda no la acepta ni la devuelve
+     (`nubes_de_issue.puede`, con quien actúa). La acepta otro de su empresa o el administrador. Ensayo F11 contra la
+     base real: no se le ofrece, si lo intenta recibe 403 y Eva (administradora) la acepta.
 5. **La carpeta de la incidencia.** Permiso explícito creado con la incidencia, en lugar del permiso por nombre de
    carpeta.

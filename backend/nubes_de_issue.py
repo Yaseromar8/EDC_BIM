@@ -25,6 +25,10 @@ CADA NUBE TIENE SU NÚMERO (47): lo pone la base al crear su fila y no cambia (e
 Las filas se crean al dar de alta la incidencia: no hay nubes «virtuales». Con la incidencia cerrada, nadie debe nada
 en sus nubes (`deudor`).
 
+QUIEN ENTREGA NO SE ACEPTA (4-nov-2026, el dueño: «el encargado no puede aceptar una entrega suya»; separación de
+funciones, como ACC y Procore): quien entregó una ronda no la acepta ni la devuelve. Si el encargado se asignó la nube a
+sí mismo o a su empresa y entregó él, la acepta otro de su empresa o el administrador.
+
 LA VIDA DE UNA NUBE (rondas en la MISMA nube, D7):
   sin_asignar ─asignar→ pedida ─entregar→ entregada ─aceptar→ aceptada
                           ▲                  └─devolver (con motivo)→ devuelta ─entregar→ entregada …
@@ -113,8 +117,15 @@ def papeles(usuario, issue, nube=None, admin=False, empresa_del_usuario=None):
     return p
 
 
-def puede(acto, nube, issue, sus_papeles):
-    """(True, None) o (False, por qué). No mira permisos de carpeta: eso lo hace la ruta antes."""
+def entrego(nube, uid):
+    """¿Esta persona entregó la ronda en curso de la nube?"""
+    rondas = nube.get('rondas') or []
+    return bool(uid) and bool(rondas) and rondas[-1].get('entregado_por_id') == uid
+
+
+def puede(acto, nube, issue, sus_papeles, quien=None):
+    """(True, None) o (False, por qué). `quien`: el id de quien actúa (para que quien entregó no acepte ni devuelva
+    su propia entrega). No mira permisos de carpeta: eso lo hace la ruta antes."""
     if acto not in ACTOS:
         return False, Motivo('acto', 'acto desconocido')
     origen, _destino, quienes, clase = ACTOS[acto]
@@ -130,6 +141,9 @@ def puede(acto, nube, issue, sus_papeles):
         }[acto])
     if nube.get('estado', SIN_ASIGNAR) not in origen:
         return False, Motivo('estado', 'la nube está «%s»' % ETIQUETAS.get(nube.get('estado'), nube.get('estado')))
+    if acto in ('aceptar', 'devolver') and entrego(nube, quien):
+        return False, Motivo('papel', 'quien entregó no acepta ni devuelve su propia entrega: lo hace otro encargado '
+                                      'o el administrador')
     if acto == 'verificar' and issue.get('estado') != CORREGIDO:
         return False, Motivo('estado', 'aún no hay versión corregida que verificar')
     return True, None

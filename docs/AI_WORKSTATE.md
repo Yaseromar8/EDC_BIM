@@ -100,9 +100,13 @@ Detalle en `docs/archivos/18`, `19`, `20` y `21`.
     - ensayos de fase 1 29/29, nubes 51/51 y carpeta 12/12;
     - banco en el navegador con eventos reales: la copia única, Escape y el clic fuera, teclado, tooltips, nube suelta
       en un acto, «Mi trabajo» y la barra apartada del panel.
-- EXACT NEXT ACTION (nubes): el dueño autoriza el push de `nubes-fase1` y de las fases 2 y 3; luego 47 → backend → 47 →
-  portal. Pendientes del dueño: que el encargado acepte su propia entrega (recomendado: no) y el permiso explícito de la
-  carpeta de la incidencia (doc 25 §5).
+- 4-nov: `02a8ad40` y `34450c8e` (fases 1, 2 y 3) EMPUJADOS por autorización del dueño; sin desplegar.
+- Commit siguiente (4-nov, doc 25 §5.4): el dueño decide que quien entregó una ronda no la acepta ni la devuelve
+  (separación de funciones). Solo backend, sin migración. Ensayo de fase 1 33/33 (F11), nubes 51/51, carpeta 12/12,
+  suite verde salvo el fallo previo ajeno.
+- EXACT NEXT ACTION (nubes): push de este commit (lo autoriza el dueño); luego 47 como ecd_migrator → backend → 47 →
+  portal. Pendiente del dueño: dónde viven los adjuntos de las incidencias (hoy carpetas visibles INCIDENCIAS/<código>/ y
+  MULTIMEDIA/; propuesta: ocultas, con el acceso de la propia incidencia).
 - EXACT NEXT ACTION (histórica, ya hecha para c3144a3d): Manual Deploy de `visor-ecd-backend-va` y DESPUÉS de `visor-ecd-portal` con el HEAD de main;
   comprobar `/api/health` y el bundle del portal (Cloudflare ~5 min). Luego, recorrido real con dos personas (correo
   a observadores y subida de fotos sin probar en producción).

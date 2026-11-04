@@ -153,6 +153,19 @@ def test_cada_negativa_dice_su_tipo_y_su_codigo_http():
         assert isinstance(por_que, str) and por_que                                 # y sigue siendo su texto
 
 
+def test_quien_entrego_no_acepta_ni_devuelve_su_propia_entrega():
+    # El dueño, 4-nov-2026: «el encargado no puede aceptar una entrega suya».
+    entregada = nube(estado=nub.ENTREGADA, destino_empresa=CONTRATISTA,
+                     rondas=[{'n': 1, 'entregas': [{'tipo': 'nota', 'texto': 'x'}], 'entregado_por_id': ENCARGADO}])
+    for acto in ('aceptar', 'devolver'):
+        ok, por_que = nub.puede(acto, entregada, ISSUE, {'encargado', 'aportante'}, quien=ENCARGADO)
+        assert not ok and por_que.tipo == 'papel', acto
+        assert nub.puede(acto, entregada, ISSUE, {'admin'}, quien=ADMIN)[0], acto          # lo hace otro
+        assert nub.puede(acto, entregada, ISSUE, {'encargado'}, quien=OTRO)[0], acto
+    assert not nub.entrego(nube(estado=nub.ENTREGADA), ENCARGADO)                              # sin rondas
+    assert not nub.entrego(entregada, None)
+
+
 def test_como_entra_una_nube_suelta_lo_dice_una_sola_regla():
     # La usan la ruta que la añade y la hoja que ofrece a qué incidencias puede ir (docs/archivos/25, P2).
     assert nub.como_se_anade({'revisor'}) == ('observacion', False)      # la añade; la asigna su encargado

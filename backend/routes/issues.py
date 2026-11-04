@@ -1256,7 +1256,7 @@ def _para_la_pantalla(cur, d, nubes, admin, empresa):
         if not _nub.visible(n, sus, empresa):
             ocultas += 1
             continue
-        actos = [a for a in _nub.ACTOS if _nub.puede(a, n, d, sus)[0]]
+        actos = [a for a in _nub.ACTOS if _nub.puede(a, n, d, sus, _usuario().get('id'))[0]]
         salida.append({
             **{k: v for k, v in n.items() if k != 'history'},
             'estado_etiqueta': _nub.ETIQUETAS.get(n['estado'], n['estado']),
@@ -1379,7 +1379,7 @@ def _negativa(acto, n, d, admin, empresa):
     sus = _nub.papeles(_usuario(), d, n, admin, empresa)
     if not _nub.visible(n, sus, empresa):
         return jsonify({'error': 'Esa nube no es de esta incidencia.'}), 404
-    ok, por_que = _nub.puede(acto, n, d, sus)
+    ok, por_que = _nub.puede(acto, n, d, sus, _usuario().get('id'))
     if not ok:
         return jsonify({'error': por_que[0].upper() + por_que[1:] + '.', 'code': 'NO_PUEDE'}), \
             _nub.HTTP_DE_LA_NEGATIVA[por_que.tipo]
