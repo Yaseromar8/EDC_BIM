@@ -22,6 +22,8 @@
   font-weight: 500;
   line-height: 1.4;
   white-space: pre-line;
+  /* Un texto sin espacios (una huella, una ruta) parte donde haga falta: antes se salía de la caja. */
+  overflow-wrap: anywhere;
   pointer-events: none;
   box-shadow: var(--a-shadow-md);
   z-index: var(--a-layer-tooltip);

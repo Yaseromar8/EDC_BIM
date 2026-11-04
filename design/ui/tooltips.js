@@ -109,10 +109,15 @@ export function instalarTooltips() {
 
   document.addEventListener('pointerover', (e) => {
     if (e.pointerType === 'touch') return;
-    if (actual && actual.contains(e.target)) return;
-    const el = e.target instanceof Element ? e.target.closest('[title]') : null;
-    if (el) entrar(el);
-    else if (actual) salir();
+    const t = e.target instanceof Element ? e.target : null;
+    const el = t ? t.closest('[title]') : null;
+    // EL DE DENTRO MANDA (4-nov-2026). Un botón con `title` dentro de una casilla que también lo tiene: antes se
+    // seguía con el de la casilla y el del botón salía NATIVO, encima, con otro estilo (dos a la vez). Como el
+    // `title` del que está abierto se quita, `closest` solo encuentra otro si hay uno más adentro.
+    // Dentro del que está abierto (su icono, su texto), un `title` de FUERA no cuenta: es el de su casilla.
+    const dentro = actual && t && actual.contains(t);
+    if (el && el !== actual && !(dentro && el.contains(actual))) entrar(el);
+    else if (!el && actual && !dentro) salir();
   }, true);
 
   document.addEventListener('pointerout', (e) => {
