@@ -123,7 +123,7 @@ function Recorrido({ item, datos }) {
   );
 }
 
-export default function FichaDocumento({ item, lista, onCambiar, onCerrar, onAbrir, onVersiones, onIrA }) {
+export default function FichaDocumento({ item, lista, onCambiar, onCerrar, onAbrir, onVersiones, onIrA, obra = null }) {
   // La respuesta se guarda CON el id que la pidió: al pasar a otro documento con
   // ‹ › lo anterior deja de valer sin tener que vaciarlo dentro del efecto.
   const [respuesta, setRespuesta] = useState({ id: null, datos: null, error: null });
@@ -146,6 +146,21 @@ export default function FichaDocumento({ item, lista, onCambiar, onCerrar, onAbr
       .catch(() => vivo && setRespuesta({ id, datos: null, error: 'Sin conexión con el servidor.' }));
     return () => { vivo = false; };
   }, [item.id]);
+
+  // DÓNDE ESTÁ ENLAZADO (5-nov-2026, docs/archivos/27): solo si la fila dice que lo está, o si es un enlace.
+  // La respuesta lleva el documento al que pertenece: al pasar a otro, la anterior no se enseña (como la trazabilidad).
+  const [enlaces, setEnlaces] = useState({ id: null, lista: null });
+  useEffect(() => {
+    if (!obra || !(item.enlazado_en > 0 || item.enlace)) return undefined;
+    let vivo = true;
+    const id = item.id;
+    apiFetch(`${API}/api/docs/enlaces?model_urn=${encodeURIComponent(obra)}&documento=${encodeURIComponent(id)}`)
+      .then(r => r.json().catch(() => ({})))
+      .then(j => { if (vivo && j?.success) setEnlaces({ id, lista: j.enlazado_en || [] }); })
+      .catch(() => {});
+    return () => { vivo = false; };
+  }, [item.id, item.enlazado_en, item.enlace, obra]);
+  const enlazadoEn = String(enlaces.id) === String(item.id) ? enlaces.lista : null;
 
   const indice = (lista || []).findIndex(f => String(f.id) === String(item.id));
   const mover = (d) => { const s = lista[indice + d]; if (s) onCambiar(s); };
@@ -229,6 +244,9 @@ export default function FichaDocumento({ item, lista, onCambiar, onCerrar, onAbr
             <div className="ficha-tarjeta">
               <dl className="ficha-datos">
                 <dt>Ubicación</dt><dd>{ubicacion || 'Archivos de proyecto'}</dd>
+                {enlazadoEn?.length > 0 && (<><dt>Enlazado en</dt><dd>
+                  {enlazadoEn.map(x => <span key={x.enlace} style={{ display: 'block' }}>{x.carpeta.ruta.join(' / ')}</span>)}
+                </dd></>)}
                 <dt>Descripción</dt><dd>{item.description || '—'}</dd>
                 <dt>Revisión</dt><dd><b>{item.codigo_revision || 'sin emitir'}</b> · subida V{item.version || 1}</dd>
                 <dt>Idoneidad</dt><dd>{item.codigo_idoneidad || '—'}</dd>

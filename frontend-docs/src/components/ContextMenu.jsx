@@ -9,6 +9,7 @@ import { saveAs } from 'file-saver';
 import { API } from '../utils/helpers';
 import { apiFetch } from '../utils/apiFetch';
 import toast from 'react-hot-toast';
+import IconoModulo from './IconoModulo';
 
 export default function ContextMenu({
   activeRowMenu,
@@ -24,6 +25,9 @@ export default function ContextMenu({
   onClose,
   onCreateChild,
   onCopiarEstructura,
+  onEnlazar,
+  onQuitarEnlace,
+  onIrAlOriginal,
   onOpenPermissions,
   onOpenAccBridge,
   onRename,
@@ -83,6 +87,8 @@ export default function ContextMenu({
     className: cap(nombre).disponible ? undefined : 'menu-apagado',
   });
   const puedeEditar = cap('reservar').disponible;
+  // UN ENLACE (docs/archivos/27): si todo lo marcado son enlaces, lo destructivo es «Quitar el enlace», no suprimir.
+  const sonEnlaces = (objetivo.length ? objetivo : [item]).every(o => o?.enlace);
   // Altura estimada del menú según acciones visibles (para no salirse por abajo)
   // Alto estimado: se CUENTAN las acciones visibles en vez de suponerlas. Con
   // el número fijo, un menú corto se pegaba al borde inferior sin necesidad.
@@ -95,6 +101,8 @@ export default function ContextMenu({
     (item.type !== 'folder' && onAttributes ? 1 : 0) +
     (onCopiarEnlace && !varios ? 1 : 0) +
     (item.type !== 'folder' && onAnadirAGrupo ? 1 : 0) +
+    (item.type !== 'folder' && onEnlazar && visible('enlazar') ? 1 : 0) +
+    (item.enlace && onIrAlOriginal && !varios ? 1 : 0) +
     1 +
     (isAdmin ? 2 : 0);
   // Opciones de 36 px, 4 px de margen arriba y abajo y el separador de
@@ -209,6 +217,20 @@ export default function ContextMenu({
           Añadir a grupo{sufijo}
         </button>
       )}
+      {/* ENLAZAR (5-nov-2026, docs/archivos/27): el documento se queda en su carpeta y se enseña en otras, sin copia. */}
+      {item.type !== 'folder' && onEnlazar && visible('enlazar') && (
+        <button {...props('enlazar')} onClick={() => { if (!cap('enlazar').disponible) return; onClose(); onEnlazar((objetivo.length ? objetivo : [item]).filter(o => o.type !== 'folder')); }}>
+          <div className="menu-icon"><IconoModulo nombre="enlace" tamano={18} /></div>
+          Enlazar{sufijo}
+        </button>
+      )}
+      {/* IR AL ORIGINAL: la carpeta donde vive el documento enlazado. */}
+      {item.enlace && onIrAlOriginal && !varios && (
+        <button onClick={() => { onClose(); onIrAlOriginal(item); }}>
+          <div className="menu-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg></div>
+          Ir al original
+        </button>
+      )}
       {item.type !== 'folder' && onAttributes && visible('atributos') && (
         <button {...props('atributos')} onClick={() => { if (!cap('atributos').disponible) return; onClose(); onAttributes(item); }}>
           <div className="menu-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg></div>
@@ -274,7 +296,18 @@ export default function ContextMenu({
           Desplazar{sufijo}
         </button>
       )}
-      {visible('suprimir') && (
+      {sonEnlaces && onQuitarEnlace && visible('quitar_enlace') && (
+        <>
+          <div className="menu-divider" />
+          <button {...props('quitar_enlace')}
+            className={cap('quitar_enlace').disponible ? 'delete' : 'delete menu-apagado'}
+            onClick={() => { if (!cap('quitar_enlace').disponible) return; onClose(); onQuitarEnlace(objetivo.length ? objetivo : [item]); }}>
+            <div className="menu-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 7H6a3 3 0 0 0 0 6h3"></path><path d="M15 7h3a3 3 0 0 1 0 6h-3"></path><line x1="4" y1="4" x2="20" y2="20"></line></svg></div>
+            Quitar el enlace{sufijo}
+          </button>
+        </>
+      )}
+      {!sonEnlaces && visible('suprimir') && (
         <>
           <div className="menu-divider" />
           <button {...props('suprimir')}

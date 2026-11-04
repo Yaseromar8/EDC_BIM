@@ -138,6 +138,21 @@ def list_contents(parent_id, model_urn, base_path="", user=None):
         
         rows = cursor.fetchall()
 
+        # LOS DOCUMENTOS QUE ESTA CARPETA ENLAZA (migración 48, docs/archivos/27): viven en otra carpeta y aquí se
+        # enseñan con la marca ⤷. Entran en el MISMO bucle que los propios, así que pasan la misma regla de permiso
+        # --la del original-- y el mismo filtro ISO. Si algo falla al leerlos, la carpeta se lista igual, sin ellos.
+        import enlaces_de_documentos as _enl
+        enlaces = []
+        if parent_id:
+            try:
+                cursor.execute('SAVEPOINT enlaces_del_listado')
+                enlaces = _enl.filas_del_listado(cursor, model_urn, parent_id)
+                cursor.execute('RELEASE SAVEPOINT enlaces_del_listado')
+            except Exception as _ee:
+                print(f"[LIST] enlaces sin resolver: {_ee}")
+                cursor.execute('ROLLBACK TO SAVEPOINT enlaces_del_listado')
+                enlaces = []
+
         # Nivel HEREDADO desde la carpeta padre (herencia aditiva): un hijo tiene al
         # menos el nivel efectivo del padre. Antes la visibilidad miraba solo el
         # permiso DIRECTO de cada carpeta, asi que las subcarpetas de una carpeta
@@ -170,13 +185,16 @@ def list_contents(parent_id, model_urn, base_path="", user=None):
             except Exception:
                 ctx_permisos = None            # sin contexto se resuelve como siempre
 
-        for row in rows:
+        for row, enlace in [(r, None) for r in rows] + enlaces:
             (r_id, r_name, r_type, r_size, r_version, r_updated, r_gcs, r_status, r_tags,
              r_metadata, r_description, r_mime, r_created, r_u_by, r_perm, r_has_children,
              r_idoneidad, r_revision, r_nomenclatura,
              r_bloqueado_por, r_bloqueado_en, r_version_id) = row
             bp = base_path if base_path.endswith('/') else (base_path + '/' if base_path else '')
             full_name = f"{bp}{r_name}" + ("/" if r_type == 'FOLDER' else "")
+            if enlace:
+                # Un enlace es el ORIGINAL: su ruta es la de su carpeta, no la de la que lo enseña (como en Grupos).
+                full_name = '/'.join([model_urn] + enlace['desde']['ruta'] + [r_name])
             
             audit_data = {
                 "name": r_u_by,
@@ -260,8 +278,24 @@ def list_contents(parent_id, model_urn, base_path="", user=None):
                         "mime_type": r_mime,
                         "gcs_urn": r_gcs
                     })
+                    if enlace:
+                        item["enlace"] = enlace
                     files.append(item)
-                
+
+        # «Enlazado en N carpetas» de cada documento propio, para su ficha y su fila. Una consulta; si falla, sin ello.
+        propios = [f["id"] for f in files if not f.get("enlace")]
+        if propios:
+            try:
+                cursor.execute('SAVEPOINT enlazados_del_listado')
+                cuantos = _enl.cuantos_por_documento(cursor, propios)
+                cursor.execute('RELEASE SAVEPOINT enlazados_del_listado')
+                for f in files:
+                    if cuantos.get(str(f["id"])):
+                        f["enlazado_en"] = cuantos[str(f["id"])]
+            except Exception as _ee:
+                print(f"[LIST] enlazados sin resolver: {_ee}")
+                cursor.execute('ROLLBACK TO SAVEPOINT enlazados_del_listado')
+
     return {"folders": folders, "files": files}
 
 # ── IN-MEMORY ROOT NODE CACHE (permanent) ────────────────────────────

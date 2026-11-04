@@ -18,6 +18,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { urlsDeMiniaturas } from '../utils/colaMiniaturas';
 import { renderFileIconSop } from '../utils/fileIcons';
 import IconoModulo from './IconoModulo';
+import MarcaDeEnlace from './MarcaDeEnlace';
 
 const CON_VISTA = /\.(pdfx?|jpe?g|png|webp|gif)$/i;
 
@@ -126,6 +127,8 @@ export default function MatrixGrid({
             <div className="rejilla-nombre" title={item.name}>{item.name}</div>
             <div className="rejilla-meta">
               <span className="rejilla-version">V{item.version || 1}</span>
+              {/* Enlazado (docs/archivos/27): como en la lista. */}
+              {item.enlace && <MarcaDeEnlace texto={`Enlazado desde ${(item.enlace.desde?.ruta || []).join(' / ') || 'Archivos de proyecto'}`} />}
               {item.description && (
                 <span className="rejilla-desc" title={item.description}>{item.description}</span>
               )}

@@ -76,6 +76,8 @@ RECURSOS = {
     'vinculos_de_sustento': ('id', 'model_urn'),
     # Grupos de documentos (migración 35): la obra es la del grupo.
     'grupos_de_documentos': ('id', 'model_urn'),
+    # Enlaces de documentos (migración 48): la obra es la del enlace, copiada al crearlo.
+    'doc_enlaces': ('id', 'model_urn'),
     # Tableros de Docs (migración 43): la obra es la del tablero.
     'tableros': ('id', 'model_urn'),
     # La sesion de subida troceada. Sin esto, conocer un id de sesion bastaba
@@ -156,6 +158,8 @@ RUTAS_POR_RECURSO = {
     'grupo': ('grupos_de_documentos', 'gid'),
     'documentos_del_grupo': ('grupos_de_documentos', 'gid'),
     'documento_del_grupo': ('grupos_de_documentos', 'gid'),
+    # Quitar un enlace de documento (docs/archivos/27): solo trae su id. Dentro se exige «Editar» en su carpeta.
+    'quitar_enlace': ('doc_enlaces', 'eid'),
     # Tableros de Docs: abrir, guardar, renombrar y archivar solo traen el id del tablero.
     'tablero': ('tableros', 'tid'),
     'miembros_del_tablero': ('tableros', 'tid'),     # sus miembros (docs/visor/66)

@@ -81,7 +81,11 @@ await test('con `admin` de carpeta se puede suprimir aunque no seas admin de obr
 
 await test('un lector no puede nada de lo que exige permiso', () => {
     const c = capacidadesDeSeleccion({ elementos: [doc({ permission_level: 'viewer' })], isAdmin: false });
-    for (const cap of Object.keys(EXIGE)) assert.equal(c[cap].disponible, false, cap);
+    // Las que piden más que «Ver». Copiar la estructura y enlazar LEEN lo elegido: lo que escriben es el destino, y
+    // ahí el servidor exige «Editar» (lo atan las pruebas de contrato de abajo).
+    const exigenMas = Object.keys(EXIGE).filter(cap => EXIGE[cap] !== 'viewer');
+    assert.deepEqual(Object.keys(EXIGE).filter(cap => EXIGE[cap] === 'viewer'), ['copiar_estructura', 'enlazar']);
+    for (const cap of exigenMas) assert.equal(c[cap].disponible, false, cap);
     assert.equal(c.descargar.disponible, true, 'ver y descargar no exige nivel en esta ruta');
 });
 
@@ -166,6 +170,34 @@ await test('copiar la estructura: sobre una o VARIAS carpetas, y basta con verla
         .copiar_estructura.disponible, false);
 });
 
+await test('enlazar: uno o varios DOCUMENTOS, y basta con verlos (las carpetas las mira el servidor)', () => {
+    assert.equal(capacidadesDeSeleccion({ elementos: [doc({ permission_level: 'viewer' })] }).enlazar.disponible, true);
+    assert.equal(capacidadesDeSeleccion({ elementos: [doc({ id: 'a' }), doc({ id: 'b' })] }).enlazar.disponible, true);
+    assert.equal(capacidadesDeSeleccion({ elementos: [carpeta()] }).enlazar.mostrar, 'oculta');
+    assert.equal(capacidadesDeSeleccion({ elementos: [doc({ permission_level: 'none' })] }).enlazar.disponible, false);
+});
+
+await test('un ENLACE: lo suyo se hace en el original, y quitarlo pide «Editar» en ESTA carpeta', () => {
+    const enlace = doc({ id: 'e', permission_level: 'admin', enlace: { id: 'x', desde: { ruta: ['0. Generales'] } } });
+    const c = capacidadesDeSeleccion({ elementos: [enlace], puedeEditarAqui: true });
+    for (const cap of ['renombrar', 'desplazar', 'suprimir', 'reservar', 'atributos', 'nueva_version']) {
+        assert.equal(c[cap].disponible, false, cap);
+        assert.match(c[cap].motivo, /enlace/, cap);
+        assert.notEqual(c[cap].mostrar, 'oculta', cap);                    // se apaga y se dice por qué
+    }
+    assert.equal(c.descargar.disponible, true);
+    assert.equal(c.enlazar.disponible, true);                              // se puede enlazar en más carpetas
+    assert.equal(c.quitar_enlace.disponible, true);
+    assert.equal(capacidadesDeSeleccion({ elementos: [enlace], puedeEditarAqui: false }).quitar_enlace.disponible, false);
+    assert.equal(capacidadesDeSeleccion({ elementos: [enlace], isAdmin: true }).quitar_enlace.disponible, true);
+    // Mezclado con un documento propio: suprimir se apaga (no se suprime el original) y quitar el enlace no aplica.
+    const mezcla = capacidadesDeSeleccion({ elementos: [enlace, doc({ id: 'p', permission_level: 'edit' })], puedeEditarAqui: true });
+    assert.equal(mezcla.suprimir.disponible, false);
+    assert.equal(mezcla.quitar_enlace.mostrar, 'oculta');
+    // Un documento propio no ofrece quitar un enlace.
+    assert.equal(capacidadesDeSeleccion({ elementos: [doc()] }).quitar_enlace.mostrar, 'oculta');
+});
+
 await test('subir nueva version: solo sobre UN documento y con `edit`', () => {
     assert.equal(capacidadesDeSeleccion({ elementos: [doc({ permission_level: 'edit' })] }).nueva_version.disponible, true);
     assert.equal(capacidadesDeSeleccion({ elementos: [doc({ permission_level: 'view_markup' })] }).nueva_version.disponible, false);
@@ -187,7 +219,7 @@ await test('en la papelera el repertorio documental no aplica', () => {
 await test('los niveles exigidos son los que se trazaron contra el backend', () => {
     assert.deepEqual(EXIGE, { renombrar: 'edit', compartir: 'edit', desplazar: 'edit', reservar: 'edit',
                               subcarpeta: 'edit', nueva_version: 'edit', suprimir: 'edit',
-                              copiar_estructura: 'viewer' });
+                              copiar_estructura: 'viewer', enlazar: 'viewer' });
     assert.equal(NIVELES.admin > NIVELES.edit, true);
     // Y el servidor pide lo mismo para suprimir, en lote y restaurar.
     const servidor = readFileSync(join(aqui, '..', '..', 'backend', 'routes', 'documents.py'), 'utf8');
@@ -196,6 +228,9 @@ await test('los niveles exigidos son los que se trazaron contra el backend', () 
     assert.match(servidor, /'edit', 'restaurar elementos'/, 'restaurar');
     assert.match(servidor, /'viewer', 'copiar la estructura de esta carpeta'/, 'copiar estructura: la modelo');
     assert.match(servidor, /'edit', 'crear carpetas en ese destino'/, 'copiar estructura: cada destino');
+    assert.match(servidor, /'viewer', 'enlazar este documento'/, 'enlazar: el documento');
+    assert.match(servidor, /'edit', 'enlazar en esa carpeta'/, 'enlazar: cada carpeta');
+    assert.match(servidor, /'edit', 'quitar un enlace de esta carpeta'/, 'quitar un enlace: su carpeta');
 });
 
 await test('llamarla sin argumentos no revienta', () => {

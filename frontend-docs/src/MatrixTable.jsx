@@ -10,6 +10,7 @@ import { API } from './utils/helpers';
 import { apiFetch } from './utils/apiFetch';
 import IconoModulo from './components/IconoModulo';
 import AvisoObservaciones from './components/AvisoObservaciones';
+import MarcaDeEnlace from './components/MarcaDeEnlace';
 import { piezasDelCodigo } from './utils/codigoDelNombre';
 
 // ── ISO 19650 Document Lifecycle ──────────────────────────────────────────
@@ -299,7 +300,8 @@ const TableRow = ({ index, style, data }) => {
   const isGrey = item.has_access === false;
   const codigo = isFolder ? null : piezasDelCodigo(item.name);
   // Renombrar y describir exigen «Editar» en el servidor, no administrar la obra.
-  const puedeEditarFila = isAdmin || (NIVELES[item.permission_level] ?? NIVELES.none) >= NIVELES.edit;
+  // Un ENLACE (docs/archivos/27) no se renombra aquí: su nombre es el del original, que se cambia en su carpeta.
+  const puedeEditarFila = !item.enlace && (isAdmin || (NIVELES[item.permission_level] ?? NIVELES.none) >= NIVELES.edit);
 
   // Abrir elemento: carpeta navega, archivo abre el visor
   const openItem = () => {
@@ -503,6 +505,13 @@ const TableRow = ({ index, style, data }) => {
             >
               {item.name || 'Sin nombre'}
             </span>
+            )}
+            {/* ENLAZADO (5-nov-2026, docs/archivos/27): la fila de un documento que vive en otra carpeta lleva la marca
+                y dice de dónde viene; el original dice en cuántas carpetas está enlazado. */}
+            {!isFolder && item.enlace && <MarcaDeEnlace texto={`Enlazado desde ${(item.enlace.desde?.ruta || []).join(' / ') || 'Archivos de proyecto'}`} />}
+            {!isFolder && !item.enlace && item.enlazado_en > 0 && (
+              <MarcaDeEnlace texto={`Enlazado en ${item.enlazado_en === 1 ? '1 carpeta más' : `${item.enlazado_en} carpetas más`}`}
+                cifra={item.enlazado_en} />
             )}
             {/* Como va la preparacion del plano (ver ES_CAD arriba). Lo listo y
                 lo que nadie ha preparado no dicen nada: solo se habla cuando hay

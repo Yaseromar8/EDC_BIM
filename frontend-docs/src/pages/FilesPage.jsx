@@ -59,6 +59,7 @@ import NewFolderModal from '../components/modals/NewFolderModal';
 import ShareModal from '../components/modals/ShareModal';
 import MoveModal from '../components/modals/MoveModal';
 import CopiarEstructuraModal from '../components/modals/CopiarEstructuraModal';
+import EnlazarModal from '../components/modals/EnlazarModal';
 import UploadModal from '../components/modals/UploadModal';
 import VersionPanel from '../components/panels/VersionPanel';
 import DeletedTable from '../components/panels/DeletedTable';
@@ -295,8 +296,8 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
   }, [fe.activeRowMenu, fe.selected, fe.elementosSeleccionados]);
 
   const capsMenu = React.useMemo(() => capacidadesDeSeleccion({
-    elementos: objetivoMenu, isAdmin, isTrashMode: fe.isTrashMode,
-  }), [objetivoMenu, isAdmin, fe.isTrashMode]);
+    elementos: objetivoMenu, isAdmin, isTrashMode: fe.isTrashMode, puedeEditarAqui: fe.puedeEditarAqui,
+  }), [objetivoMenu, isAdmin, fe.isTrashMode, fe.puedeEditarAqui]);
 
   // «SUBIR NUEVA VERSIÓN» abre el selector de ficheros del sistema para UN
   // documento; el fichero elegido se sube con el nombre de ese documento.
@@ -344,6 +345,8 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
   const [paraAgrupar, setParaAgrupar] = React.useState(null);
   // COPIAR LA ESTRUCTURA (4-nov-2026): las carpetas marcadas (una o varias), mientras se eligen los destinos.
   const [copiandoEstructura, setCopiandoEstructura] = React.useState(null);
+  // ENLAZAR (5-nov-2026, docs/archivos/27): los documentos que se están enlazando, mientras se eligen las carpetas.
+  const [enlazando, setEnlazando] = React.useState(null);
   // ‹ › del lector recorren el grupo cuando el documento se abrió desde él.
   const [juegoDelGrupo, setJuegoDelGrupo] = React.useState(null);
   React.useEffect(() => { setGrupoActivoId(null); }, [fe.currentPath, fe.isTrashMode, fe.sidebarView, projectPrefix]);
@@ -530,8 +533,25 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
   }, [limpiarSeleccion]);
 
   const capsSeleccion = React.useMemo(() => capacidadesDeSeleccion({
-    elementos: fe.elementosSeleccionados, isAdmin, isTrashMode: fe.isTrashMode,
-  }), [fe.elementosSeleccionados, isAdmin, fe.isTrashMode]);
+    elementos: fe.elementosSeleccionados, isAdmin, isTrashMode: fe.isTrashMode, puedeEditarAqui: fe.puedeEditarAqui,
+  }), [fe.elementosSeleccionados, isAdmin, fe.isTrashMode, fe.puedeEditarAqui]);
+
+  // QUITAR EL ENLACE (docs/archivos/27): el documento sigue en su carpeta; esta deja de enseñarlo.
+  const quitarEnlaces = async (filas) => {
+    const enlaces = filas.filter(f => f.enlace?.id);
+    if (!enlaces.length) return;
+    let quitados = 0;
+    for (const f of enlaces) {
+      const r = await apiFetch(`${API}/api/docs/enlaces/${encodeURIComponent(f.enlace.id)}`, { method: 'DELETE' });
+      const d = await r.json().catch(() => ({}));
+      if (r.ok && d.success) quitados += 1;
+      else toast.error(d.error || `No se pudo quitar el enlace de «${f.name}».`);
+    }
+    if (quitados) toast.success(quitados === 1 ? 'Enlace quitado: el documento sigue en su carpeta'
+      : `${quitados} enlaces quitados: los documentos siguen en su carpeta`);
+    fe.setSelected(new Set());
+    fe.triggerRefresh(fe.currentPath);
+  };
 
   // ── Revisiones (flujos de aprobación) ──
   const [reviewModalItems, setReviewModalItems] = React.useState(null); // null = cerrado
@@ -1133,7 +1153,7 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
             <FichaDocumento item={ficha} lista={[...(enVista ? filasDeVista : fe.filteredFiles)].sort((x, y) => String(x.name || '').localeCompare(String(y.name || ''), undefined, { numeric: true, sensitivity: 'base' }))}
               onCambiar={(f) => { setFicha(f); setConsultado(f); }} onCerrar={() => setFicha(null)}
               onAbrir={abrirDocumento} onVersiones={vh.onShowVersions}
-              onIrA={(v) => { setFicha(null); fe.setSidebarView(v); }} />
+              onIrA={(v) => { setFicha(null); fe.setSidebarView(v); }} obra={projectPrefix} />
             </div>
           )}
           <div className="acc-workspace" style={{ flex: 1, display: 'flex', overflow: 'hidden', visibility: ficha && !fe.isTrashMode ? 'hidden' : 'visible' }}>
@@ -1660,6 +1680,9 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
         onClose={() => { fe.setActiveRowMenu(null); fe.setRightClickedId(null); }}
         onCreateChild={(id) => fe.setCreatingChildParentId(id)}
         onCopiarEstructura={!fe.isTrashMode ? (carpetas) => setCopiandoEstructura(carpetas) : undefined}
+        onEnlazar={!fe.isTrashMode ? (docs) => setEnlazando(docs) : undefined}
+        onQuitarEnlace={!fe.isTrashMode ? quitarEnlaces : undefined}
+        onIrAlOriginal={(f) => navegarYSalir([projectPrefix, ...(f.enlace?.desde?.ruta || [])].join('/') + '/', f.enlace?.desde?.id)}
         onOpenPermissions={(item) => fe.setPermissionsFolder(item)}
         onOpenAccBridge={(item) => setAccBridgeFolder(item)}
         onRename={(data) => fe.setEditingNodeId(data)}
@@ -1734,6 +1757,11 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
         <CopiarEstructuraModal carpetas={copiandoEstructura} projectPrefix={projectPrefix} projectRootId={fe.projectRootId}
           onCerrar={() => setCopiandoEstructura(null)}
           onHecho={() => { setCopiandoEstructura(null); fe.triggerRefresh(fe.currentPath); }} />
+      )}
+      {enlazando && (
+        <EnlazarModal documentos={enlazando} carpetaActual={fe.currentNodeId} projectPrefix={projectPrefix}
+          projectRootId={fe.projectRootId} onCerrar={() => setEnlazando(null)}
+          onHecho={() => { setEnlazando(null); fe.triggerRefresh(fe.currentPath); }} />
       )}
 
       {fe.pendingBanner && fe.pendingBanner.count > 0 && (

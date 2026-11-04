@@ -21,6 +21,8 @@
  *     suprimir (y restaurar, en la papelera)        ->  'edit' (14-sep-2026; antes 'admin')
  *     copiar la estructura de una carpeta           ->  'viewer' en ella (4-nov-2026; los destinos los mira el
  *                                                       servidor: «Editar» en cada uno)
+ *     enlazar un documento en otras carpetas        ->  'viewer' en él (5-nov-2026; las carpetas, «Editar»)
+ *     quitar un enlace                              ->  'edit' en ESTA carpeta
  *
  * Antes la interfaz exigía «administrador de obra» para las cuatro primeras, y
  * eso ESCONDÍA capacidades a quien el servidor sí se las concede. La interfaz
@@ -50,12 +52,21 @@ export const EXIGE = {
     // Copiar la estructura LEE las carpetas marcadas (una o varias, 5-nov-2026); donde se escribe es en los destinos,
     // que se eligen después y los comprueba el servidor (`POST /api/docs/carpetas/copiar-estructura`).
     copiar_estructura: 'viewer',
+    // Enlazar LEE el documento (docs/archivos/27, 5-nov-2026); donde se escribe es en las carpetas destino, que se
+    // eligen después y las comprueba el servidor (`POST /api/docs/enlaces`).
+    enlazar: 'viewer',
 };
 
 /** Capacidades que sólo tienen sentido sobre UN elemento. */
 const SOLO_UNO = new Set(['renombrar', 'compartir', 'reservar', 'atributos', 'subcarpeta', 'nueva_version']);
 /** Capacidades que sólo tienen sentido sobre un DOCUMENTO. */
-const SOLO_ARCHIVO = new Set(['reservar', 'atributos', 'nueva_version']);
+const SOLO_ARCHIVO = new Set(['reservar', 'atributos', 'nueva_version', 'enlazar', 'quitar_enlace']);
+/**
+ * Lo que sobre un ENLACE se hace en el original, en su carpeta (docs/archivos/27): su nombre, su sitio, sus versiones,
+ * su reserva y sus atributos son los del original. Suprimir un enlace no es suprimir el documento: es «Quitar el
+ * enlace». Se apagan, no se ocultan: quien mira tiene que saber por qué no puede.
+ */
+const EN_EL_ORIGINAL = new Set(['renombrar', 'desplazar', 'suprimir', 'reservar', 'atributos', 'nueva_version']);
 /** Capacidades que sólo tienen sentido sobre una CARPETA. */
 const SOLO_CARPETA = new Set(['subcarpeta', 'copiar_estructura']);
 
@@ -85,9 +96,10 @@ export const puedeEditarEn = (nivel, isAdmin = false) =>
  * @param isTrashMode papelera: el repertorio documental no aplica
  * @returns {Object<string, {disponible, motivo?, mostrar?}>}
  */
-export function capacidadesDeSeleccion({ elementos = [], isAdmin = false, isTrashMode = false } = {}) {
+export function capacidadesDeSeleccion({ elementos = [], isAdmin = false, isTrashMode = false,
+                                        puedeEditarAqui = false } = {}) {
     const capacidades = ['renombrar', 'compartir', 'desplazar', 'suprimir', 'reservar', 'atributos', 'descargar',
-                         'subcarpeta', 'nueva_version', 'copiar_estructura'];
+                         'subcarpeta', 'nueva_version', 'copiar_estructura', 'enlazar', 'quitar_enlace'];
     const r = {};
 
     for (const cap of capacidades) {
@@ -114,6 +126,16 @@ export function capacidadesDeSeleccion({ elementos = [], isAdmin = false, isTras
         }
         if (SOLO_CARPETA.has(cap) && elementos.some(e => e?.type !== 'folder')) {
             r[cap] = no('Sólo para carpetas', 'oculta'); continue;
+        }
+        // ── UN ENLACE NO ES EL DOCUMENTO: lo suyo se hace en el original.
+        if (EN_EL_ORIGINAL.has(cap) && elementos.some(e => e?.enlace)) {
+            r[cap] = no('Es un enlace: se hace en su carpeta original'); continue;
+        }
+        // ── QUITAR EL ENLACE: solo sobre enlaces, y escribe en ESTA carpeta (el nivel de la fila es el del original).
+        if (cap === 'quitar_enlace') {
+            if (!elementos.every(e => e?.enlace)) { r[cap] = no('Solo para enlaces', 'oculta'); continue; }
+            r[cap] = isAdmin || puedeEditarAqui ? si() : no('Necesitas permiso de edición en esta carpeta');
+            continue;
         }
         if (SOLO_UNO.has(cap) && elementos.length > 1) {
             r[cap] = no('Sólo se puede con un elemento a la vez'); continue;

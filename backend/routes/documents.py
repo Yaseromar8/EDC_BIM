@@ -1788,6 +1788,142 @@ def copiar_estructura_de_carpetas():
         return jsonify({"success": False, "error": "No se pudo copiar la estructura."}), 500
 
 
+@documents_bp.route('/api/docs/enlaces', methods=['GET', 'POST'])
+def enlaces_de_documentos():
+    """ENLAZAR (5-nov-2026, docs/archivos/27, migración 48): un documento que vive en una carpeta se enseña en otras.
+
+    GET ?model_urn&documento → dónde está enlazado (las carpetas que quien pregunta puede ver).
+    POST {model_urn, documentos: [ids], carpetas: [ids]} → enlaza cada documento en cada carpeta. Exige «Ver» en cada
+    documento y «Editar» en cada carpeta. Todo o nada. Las reglas y el porqué, en `enlaces_de_documentos.py`."""
+    import enlaces_de_documentos as enl
+    from flask import g
+    from db import get_db_connection, log_activity
+    from folder_permissions import PERMISSION_LEVELS, get_effective_permission
+
+    user = getattr(g, 'current_user', None)
+    data = (request.get_json(silent=True) or {}) if request.method == 'POST' else {}
+    model_urn = str((data.get('model_urn') if request.method == 'POST' else request.args.get('model_urn')) or '').strip()
+    if not user or not model_urn or not verify_project_access(user, model_urn):
+        return jsonify({"success": False, "error": "No tienes acceso a este proyecto."}), 403
+    uid = (user or {}).get('id')
+
+    if request.method == 'GET':
+        documento = str(request.args.get('documento') or '').strip()
+        if not _ES_UUID.match(documento):
+            return jsonify({"success": False, "error": "Documento no válido."}), 400
+        rbac = check_folder_permission(user, documento, model_urn, 'viewer', 'ver dónde está enlazado')
+        if rbac:
+            return rbac
+        try:
+            with get_db_connection() as conn:
+                cur = conn.cursor()
+                cur.execute("SELECT 1 FROM file_nodes WHERE id = %s AND model_urn = %s", (documento, model_urn))
+                if not cur.fetchone():
+                    return jsonify({"success": False, "error": "Documento no encontrado en esta obra."}), 404
+                # Solo las carpetas que quien pregunta puede ver: el aviso no anuncia carpetas restringidas.
+                lista = [x for x in enl.enlazado_en(cur, model_urn, documento)
+                         if PERMISSION_LEVELS.get(get_effective_permission(uid, x['carpeta']['id'], model_urn,
+                                                                          cursor=cur), -1)
+                         >= PERMISSION_LEVELS['viewer']]
+            resp = jsonify({"success": True, "enlazado_en": lista})
+            resp.headers['Cache-Control'] = 'private, no-store'
+            return resp
+        except Exception as e:
+            print(f"[ENLACES] {e}")
+            return jsonify({"success": False, "error": "No se pudo leer dónde está enlazado."}), 500
+
+    def ids(clave):
+        valor = data.get(clave) or []
+        return list(dict.fromkeys(str(x).strip() for x in (valor if isinstance(valor, list) else [valor])
+                                  if str(x or '').strip()))
+    documentos, carpetas = ids('documentos'), ids('carpetas')
+    if not documentos or not carpetas:
+        return jsonify({"success": False, "error": "Elige el documento y al menos una carpeta."}), 400
+    if not all(_ES_UUID.match(x) for x in documentos + carpetas):
+        return jsonify({"success": False, "error": "Documento o carpeta no válido."}), 400
+    if len(documentos) > enl.TOPE_DOCUMENTOS or len(carpetas) > enl.TOPE_CARPETAS:
+        return jsonify({"success": False, "error": "Como mucho %d documentos y %d carpetas a la vez."
+                        % (enl.TOPE_DOCUMENTOS, enl.TOPE_CARPETAS)}), 400
+    for d in documentos:
+        rbac = check_folder_permission(user, d, model_urn, 'viewer', 'enlazar este documento')
+        if rbac:
+            return rbac
+    for c in carpetas:
+        rbac = check_folder_permission(user, c, model_urn, 'edit', 'enlazar en esa carpeta')
+        if rbac:
+            return rbac
+    performed_by = _autor_verificado()
+    try:
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+
+            def nivel(nodo):
+                return PERMISSION_LEVELS.get(get_effective_permission(uid, nodo, model_urn, cursor=cur), -1)
+            try:
+                hecho = enl.crear(cur, model_urn, documentos, carpetas, uid,
+                                  puede_ver=lambda n: nivel(n) >= PERMISSION_LEVELS['viewer'],
+                                  puede_editar_en=lambda n: nivel(n) >= PERMISSION_LEVELS['edit'])
+            except enl.Negativa as e:
+                conn.rollback()
+                return jsonify({"success": False, "error": e.texto, "code": e.codigo}), e.http
+            cur.execute("SELECT id::text, name FROM file_nodes WHERE id = ANY(%s::uuid[])", (documentos + carpetas,))
+            nombres = dict(cur.fetchall())
+            conn.commit()
+        log_activity(model_urn, 'link_document', 'file', entity_id=documentos[0],
+                     entity_name=', '.join(nombres.get(d, d) for d in documentos), performed_by=performed_by,
+                     details={'documentos': documentos, 'carpetas': carpetas,
+                              'en': [nombres.get(c, c) for c in carpetas],
+                              'creados': hecho['creados'], 'ya_estaban': hecho['ya_estaban']})
+        return jsonify({"success": True, **hecho}), 200
+    except Exception as e:
+        print(f"[ENLACES] {e}")
+        return jsonify({"success": False, "error": "No se pudo enlazar."}), 500
+
+
+@documents_bp.route('/api/docs/enlaces/<eid>', methods=['DELETE'])
+def quitar_enlace(eid):
+    """Quita un enlace (5-nov-2026). El original NO se toca. Exige «Editar» en la carpeta donde se ve el enlace; la
+    obra sale del enlace, no de lo que diga el cliente."""
+    import enlaces_de_documentos as enl
+    from flask import g
+    from db import get_db_connection, log_activity
+    from perimetro_de_obra import guardia_de_recurso
+    user = getattr(g, 'current_user', None)
+    if not user:
+        return jsonify({"success": False, "error": "Autenticación requerida."}), 401
+    if not _ES_UUID.match(str(eid or '')):
+        return jsonify({"success": False, "error": "Enlace no válido."}), 400
+    # La obra sale de la fila del enlace (perimetro_de_obra: 'doc_enlaces'); de otra obra, 404 sin decir más.
+    negativa = guardia_de_recurso('doc_enlaces', eid)
+    if negativa:
+        return negativa
+    try:
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            fila = enl.leer(cur, eid)
+        if not fila:
+            return jsonify({"success": False, "error": "Ese enlace ya no existe."}), 404
+        obra, documento, carpeta = fila
+        # De otra obra se responde igual que si no existiera: no se confirma que exista.
+        if not verify_project_access(user, obra):
+            return jsonify({"success": False, "error": "Ese enlace ya no existe."}), 404
+        rbac = check_folder_permission(user, carpeta, obra, 'edit', 'quitar un enlace de esta carpeta')
+        if rbac:
+            return rbac
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            enl.quitar(cur, eid)
+            cur.execute("SELECT id::text, name FROM file_nodes WHERE id = ANY(%s::uuid[])", ([documento, carpeta],))
+            nombres = dict(cur.fetchall())
+            conn.commit()
+        log_activity(obra, 'unlink_document', 'file', entity_id=documento, entity_name=nombres.get(documento),
+                     performed_by=_autor_verificado(), details={'carpeta': carpeta, 'en': nombres.get(carpeta)})
+        return jsonify({"success": True}), 200
+    except Exception as e:
+        print(f"[ENLACES] {e}")
+        return jsonify({"success": False, "error": "No se pudo quitar el enlace."}), 500
+
+
 @documents_bp.route('/api/docs/upload-url', methods=['POST'])
 def get_upload_url():
     """Generates a Signed URL for direct-to-bucket client uploads."""
@@ -3905,6 +4041,16 @@ def download_folder_urls():
         """
         cursor.execute(query, (folder_id,))
         files = cursor.fetchall()
+        # LOS DOCUMENTOS ENLAZADOS en esta carpeta y las de dentro (5-nov-2026, docs/archivos/27): quien descarga una
+        # carpeta espera lo que ve en ella. Cada uno con SU permiso, el del original, no con el de la carpeta.
+        import enlaces_de_documentos as _enl
+        if _enl.hay_tabla(cursor):
+            import permiso_documental as _pd
+            from folder_permissions import PERMISSION_LEVELS as _NIVELES
+            for _id, _nombre, _gcs, _ruta in _enl.de_un_arbol(cursor, folder_id):
+                _nivel = _pd.permiso_efectivo(cursor, user, model_urn, _id)
+                if _NIVELES.get(_nivel, -1) >= _NIVELES['view_download']:
+                    files.append((_nombre, _gcs, _ruta + '/' + _nombre))
         
     manifest = []
     if files:

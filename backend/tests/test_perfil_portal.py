@@ -231,7 +231,11 @@ def test_el_recorte_es_real(rutas_portal):
     # 315 -> 316 (4-nov-2026): `POST /api/docs/carpetas/copiar-estructura`. Copiar las subcarpetas de una carpeta,
     # vacías, a otras (el dueño: «tengo 10 carpetas que tendrán las mismas subcarpetas»). Producto documental de
     # Archivos, con guardia de obra, «Ver» en la modelo y «Editar» en cada destino, y las reglas de crear carpeta.
-    TECHO = 316
+    # 316 -> 318 (5-nov-2026, migración 48): `GET|POST /api/docs/enlaces` y `DELETE /api/docs/enlaces/<eid>`. Enlazar
+    # un documento en otras carpetas sin copiarlo (el dueño: «un único archivo que sirve a varias calles»,
+    # docs/archivos/27). Producto documental de Archivos, con guardia de obra, «Ver» en el documento y «Editar» en
+    # cada carpeta; quitar exige «Editar» en la carpeta del enlace, con la obra sacada del propio enlace.
+    TECHO = 318
     sin_puente = [r for r in rutas_portal
                   if r not in puente_acc and r not in revision_cad]
     assert len(sin_puente) < TECHO, (
