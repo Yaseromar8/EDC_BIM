@@ -23,6 +23,7 @@ import IncidenciaLateral from './IncidenciaLateral';
 import { pedirCompararNube } from './AsignacionDeNube';
 import IconoModulo from './IconoModulo';
 import { AISLADO, PinDeIncidencia, numeroDe } from '../../../design/incidencias/PanelDeIncidencia.jsx';
+import { useDestinoDelLector } from '../utils/contextoDelLector';
 
 const NOMBRE_DE_TIPO = {
   foto: 'Foto', sello: 'Sello', cloud: 'Nube', arrow: 'Flecha', text: 'Texto', measure: 'Medición',
@@ -33,10 +34,6 @@ const Ico = ({ children }) => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"
     strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{children}</svg>
 );
-
-export function destinoDelLector() {
-  return document.querySelector('.pdf-viewer .pdf-body') || document.querySelector('.file-viewer-content') || document.body;
-}
 
 export function textoDeMarca(m) {
   return `${NOMBRE_DE_TIPO[m.kind] || 'Marca'} · pág. ${m.page}${m.text ? ` · ${String(m.text).slice(0, 40)}` : ''}`;
@@ -103,6 +100,7 @@ function FilaDelPlano({ o, onAbrir }) {
 
 export default function ObservacionesDelPlano({ API, obra, nodeId, nombre = '', version, marcas = [], pedido = null,
   onCambio, onIrAMarca, onIrAPin, onPinPendiente, onAbierta, onCerrar }) {
+  const destino = useDestinoDelLector();       // el cuerpo del lector (utils/contextoDelLector.js)
   const [lista, setLista] = useState(null);
   const [vista, setVista] = useState(pedido?.vista ?? 'lista');   // 'lista' | 'nueva' | id de una observación
   const [pin, setPin] = useState(pedido?.pin || null);             // el punto de la hoja de la que se levanta
@@ -158,7 +156,7 @@ export default function ObservacionesDelPlano({ API, obra, nodeId, nombre = '', 
 
   if (vista !== 'lista') {
     return (
-      <IncidenciaLateral API={API} obra={obra} contenedor={destinoDelLector()} onVolver={() => setVista('lista')}
+      <IncidenciaLateral API={API} obra={obra} contenedor={destino} onVolver={() => setVista('lista')}
         issueId={vista === 'nueva' ? null : vista}
         nueva={vista === 'nueva' ? { tipo: 'OBSERVACION', lugar: [nombre, version?.numero ? `V${version.numero}` : null].filter(Boolean).join(' · ') } : null}
         titulo={pin ? 'Nueva incidencia' : 'Nueva incidencia del plano'}
@@ -166,6 +164,7 @@ export default function ObservacionesDelPlano({ API, obra, nodeId, nombre = '', 
         onIrAMarca={(id) => { const m = porId.get(String(id)); if (m) onIrAMarca?.(m); }}
         onCompararNube={pedirCompararNube}
         nube={nubePedida && String(nubePedida.vista) === String(vista) ? nubePedida.nube : null}
+        vez={pedido?.n ?? null}
         extraAlta={<>
           {pin && (
             <div className="pinc-campo">
@@ -216,7 +215,7 @@ export default function ObservacionesDelPlano({ API, obra, nodeId, nombre = '', 
   const cerradas = (lista || []).filter(o => !(issueViva(o) || o.estado === 'Borrador'));
 
   return createPortal(
-    <aside className="mce-panel" aria-label="Observaciones del plano" {...AISLADO}>
+    <aside className="mce-panel" aria-label="Observaciones del plano" data-obstaculo {...AISLADO}>
       <header className="mce-panel__cab">
         <span className="mce-panel__ico"><IconoModulo nombre="incidencia" tamano={20} /></span>
         <div className="mce-panel__tit">
@@ -258,6 +257,6 @@ export default function ObservacionesDelPlano({ API, obra, nodeId, nombre = '', 
         )}
       </div>
     </aside>,
-    destinoDelLector(),
+    destino,
   );
 }

@@ -170,6 +170,7 @@ def list_markups():
             _con_enlaces(cur, rows)
             _con_observacion(cur, rows, node_id)
             _con_nube(cur, rows, node_id)
+            _con_incidencias_para_la_nube_suelta(cur, rows, node_id)
             en_otras = []
             if version:
                 cur.execute("""SELECT v.id::text, v.version_number, count(*)
@@ -1098,26 +1099,16 @@ def _con_nube(cur, rows, node_id):
     mucho, sean cuantas sean las nubes."""
     import almacen_de_nubes as alm
     import nubes_de_issue as nub
-    from administracion_de_obra import es_admin_de_obra
     for m in rows:
         m['nube'] = None
     de_marca = alm.de_las_marcas(cur, [m['id'] for m in rows
                                        if m.get('kind') == nub.TIPO_DE_NUBE and m.get('id') is not None])
     if not de_marca:
         return rows
-    yo = _user()
-    empresa = None
-    if yo.get('id'):
-        cur.execute('SELECT company_id FROM users WHERE id = %s', (yo['id'],))
-        f = cur.fetchone()
-        empresa = f[0] if f else None
-    admin_en = {}
+    yo, empresa, admin_en = _quien_mira(cur)
     visibles = {}
     for mid, (n, issue) in de_marca.items():
-        obra = issue['project_id']
-        if obra not in admin_en:
-            admin_en[obra] = es_admin_de_obra(cur, yo, obra)
-        if nub.visible(n, nub.papeles(yo, issue, n, admin_en[obra], empresa), empresa):
+        if nub.visible(n, nub.papeles(yo, issue, n, admin_en(issue['project_id']), empresa), empresa):
             visibles[mid] = (n, issue)
     rows[:] = [m for m in rows if m.get('id') not in de_marca or m['id'] in visibles]
     if not visibles:
@@ -1152,13 +1143,75 @@ def _con_nube(cur, rows, node_id):
     for m in rows:
         if m['id'] not in visibles:
             continue
-        n, _issue = visibles[m['id']]
+        n, issue = visibles[m['id']]
         m['nube_numero'] = n['numero']
         m['nube'] = {'estado': n['estado'], 'estado_etiqueta': nub.ETIQUETAS.get(n['estado'], n['estado']),
                      'clase': n['clase'], 'numero': n['numero'],
+                     # Lo que la leyenda cuenta «por entregar»: lo decide el servidor, no la pantalla.
+                     'por_entregar': nub.por_entregar(n, issue),
                      'destino_nombre': personas.get(n['destino_usuario']) or empresas.get(n['destino_empresa']),
                      'destino_es_empresa': bool(n['destino_empresa']),
                      'color': colores.get(nub.clave_de_destino(n))}
+    return rows
+
+
+def _quien_mira(cur):
+    """(usuario, su empresa, admin_en(obra)) de quien pide la hoja: lo que piden `papeles()` y `visible()`. La
+    pregunta de administrador se hace una vez por obra."""
+    from administracion_de_obra import es_admin_de_obra
+    yo = _user()
+    empresa = None
+    if yo.get('id'):
+        cur.execute('SELECT company_id FROM users WHERE id = %s', (yo['id'],))
+        f = cur.fetchone()
+        empresa = f[0] if f else None
+    cache = {}
+
+    def admin_en(obra):
+        if obra not in cache:
+            cache[obra] = es_admin_de_obra(cur, yo, obra)
+        return cache[obra]
+    return yo, empresa, admin_en
+
+
+def _con_incidencias_para_la_nube_suelta(cur, rows, node_id):
+    """Una NUBE SUELTA (de ninguna incidencia) que esta persona puede repartir lleva a qué incidencias abiertas de este
+    plano puede ir y cómo (`puede_unirse_a`: [{id, codigo, titulo, clase, asigna}]). La regla es
+    `nubes_de_issue.como_se_anade`, la misma de la ruta que la añade (docs/archivos/25, P2): la pantalla solo la pinta.
+    Se reparte una nube TUYA (las marcas guardan el nombre de su autor) o, si administras la obra, cualquiera."""
+    import flujo_de_issue as iss
+    import nubes_de_issue as nub
+    sueltas = [m for m in rows if m.get('kind') == nub.TIPO_DE_NUBE and m.get('id') is not None
+               and not m.get('observacion') and not m.get('nube')]
+    yo, empresa, admin_en = _quien_mira(cur)
+    if not sueltas or not yo.get('id'):
+        return rows
+    # Las incidencias vivas de ESTE plano: levantadas desde él o con alguna marca suya en la evidencia.
+    cur.execute("""SELECT id, project_id, codigo, titulo, estado, autor_id, verificador_id, responsable_id,
+                          responsable_empresa
+                     FROM doc_issues
+                    WHERE model_urn = (SELECT model_urn FROM file_nodes WHERE id = %s)
+                      AND estado <> ALL(%s)
+                      AND ((origen_tipo = %s AND origen_id = %s) OR evidencia @> %s::jsonb)
+                    ORDER BY creado_en DESC, id DESC LIMIT 50""",
+                (str(node_id), [iss.VERIFICADO, iss.ANULADO, iss.BORRADOR], ORIGEN_PLANO, str(node_id),
+                 json.dumps([{'documento': str(node_id)}])))
+    destinos = []
+    admin_aqui = False
+    for r in cur.fetchall():
+        issue = {'id': r[0], 'project_id': r[1], 'codigo': r[2], 'titulo': r[3], 'estado': r[4], 'autor_id': r[5],
+                 'verificador_id': r[6], 'responsable_id': r[7], 'responsable_empresa': r[8]}
+        admin = admin_en(issue['project_id'])
+        admin_aqui = admin_aqui or admin
+        como = nub.como_se_anade(nub.papeles(yo, issue, None, admin, empresa))
+        if como:
+            destinos.append({'id': str(issue['id']), 'codigo': issue['codigo'], 'titulo': issue['titulo'],
+                             'clase': como[0], 'asigna': como[1]})
+    if not destinos:
+        return rows
+    for m in sueltas:
+        if admin_aqui or m.get('created_by') == (yo.get('name') or ''):
+            m['puede_unirse_a'] = destinos
     return rows
 
 

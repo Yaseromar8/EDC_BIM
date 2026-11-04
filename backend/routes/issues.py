@@ -1261,6 +1261,7 @@ def _para_la_pantalla(cur, d, nubes, admin, empresa):
             **{k: v for k, v in n.items() if k != 'history'},
             'estado_etiqueta': _nub.ETIQUETAS.get(n['estado'], n['estado']),
             'por_verificar': _nub.por_verificar(n, d),
+            'por_entregar': _nub.por_entregar(n, d),
             'destino_nombre': personas.get(n.get('destino_usuario')) or empresas.get(n.get('destino_empresa')),
             'destino_es_empresa': bool(n.get('destino_empresa')),
             'color': colores.get(_nub.clave_de_destino(n)),
@@ -1355,7 +1356,7 @@ def _acto_sobre_nube(cur, d, data, admin, empresa, avisos):
         return jsonify({'error': 'La incidencia está cerrada.', 'code': 'CERRADA'}), 409
 
     if acto == 'crear':
-        return _anadir_nube(cur, d, data, admin, empresa)
+        return _anadir_nube(cur, d, data, admin, empresa, avisos)
 
     # La nube: por su id o por su marca.
     nubes = _nubes_de(cur, d)
@@ -1366,6 +1367,15 @@ def _acto_sobre_nube(cur, d, data, admin, empresa, avisos):
         n = next((x for x in nubes if str(x.get('markup_id')) == str(data['marca'])), None)
     if not n:
         return jsonify({'error': 'Esa nube no es de esta incidencia.'}), 404
+    negativa = _negativa(acto, n, d, admin, empresa)
+    if negativa:
+        return negativa
+    return _hacer(cur, d, n, acto, data, avisos)
+
+
+def _negativa(acto, n, d, admin, empresa):
+    """(cuerpo, código) si esta persona no puede hacer el acto en la nube; None si puede. El código sale del TIPO de la
+    negativa (`nubes_de_issue.Motivo`)."""
     sus = _nub.papeles(_usuario(), d, n, admin, empresa)
     if not _nub.visible(n, sus, empresa):
         return jsonify({'error': 'Esa nube no es de esta incidencia.'}), 404
@@ -1373,7 +1383,12 @@ def _acto_sobre_nube(cur, d, data, admin, empresa, avisos):
     if not ok:
         return jsonify({'error': por_que[0].upper() + por_que[1:] + '.', 'code': 'NO_PUEDE'}), \
             _nub.HTTP_DE_LA_NEGATIVA[por_que.tipo]
+    return None
 
+
+def _hacer(cur, d, n, acto, data, avisos):
+    """El acto, ya permitido: cambia la nube, su ronda y su historial, la guarda, sincroniza lo que se debe en ella y lo
+    cuenta en el historial de la incidencia. None si salió bien; (cuerpo, código) si los datos no valen."""
     yo = _usuario()
     ahora = reg.entrada('x', _actor())['at']          # la hora del servidor, en UTC, como el resto del historial
     rondas = [dict(r) for r in (n['rondas'] or [])]
@@ -1469,18 +1484,19 @@ def _acto_sobre_nube(cur, d, data, admin, empresa, avisos):
     return None
 
 
-def _anadir_nube(cur, d, data, admin, empresa):
+def _anadir_nube(cur, d, data, admin, empresa, avisos):
     """Una nube suelta de este plano pasa a ser nube de la incidencia (4-nov-2026, el dueño: «no veo dónde asignar»
-    en una nube dibujada después). Quien la revisa o el administrador la añaden como nube de OBSERVACIÓN; el encargado,
-    como nube de ENCARGO para su equipo (D6)."""
-    sus = _nub.papeles(_usuario(), d, None, admin, empresa)
-    if {'revisor', 'admin'} & sus:
-        clase = 'observacion'
-    elif _nub.puede_crear_encargo(sus):
-        clase = 'encargo'
-    else:
+    en una nube dibujada después). Cómo entra lo dice `nubes_de_issue.como_se_anade`: de observación si la añade quien
+    revisa (o el administrador); de encargo si la añade el encargado.
+
+    AÑADIR Y ASIGNAR ES UN SOLO ACTO (docs/archivos/25, P3): con `destino_usuario` o `destino_empresa` y `pedido`, la
+    nube se añade y se asigna en la misma transacción, con las mismas reglas que «asignar». Si algo no vale, no queda
+    nada a medias."""
+    como = _nub.como_se_anade(_nub.papeles(_usuario(), d, None, admin, empresa))
+    if not como:
         return jsonify({'error': 'Añade nubes quien revisa la incidencia; el encargado, nubes de encargo.',
                         'code': 'NO_PUEDE'}), 403
+    clase, _asigna = como
     try:
         marca = int(data.get('marca'))
     except (TypeError, ValueError):
@@ -1512,4 +1528,10 @@ def _anadir_nube(cur, d, data, admin, empresa):
     _historial(cur, int(d['id']), d['history'], 'cloud_created', nube=nid, marca=marca, clase=clase,
                padre=padre)
     log_activity(d['model_urn'], 'CLOUD_CREATE', 'ISSUE', str(d['id']), d['codigo'], _actor(), {'nube': nid})
+    if data.get('destino_usuario') or data.get('destino_empresa'):
+        n = next((x for x in _nubes_de(cur, d) if x['id'] == nid), None)
+        negativa = _negativa('asignar', n, d, admin, empresa)
+        if negativa:
+            return negativa
+        return _hacer(cur, d, n, 'asignar', data, avisos)
     return None

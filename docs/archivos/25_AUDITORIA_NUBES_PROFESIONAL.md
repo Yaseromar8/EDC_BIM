@@ -201,6 +201,64 @@ lista sin fechas, asignar desde la barra, entrega como respuesta.
 - Las tablas hijas de rondas.
 - Llevar el ensayo de la fase 1 de la base desechable a `backend/herramientas/`: hoy corre contra el banco.
 
+## 4 ter · Fases 2 y 3 hechas (4-nov-2026, en local)
+
+**Fase 2 · el cliente solo pinta**
+
+| # | Antes | Ahora |
+|---|---|---|
+| P1 | Tres copias de la nube (hoja, barra, panel) que no se avisaban. | **Una copia por incidencia**: `design/incidencias/datosDeNubes.js`, leída con `useNubesDeIncidencia`. Cada acto escribe la respuesta del servidor (`fijarNubes`) y la hoja, la barra, la leyenda y el panel la ven a la vez. Dos que piden a la vez esperan la misma lectura. |
+| P2 | La pantalla volvía a decidir papeles, actos y qué se debe. | **El servidor lo da hecho**: `puede_unirse_a` en cada nube suelta (a qué incidencia puede ir, de qué clase y si quien mira la asigna, con `como_se_anade`), `numero`, `actos` y `por_entregar` en cada nube. Se quitaron de la pantalla `incidenciasParaEncargo`, el papel supuesto del formulario, el filtro de «Entregar», la cuenta de la leyenda, el segundo algoritmo de color y `miIdDeSesion`. |
+| P3 | Añadir y asignar, dos peticiones. | **Un solo acto**: `acto: 'crear'` con persona y pedido añade y asigna en la misma transacción, con las mismas reglas que «asignar». Si algo no vale, no queda nada a medias. |
+| P8 | Los botones de la barra no tenían tooltip (`data-tip` sin sistema) y los rótulos SVG sacaban el nativo. | **Un solo sistema**: `tooltips.js` lee `title` y `data-tip`, y con `data-tip-lado="izquierda"` lo pone a la izquierda (el estuche). La regla CSS propia del estuche se quitó, y los `<title>` de la hoja pasaron a `data-tip`. |
+
+**Fase 3 · interacción estándar**
+
+| # | Antes | Ahora |
+|---|---|---|
+| P4 | Efectos que se cerraban unos a otros (`esNubeConPanel`, `cargadoDe`, contadores, `setTimeout(0)`). | **Una máquina de estados** (`utils/seleccionDelLector.js`, pura, con prueba) que lleva el lector: cada acto dice a la vez qué pasa con la barra y con el panel. «Mi trabajo» y «Citado en» entran por la misma acción al abrir el documento, sin temporizador. |
+| P5 | Escuchadores propios en captura, `setTimeout(0)`, refs para no volver a suscribirse. | **Capas** (`design/ui/capas.js`): una pila con un único escuchador. Escape cierra la capa de arriba (la nota, luego la barra) y el clic fuera cierra lo que queda fuera; arrastrar no cuenta y un diálogo encima lo para. Escribir en el panel y pulsar Escape no suelta la nube (`propios` frente a `contiene`). |
+| P6 | Piezas que se buscaban con `document.querySelector` y un temporizador de 400 ms. | **El lector da sus sitios por contexto** (`utils/contextoDelLector.js`: cuerpo y marco). El panel y el estuche se declaran obstáculo (`data-obstaculo`) y la barra se aparta: mide cuando cambia lo elegido, su contenido o el tamaño del lector. |
+| P7 | Ancho de los rótulos «a ojo»; la barra encogía hasta el 75 % (botones de 22,5 px). | **Rótulos medidos con su fuente** (`design/ui/medirTexto.js`) en `components/nubes/RotulosDeLaHoja.jsx`. **La barra no encoge.** La geometría del pin se exporta con su dibujo (`GEOMETRIA_DEL_PIN`). |
+| P9 | Sin teclado. | Nubes y pines con `role="button"`, en el orden del tabulador, con su nombre; Intro o espacio los eligen. La barra se recorre con las flechas (patrón «toolbar»). El foco vuelve al botón que abrió una nota. Las pestañas son las del patrón WAI-ARIA, con flechas. Hay anillo de foco. |
+| B1 | `PdfToolsOverlay` de 1.210 líneas, con funciones inmediatas dentro del JSX. | Fuera: rótulos, leyenda (`components/nubes/`), selección y su hook. `iniciales` vive en un solo sitio (`reglas.js`) y `colorDePersona` se quitó. |
+
+**Probado**
+
+*Pruebas automáticas*
+- Banco nuevo `frontend-docs/pruebas/nubesDeLaPantalla.prueba.mjs`: 18/18 (máquina de estados, copia única, capas,
+  leyenda).
+- `npm test`: 35 bancos en verde. Build de producción correcto.
+- Lint de los ficheros tocados: ningún error nuevo; los que hay ya estaban en origin/main y bajan de 3 a 2 y de 4 a 3.
+
+*Ensayos contra PostgreSQL*
+- Fase 1: 29/29. Añade F9, la nube suelta lleva `puede_unirse_a` solo para quien puede repartirla, y F10: si la
+  asignación no vale, la nube no queda añadida; si vale, queda añadida y asignada a la vez.
+- Nubes: 51/51. Carpeta de la incidencia: 12/12.
+
+*En el navegador del banco* (con eventos reales; la ventana estaba oculta, así que sin capturas):
+- Elegir una nube abre su barra y su panel en «Nubes» con su fila. Reasignarla desde la barra cambia a la vez la fila
+  del panel («M» → «CS»), el rótulo de la hoja y la leyenda, sin recargar.
+- La entrega de Mario desde el panel cambia la hoja («Pedida» → «Entregada»), también sin recargar.
+- Escape: primero la nota, luego la barra, y el panel sigue abierto. El foco vuelve a «Comentar». Escape escribiendo en
+  el panel no suelta la nube.
+- Un clic en su panel no la suelta; un clic en la barra superior sí.
+- Intro en una nube enfocada con el tabulador la elige. Las flechas y Fin recorren la barra.
+- El tooltip de los botones de la barra sale («Comentar»).
+- La nube suelta de Luis se añade y se asigna con UNA petición y pasa a ser «Nube 3 de ISS-001» («3 M»).
+- El enlace de «Mi trabajo» abre ISS-001 en «Nubes» con la fila 3 abierta y limpia la dirección.
+- **Barra frente al panel:** el ensayo destapó dos fallos míos, ya corregidos. Con la nube bajo el panel, la barra no se
+  apartaba. Y la primera vez quedaba 26 px debajo del panel porque crece al llegar los datos de su nube (con la ventana
+  oculta el `ResizeObserver` no avisa). Ahora se vuelve a medir al cambiar su contenido: en las cuatro pruebas la barra
+  queda libre.
+
+**Queda**
+- Los colores de persona siguen en JavaScript (`COLORES_DE_PERSONA`, una sola lista) y no como tokens CSS: el SVG no
+  lee variables CSS en sus atributos.
+- La autoría de la marca, todavía por nombre.
+- El permiso de la carpeta, por nombre de ruta (decisión 5).
+- El ensayo vive en el banco, no en `backend/herramientas/`.
+
 ## 5 · Lo que tiene que decidir el dueño
 
 1. **El commit `11d072a4` (aún sin push).**
@@ -209,9 +267,13 @@ lista sin fechas, asignar desde la barra, entrega como respuesta.
    - Pero añade tres de los parches señalados: P3, P5 y P7.
    - Recomendación: **no publicarlo así**, sino rehacer esas tres piezas dentro de las fases 2 y 3 y publicar la fase 1
      primero.
-2. **Migración 47** (número estable, índices, unicidad de la marca), que aplica él.
+   - **Resuelto (4-nov):** queda sustituido. Su parte de servidor va en la fase 1 y su parte de pantalla, rehecha, en las
+     fases 2 y 3. No se publica.
+2. **Migración 47** (número estable, filas desde el alta, índices), que aplica él. Sin la unicidad de la marca: una marca
+   puede volver a ser nube de otra incidencia cuando la anterior se cerró (lo permite el alta de hoy).
 3. **La barra al alejar.** El estándar es que la barra mantenga su tamaño. Si se encoge, se pierde el mínimo de
    accesibilidad. Que confirme que lo que le molestaba era lo dibujado sobre la hoja.
+   - **Aplicado el estándar (4-nov):** la barra no encoge; si el dueño quiere otra cosa, se cambia.
 4. **Separación de funciones.** ¿Puede el encargado asignarse una nube a sí mismo y aceptar su propia entrega? En ACC y
    Procore quien aprueba no es quien entrega. Recomendación: no.
 5. **La carpeta de la incidencia.** Permiso explícito creado con la incidencia, en lugar del permiso por nombre de

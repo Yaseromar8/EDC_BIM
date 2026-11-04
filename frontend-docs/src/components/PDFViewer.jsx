@@ -24,6 +24,8 @@ import {
   DURACION_DE_HOJA_ENTERA_MS, vistaDeHojaEntera, vistaIntermedia,
   areaDelDetalle, detalleSigueValiendo,
 } from '../utils/navegacionLector';
+import useSeleccionDelLector from '../utils/useSeleccionDelLector';
+import { ContextoDelLector } from '../utils/contextoDelLector';
 import './PDFViewer.css';
 
 // El worker y los recursos de pdf.js se configuran en un solo sitio.
@@ -949,10 +951,18 @@ export default function PDFViewer({ url, preparando = false,
 
   // Herramientas de ingeniería (overlay)
   const [tool, setTool] = useState('pan');
+  // LO ELEGIDO EN EL LECTOR (la marca y su barra, el panel del plano) en UNA máquina de estados (docs/archivos/25 P4):
+  // la llevan el lector —que cambia de documento y de versión y tiene el botón del panel— y la capa de marcas.
+  const [seleccion, despachar] = useSeleccionDelLector(nodeId, versionDeLasMarcas?.id || null);
+  const alternarPanelDelPlano = () => despachar({ tipo: seleccion.panel ? 'cerrarPanel' : 'abrirLista' });
   // OBSERVACIONES DEL PLANO (docs/archivos/18): el panel lo pinta PdfToolsOverlay; el botón está en el rail.
-  const [panelDelPlano, setPanelDelPlano] = useState(false);
   const [obsDelPlano, setObsDelPlano] = useState(0);
-  useEffect(() => { setPanelDelPlano(false); setObsDelPlano(0); }, [nodeId]);
+  useEffect(() => { setObsDelPlano(0); }, [nodeId]);
+  // Los SITIOS del lector, por contexto (utils/contextoDelLector.js): el cuerpo para el panel lateral, el marco de la
+  // hoja para la leyenda. Antes cada pieza los buscaba en el documento.
+  const [cuerpo, setCuerpo] = useState(null);
+  const [marco, setMarco] = useState(null);
+  const sitios = useMemo(() => ({ cuerpo, marco }), [cuerpo, marco]);
   const [markupColor, setMarkupColor] = useState(COLORS[0]);
   // Estuche compacto: la última variante de cada familia y el desplegable abierto (uno a la vez).
   const [variante, setVariante] = useState({ medir: 'measure', marcar: 'cloud' });
@@ -2336,6 +2346,7 @@ export default function PDFViewer({ url, preparando = false,
   );
 
   return (
+    <ContextoDelLector.Provider value={sitios}>
     <div ref={viewerRef} className={`pdf-viewer${cajetin ? ' pdf-viewer--alephia' : ''}`} tabIndex={-1} aria-busy={pageRendering}>
 
       <div className={`pdf-topbar${cajetin ? ' pdf-topbar--cajetin' : ''}`} role="toolbar" aria-label="Controles del documento">
@@ -2426,7 +2437,7 @@ export default function PDFViewer({ url, preparando = false,
         </div>
       </div>
 
-      <div className="pdf-body">
+      <div ref={setCuerpo} className="pdf-body">
         {showSidebar && (
           <div ref={sidebarRef} className={`pdf-sidebar${indice.length && pestanaLateral === 'indice' ? ' pdf-sidebar--indice' : ''}`}
             aria-label={indice.length ? 'Índice y páginas' : 'Miniaturas de páginas'}>
@@ -2464,9 +2475,11 @@ export default function PDFViewer({ url, preparando = false,
               anteriores. Ahora la zona y la cinta son HERMANAS en una columna,
               asi que el lienzo se encoge solo cuando la cinta se abre y nada
               tapa a nada. */}
-          <div className="pdf-lienzo-zona">
+          <div ref={setMarco} className="pdf-lienzo-zona">
           <div ref={containerRef} className="pdf-canvas-container"
-            style={{ cursor: tool === 'pan' ? (isDragging ? 'grabbing' : 'grab') : 'crosshair' }}
+            // «Seleccionar y mover» lleva la FLECHA, como ACC; la mano solo mientras se arrastra la hoja (4-nov-2026,
+            // el dueño: «aparece una manito y se queda con eso y no con el del cursor»).
+            style={{ cursor: tool === 'pan' ? (isDragging ? 'grabbing' : 'default') : 'crosshair' }}
             onMouseDown={handleMouseDown} onMouseMove={handleMouseMove}
             onMouseUp={handleMouseUp} onMouseLeave={handleMouseUp}
             onDoubleClick={alHacerDobleClic}>
@@ -2570,7 +2583,7 @@ export default function PDFViewer({ url, preparando = false,
                     projectPrefix={projectPrefix} tool={tool} setTool={setTool}
                     color={markupColor} userName={userName}
                     versionDeLasMarcas={versionDeLasMarcas} versionVigente={versionVigente} onIrAVersion={onIrAVersion}
-                    panelDelPlano={panelDelPlano} onPanelDelPlano={setPanelDelPlano} onIrAPagina={goToPage}
+                    seleccion={seleccion} despachar={despachar} onIrAPagina={goToPage}
                     onObservacionesDelPlano={setObsDelPlano} nombreDelDocumento={fileName} />
                 )}
               </div>
@@ -2578,7 +2591,8 @@ export default function PDFViewer({ url, preparando = false,
           </div>
 
         {nodeId && cajetin && (
-            <div ref={estucheRef} className="pdf-rail pdf-rail--compacto" role="toolbar" aria-label="Herramientas de medición y anotación">
+            <div ref={estucheRef} className="pdf-rail pdf-rail--compacto" role="toolbar" aria-label="Herramientas de medición y anotación"
+              aria-orientation="vertical" data-obstaculo data-tip-lado="izquierda">
               {ESTUCHE_COMPACTO.map((bloque, i) => (
                 <div key={i} className="pdf-rail__group">
                   {bloque.map(g => {
@@ -2625,8 +2639,8 @@ export default function PDFViewer({ url, preparando = false,
                 </div>
               ))}
               <div className="pdf-rail__group">
-                <BotonObservacionesDelPlano activo={panelDelPlano} cuantas={obsDelPlano}
-                  onClick={() => { setDesplegable(null); setColorOpen(false); setPanelDelPlano(v => !v); }} />
+                <BotonObservacionesDelPlano activo={!!seleccion.panel} cuantas={obsDelPlano}
+                  onClick={() => { setDesplegable(null); setColorOpen(false); alternarPanelDelPlano(); }} />
               </div>
               <div className="pdf-rail__group">
                 <span className="pdf-estuche__celda">
@@ -2650,7 +2664,8 @@ export default function PDFViewer({ url, preparando = false,
           )}
 
         {nodeId && !cajetin && (
-            <div className="pdf-rail" role="toolbar" aria-label="Herramientas de medición y anotación">
+            <div className="pdf-rail" role="toolbar" aria-label="Herramientas de medición y anotación"
+              aria-orientation="vertical" data-obstaculo data-tip-lado="izquierda">
               {GRUPOS_DE_HERRAMIENTAS.map(grupo => (
                 <div key={grupo.nombre} className="pdf-rail__group">
                   {cajetin && <span className="pdf-rail__titulo">{TITULO_DE_GRUPO[grupo.nombre] || grupo.nombre}</span>}
@@ -2691,8 +2706,8 @@ export default function PDFViewer({ url, preparando = false,
                 </div>
               ))}
               <div className="pdf-rail__group">
-                <BotonObservacionesDelPlano activo={panelDelPlano} cuantas={obsDelPlano}
-                  onClick={() => setPanelDelPlano(v => !v)} />
+                <BotonObservacionesDelPlano activo={!!seleccion.panel} cuantas={obsDelPlano}
+                  onClick={alternarPanelDelPlano} />
               </div>
             </div>
         )}
@@ -2806,6 +2821,7 @@ export default function PDFViewer({ url, preparando = false,
         </div>
       </div>
     </div>
+    </ContextoDelLector.Provider>
   );
 }
 

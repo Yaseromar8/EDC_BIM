@@ -17,6 +17,8 @@
   color: var(--a-text-primary, #141413);
 }
 .pinc--dentro { position: absolute; top: 0; z-index: 36; }
+/* El panel de cada pestaña: solo dice a qué pestaña pertenece (accesibilidad); no cambia la maqueta. */
+.pinc-tabpanel { display: contents; }
 
 /* Cabecera */
 .pinc-cab {
@@ -278,12 +280,12 @@ button.pinc-valor:hover .pinc-valor__lapiz, button.pinc-valor:focus-visible .pin
 .nub.es-encargo .nub-num { outline: 1px dashed var(--nube, #b0aea5); outline-offset: 1px; }
 .nub-cab { display: flex; align-items: center; gap: var(--a-space-8, 8px); width: 100%; min-height: 40px; padding: 6px 4px; border: none; background: none; cursor: pointer; text-align: left; font: inherit; color: var(--a-text-primary, #141413); }
 .nub-cab:hover { background: var(--a-state-hover, #f1f0e8); }
-.nub-cab b.es-vacio { font-weight: 500; color: var(--a-text-muted, #72706b); }
+.nub-cab b.es-vacio { color: var(--a-text-muted, #72706b); }
 .nub-estado { flex: none; font-size: var(--a-type-caption-size, 12px); color: var(--a-text-muted, #72706b); white-space: nowrap; }
 .nub-estado.es-mal { color: #b93535; }
 .nub-estado.es-bien { color: #667650; }
 .nub-estado.es-entregada { color: #507294; }
-.nub-cab b { flex: 1; min-width: 0; font-weight: 600; font-size: var(--a-type-body-size, 13px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.nub-cab b { flex: 1; min-width: 0; font-weight: 500; font-size: var(--a-type-body-size, 13px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .nub-num { flex: none; min-width: 20px; text-align: center; font: 600 11px/1.6 var(--a-font-mono, ui-monospace, monospace); color: #fff; background: var(--nube, #b0aea5); border-radius: 2px; padding: 0 5px; }
 .nub-chip { flex: none; font-size: var(--a-type-caption-size, 12px); color: var(--a-text-secondary, #52524d); background: var(--a-surface-sunken, #f1f0e8); border-radius: var(--a-radius-md, 4px); padding: 2px 7px; white-space: nowrap; }
 .nub-chip.es-mal { background: #fbebeb; color: #7a2626; }

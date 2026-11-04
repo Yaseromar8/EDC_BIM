@@ -18,6 +18,11 @@
 //     texto, el tooltip queda como su descripción (`aria-describedby`).
 //   · En pantallas táctiles no se muestra (no hay «pasar por encima»).
 //   · Se cierra al pulsar, al desplazar, con la rueda y con Escape.
+//
+// `data-tip="…"` PIDE LO MISMO SIN `title` (4-nov-2026, docs/archivos/25 P8): lo usan los botones que ya llevan su
+// nombre en `aria-label` y los rótulos del plano (SVG), donde un `<title>` sacaría el aviso nativo del navegador. Antes
+// `data-tip` solo lo pintaba una regla CSS del estuche, así que los botones de la barra de la nube no tenían ninguno:
+// ahora hay un solo sistema. `data-tip-lado="izquierda"` en un contenedor (una barra vertical) lo pone a su izquierda.
 import './Tooltip.css';
 
 const RETARDO = 450;   // ms hasta el primero
@@ -41,6 +46,7 @@ export function instalarTooltips() {
 
   let actual = null;      // elemento con el tooltip
   let texto = '';
+  let deTitle = false;    // el texto salió de `title` (se quita mientras dura y se devuelve al salir)
   let puseEtiqueta = false;
   let puseDescripcion = false;
   let reloj = 0;
@@ -51,6 +57,11 @@ export function instalarTooltips() {
   const colocar = () => {
     const r = actual.getBoundingClientRect();
     const t = tip.getBoundingClientRect();
+    if (actual.closest('[data-tip-lado="izquierda"]') && r.left - t.width - SEPARACION >= MARGEN) {
+      tip.style.top = `${Math.max(MARGEN, Math.min(r.top + r.height / 2 - t.height / 2, window.innerHeight - t.height - MARGEN))}px`;
+      tip.style.left = `${r.left - t.width - SEPARACION}px`;
+      return;
+    }
     let top = r.bottom + SEPARACION;
     if (top + t.height > window.innerHeight - MARGEN) top = r.top - t.height - SEPARACION;
     let left = r.left + r.width / 2 - t.width / 2;
@@ -71,7 +82,7 @@ export function instalarTooltips() {
     clearTimeout(reloj);
     if (actual) {
       // Si alguien cambió el `title` mientras estaba quitado, manda el suyo.
-      if (!actual.hasAttribute('title')) actual.setAttribute('title', texto);
+      if (deTitle && !actual.hasAttribute('title')) actual.setAttribute('title', texto);
       if (puseEtiqueta) actual.removeAttribute('aria-label');
       if (puseDescripcion) actual.removeAttribute('aria-describedby');
       if (abierto()) ultimoCierre = Date.now();
@@ -80,6 +91,7 @@ export function instalarTooltips() {
     if (conPopover && tip.matches(':popover-open')) tip.hidePopover();
     actual = null;
     texto = '';
+    deTitle = false;
     puseEtiqueta = false;
     puseDescripcion = false;
   };
@@ -87,15 +99,17 @@ export function instalarTooltips() {
   const entrar = (el, inmediato = false) => {
     if (el === actual) return;
     salir();
-    const t = el.getAttribute('title');
+    const t = el.getAttribute('title') || el.getAttribute('data-tip');
     if (!t || !t.trim()) return;
+    if (el.getAttribute('aria-expanded') === 'true') return;   // con su menú abierto, el nombre sobra
     actual = el;
     texto = t;
-    el.removeAttribute('title');
+    deTitle = el.hasAttribute('title');
+    if (deTitle) el.removeAttribute('title');
     if (!el.hasAttribute('aria-label') && !el.hasAttribute('aria-labelledby') && !el.textContent.trim()) {
       el.setAttribute('aria-label', t);
       puseEtiqueta = true;
-    } else if (!el.hasAttribute('aria-describedby')) {
+    } else if (el.getAttribute('aria-label') !== t && !el.hasAttribute('aria-describedby')) {
       el.setAttribute('aria-describedby', tip.id);
       puseDescripcion = true;
     }
@@ -110,7 +124,7 @@ export function instalarTooltips() {
   document.addEventListener('pointerover', (e) => {
     if (e.pointerType === 'touch') return;
     const t = e.target instanceof Element ? e.target : null;
-    const el = t ? t.closest('[title]') : null;
+    const el = t ? t.closest('[title], [data-tip]') : null;
     // EL DE DENTRO MANDA (4-nov-2026). Un botón con `title` dentro de una casilla que también lo tiene: antes se
     // seguía con el de la casilla y el del botón salía NATIVO, encima, con otro estilo (dos a la vez). Como el
     // `title` del que está abierto se quita, `closest` solo encuentra otro si hay uno más adentro.
@@ -126,7 +140,7 @@ export function instalarTooltips() {
 
   document.addEventListener('focusin', (e) => {
     const el = e.target instanceof Element ? e.target : null;
-    if (!el || !el.hasAttribute('title')) return;
+    if (!el || !(el.hasAttribute('title') || el.hasAttribute('data-tip'))) return;
     let deTeclado = false;
     try { deTeclado = el.matches(':focus-visible'); } catch { deTeclado = false; }
     if (deTeclado) entrar(el, true);

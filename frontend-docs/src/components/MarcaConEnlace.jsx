@@ -24,6 +24,7 @@ import {
 } from '../utils/marcasConEnlace';
 import ObservacionDeMarca, { EtiquetaDeObservacion } from './ObservacionDeMarca';
 import { AISLADO } from '../../../design/incidencias/PanelDeIncidencia.jsx';
+import { useDestinoDelLector } from '../utils/contextoDelLector';
 import './MarcaConEnlace.css';
 
 const NOMBRE_DE_TIPO = {
@@ -206,6 +207,7 @@ export function DialogoDeSello({ inicial, autor, editar = false, onAceptar, onCe
 // ── El panel de una marca elegida ────────────────────────────────────────────
 export function PanelDeMarca({ API, obra, marca, esAutor, versionVigente = null, onLlevar = null,
                               editable = false, colores = [], onCambio, onPublicar, onBorrar, onCerrar }) {
+  const destino = useDestinoDelLector();       // el cuerpo del lector (utils/contextoDelLector.js)
   const [subiendo, setSubiendo] = useState(0);
   const [eligiendo, setEligiendo] = useState(null);      // 'cita' | 'foto'
   const [viendo, setViendo] = useState(null);            // índice de la foto abierta
@@ -272,7 +274,7 @@ export function PanelDeMarca({ API, obra, marca, esAutor, versionVigente = null,
   const sello = marca.style?.sello;
 
   return createPortal(
-    <aside className="mce-panel" aria-label={`${tipo} seleccionada`} {...AISLADO}>
+    <aside className="mce-panel" aria-label={`${tipo} seleccionada`} data-obstaculo {...AISLADO}>
       <header className="mce-panel__cab">
         <span className="mce-panel__ico">{marca.kind === 'foto' ? <IconoFoto /> : marca.kind === 'sello' ? <IconoSello /> : <IconoEnlace />}</span>
         <div className="mce-panel__tit">
@@ -458,7 +460,7 @@ export function PanelDeMarca({ API, obra, marca, esAutor, versionVigente = null,
           onCerrar={() => setEditandoSello(false)} />
       )}
     </aside>,
-    document.querySelector('.pdf-viewer .pdf-body') || document.querySelector('.file-viewer-content') || document.body,
+    destino,
   );
 }
 

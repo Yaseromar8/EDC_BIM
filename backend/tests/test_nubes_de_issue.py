@@ -124,6 +124,14 @@ def test_con_la_incidencia_cerrada_nadie_debe_nada_en_sus_nubes():
     assert nub.incidencia_viva({**ISSUE, 'estado': 'Corregido'})
 
 
+def test_por_entregar_es_lo_que_se_debe_en_una_incidencia_viva():
+    pedida = nube(estado=nub.PEDIDA, destino_usuario=CADISTA)
+    assert nub.por_entregar(pedida, {**ISSUE, 'estado': 'Abierto'})
+    assert nub.por_entregar(nube(estado=nub.DEVUELTA), {**ISSUE, 'estado': 'Corregido'})
+    assert not nub.por_entregar(nube(estado=nub.ENTREGADA), ISSUE)          # ya entregó: lo revisa el encargado
+    assert not nub.por_entregar(pedida, {**ISSUE, 'estado': 'Anulado'})      # anulada: nadie debe nada
+
+
 def test_el_plazo_es_el_de_la_nube_o_el_de_la_incidencia():
     assert nub.plazo({'vence_en': '2026-11-20'}, {'vence_en': '2026-11-30'}) == '2026-11-20'
     assert nub.plazo({'vence_en': None}, {'vence_en': '2026-11-30'}) == '2026-11-30'
@@ -143,6 +151,15 @@ def test_cada_negativa_dice_su_tipo_y_su_codigo_http():
         ok, por_que = nub.puede(acto, n, ISSUE, sus)
         assert not ok and por_que.tipo == tipo and nub.HTTP_DE_LA_NEGATIVA[tipo] == http, (acto, por_que)
         assert isinstance(por_que, str) and por_que                                 # y sigue siendo su texto
+
+
+def test_como_entra_una_nube_suelta_lo_dice_una_sola_regla():
+    # La usan la ruta que la añade y la hoja que ofrece a qué incidencias puede ir (docs/archivos/25, P2).
+    assert nub.como_se_anade({'revisor'}) == ('observacion', False)      # la añade; la asigna su encargado
+    assert nub.como_se_anade({'admin'}) == ('observacion', True)
+    assert nub.como_se_anade({'encargado'}) == ('encargo', True)
+    assert nub.como_se_anade({'revisor', 'encargado'}) == ('observacion', True)
+    assert nub.como_se_anade({'aportante'}) is None and nub.como_se_anade(set()) is None
 
 
 def test_quien_revisa_es_una_sola_regla():

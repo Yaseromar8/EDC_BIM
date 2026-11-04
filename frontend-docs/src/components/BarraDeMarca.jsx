@@ -27,11 +27,12 @@ import { conSuConversacion, estadoDeObservacion, etiquetaDeCita, fechaCorta, fec
 import SelectorDeDocumento from './SelectorDeDocumento';
 import IconoModulo from './IconoModulo';
 import IncidenciaLateral from './IncidenciaLateral';
-import AsignacionDeNube, { CrearEncargo, pedirCompararNube, useNubeDeLaMarca } from './AsignacionDeNube';
-import { colorDeIndice } from '../../../design/incidencias/reglas.js';
-import { destinoDelLector } from './ObservacionesDelPlano';
+import AsignacionDeNube, { AsignarSuelta, pedirCompararNube, useNubeDeLaMarca } from './AsignacionDeNube';
+import { colorDeIndice, iniciales } from '../../../design/incidencias/reglas.js';
+import { useDestinoDelLector } from '../utils/contextoDelLector';
 import { DialogoDeSello } from './MarcaConEnlace';
 import { AISLADO } from '../../../design/incidencias/PanelDeIncidencia.jsx';
+import useCapa from '../../../design/ui/useCapa.js';
 import './BarraDeMarca.css';
 
 const NOMBRE = {
@@ -44,16 +45,12 @@ const CON_RELLENO = ['cloud', 'rect'];
 const CON_GROSOR = ['cloud', 'rect', 'arrow', 'pen'];
 
 const Ico = ({ children, size = 16 }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9"
     strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{children}</svg>
 );
 const IcoTexto = () => <Ico><path d="M5 6h14M12 6v13" /></Ico>;
 const IcoRef = () => <Ico><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1" /><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1" /></Ico>;
 const IcoIssue = () => <IconoModulo nombre="incidencia" tamano={16} />;
-function iniciales(nombre) {
-  const p = String(nombre || '?').replace(/@.*/, '').split(/[\s._-]+/).filter(Boolean);
-  return ((p[0] || '?')[0] + (p[1] ? p[1][0] : '')).toUpperCase();
-}
 const IcoComentario = () => <IconoModulo nombre="comentario" tamano={16} />;
 const TOPE_COMENTARIO = 2000;
 // «11:14» si es de hoy; si no, «03 nov.»: la fecha entera va en el título.
@@ -83,7 +80,7 @@ function Boton({ etiqueta, activo, onClick, disabled, peligro, children, conText
 
 export default function BarraDeMarca({ API, obra, marca, esAutor, editable, colores = [], posicion, versionVigente = null,
                                        revisionSugerida = '', pedido = null, bajoLaMarca = null,
-                                       incidenciasParaEncargo = [], onRecargar = null, onAbrirIncidencia = null,
+                                       onAbrirIncidencia = null, conPanel = false, panelAbierto = false,
                                        onLlevar = null, onDuplicar, onCambio, onPublicar, onBorrar, onCerrar }) {
   const [abierto, setAbierto] = useState(null);         // 'estilo' | 'texto' | 'referencias' | 'comentarios'
   const [comentario, setComentario] = useState('');
@@ -96,63 +93,47 @@ export default function BarraDeMarca({ API, obra, marca, esAutor, editable, colo
   const [triangulo, setTriangulo] = useState(marca.style?.triangulo || revisionSugerida || '');
   const raiz = useRef(null);
   const nota = useRef(null);
+  const quienAbrio = useRef(null);     // el botón que abrió lo desplegado: el foco vuelve a él al cerrarlo
+  const destino = useDestinoDelLector();
   const citas = marca.citas || [];
   const comentarios = marca.style?.comentarios || [];
   const obs = marca.observacion || null;
   const viva = observacionViva(obs);
-  // Si esta marca es una NUBE de su incidencia (46), a quién le toca aportar va en su nota, arriba de los comentarios.
-  const [nube, setNube] = useNubeDeLaMarca(API, marca);
+  // Si esta marca es una NUBE de su incidencia (46), a quién le toca aportar (de la copia única de las nubes).
+  const nube = useNubeDeLaMarca(API, marca);
   const asignable = !!nube && (nube.actos || []).includes('asignar');
-  // Una nube SUYA que aún no es de ninguna incidencia: el encargado puede repartirla a su equipo (encargo).
-  const repartible = marca.kind === 'cloud' && !obs && esAutor && !marca._unsaved && incidenciasParaEncargo.length > 0;
+  // Una nube SUELTA (de ninguna incidencia) se asigna si el servidor dice a qué incidencias puede ir y cómo.
+  const repartible = marca.kind === 'cloud' && !obs && !marca._unsaved && (marca.puede_unirse_a || []).length > 0;
   const estilo = marca.style || {};
   // El chip «🔗 N» de la hoja abre la lista de referencias, no solo elige la marca.
   useEffect(() => { if (pedido) setAbierto(pedido.que); }, [pedido?.n]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Esc cierra el menú desplegado (y, sin nada desplegado, deja la marca). Dentro del menú las teclas no salen (AISLADO,
-  // para que escribir no dispare los atajos del lector): por eso el Esc de dentro se atiende en `alTeclearDentro`.
-  const alEscape = useCallback(() => {
-    if (lateral || eligiendo || sello) return;
-    if (abierto) setAbierto(null); else onCerrar?.();
-  }, [abierto, lateral, eligiendo, sello, onCerrar]);
+  // ESCAPE Y EL CLIC FUERA, COMO CAPAS (design/ui/capas.js, docs/archivos/25 P5). Antes: dos escuchadores propios, uno
+  // en captura porque el panel de la incidencia paraba las teclas, y un `setTimeout(0)` para que el clic que abría la
+  // barra no la cerrase. Ahora:
+  //   · la barra (nivel 2): Escape o un clic fuera la sueltan. Fuera es fuera de la barra, de su nota y —si su panel
+  //     está abierto con ella (una nube de una incidencia)— de ese panel;
+  //   · lo desplegado en ella (nivel 3): Escape lo pliega, aunque se esté escribiendo en la nota;
+  //   · un diálogo abierto desde ella (nivel 4: elegir documento, el sello, la observación lateral) para el clic fuera
+  //     y Escape lo cierra.
+  // `propios`: la barra y su nota (Escape escribiendo en ellas las cierra). `contiene`: además su panel (pulsar en él no la
+  // suelta; escribir en él y pulsar Escape, tampoco: ese Escape es del campo).
+  const propios = (t) => !!(raiz.current?.contains(t) || nota.current?.contains(t));
+  const contiene = (t) => propios(t) || !!(conPanel && t?.closest?.('[data-panel-de-incidencia]'));
+  useCapa(true, { nivel: 2, escapeDesdeCampos: true, contiene, propios, cerrar: () => onCerrar?.() });
+  useCapa(!!abierto, { nivel: 3, escapeDesdeCampos: true, alPulsarFuera: false, contiene, propios,
+    cerrar: () => setAbierto(null) });
+  useCapa(!!(lateral || eligiendo || sello), { nivel: 4, bloquea: true, alPulsarFuera: false, contiene: () => true,
+    cerrar: () => { setLateral(null); setEligiendo(false); setSello(false); } });
+  // Al plegar lo desplegado, el foco vuelve al botón que lo abrió (si estaba dentro de lo que se cerró).
+  const antes = useRef(abierto);
   useEffect(() => {
-    const alTeclear = (e) => { if (e.key === 'Escape') alEscape(); };
-    window.addEventListener('keydown', alTeclear);
-    return () => window.removeEventListener('keydown', alTeclear);
-  }, [alEscape]);
-  const alTeclearDentro = (e) => {
-    e.stopPropagation();
-    if (e.key === 'Escape') { e.preventDefault(); alEscape(); }
-  };
-
-  // Un clic fuera deja la marca, como en ACC (3-nov-2026: «cuando le doy clic afuera sigue viéndose»). Arrastrar la hoja
-  // no cuenta como clic, y lo de dentro del menú, las marcas y sus distintivos no llegan aquí (paran el clic).
-  // onCerrar llega nuevo en cada dibujado del lector: va en una ref para que el escuchador no se quite y se ponga en
-  // cada uno (al soltar el ratón el lector se redibuja, y el clic caía justo en el hueco).
-  const cerrar = useRef(onCerrar);
-  cerrar.current = onCerrar;
-  useEffect(() => {
-    if (lateral || eligiendo || sello) return undefined;
-    let desde = null;
-    const alBajar = (e) => { desde = [e.clientX, e.clientY]; };
-    const alClicar = (e) => {
-      const t = e.target;
-      if (raiz.current?.contains(t) || nota.current?.contains(t)) return;
-      if (t?.closest?.('[role="dialog"], [role="alertdialog"]')) return;
-      if (desde && Math.hypot(e.clientX - desde[0], e.clientY - desde[1]) > 5) return;
-      cerrar.current?.();
-    };
-    // Después del clic que la abrió: React monta el menú mientras ese mismo clic aún sube hasta el documento.
-    const espera = setTimeout(() => {
-      document.addEventListener('pointerdown', alBajar, true);
-      document.addEventListener('click', alClicar);
-    }, 0);
-    return () => {
-      clearTimeout(espera);
-      document.removeEventListener('pointerdown', alBajar, true);
-      document.removeEventListener('click', alClicar);
-    };
-  }, [lateral, eligiendo, sello]);
+    const habia = antes.current;
+    antes.current = abierto;
+    if (!habia || abierto) return;
+    const a = document.activeElement;
+    if (!a || a === document.body || raiz.current?.contains(a) || nota.current?.contains(a)) quienAbrio.current?.focus();
+  }, [abierto]);
 
   const cambiar = useCallback(async (cuerpo, ok) => {
     try {
@@ -185,14 +166,22 @@ export default function BarraDeMarca({ API, obra, marca, esAutor, editable, colo
     return d.observacion;
   };
 
-  // Que el menú y lo desplegado queden enteros a la vista: si chocan con la columna de herramientas del lector o con el
-  // borde de la ventana, se corren a la izquierda (el de comentarios, con su botón, quedaba debajo, 3-nov-2026).
-  // El panel de la incidencia llega un instante después de elegir la nube: se vuelve a medir cuando ya está.
-  const [remedida, setRemedida] = useState(0);
+  // QUE EL MENÚ Y LO DESPLEGADO QUEDEN ENTEROS A LA VISTA: si chocan con el borde de la ventana o con lo que en el lector
+  // se declara OBSTÁCULO (`data-obstaculo`: el estuche de herramientas, el panel de la incidencia), se corren a la
+  // izquierda. Se mide al cambiar lo que puede moverlo —lo desplegado, la posición, el panel— y cuando el lector cambia de
+  // tamaño o la propia barra (crece al llegar los datos de su nube); antes, con un temporizador de 400 ms «porque el
+  // panel llega después» y buscando cada pieza por su clase.
+  const [medida, setMedida] = useState(0);
   useEffect(() => {
-    const t = setTimeout(() => setRemedida(x => x + 1), 400);
-    return () => clearTimeout(t);
-  }, [marca.id, abierto]);
+    if (typeof ResizeObserver === 'undefined') return undefined;
+    const ro = new ResizeObserver(() => setMedida(x => x + 1));
+    if (destino) ro.observe(destino);
+    // Lo mismo que se mide abajo: la barra y lo desplegado (el contenedor no cambia de tamaño cuando ellas crecen).
+    for (const el of [raiz.current, nota.current]) {
+      for (const hijo of el?.querySelectorAll(':scope > .bdm-barra, :scope > .bdm-menu') || []) ro.observe(hijo);
+    }
+    return () => ro.disconnect();
+  }, [destino, abierto]);
   useLayoutEffect(() => {
     for (const el of [raiz.current, nota.current]) {
       if (!el) continue;
@@ -207,15 +196,18 @@ export default function BarraDeMarca({ API, obra, marca, esAutor, editable, colo
       }
       if (!caja) continue;
       let tope = window.innerWidth - 8;
-      const columna = document.querySelector('.pdf-rail')?.getBoundingClientRect();
-      if (columna && columna.width && columna.top < caja.bottom && columna.bottom > caja.top) tope = Math.min(tope, columna.left - 8);
-      // Tampoco debajo del PANEL DE LA INCIDENCIA, que se abre a la vez al pulsar una nube (4-nov-2026).
-      const panel = document.querySelector('.pinc--dentro')?.getBoundingClientRect();
-      if (panel && panel.width && panel.top < caja.bottom && panel.bottom > caja.top) tope = Math.min(tope, panel.left - 8);
+      for (const o of destino?.querySelectorAll?.('[data-obstaculo]') || []) {
+        const r = o.getBoundingClientRect();
+        // Cuenta el que se cruza con ella en altura y no queda entero a su izquierda (también si la barra empieza ya
+        // debajo de él: entonces se corre hasta dejarlo libre).
+        if (r.width && r.top < caja.bottom && r.bottom > caja.top && r.right > caja.left) tope = Math.min(tope, r.left - 8);
+      }
       const sobra = Math.min(derecha - tope, caja.left - 8);
       if (sobra > 0) el.style.marginLeft = `${-sobra}px`;
     }
-  }, [abierto, posicion?.left, posicion?.top, bajoLaMarca?.top, comentarios.length, remedida]);
+    // Lo que cambia su CONTENIDO también la mueve: al llegar los datos de su nube aparece «Asignada a…» y crece.
+  }, [abierto, posicion?.left, posicion?.top, bajoLaMarca?.top, comentarios.length, citas.length, nube?.destino_nombre,
+      asignable, panelAbierto, medida, destino]);
 
   // Al abrir la conversación, se ve lo último.
   useEffect(() => {
@@ -248,8 +240,21 @@ export default function BarraDeMarca({ API, obra, marca, esAutor, editable, colo
     if (ok) onBorrar();
   };
 
-  const alternar = (que) => setAbierto(a => (a === que ? null : que));
+  const alternar = (que, e) => {
+    if (e?.currentTarget) quienAbrio.current = e.currentTarget;
+    setAbierto(a => (a === que ? null : que));
+  };
   const est = obs ? estadoDeObservacion(obs.estado) : null;
+  const alMoverseConFlechas = (e) => {
+    if (!['ArrowRight', 'ArrowLeft', 'Home', 'End'].includes(e.key)) return;
+    const botones = [...e.currentTarget.querySelectorAll('button:not([disabled])')];
+    const k = botones.indexOf(document.activeElement);
+    if (!botones.length) return;
+    e.preventDefault();
+    const sig = e.key === 'Home' ? 0 : e.key === 'End' ? botones.length - 1
+      : (k + (e.key === 'ArrowRight' ? 1 : -1) + botones.length) % botones.length;
+    botones[sig].focus();
+  };
   const motivoFijo = viva ? 'Tiene una observación abierta: queda fija mientras el responsable la corrige.'
     : marca.publicado ? 'Publicada: retírala de la obra para cambiarla.' : null;
 
@@ -259,15 +264,14 @@ export default function BarraDeMarca({ API, obra, marca, esAutor, editable, colo
   // ASIGNAR, DIRECTO EN LA BARRA (4-nov-2026, el dueño: «es muy confuso tener que ir hasta el mensaje»): su propia nota.
   const notaDeAsignar = (
     <div className="bdm-menu bdm-nota-de-marca" role="dialog" aria-label="Asignar la nube">
-      <AsignacionDeNube API={API} obra={obra} marca={marca} nube={nube} editarDeEntrada
-        onCambio={(n) => { setNube(n); onRecargar?.(); }} onCerrar={() => setAbierto(null)}
+      <AsignacionDeNube API={API} obra={obra} marca={marca} nube={nube} editarDeEntrada onCerrar={() => setAbierto(null)}
         pedidoSugerido={comentarios[comentarios.length - 1]?.texto || ''} />
     </div>
   );
   const notaDeEncargo = (
     <div className="bdm-menu bdm-nota-de-marca" role="dialog" aria-label="Encargo para tu equipo">
-      <CrearEncargo API={API} marca={marca} incidencias={incidenciasParaEncargo} onCancelar={() => setAbierto(null)}
-        onHecho={() => { setAbierto('asignar'); onRecargar?.(); }} />
+      <AsignarSuelta API={API} obra={obra} marca={marca} onCancelar={() => setAbierto(null)}
+        pedidoSugerido={comentarios[comentarios.length - 1]?.texto || ''} onHecho={() => setAbierto(null)} />
     </div>
   );
   const notaDeComentarios = (
@@ -296,8 +300,11 @@ export default function BarraDeMarca({ API, obra, marca, esAutor, editable, colo
   return (
     <>
     <div ref={raiz} className="bdm" style={posicion} role="toolbar" aria-label={`${NOMBRE[marca.kind] || 'Marca'} elegida`}
-      {...AISLADO} onKeyDown={alTeclearDentro}>
-      <div className="bdm-barra">
+      {...AISLADO}>
+      {/* LA BARRA NO ENCOGE AL ALEJAR (docs/archivos/25 P7): sus botones son para pulsar y no bajan de su tamaño
+          (WCAG 2.5.8); lo que encoge con la hoja es lo dibujado en ella. Con el teclado, las flechas pasan de un botón
+          al siguiente (patrón WAI-ARIA «toolbar»). */}
+      <div className="bdm-barra" onKeyDown={alMoverseConFlechas}>
         <span className="bdm-info" data-tip={[marca.version_number ? `V${marca.version_number}` : '', marca.created_by,
           fechaCorta(marca.created_at), marca.publicado ? 'Publicada' : 'Borrador'].filter(Boolean).join(' · ')}>
           {NOMBRE[marca.kind] || 'Marca'}
@@ -305,33 +312,33 @@ export default function BarraDeMarca({ API, obra, marca, esAutor, editable, colo
 
         {esAutor && marca.kind !== 'sello' && (
           <Boton etiqueta={editable ? 'Estilo' : motivoFijo || 'Estilo'} activo={abierto === 'estilo'} disabled={!editable}
-            onClick={() => alternar('estilo')}>
+            onClick={e => alternar('estilo', e)}>
             <i className="bdm-muestra" style={{ background: estilo.color || '#d97757' }} />
           </Boton>
         )}
         {esAutor && marca.kind === 'text' && (
           <Boton etiqueta={editable ? 'Editar texto' : motivoFijo || 'Editar texto'} activo={abierto === 'texto'} disabled={!editable}
-            onClick={() => { setTexto(marca.text || ''); alternar('texto'); }}><IcoTexto /></Boton>
+            onClick={e => { setTexto(marca.text || ''); alternar('texto', e); }}><IcoTexto /></Boton>
         )}
         {esAutor && marca.kind === 'sello' && (
           <Boton etiqueta="Editar el sello" onClick={() => setSello(true)}><IcoSello /></Boton>
         )}
 
         <Boton etiqueta={citas.length ? `Referencias (${citas.length})` : 'Referencia'} activo={abierto === 'referencias'}
-          onClick={() => alternar('referencias')} conTexto={citas.length > 0}>
+          onClick={e => alternar('referencias', e)} conTexto={citas.length > 0}>
           <IcoRef />{citas.length > 0 && <b>{citas.length}</b>}
         </Boton>
 
         {!marca._unsaved && (
           <Boton etiqueta={comentarios.length ? `Comentarios (${comentarios.length})` : 'Comentar'}
-            activo={abierto === 'comentarios'} onClick={() => alternar('comentarios')} conTexto={comentarios.length > 0}>
+            activo={abierto === 'comentarios'} onClick={e => alternar('comentarios', e)} conTexto={comentarios.length > 0}>
             <IcoComentario />{comentarios.length > 0 && <b>{comentarios.length}</b>}
           </Boton>
         )}
 
         {nube && (asignable || nube.destino_nombre) && (
           <Boton etiqueta={nube.destino_nombre ? `Asignada a ${nube.destino_nombre}` : 'Asignar'} activo={abierto === 'asignar'}
-            onClick={() => alternar('asignar')} conTexto={!!nube.destino_nombre}>
+            onClick={e => alternar('asignar', e)} conTexto={!!nube.destino_nombre}>
             {nube.destino_nombre
               ? <span className="bdm-quien-chip" style={{ background: colorDeIndice(nube.color) }}>{iniciales(nube.destino_nombre)}</span>
               : <Ico><circle cx="12" cy="8" r="3.5" /><path d="M5 20a7 7 0 0 1 14 0" /></Ico>}
@@ -349,8 +356,8 @@ export default function BarraDeMarca({ API, obra, marca, esAutor, editable, colo
           <Boton etiqueta="Crear observación" onClick={() => setLateral('nueva')}><IcoIssue /></Boton>
         )}
         {repartible && (
-          <Boton etiqueta="Encargo para mi equipo" activo={abierto === 'encargo'} onClick={() => alternar('encargo')}>
-            <Ico><circle cx="9" cy="8" r="3" /><path d="M3.5 19a5.5 5.5 0 0 1 11 0" /><path d="M16 11h5M18.5 8.5v5" /></Ico>
+          <Boton etiqueta="Asignar" activo={abierto === 'encargo'} onClick={e => alternar('encargo', e)}>
+            <Ico><circle cx="12" cy="8" r="3.5" /><path d="M5 20a7 7 0 0 1 14 0" /></Ico>
           </Boton>
         )}
 
@@ -489,7 +496,7 @@ export default function BarraDeMarca({ API, obra, marca, esAutor, editable, colo
           onCerrar={() => setSello(false)} />
       )}
       {lateral && (
-        <IncidenciaLateral API={API} obra={obra} contenedor={destinoDelLector()} onVolver={() => setLateral(null)}
+        <IncidenciaLateral API={API} obra={obra} contenedor={destino} onVolver={() => setLateral(null)}
           issueId={lateral === 'nueva' ? null : lateral}
           // Abierta desde su marca: el panel va a la pestaña «Nubes», a ESTA nube.
           nube={lateral === 'nueva' ? null : marca.id}
@@ -500,7 +507,7 @@ export default function BarraDeMarca({ API, obra, marca, esAutor, editable, colo
       )}
     </div>
     {notaAparte && (
-      <div ref={nota} className="bdm bdm-suelta" style={bajoLaMarca} {...AISLADO} onKeyDown={alTeclearDentro}>
+      <div ref={nota} className="bdm bdm-suelta" {...AISLADO} style={bajoLaMarca}>
         {abierto === 'encargo' ? notaDeEncargo : abierto === 'asignar' ? notaDeAsignar : notaDeComentarios}
       </div>
     )}

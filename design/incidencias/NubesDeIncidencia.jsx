@@ -10,7 +10,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { enviarJson } from './piezas.jsx';
-import { colorDeIndice, colorDePersona } from './reglas.js';
+import { colorDeIndice, iniciales } from './reglas.js';
 
 // Las fechas del historial ya traen su zona; las de la base no (UTC sin zona): igual que en el panel.
 function fechaCorta(iso) {
@@ -18,10 +18,6 @@ function fechaCorta(iso) {
   const d = s ? new Date(/T\d{2}:\d{2}(:\d{2}(\.\d+)?)?$/.test(s) ? `${s}Z` : s) : null;
   return d && !Number.isNaN(d.getTime())
     ? d.toLocaleString('es-PE', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '';
-}
-function iniciales(nombre) {
-  const p = String(nombre || '?').replace(/@.*/, '').split(/[\s._-]+/).filter(Boolean);
-  return ((p[0] || '?')[0] + (p[1] ? p[1][0] : '')).toUpperCase();
 }
 
 const TIPO_DE_MARCA = { cloud: 'Nube', rect: 'Recuadro', ellipse: 'Elipse', arrow: 'Flecha', line: 'Línea', text: 'Texto',
@@ -42,7 +38,12 @@ function rotulo(n) {
   return `${n.estado_etiqueta}${r}`;
 }
 
-/** Lo que se entrega en una ronda: documentos (subidos a Docs o enlazados desde Docs) y notas, antes de entregar. */
+/**
+ * LA ENTREGA, IGUAL PARA CUALQUIER PEDIDO (4-nov-2026, el dueño: «hay casos donde se adjuntarán fotos o documentos y
+ * otros donde solo se trata de mover un cuadro o borrar una descripción… profesional, estándar y escalable»): como la
+ * respuesta de ACC o el «listo para revisar» de Procore, quien aporta RESPONDE qué hizo y, si hace falta, adjunta
+ * (subido a la carpeta de la incidencia o enlazado de Docs). Basta una de las dos cosas; quien pidió acepta o devuelve.
+ */
 function Entrega({ entorno, obra, codigo, ronda, ocupado, onEntregar }) {
   const [lista, setLista] = useState([]);
   const [nota, setNota] = useState('');
@@ -67,6 +68,8 @@ function Entrega({ entorno, obra, codigo, ronda, ocupado, onEntregar }) {
   return (
     <div className="pinc-acto nub-entrega">
       <b>Entregar{ronda > 1 ? ` la ronda ${ronda}` : ''}</b>
+      <textarea value={nota} rows={2} maxLength={2000} onChange={e => setNota(e.target.value)} autoFocus
+        placeholder="Qué se hizo" aria-label="Respuesta" />
       {lista.length > 0 && (
         <ul className="nub-entregas">
           {lista.map((e, k) => (
@@ -83,15 +86,13 @@ function Entrega({ entorno, obra, codigo, ronda, ocupado, onEntregar }) {
       <div className="pinc-botones">
         {entorno.subirFoto && (
           <button type="button" className="pinc-btn" disabled={subiendo || ocupado} onClick={() => fichero.current?.click()}>
-            {subiendo ? 'Subiendo…' : 'Subir a Docs'}</button>
+            {subiendo ? 'Subiendo…' : 'Adjuntar'}</button>
         )}
         {Elegir && (
           <button type="button" className="pinc-btn" disabled={subiendo || ocupado} onClick={() => setEligiendo(true)}>
             Enlazar de Docs</button>
         )}
       </div>
-      <textarea value={nota} rows={2} maxLength={2000} onChange={e => setNota(e.target.value)}
-        placeholder="Nota (opcional): un dato, una cota, lo que aclare la entrega" aria-label="Nota de la entrega" />
       <div className="pinc-botones">
         <button type="button" className="pinc-btn pinc-btn--prim" disabled={!entregas.length || subiendo || ocupado}
           onClick={() => onEntregar(entregas)}>Entregar</button>
@@ -170,11 +171,13 @@ function Nube({ entorno, obra, ob, i, n, numero, color, abierta, onAbrir, ocupad
   const tipo = TIPO_DE_MARCA[marca.kind] || 'Marca';
   const titulo = n.pedido || (n.estado === 'sin_asignar' ? 'Sin asignar' : `${tipo}${marca.page != null ? ` · pág. ${marca.page}` : ''}`);
   const rondas = n.rondas || [];
-  const debeEntregar = puede('entregar') && (n.estado === 'pedida' || n.estado === 'devuelta');
+  // «Entregar» lo da el servidor solo a quien tiene la nube asignada y le toca (docs/archivos/25: la pantalla no decide).
+  const debeEntregar = puede('entregar');
   return (
     <li ref={caja} className={`nub${abierta ? ' es-abierta' : ''}${n.clase === 'encargo' ? ' es-encargo' : ''}`}
       style={{ '--nube': color }}>
-      <button type="button" className="nub-cab" aria-expanded={abierta} onClick={onAbrir}>
+      <button type="button" className="nub-cab" aria-expanded={abierta}
+        onClick={() => { onAbrir(); if (!abierta && onIrAMarca && n.markup_id != null) onIrAMarca(n.markup_id); }}>
         <span className="nub-num">{numero}</span>
         <b className={n.pedido ? undefined : 'es-vacio'}>{titulo}</b>
         {n.destino_nombre && (
@@ -245,9 +248,6 @@ export default function NubesDeIncidencia({ entorno, obra, ob, i, datos, foco = 
   const [ocupado, setOcupado] = useState(false);
   useEffect(() => { if (foco != null) setAbierta(String(foco)); }, [foco]);
   const nubes = datos?.nubes || [];
-  // UN COLOR POR PERSONA EN CADA PLANO (el dueño: «máximo serán 10 personas»): el mismo para todas sus nubes.
-  const colorDe = colorDePersona(nubes.map(n => (n.destino_usuario ? `u${n.destino_usuario}`
-    : n.destino_empresa ? `e${n.destino_empresa}` : null)));
   const hacer = async (cuerpo, ok) => {
     setOcupado(true);
     try {
@@ -261,11 +261,12 @@ export default function NubesDeIncidencia({ entorno, obra, ob, i, datos, foco = 
   return (
     <div className="nub-pestana">
       <ol className="nub-lista">
-        {nubes.map((n, k) => {
-          const quien = n.destino_usuario ? `u${n.destino_usuario}` : n.destino_empresa ? `e${n.destino_empresa}` : null;
+        {nubes.map((n) => {
+          // EL NÚMERO Y EL COLOR, LOS DEL SERVIDOR (47): el mismo número que en la hoja, para quien ve todas o no; el
+          // color de su persona en este plano (gris mientras no se asigna).
           return (
-            <Nube key={clave(n)} entorno={entorno} obra={obra} ob={ob} i={i} n={n} numero={k + 1}
-              color={n.color != null ? colorDeIndice(n.color) : quien ? colorDe(quien) : '#b0aea5'} abierta={abierta === clave(n)} ocupado={ocupado} hacer={hacer}
+            <Nube key={clave(n)} entorno={entorno} obra={obra} ob={ob} i={i} n={n} numero={n.numero}
+              color={colorDeIndice(n.color)} abierta={abierta === clave(n)} ocupado={ocupado} hacer={hacer}
               onAbrir={() => setAbierta(a => (a === clave(n) ? null : clave(n)))} onIrAMarca={onIrAMarca}
               onComparar={onComparar} />
           );

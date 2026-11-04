@@ -78,8 +78,31 @@ Detalle en `docs/archivos/18`, `19`, `20` y `21`.
   de servidor de `11d072a4` (solo entrega el asignado; entregada, el pendiente va al encargado; añadir una nube suelta
   según el papel). Pruebas: suite backend verde salvo el fallo previo ajeno de `test_reconstruccion_desde_cero`;
   ensayo de la fase 1 22/22, de nubes 51/51 y de la carpeta 12/12 contra PostgreSQL real con la 47 aplicada dos veces.
-- EXACT NEXT ACTION (nubes): el dueño autoriza el push de la fase 1; luego 47 → backend → 47. Después, fase 2
-  (doc 25 §4: el cliente solo pinta).
+- Commit siguiente (4-nov, doc 25 §4 ter): FASES 2 Y 3, la pantalla.
+  - **Fase 2 · el cliente solo pinta.**
+    - Una sola copia de las nubes por incidencia (`design/incidencias/datosDeNubes.js`): la hoja, la barra, la leyenda y
+      el panel se actualizan a la vez tras cada acto.
+    - El servidor da `puede_unirse_a`, `numero`, `actos` y `por_entregar`; la pantalla ya no decide papeles ni estados.
+    - Añadir y asignar una nube suelta es un solo acto, en una transacción.
+    - Un solo sistema de tooltips (`title` y `data-tip`).
+  - **Fase 3 · interacción estándar.**
+    - Lo elegido, en una máquina de estados del lector (`utils/seleccionDelLector.js`).
+    - Escape y el clic fuera, como capas (`design/ui/capas.js`).
+    - Los sitios del lector, por contexto, y obstáculos declarados (`data-obstaculo`), sin `querySelector` ni
+      temporizadores.
+    - Rótulos medidos con su fuente; la barra no encoge.
+    - Teclado y foco en nubes, pines, barra y pestañas.
+    - El overlay, partido en piezas.
+  - Toca backend (sin migración nueva) y portal. **Publicar:** 47 → backend → 47 → portal.
+  - **Pruebas:**
+    - suite backend verde salvo el fallo previo ajeno;
+    - `npm test` 35 bancos, con el nuevo `nubesDeLaPantalla` 18/18;
+    - ensayos de fase 1 29/29, nubes 51/51 y carpeta 12/12;
+    - banco en el navegador con eventos reales: la copia única, Escape y el clic fuera, teclado, tooltips, nube suelta
+      en un acto, «Mi trabajo» y la barra apartada del panel.
+- EXACT NEXT ACTION (nubes): el dueño autoriza el push de `nubes-fase1` y de las fases 2 y 3; luego 47 → backend → 47 →
+  portal. Pendientes del dueño: que el encargado acepte su propia entrega (recomendado: no) y el permiso explícito de la
+  carpeta de la incidencia (doc 25 §5).
 - EXACT NEXT ACTION (histórica, ya hecha para c3144a3d): Manual Deploy de `visor-ecd-backend-va` y DESPUÉS de `visor-ecd-portal` con el HEAD de main;
   comprobar `/api/health` y el bundle del portal (Cloudflare ~5 min). Luego, recorrido real con dos personas (correo
   a observadores y subida de fotos sin probar en producción).

@@ -16,8 +16,10 @@
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { actosDeIssue, aQuienLeTocaIssue, esDelResponsable, estadoDeIssue, issueViva, pasosDeEstado,
+import { actosDeIssue, aQuienLeTocaIssue, esDelResponsable, estadoDeIssue, iniciales, issueViva, pasosDeEstado,
          puedeVerificar, textoDeEvento, usaEstado } from './reglas.js';
+import { fijarNubes, recargarNubes } from './datosDeNubes.js';
+import useNubesDeIncidencia from './useNubesDeIncidencia.js';
 import { ClasificacionDeAlta, ObservadoresDeAlta, ResponsableDeAlta, camposDelTipo, enviarJson, faltaObligatorio,
          leerJson, useObraDeIncidencias } from './piezas.jsx';
 import NubesDeIncidencia from './NubesDeIncidencia.jsx';
@@ -293,26 +295,25 @@ const ESTADOS_DONDE_SE_REASIGNA = ['Borrador', 'Abierto', 'En curso', 'Reabierto
 // (design/iconos/iconos-obra.json, «incidencia»: retícula 24, trazo 1,5, puntas redondas), relleno con el color de su
 // estado (lista cerrada D-24) y perfilado en Light #faf9f5 para que se lea sobre cualquier plano. El número, en IBM
 // Plex Sans 600, como el resto de la interfaz.
-const PIN = 'M12 21s-6.5-5.6-6.5-10.8a6.5 6.5 0 0 1 13 0C18.5 15.4 12 21 12 21z';
+// EL PIN PROPIO (4-nov-2026, el dueño: «que no vaya el número y que tengamos uno propio, ese parece al de Autodesk»):
+// un HITO, como los de topografía: un rombo del color de su estado, con su punto, y la punta de abajo en el sitio
+// (y = 21, como el anterior). `numero` se acepta y no se pinta.
+const PIN = 'M12 21 4 12 12 3 20 12Z';
+// Su geometría, para quien lo coloca en la hoja: dibujado en una caja de `lado`, con la punta (el sitio) en `punta` y
+// el centro del rombo en `centro`, las dos en el eje vertical de esa caja.
+export const GEOMETRIA_DEL_PIN = { lado: 24, punta: 21, centro: 12 };
 const CLARO = '#faf9f5';
-export function PinDeIncidencia({ color = '#d97757', tamano = 28, numero = null, ...resto }) {
+export function PinDeIncidencia({ color = '#d97757', tamano = 28, numero: _numero = null, ...resto }) {
   return (
     <svg width={tamano} height={tamano} viewBox="0 0 24 24" aria-hidden="true" style={{ flex: 'none' }} {...resto}>
-      <path d={PIN} fill={color} stroke={CLARO} strokeWidth="1.5" strokeLinejoin="round" />
-      {numero != null
-        ? <text x="12" y="12.8" textAnchor="middle" fontSize={String(numero).length > 2 ? 5.5 : 7} fontWeight="600" fill={CLARO}
-            fontFamily="var(--a-font-sans, 'IBM Plex Sans', sans-serif)">{numero}</text>
-        : <><path d="M12 6.7v3.8" stroke={CLARO} strokeWidth="1.5" strokeLinecap="round" /><circle cx="12" cy="13.2" r="1" fill={CLARO} /></>}
+      <path d={PIN} fill={color} stroke={CLARO} strokeWidth="1.6" strokeLinejoin="round" />
+      <circle cx="12" cy="12" r="2.3" fill={CLARO} />
     </svg>
   );
 }
 
 export const numeroDe = (codigo) => (/(\d+)\s*$/.exec(String(codigo || '')) || [])[1]?.replace(/^0+(?=\d)/, '') || null;
 
-function iniciales(nombre) {
-  const p = String(nombre || '?').replace(/@.*/, '').split(/[\s._-]+/).filter(Boolean);
-  return ((p[0] || '?')[0] + (p[1] ? p[1][0] : '')).toUpperCase();
-}
 
 /** Una miniatura de un adjunto: la imagen si la aplicación sabe darla; si no, el icono de documento. */
 function Miniatura({ entorno, adjunto, onAbrir, onQuitar }) {
@@ -338,7 +339,7 @@ function Miniatura({ entorno, adjunto, onAbrir, onQuitar }) {
   );
 }
 
-function Detalle({ entorno, obra, ob, issueId, extraDetalle, nube = null, onIrAMarca = null, onCompararNube = null,
+function Detalle({ entorno, obra, ob, issueId, extraDetalle, nube = null, vez = null, onIrAMarca = null, onCompararNube = null,
                   onCambio, onCargada, onDescartada }) {
   const API = entorno.API ?? '';
   const [i, setI] = useState(null);
@@ -351,8 +352,10 @@ function Detalle({ entorno, obra, ob, issueId, extraDetalle, nube = null, onIrAM
   // TRES PESTAÑAS (3-nov-2026, el dueño: «lo que le corresponde al issue, lo que corresponde a cada nube y el
   // historial; si hago clic a la nube se abre en esa pestaña»).
   const [pestana, setPestana] = useState(nube != null ? 'nubes' : 'incidencia');
-  const [nubes, setNubes] = useState(null);
-  useEffect(() => { if (nube != null) setPestana('nubes'); }, [nube]);
+  // LAS NUBES, DE LA COPIA ÚNICA (datosDeNubes.js): lo que cambia en la barra de la nube se ve aquí y al revés.
+  // Cada pedido nuevo (un clic en su pin o en una de sus nubes) abre donde se pidió: el pin, en «Incidencia»; la nube,
+  // en «Nubes». Antes, con «Nubes» ya abierta, el clic en el pin no llevaba a su información (4-nov-2026).
+  useEffect(() => { setPestana(nube != null ? 'nubes' : 'incidencia'); }, [nube, vez]);
   const comentando = useRef(false);    // un comentario no sale dos veces aunque se pulse dos veces seguidas
 
   const cargar = useCallback(async () => {
@@ -362,10 +365,8 @@ function Detalle({ entorno, obra, ob, issueId, extraDetalle, nube = null, onIrAM
   }, [API, issueId]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { cargar(); }, [cargar]);
   // Las nubes van aparte: un servidor sin la 46 responde que no, y el panel sigue con sus dos pestañas de siempre.
-  const cargarNubes = useCallback(async () => {
-    setNubes(await leerJson(entorno, `${API}/api/issues/${encodeURIComponent(issueId)}/nubes`));
-  }, [API, issueId]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { cargarNubes(); }, [cargarNubes]);
+  const leerNubes = (id) => leerJson(entorno, `${API}/api/issues/${encodeURIComponent(id)}/nubes`);
+  const nubes = useNubesDeIncidencia(leerNubes, issueId);
 
   const hacer = async (ruta, cuerpo, ok) => {
     setOcupado(true);
@@ -376,7 +377,7 @@ function Detalle({ entorno, obra, ob, issueId, extraDetalle, nube = null, onIrAM
       setActo(null); setEditando(null);
       if (ok) entorno.avisar.ok(ok);
       onCambio?.(d);
-      cargarNubes();                // el estado de la incidencia cambia el de sus nubes («por verificar»)
+      recargarNubes(leerNubes, issueId).catch(() => {});   // su estado cambia el de sus nubes («por verificar»)
       return true;
     } catch (e) {
       entorno.avisar.error(e.message);
@@ -488,10 +489,8 @@ function Detalle({ entorno, obra, ob, issueId, extraDetalle, nube = null, onIrAM
   const reasignable = dirige && ESTADOS_DONDE_SE_REASIGNA.includes(i.estado);
   const listaDeNubes = nubes?.nubes || [];
   const hayNubes = listaDeNubes.length > 0 || (nubes?.encargos_internos || 0) > 0;
-  const numeroDeNube = (id) => {
-    const k = listaDeNubes.findIndex(n => n.id != null && String(n.id) === String(id));
-    return k < 0 ? null : k + 1;
-  };
+  // El número que guarda la nube (47): el mismo en la hoja, en la pestaña y en el historial.
+  const numeroDeNube = (id) => listaDeNubes.find(n => String(n.id) === String(id))?.numero ?? null;
   const verPestana = hayNubes ? pestana : (pestana === 'nubes' ? 'incidencia' : pestana);
   const nombresObs = (i.observadores || []).map(u => ob.nombres[u] || `usuario ${u}`);
 
@@ -610,21 +609,33 @@ function Detalle({ entorno, obra, ob, issueId, extraDetalle, nube = null, onIrAM
         </div>
       )}
 
-      <div className="pinc-pestanas pinc-pestanas--panel" role="tablist">
-        <button type="button" role="tab" aria-selected={verPestana === 'incidencia'} onClick={() => setPestana('incidencia')}>
-          Incidencia <span>{comentarios.length || ''}</span></button>
-        {hayNubes && (
-          <button type="button" role="tab" aria-selected={verPestana === 'nubes'} onClick={() => setPestana('nubes')}>
-            Nubes <span>{listaDeNubes.length || ''}</span></button>
-        )}
-        <button type="button" role="tab" aria-selected={verPestana === 'historial'} onClick={() => setPestana('historial')}>
-          Historial <span>{historial.length || ''}</span></button>
+      {/* PESTAÑAS COMO MANDA EL PATRÓN (WAI-ARIA «tabs»): cada una dice qué panel controla, solo la elegida está en el
+          orden del tabulador y las flechas pasan de una a otra. */}
+      <div className="pinc-pestanas pinc-pestanas--panel" role="tablist" aria-label="Partes de la incidencia"
+        onKeyDown={(ev) => {
+          const orden = ['incidencia', ...(hayNubes ? ['nubes'] : []), 'historial'];
+          const k = orden.indexOf(verPestana);
+          const sig = ev.key === 'ArrowRight' ? orden[(k + 1) % orden.length]
+            : ev.key === 'ArrowLeft' ? orden[(k - 1 + orden.length) % orden.length]
+              : ev.key === 'Home' ? orden[0] : ev.key === 'End' ? orden[orden.length - 1] : null;
+          if (!sig) return;
+          ev.preventDefault();
+          setPestana(sig);
+          ev.currentTarget.querySelector(`#pinc-tab-${issueId}-${sig}`)?.focus();
+        }}>
+        {[['incidencia', 'Incidencia', comentarios.length], ...(hayNubes ? [['nubes', 'Nubes', listaDeNubes.length]] : []),
+          ['historial', 'Historial', historial.length]].map(([clave, rotulo, cuantos]) => (
+          <button key={clave} type="button" role="tab" id={`pinc-tab-${issueId}-${clave}`} aria-controls={`pinc-panel-${issueId}`}
+            aria-selected={verPestana === clave} tabIndex={verPestana === clave ? 0 : -1} onClick={() => setPestana(clave)}>
+            {rotulo} <span>{cuantos || ''}</span></button>
+        ))}
       </div>
+      <div id={`pinc-panel-${issueId}`} role="tabpanel" aria-labelledby={`pinc-tab-${issueId}-${verPestana}`} className="pinc-tabpanel">
 
       {verPestana === 'nubes' && (
         <NubesDeIncidencia entorno={entorno} obra={obra} ob={ob} i={i} datos={nubes} foco={nube} onIrAMarca={onIrAMarca}
           onComparar={onCompararNube}
-          onCambio={(d) => { setNubes(d); cargar(); }} />
+          onCambio={(d) => { fijarNubes(i.id, d); cargar(); }} />
       )}
 
       {verPestana === 'historial' && (
@@ -794,6 +805,7 @@ function Detalle({ entorno, obra, ob, issueId, extraDetalle, nube = null, onIrAM
         <button type="button" className="pinc-btn pinc-btn--prim" disabled={!comentario.trim() || ocupado} onClick={comentar}>Comentar</button>
       </div>
       </>}
+      </div>
     </div>
   );
 }
@@ -870,7 +882,7 @@ export const AISLADO = Object.fromEntries(['onMouseDown', 'onMouseUp', 'onMouseM
 
 export default function PanelDeIncidencia({ entorno, obra, issueId = null, nueva = null, crear = null, titulo = null,
                                             extraAlta = null, extraDetalle = null, contenedor = null,
-                                            nube = null, onIrAMarca = null, onCompararNube = null,
+                                            nube = null, vez = null, onIrAMarca = null, onCompararNube = null,
                                             onVolver = null, onCreada, onCambio, onCerrar }) {
   const ob = useObraDeIncidencias(entorno, obra);
   const [id, setId] = useState(issueId);
@@ -881,7 +893,10 @@ export default function PanelDeIncidencia({ entorno, obra, issueId = null, nueva
   const cabecera = id ? (codigo || 'Incidencia') : (titulo || (tipoNuevo ? `Nueva ${tipoNuevo.etiqueta.toLowerCase()}` : 'Nueva incidencia'));
   const destino = contenedor || document.body;
   return createPortal(
+    // `data-obstaculo`: lo que el lector no tapa (la barra de la marca se aparta); `data-panel-de-incidencia`: pulsar
+    // en él no suelta la nube cuya incidencia enseña (docs/archivos/25).
     <aside className={`pinc${contenedor ? ' pinc--dentro' : ''}`} aria-label={id ? `Incidencia ${codigo || ''}` : 'Nueva incidencia'}
+      data-obstaculo data-panel-de-incidencia
       {...AISLADO}>
       <header className="pinc-cab">
         {onVolver && <button type="button" className="pinc-icono" onClick={onVolver} aria-label="Volver"><Ico><path d="M15 6l-6 6 6 6" /></Ico></button>}
@@ -896,7 +911,7 @@ export default function PanelDeIncidencia({ entorno, obra, issueId = null, nueva
       </header>
       {id ? (
         <Detalle key={id} entorno={entorno} obra={obra} ob={ob} issueId={id} extraDetalle={extraDetalle}
-          nube={nube} onIrAMarca={onIrAMarca} onCompararNube={onCompararNube}
+          nube={nube} vez={vez} onIrAMarca={onIrAMarca} onCompararNube={onCompararNube}
           onCargada={(d) => { setCodigo(d?.codigo || null); setCargada(d); }} onCambio={onCambio}
           onDescartada={() => { onCambio?.(null); if (onVolver) onVolver(); else onCerrar?.(); }} />
       ) : (

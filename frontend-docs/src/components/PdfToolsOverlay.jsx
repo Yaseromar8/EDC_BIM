@@ -2,25 +2,26 @@
 // Mediciones (distancia/área/conteo), anotaciones (nube, flecha, rect, lápiz, texto)
 // y calibración de escala. Geometrías en coordenadas PDF (independientes del zoom).
 import React, { useState, useEffect, useRef, useCallback, useLayoutEffect } from 'react';
-import { createPortal } from 'react-dom';
-import { incidenciaDeLaDireccion, nubeDeLaDireccion, sinIncidencia } from '../utils/enlacesDeArchivos';
 import toast from 'react-hot-toast';
 import { API } from '../utils/helpers';
 import { apiFetch } from '../utils/apiFetch';
 import { PanelDeMarca, DialogoDeSello } from './MarcaConEnlace';
 import BarraDeMarca from './BarraDeMarca';
 import ObservacionesDelPlano from './ObservacionesDelPlano';
-import { PinDeIncidencia, numeroDe } from '../../../design/incidencias/PanelDeIncidencia.jsx';
+import { GEOMETRIA_DEL_PIN, PinDeIncidencia, numeroDe } from '../../../design/incidencias/PanelDeIncidencia.jsx';
 import { colorDeIndice } from '../../../design/incidencias/reglas.js';
-import { miIdDeSesion } from './AsignacionDeNube';
+import { alCambiarNubes } from '../../../design/incidencias/datosDeNubes.js';
+import { fuentesListas } from '../../../design/ui/medirTexto.js';
 import { estadoDeIssue } from '../utils/estadosDeIssue';
-import { estadoDeObservacion, observacionViva } from '../utils/marcasConEnlace';
-import { estadoDeSello, marcaDeLaDireccion, fechaCorta } from '../utils/marcasConEnlace';
+import { observacionViva } from '../utils/marcasConEnlace';
+import { estadoDeSello, fechaCorta } from '../utils/marcasConEnlace';
+import { SIN_SELECCION, pedidoAlPanel, pedidoALaBarra } from '../utils/seleccionDelLector';
+import { RotuloDeIncidencia, RotuloDeNube } from './nubes/RotulosDeLaHoja';
+import LeyendaDeNubes from './nubes/LeyendaDeNubes';
 
-const inicialesDe = (nombre) => {
-  const p = String(nombre || '?').replace(/@.*/, '').split(/[\s._-]+/).filter(Boolean);
-  return ((p[0] || '?')[0] + (p[1] ? p[1][0] : '')).toUpperCase();
-};
+// El nombre de cada tipo de marca, para quien navega con el teclado o un lector de pantalla.
+const NOMBRE_DE_MARCA = { cloud: 'Nube', rect: 'Rectángulo', arrow: 'Flecha', text: 'Texto', pen: 'Trazo',
+  measure: 'Medición', area: 'Área', count: 'Conteo', sello: 'Sello', foto: 'Foto' };
 
 // El sello mide lo mismo EN LA HOJA (puntos PDF), como un sello de goma: al alejar el plano se hace pequeño
 // con él. 150 × 62 pt ≈ 53 × 22 mm de papel.
@@ -141,7 +142,7 @@ function conTirador(g, i, p) {
 
 export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, tool, setTool, color, userName,
                                          versionDeLasMarcas = null, versionVigente = null, onIrAVersion = null,
-                                         panelDelPlano = false, onPanelDelPlano = null, onIrAPagina = null,
+                                         seleccion = SIN_SELECCION, despachar = () => {}, onIrAPagina = null,
                                          onObservacionesDelPlano = null, nombreDelDocumento = '' }) {
   const [markups, setMarkups] = useState([]);          // todos los del documento
   const [calibrations, setCalibrations] = useState({}); // { page: {units_per_pdf, display_unit} }
@@ -149,40 +150,28 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
   const [textDraft, setTextDraft] = useState(null);    // { px, py } posición de input de texto
   const [calibAsk, setCalibAsk] = useState(null);      // { p1, p2 } pidiendo distancia real
   const [recalibrar, setRecalibrar] = useState(false);  // «Cambiar» la escala ya fijada
-  const [elegida, setElegida] = useState(null);         // id de la marca abierta en su panel
+  // LO ELEGIDO (la marca y su barra, el panel del plano) lo lleva el lector en UNA máquina de estados
+  // (utils/seleccionDelLector.js, docs/archivos/25 P4): aquí solo se lee y se piden actos.
+  const elegida = seleccion.marca;
+  const elegir = (m, que = null) => despachar({ tipo: 'elegirMarca', id: m.id, que,
+    incidencia: m.kind === 'cloud' && m.observacion?.id ? m.observacion.id : null });
+  const elegirId = (id) => despachar({ tipo: 'elegirMarca', id });
+  const soltar = () => despachar({ tipo: 'soltarMarca' });
   const [selloEn, setSelloEn] = useState(null);         // { p } donde se colocará un sello
   const [enOtras, setEnOtras] = useState([]);           // [{ version_id, version_number, marcas }]
   // OBSERVACIONES DEL PLANO (docs/archivos/18): tras un acto se vuelven a pedir las marcas (su etiqueta de
   // observación) y cuántas del plano siguen sin cerrar (el número del botón del rail).
   const [vuelta, setVuelta] = useState(0);
-  // LA LEYENDA DEL PLANO (46): plegada, las iniciales de color de quien tiene nubes; abierta, sus nombres.
-  const [leyendaAbierta, setLeyendaAbierta] = useState(false);
   // LOS PINES (2-nov-2026, docs/archivos/21): las incidencias del plano con su punto en la hoja; el que se está
   // levantando (fantasma, gris) y el pedido al panel del plano (abrir el alta con un pin, o una incidencia).
   const [obsPlano, setObsPlano] = useState([]);
   const [pinPendiente, setPinPendiente] = useState(null);
   const [abiertaDelPlano, setAbiertaDelPlano] = useState(null);
-  const [pedidoDelPlano, setPedidoDelPlano] = useState(null);
-  const [pedidoDeMarca, setPedidoDeMarca] = useState(null);   // { id, que, n }: abrir el menú de la marca en algo
-  const pedirAlPlano = (vista, pin = null, nube = null) => {
-    setPedidoDelPlano(p => ({ vista, pin, nube, n: (p?.n || 0) + 1 }));
-    onPanelDelPlano?.(true);
-  };
-  // Desde «Mi trabajo» (3-nov-2026): la dirección trae una incidencia de ESTE plano; se abre en su panel una vez.
-  useEffect(() => {
-    if (!nodeId) return undefined;
-    const id = incidenciaDeLaDireccion(window.location.search, nodeId);
-    if (id === null) return undefined;
-    const nube = nubeDeLaDireccion(window.location.search);   // y, si viene de una nube, en ella
-    // Tras el arranque del lector: al cambiar de documento, PDFViewer cierra el panel del plano en SU efecto, que corre
-    // después de este.
-    const t = setTimeout(() => {
-      window.history.replaceState(window.history.state, '',
-        window.location.pathname + sinIncidencia(window.location.search) + window.location.hash);
-      pedirAlPlano(id, null, nube);
-    }, 0);
-    return () => clearTimeout(t);
-  }, [nodeId]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Lo que cambia en las nubes (en la barra o en el panel) se ve en la hoja: se vuelven a pedir sus marcas.
+  useEffect(() => alCambiarNubes(() => setVuelta(v => v + 1)), []);
+  // Los rótulos se miden con su fuente: al cargar las fuentes, se vuelven a medir.
+  const [, setFuentes] = useState(0);
+  useEffect(() => { let vivo = true; fuentesListas().then(() => { if (vivo) setFuentes(x => x + 1); }); return () => { vivo = false; }; }, []);
   const avisarDelPlano = useRef(onObservacionesDelPlano);
   avisarDelPlano.current = onObservacionesDelPlano;
   // LAS MARCAS SON DE LA VERSIÓN QUE SE MIRA (migración 36). Sin versión (enlace compartido, banco viejo),
@@ -190,7 +179,6 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
   const versionId = versionDeLasMarcas?.id || null;
   const vigenteId = versionVigente?.id || null;
   const enVigente = !versionId || !vigenteId || String(versionId) === String(vigenteId);
-  const marcaPedida = useRef(marcaDeLaDireccion(window.location.search).marca);
   const svgRef = useRef(null);
   const draftRef = useRef(null);
   draftRef.current = draft;
@@ -205,15 +193,10 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
   const faltaEscala = midiendo && (!cal || recalibrar);
 
   // ── Cargar markups + calibraciones del documento ──
-  // Solo al cambiar de documento o de versión se suelta la marca elegida: una recarga tras un acto (`vuelta`, p. ej.
-  // al crear un encargo) la deja abierta, para seguir con ella (antes se cerraba sola).
-  const cargadoDe = useRef(null);
+  // Qué queda elegido al cambiar de documento o de versión lo decide el lector («documento»); una recarga tras un acto
+  // (`vuelta`) no toca lo elegido.
   useEffect(() => {
     if (!nodeId) return undefined;
-    if (cargadoDe.current !== `${nodeId}|${versionId}`) {
-      cargadoDe.current = `${nodeId}|${versionId}`;
-      setElegida(null);   // otro documento: el panel de una marca del anterior no sigue abierto
-    }
     // Saltar a otro documento mientras estas dos respuestas viajaban pintaba
     // las marcas -y la escala- del documento ANTERIOR encima del que estas
     // mirando. Una redlinea sobre el plano equivocado no es una demora, es un
@@ -232,10 +215,6 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
         const delPlano = Array.isArray(d.observaciones_del_plano) ? d.observaciones_del_plano : [];
         setObsPlano(delPlano);
         avisarDelPlano.current?.(delPlano.filter(o => observacionViva(o)).length);
-        // Llegada desde «Citado en»: la marca pedida se abre en su panel (PDFViewer ya fue a su página).
-        const pedida = marcaPedida.current;
-        if (pedida && lista.some(m => String(m.id) === String(pedida))) setElegida(Number(pedida) || pedida);
-        marcaPedida.current = null;
       }).catch(() => {});
     apiFetch(`${API}/api/pdf/calibration?node_id=${nodeId}`).then(r => r.json())
       .then(d => { if (vigente && d.success) setCalibrations(d.calibrations || {}); }).catch(() => {});
@@ -252,17 +231,9 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
     setPorPixel(prev => (Math.abs(prev - k) > 0.01 ? k : prev));
   });
 
-  // El panel de una marca y el del plano ocupan el mismo costado: abrir uno cierra el otro.
-  // Salvo una NUBE de una incidencia: su barra y su panel van juntos.
-  const esNubeConPanel = (id) => {
-    const m = id == null ? null : markups.find(x => x.id === id);
-    return !!(m && m.kind === 'cloud' && m.observacion?.id);
-  };
-  useEffect(() => { if (elegida != null && !esNubeConPanel(elegida)) onPanelDelPlano?.(false); }, [elegida]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => {
-    if (panelDelPlano) { if (!esNubeConPanel(elegida)) setElegida(null); }
-    else { setPinPendiente(null); setAbiertaDelPlano(null); setPedidoDelPlano(null); }
-  }, [panelDelPlano]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Con el panel cerrado no hay pin a medio poner ni incidencia abierta que señalar: se deriva, sin efectos.
+  const pinDelAlta = seleccion.panel ? pinPendiente : null;
+  const abiertaEnElPanel = seleccion.panel ? abiertaDelPlano : null;
 
   // ── Transformaciones ──
   const toPdf = useCallback((e) => {
@@ -329,12 +300,12 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
       const m = markups.find(x => x.id === elegida);
       if (!m || String(m.id).startsWith('tmp_') || !userName || m.created_by !== userName) return;
       e.preventDefault();
-      setElegida(null);
+      despachar({ tipo: 'soltarMarca' });
       deleteMarkup(m);
     };
     window.addEventListener('keydown', alTeclear);
     return () => window.removeEventListener('keydown', alTeclear);
-  }, [elegida, markups, userName]);
+  }, [elegida, markups, userName, despachar]);
 
   // Publicar o retirar: un acto de su autor (GAP 02). Desde el panel de la marca.
   const publicarMarkup = async (m) => {
@@ -357,7 +328,7 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
     const d = 12 / (vp?.scale || 1);
     const id = await saveMarkup(m.kind, trasladar(m.geometry || {}, d, -d), m.text || null,
       { ...(m.style || {}), comentarios: undefined });          // la conversación se queda en la original
-    if (id) { setElegida(id); toast.success('Duplicada: la copia es un borrador tuyo'); }
+    if (id) { elegirId(id); toast.success('Duplicada: la copia es un borrador tuyo'); }
   };
 
   const llevarMarca = async (m) => {
@@ -366,8 +337,8 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
       const d = await r.json().catch(() => ({}));
       if (!r.ok || !d.success) throw new Error(d.error || 'No se pudo llevar la marca.');
       toast.success(`Copiada a la V${versionVigente?.version_number ?? ''} como borrador. La de la V${m.version_number ?? d.desde_version} no cambia.`);
-      setElegida(null);
-      if (onIrAVersion && vigenteId) { marcaPedida.current = d.id; onIrAVersion(vigenteId); }
+      // Se elige en la vigente en cuanto llegue (el lector la elige al cambiar de versión).
+      if (onIrAVersion && vigenteId) { despachar({ tipo: 'llevarA', id: d.id }); onIrAVersion(vigenteId); } else soltar();
     } catch (e) { toast.error(e.message); }
   };
 
@@ -377,7 +348,7 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
     if (!p) return;
     const id = await saveMarkup('sello', { p }, null, { sello });
     setTool('pan');
-    if (id) setElegida(id);
+    if (id) elegirId(id);
   };
 
   // ── Editar la figura ──
@@ -408,7 +379,7 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
     if (e.button !== 0) return;
     e.preventDefault();      // y así tampoco llega el mousedown que arrastraría la hoja
     e.stopPropagation();
-    setElegida(m.id);
+    elegir(m);
     soltarArrastre.current?.();
     let a = { id: m.id, indice, desde: toPdf(e), cx: e.clientX, cy: e.clientY, movido: false, geo0: m.geometry, geo: m.geometry };
     setArrastre(a);
@@ -450,13 +421,13 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
       setTool('pan');
       const pin = { pagina: page, p: [Math.round(p[0] * 100) / 100, Math.round(p[1] * 100) / 100] };
       setPinPendiente(pin);
-      pedirAlPlano('nueva', pin);
+      despachar({ tipo: 'nuevaIncidencia', pin });
       return;
     }
     // Foto: el marcador se pone y se abre su panel para subir o elegir las fotos.
     if (tool === 'photo') {
       setTool('pan');
-      saveMarkup('foto', { p, ang: 0 }).then(id => { if (id) setElegida(id); });
+      saveMarkup('foto', { p, ang: 0 }).then(id => { if (id) elegirId(id); });
       return;
     }
     if (tool === 'stamp') { setSelloEn({ p }); return; }
@@ -553,16 +524,16 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
   };
 
   // El panel del plano no depende de la hoja: se abre aunque el PDF siga dibujándose.
-  const panelPlano = panelDelPlano ? (
+  const panelPlano = seleccion.panel ? (
         <ObservacionesDelPlano API={API} obra={projectPrefix} nodeId={nodeId} nombre={nombreDelDocumento}
           version={{ id: versionId || vigenteId, numero: versionDeLasMarcas?.version_number ?? versionVigente?.version_number }}
           // Las que esta persona ve de esta versión: publicadas o suyas, ya guardadas.
           marcas={markups.filter(m => !String(m.id).startsWith('tmp_') && (m.publicado || m.created_by === userName))}
-          pedido={pedidoDelPlano} onPinPendiente={setPinPendiente} onAbierta={setAbiertaDelPlano}
+          pedido={pedidoAlPanel(seleccion)} onPinPendiente={setPinPendiente} onAbierta={setAbiertaDelPlano}
           onIrAPin={(pin) => onIrAPagina?.(pin.pagina)}
           onCambio={() => setVuelta(v => v + 1)}
-          onIrAMarca={(m) => { onIrAPagina?.(m.page); setElegida(m.id); }}
-          onCerrar={() => onPanelDelPlano?.(false)} />
+          onIrAMarca={(m) => { onIrAPagina?.(m.page); elegir(m); }}
+          onCerrar={() => despachar({ tipo: 'cerrarPanel' })} />
   ) : null;
   if (!vp) return panelPlano;
   // La marca que se arrastra se dibuja donde va, antes de guardarla.
@@ -574,15 +545,18 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
   // En «Mover» un clic en una marca la ELIGE (su panel: referencias, fotos, publicar, borrar); en «Borrar
   // marca» la borra; con cualquier otra herramienta las marcas no se tocan, para poder dibujar encima.
   const tocable = tool === 'erase' || tool === 'pan';
-  const alTocar = (m) => (e) => {
+  const alTocar = (m, que = null) => (e) => {
     e.stopPropagation();
     if (tool === 'erase') deleteMarkup(m);
-    else if (tool === 'pan' && !String(m.id).startsWith('tmp_')) {
-      setElegida(m.id);
-      // Una NUBE de una incidencia abre también su panel, en ella (el dueño: «cuando le hago clic a la nube no se
-      // abre el panel»). La barra y el panel conviven solo en este caso.
-      if (m.kind === 'cloud' && m.observacion?.id) pedirAlPlano(String(m.observacion.id), null, m.id);
-    }
+    // Una NUBE de una incidencia abre también su panel, en ella (el dueño: «cuando le hago clic a la nube no se abre el
+    // panel»): lo resuelve «elegirMarca».
+    else if (tool === 'pan' && !String(m.id).startsWith('tmp_')) elegir(m, que);
+  };
+  // Con el teclado (Intro o espacio), lo mismo que con el clic (docs/archivos/25, P9).
+  const alTeclearMarca = (m) => (e) => {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    e.preventDefault();
+    alTocar(m)(e);
   };
   // La caja del sello en pantalla: esquina en el clic, tamaño fijo en puntos de hoja × escala del dibujado.
   const cajaDelSello = (p) => {
@@ -608,6 +582,11 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
   // más negrita»). Con la hoja a 700 px o más en pantalla van a su tamaño; por debajo, en proporción a ella, hasta el
   // 40 %. Los pines y la barra de la marca no: son para pulsar.
   const esc = Math.min(1, Math.max(0.4, (vpInfo.w || 700) / 700));
+  // Las nubes y los pines se eligen también con el teclado: con «Seleccionar» están en el orden del tabulador.
+  const enfocable = (m) => (tool === 'pan' && !String(m.id).startsWith('tmp_')
+    ? { tabIndex: 0, role: 'button', 'aria-label': `${NOMBRE_DE_MARCA[m.kind] || 'Marca'}${m.nube_numero != null ? ` ${m.nube_numero}` : ''}${m.observacion?.codigo ? ` de ${m.observacion.codigo}` : ''}`,
+        onKeyDown: alTeclearMarca(m), className: 'marca-enfocable' }
+    : {});
   const renderMarkup = (m, i) => {
     // UNA NUBE ASIGNADA SE PINTA DEL COLOR DE QUIEN APORTA (46, el dueño: «el color que dijimos en cada nube por
     // usuario»). Sin asignar, el que le dio quien la dibujó. Es solo cómo se pinta: su estilo guardado no cambia.
@@ -715,7 +694,7 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
       const caja = { x: Math.min(...xs), y: Math.min(...ys), x2: Math.max(...xs), y2: Math.max(...ys) };
       const relleno = m.style?.relleno ? { fill: m.style.relleno, fillOpacity: 0.14 } : {};
       return (
-        <g key={m.id}>
+        <g key={m.id} {...enfocable(m)}>
           <path d={cloudPolyPath(pts, radioDeFeston(m, vp?.scale, Math.min(caja.x2 - caja.x, caja.y2 - caja.y), 2.5 * esc))}
             {...common} {...relleno} strokeWidth={2.2 * grosorDe(m) * esc} />
           {m.style?.triangulo && <TrianguloDeRevision caja={caja} codigo={m.style.triangulo} color={c} escala={vp?.scale} />}
@@ -728,7 +707,7 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
       const relleno = m.style?.relleno ? { fill: m.style.relleno, fillOpacity: 0.14 } : {};
       return m.kind === 'cloud'
         ? (
-          <g key={m.id}>
+          <g key={m.id} {...enfocable(m)}>
             <path d={cloudPath(x, y, w, h, radioDeFeston(m, vp?.scale, Math.min(w, h), 2.5 * esc))} {...common} {...relleno}
               strokeWidth={2.2 * grosorDe(m) * esc} />
             {m.style?.triangulo && <TrianguloDeRevision caja={{ x, y, x2: x + w, y2: y + h }} codigo={m.style.triangulo}
@@ -867,10 +846,7 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
         {n > 0 && (
           <g transform={`translate(${bx} ${by}) scale(${esc})`}
             style={{ pointerEvents: tocable ? 'all' : 'none', cursor: tool === 'erase' ? 'not-allowed' : tool === 'pan' ? 'pointer' : 'default' }}
-            onClick={tocable ? (e) => {
-              alTocar(m)(e);
-              if (tool === 'pan') setPedidoDeMarca(p => ({ id: m.id, que: 'referencias', n: (p?.n || 0) + 1 }));
-            } : undefined}>
+            onClick={tocable ? alTocar(m, 'referencias') : undefined} data-tip={n === 1 ? '1 referencia' : `${n} referencias`}>
             <rect width={anchoB} height="16" rx="8" fill="#fff" stroke="#507294" strokeWidth="1" />
             <g transform="translate(4 2.5) scale(0.46)" fill="none" stroke="#507294" strokeWidth="2.6" strokeLinecap="round">
               <path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1" /><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1" />
@@ -881,11 +857,7 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
         {nc > 0 && (
           <g transform={`translate(${cx} ${by}) scale(${esc})`}
             style={{ pointerEvents: tocable ? 'all' : 'none', cursor: tool === 'erase' ? 'not-allowed' : tool === 'pan' ? 'pointer' : 'default' }}
-            onClick={tocable ? (e) => {
-              alTocar(m)(e);
-              if (tool === 'pan') setPedidoDeMarca(p => ({ id: m.id, que: 'comentarios', n: (p?.n || 0) + 1 }));
-            } : undefined}>
-            <title>{nc === 1 ? '1 comentario' : `${nc} comentarios`}</title>
+            onClick={tocable ? alTocar(m, 'comentarios') : undefined} data-tip={nc === 1 ? '1 comentario' : `${nc} comentarios`}>
             <rect width={anchoCB} height="16" rx="8" fill="#fff" stroke="#507294" strokeWidth="1" />
             <g transform="translate(3.5 2.2) scale(0.48)" fill="none" stroke="#507294" strokeWidth="2.4" strokeLinejoin="round">
               <path d="M5.5 4.5h13a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H11l-4.5 3v-3h-1a2 2 0 0 1-2-2v-9a2 2 0 0 1 2-2z" />
@@ -893,56 +865,16 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
             <text x="18" y="11.6" fontSize="10" fontWeight="600" fill="#507294" fontFamily="'IBM Plex Mono', monospace" style={{ pointerEvents: 'none' }}>{nc}</text>
           </g>
         )}
-        {obs && m.kind === 'cloud' && (() => {
-          // LA NUBE DE UNA INCIDENCIA: solo a quién le toca, con sus iniciales en su color. Lo demás, al pulsarla.
-          if (!m.nube?.destino_nombre) return null;
-          const quien = inicialesDe(m.nube.destino_nombre);
-          const anchoQ = quien.length * 7 + 8;
-          const qx = Math.max(4, Math.min(k.x2 - anchoQ * esc, vpInfo.w - anchoQ * esc - 4));
-          const qy = k.y - 16 * esc - 2 < 2 ? k.y2 + 2 : k.y - 16 * esc - 2;
-          return (
-            <g transform={`translate(${qx} ${qy}) scale(${esc})`}
-              style={{ pointerEvents: tocable ? 'all' : 'none', cursor: tool === 'pan' ? 'pointer' : 'default' }}
-              onClick={tocable ? alTocar(m) : undefined}>
-              <title>{`${m.nube.destino_nombre} · ${m.nube.estado_etiqueta} · ${obs.codigo}`}</title>
-              <rect width={anchoQ} height="16" rx="2" fill={colorDeIndice(m.nube.color)}
-                strokeDasharray={m.nube.clase === 'encargo' ? '3 2' : undefined} stroke={m.nube.clase === 'encargo' ? '#fff' : 'none'} />
-              <text x={anchoQ / 2} y="11.6" fontSize="9.5" fontWeight="600" fill="#fff" textAnchor="middle"
-                fontFamily="'IBM Plex Mono', monospace" style={{ pointerEvents: 'none' }}>{quien}</text>
-            </g>
-          );
-        })()}
-        {obs && m.kind !== 'cloud' && (() => {
+        {obs && m.kind === 'cloud' && (
+          // LA NUBE DE UNA INCIDENCIA: su número (el del panel) y, asignada, a quién le toca, en su color.
+          <RotuloDeNube caja={k} esc={esc} ancho={vpInfo.w} alto={vpInfo.h} numero={m.nube_numero} nube={m.nube}
+            tocable={tocable} cursor={tool === 'pan' ? 'pointer' : 'default'} onTocar={alTocar(m)} />
+        )}
+        {obs && m.kind !== 'cloud' && (
           // OBSERVACIÓN (37): «ISS-012 · Abierta» bajo la marca, con la barra del color de su estado.
-          const est = estadoDeObservacion(obs.estado);
-          const texto = `${obs.codigo} · ${obs.vencida ? 'Vencida' : est.etiqueta}`;
-          // LA NUBE ASIGNADA lleva las iniciales de quien aporta, con SU color en este plano (46): de un vistazo,
-          // a quién le toca cada nube de la hoja.
-          const quien = m.nube?.destino_nombre ? inicialesDe(m.nube.destino_nombre) : null;
-          const anchoQ = quien ? quien.length * 7 + 10 : 0;
-          const anchoT = Math.round(texto.length * 6.1) + 16;
-          const anchoE = anchoT + anchoQ;
-          const ex = Math.max(4, Math.min(k.x, vpInfo.w - anchoE * esc - 4));
-          const ey = k.y2 + 22 * esc > vpInfo.h ? Math.max(4, k.y - 22 * esc) : k.y2 + 4 * esc;
-          return (
-            <g transform={`translate(${ex} ${ey}) scale(${esc})`}
-              style={{ pointerEvents: tocable ? 'all' : 'none', cursor: tool === 'pan' ? 'pointer' : 'default' }}
-              onClick={tocable ? alTocar(m) : undefined}>
-              <title>{`${obs.encargo ? 'Encargo del equipo · ' : ''}${obs.titulo || ''}${obs.responsable ? ` — ${obs.responsable}` : ''}${m.nube?.destino_nombre
-                ? `\nNube asignada a ${m.nube.destino_nombre} · ${m.nube.estado_etiqueta}` : ''}`}</title>
-              <rect width={anchoE} height="18" rx="3" fill="#fff" stroke={obs.vencida ? '#b93535' : m.nube?.clase === 'encargo' ? '#8a877f' : '#cccac0'}
-                strokeWidth="1" strokeDasharray={m.nube?.clase === 'encargo' || obs.encargo ? '3 2' : undefined} />
-              <rect x="0.5" y="0.5" width="4" height="17" rx="2" fill={est.color} />
-              <text x="10" y="12.6" fontSize="10.5" fontWeight="500" fill={obs.vencida ? '#b93535' : '#141413'}
-                fontFamily="'IBM Plex Sans', sans-serif" style={{ pointerEvents: 'none' }}>{texto}</text>
-              {quien && <>
-                <rect x={anchoT - 2} y="3" width={anchoQ - 2} height="12" rx="2" fill={colorDeIndice(m.nube.color)} />
-                <text x={anchoT + 3} y="12.2" fontSize="9" fontWeight="600" fill="#fff"
-                  fontFamily="'IBM Plex Mono', monospace" style={{ pointerEvents: 'none' }}>{quien}</text>
-              </>}
-            </g>
-          );
-        })()}
+          <RotuloDeIncidencia caja={k} esc={esc} ancho={vpInfo.w} alto={vpInfo.h} obs={obs} nube={m.nube}
+            tocable={tocable} cursor={tool === 'pan' ? 'pointer' : 'default'} onTocar={alTocar(m)} />
+        )}
       </g>
     );
   });
@@ -955,27 +887,32 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
     // Las ANULADAS no se clavan en la hoja (2-nov-2026): se levantaron por error; siguen en la lista del panel.
     const pines = obsPlano.filter(o => o.pin && o.estado !== 'Anulado' && o.pin.pagina === page && Array.isArray(o.pin.p)
       && (enVigente || !o.version_id || String(o.version_id) === String(versionId)));
+    const G = GEOMETRIA_DEL_PIN;
     const uno = (key, p, color, numero, extra = {}) => {
       const s = toScr(p);
       return (
-        <PinDeIncidencia key={key} x={s[0] - T / 2} y={s[1] - T * (21 / 24)} tamano={T} color={color} numero={numero} {...extra} />
+        <PinDeIncidencia key={key} x={s[0] - T / 2} y={s[1] - T * (G.punta / G.lado)} tamano={T} color={color} numero={numero} {...extra} />
       );
     };
     return (
       <g>
         {pines.map(o => {
-          const abierta = String(abiertaDelPlano) === String(o.id);
+          const abierta = String(abiertaEnElPanel) === String(o.id);
+          const abrir = () => despachar({ tipo: 'abrirIncidencia', id: o.id });
           return (
-            <g key={o.id} style={{ cursor: 'pointer' }} pointerEvents="all"
+            <g key={o.id} style={{ cursor: 'pointer' }} pointerEvents="all" className="marca-enfocable"
+              role="button" tabIndex={0} aria-label={`${o.codigo} · ${estadoDeIssue(o.estado).etiqueta}`}
+              data-tip={`${o.codigo} · ${estadoDeIssue(o.estado).etiqueta}`}
               onPointerDown={e => e.stopPropagation()} onMouseDown={e => e.stopPropagation()}
-              onClick={e => { e.stopPropagation(); pedirAlPlano(o.id); }}>
-              <title>{`${o.codigo} · ${estadoDeIssue(o.estado).etiqueta} · ${o.titulo || ''}`}</title>
-              {abierta && (() => { const s = toScr(o.pin.p); return <circle cx={s[0]} cy={s[1] - T * (10.8 / 24)} r={T * 0.4} fill="none" stroke="#141413" strokeWidth="1.5" />; })()}
+              onClick={e => { e.stopPropagation(); abrir(); }}
+              onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); abrir(); } }}>
+              {/* El anillo de la abierta, centrado en el rombo del pin (su `centro`), un poco mayor que él. */}
+              {abierta && (() => { const s = toScr(o.pin.p); return <circle cx={s[0]} cy={s[1] - T * ((G.punta - G.centro) / G.lado)} r={T * 0.42} fill="none" stroke="#141413" strokeWidth="1.5" />; })()}
               {uno(o.id, o.pin.p, estadoDeIssue(o.estado).color, numeroDe(o.codigo))}
             </g>
           );
         })}
-        {pinPendiente && pinPendiente.pagina === page && uno('nuevo', pinPendiente.p, '#72706b', null)}
+        {pinDelAlta && pinDelAlta.pagina === page && uno('nuevo', pinDelAlta.p, '#72706b', null)}
       </g>
     );
   };
@@ -1024,48 +961,8 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
         </div>
       )}
 
-      {/* LA LEYENDA DEL PLANO (3-nov-2026, doc 23 §6.4): quién es cada color. Una fila por persona o empresa con
-          nubes asignadas en el plano, con cuántas le faltan por entregar. Arriba a la izquierda: arriba al centro va
-          el aviso de la versión. Va en el MARCO del lector, no en la hoja: no se mueve ni se corta al mover el plano. */}
-      {(() => {
-        const gente = new Map();
-        for (const m of markups) {
-          const n = m.nube;
-          if (!n || !n.destino_nombre) continue;
-          const k = `${n.color}|${n.destino_nombre}`;
-          const g = gente.get(k) || { nombre: n.destino_nombre, empresa: n.destino_es_empresa, color: n.color, nubes: 0, deben: 0 };
-          g.nubes += 1;
-          if (n.estado === 'pedida' || n.estado === 'devuelta') g.deben += 1;
-          gente.set(k, g);
-        }
-        const lista = [...gente.values()].sort((a, b) => (a.color ?? 99) - (b.color ?? 99));
-        if (!lista.length) return null;
-        const marco = document.querySelector('.pdf-viewer .pdf-lienzo-zona');
-        const leyenda = (
-          <div className={`leyenda-nubes${leyendaAbierta ? ' es-abierta' : ''}`} onPointerDown={e => e.stopPropagation()}>
-            <button type="button" className="leyenda-nubes__cab" aria-expanded={leyendaAbierta}
-              onClick={() => setLeyendaAbierta(v => !v)}
-              title={leyendaAbierta ? 'Plegar la leyenda' : 'Quién es cada color'}>
-              <span>Nubes</span>
-              {!leyendaAbierta && lista.map(g => (
-                <i key={`${g.color}|${g.nombre}`} style={{ background: colorDeIndice(g.color) }}>{inicialesDe(g.nombre)}</i>
-              ))}
-            </button>
-            {leyendaAbierta && (
-              <ul>
-                {lista.map(g => (
-                  <li key={`${g.color}|${g.nombre}`}>
-                    <i style={{ background: colorDeIndice(g.color) }}>{inicialesDe(g.nombre)}</i>
-                    <span className="leyenda-nubes__quien">{g.nombre}{g.empresa ? ' · empresa' : ''}</span>
-                    <small>{g.deben ? `${g.deben} por entregar` : g.nubes === 1 ? '1 nube' : `${g.nubes} nubes`}</small>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        );
-        return marco ? createPortal(leyenda, marco) : leyenda;
-      })()}
+      {/* LA LEYENDA DEL PLANO (doc 23 §6.4): quién es cada color, en el marco del lector. */}
+      <LeyendaDeNubes marcas={markups} />
 
       {/* El panel de la marca elegida: referencias, fotos, sello, publicar y borrar. */}
       {marcaElegida && marcaElegida.kind !== 'foto' && (() => {
@@ -1077,10 +974,14 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
         return (
           <BarraDeMarca key={marcaElegida.id} API={API} obra={projectPrefix} marca={marcaElegida} colores={COLORS}
             onAbrirIncidencia={marcaElegida.observacion?.id
-              ? () => pedirAlPlano(String(marcaElegida.observacion.id), null, marcaElegida.kind === 'cloud' ? marcaElegida.id : null)
+              ? () => despachar({ tipo: 'abrirIncidencia', id: marcaElegida.observacion.id,
+                                  nube: marcaElegida.kind === 'cloud' ? marcaElegida.id : null })
               : null}
+            // Su panel abierto con ella (una nube de una incidencia): pulsar en él no la suelta.
+            conPanel={marcaElegida.kind === 'cloud' && !!marcaElegida.observacion?.id && !!seleccion.panel}
+            panelAbierto={!!seleccion.panel}
             revisionSugerida={(/(?:^|[-_ .])([A-Z]\d{1,2})(?=\.[a-z0-9]+$|[-_ ])/i.exec(nombreDelDocumento || '') || [])[1] || ''}
-            pedido={pedidoDeMarca && pedidoDeMarca.id === marcaElegida.id ? pedidoDeMarca : null}
+            pedido={pedidoALaBarra(seleccion)}
             esAutor={!!userName && marcaElegida.created_by === userName} editable={editable(marcaElegida)}
             posicion={{ left: `${Math.max(0, Math.min(100, (k.x / vpInfo.w) * 100))}%`,
                         top: arriba ? `calc(${(k.y / vpInfo.h) * 100}% - 48px)` : `calc(${(k.y2 / vpInfo.h) * 100}% + 10px)` }}
@@ -1091,25 +992,11 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
               ? () => llevarMarca(marcaElegida) : null}
             onDuplicar={() => duplicarMarca(marcaElegida)}
             onCambio={(nueva) => setMarkups(prev => prev.map(x => x.id === nueva.id ? { ...x, ...nueva } : x))}
-            // EL ENCARGADO REPARTE (doc 23 §6.6): las incidencias abiertas del plano de las que es encargado (por
-            // persona; si va a una empresa, decide el servidor). Tras crear el encargo, las marcas se vuelven a pedir.
-            incidenciasParaEncargo={(() => {
-              const yo = miIdDeSesion();
-              const vistas = new Map();
-              for (const o of [...obsPlano, ...markups.map(x => x.observacion)]) {
-                if (!o || o.cerrada || o.estado === 'Borrador' || o.encargo) continue;
-                if ((yo != null && String(o.responsable_id) === String(yo)) || (!o.responsable_id && o.responsable_empresa)) {
-                  vistas.set(String(o.id), o);
-                }
-              }
-              return [...vistas.values()];
-            })()}
-            onRecargar={() => setVuelta(v => v + 1)}
             // Publicar o retirar es un acto terminado: el menú se cierra (antes se quedaba abierto, con el botón
             // marcado).
-            onPublicar={() => { setElegida(null); publicarMarkup(marcaElegida); }}
-            onBorrar={() => { setElegida(null); deleteMarkup(marcaElegida); }}
-            onCerrar={() => setElegida(null)} />
+            onPublicar={() => { soltar(); publicarMarkup(marcaElegida); }}
+            onBorrar={() => { soltar(); deleteMarkup(marcaElegida); }}
+            onCerrar={soltar} />
         );
       })()}
       {marcaElegida && marcaElegida.kind === 'foto' && (
@@ -1121,8 +1008,8 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
             ? () => llevarMarca(marcaElegida) : null}
           onCambio={(nueva) => setMarkups(prev => prev.map(x => x.id === nueva.id ? { ...x, ...nueva } : x))}
           onPublicar={() => publicarMarkup(marcaElegida)}
-          onBorrar={() => { setElegida(null); deleteMarkup(marcaElegida); }}
-          onCerrar={() => setElegida(null)} />
+          onBorrar={() => { soltar(); deleteMarkup(marcaElegida); }}
+          onCerrar={soltar} />
       )}
       {panelPlano}
       {selloEn && (

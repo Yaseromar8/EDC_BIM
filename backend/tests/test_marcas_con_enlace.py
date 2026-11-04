@@ -217,8 +217,9 @@ def test_citado_en_exige_poder_abrir_el_documento(app, monkeypatch, prohibidos):
 
 def test_listar_por_version_filtra_y_cuenta_las_demas(app, monkeypatch):
     marcas = [(3, 1, 'cloud', {}, {}, None, 'Ana', AHORA, True, AHORA, ANTERIOR, 1, None)]
-    # marcas · su observación · la del plano · si la nube es de encargo (46) · otras versiones
-    cur, _ = _conectar(monkeypatch, [marcas, [], [], [], [(VIGENTE, 2, 4)]])
+    # marcas · su observación · la del plano · si la nube es de encargo (46) · para la nube suelta (de ninguna
+    # incidencia): la empresa de quien mira y las incidencias vivas del plano · otras versiones
+    cur, _ = _conectar(monkeypatch, [marcas, [], [], [], (None,), [], [(VIGENTE, 2, 4)]])
     r = app.test_client().get(f'/api/pdf/markups?node_id={PLANO}&version_id={ANTERIOR}')
     d = r.get_json()
     assert d['markups'][0]['version_number'] == 1 and d['markups'][0]['version_id'] == ANTERIOR

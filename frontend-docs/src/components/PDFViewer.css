@@ -193,7 +193,19 @@
   overflow: auto;
   overscroll-behavior: contain;
   background: var(--pdf-field);
+  /* La hoja no se «selecciona» como texto: un doble o triple clic, o Ctrl+A, la teñía entera de azul (4-nov-2026).
+     Lo que se escribe (notas de la marca) sigue seleccionable. */
+  -webkit-user-select: none;
+  user-select: none;
 }
+.pdf-canvas-container :is(input, textarea, [contenteditable="true"]) {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+/* Una nube o un pin elegidos con el TECLADO (docs/archivos/25, P9): el anillo de foco del producto. Con el ratón no. */
+.marca-enfocable { outline: none; }
+.marca-enfocable:focus-visible { outline: 2px solid #302f2e; outline-offset: 2px; }
 
 .pdf-page-pad {
   /* HOLGURA A LOS CUATRO LADOS.
@@ -1010,25 +1022,8 @@
   opacity: 0.75;
 }
 
-/* El nombre y su tecla, al pasar el ratón o con el foco del teclado. */
-.pdf-rail--compacto [data-tip]:hover::after,
-.pdf-rail--compacto [data-tip]:focus-visible::after {
-  content: attr(data-tip);
-  position: absolute;
-  right: calc(100% + 10px);
-  top: 50%;
-  transform: translateY(-50%);
-  z-index: 40;
-  padding: 5px 8px;
-  border-radius: 5px;
-  background: #141413;
-  color: #faf9f5;
-  font: 500 12px/1.2 'IBM Plex Sans', system-ui, sans-serif;
-  white-space: nowrap;
-  pointer-events: none;
-}
-/* Con su desplegable abierto, el nombre sobra. */
-.pdf-rail--compacto [aria-expanded="true"]::after { display: none; }
+/* El nombre y su tecla los pone el sistema común de tooltips (design/ui/tooltips.js), a la izquierda del estuche
+   (`data-tip-lado`): antes era una regla propia de aquí, y el resto de `data-tip` del producto no tenía ninguno. */
 
 .pdf-estuche__menu {
   position: absolute;

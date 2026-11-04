@@ -115,20 +115,17 @@ export const EVENTOS_DE_ISSUE = {
 
 // UN COLOR POR PERSONA EN CADA PLANO (3-nov-2026, docs/archivos/23). Diez tonos sobrios de la paleta, en el orden en
 // que aparece cada persona o empresa en las nubes de la incidencia; la undécima repite desde el primero.
+/** «Ana Pérez» → «AP»; «luis.rios@obra.pe» → «LR». Las iniciales de una persona o empresa, igual en toda la pantalla. */
+export function iniciales(nombre) {
+  const p = String(nombre || '?').replace(/@.*/, '').split(/[\s._-]+/).filter(Boolean);
+  return ((p[0] || '?')[0] + (p[1] ? p[1][0] : '')).toUpperCase();
+}
+
 export const COLORES_DE_PERSONA = ['#507294', '#b93535', '#64744e', '#9e5943', '#2f6f6a', '#8a6d1f', '#3d4f66',
   '#7d5a3c', '#5b7f3a', '#6b6a65'];
 
 // El servidor numera a cada persona o empresa en el plano (`color`: 0, 1, 2…): el mismo en la hoja y en el panel.
 export const colorDeIndice = (k) => (k == null ? '#b0aea5' : COLORES_DE_PERSONA[k % COLORES_DE_PERSONA.length]);
-
-export function colorDePersona(claves) {
-  const orden = [];
-  for (const c of claves || []) if (c != null && !orden.includes(c)) orden.push(c);
-  return (clave) => {
-    const k = orden.indexOf(clave);
-    return k < 0 ? '#b0aea5' : COLORES_DE_PERSONA[k % COLORES_DE_PERSONA.length];
-  };
-}
 
 const VERBO_DE_NUBE = {
   cloud_assigned: 'asignó', cloud_delivered: 'entregó en', cloud_accepted: 'aceptó lo entregado en',

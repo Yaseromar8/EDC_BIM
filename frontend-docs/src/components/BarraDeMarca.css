@@ -11,7 +11,7 @@
 .bdm-info { padding: 0 8px 0 6px; font-size: 12px; font-weight: 600; color: #52524d; border-right: 1px solid #f1f0e8; margin-right: 2px; }
 .bdm-btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 4px; min-width: 30px; height: 30px; padding: 0 6px;
-  border: none; border-radius: 6px; background: transparent; color: #52524d; cursor: pointer;
+  border: none; border-radius: 6px; background: transparent; color: #333330; cursor: pointer;
 }
 .bdm-btn:hover:not(:disabled) { background: #f1f0e8; color: #141413; }
 .bdm-btn[aria-pressed="true"] { background: #f1f0e8; color: #141413; }

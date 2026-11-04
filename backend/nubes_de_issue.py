@@ -146,6 +146,21 @@ def puede_crear_encargo(sus_papeles):
     return bool({'encargado', 'admin'} & set(sus_papeles))
 
 
+def como_se_anade(sus_papeles):
+    """Cómo entra una nube SUELTA en la incidencia según el papel de quien la añade: (clase, asigna) o None.
+    Quien revisa (o el administrador) la añade como nube de OBSERVACIÓN; el encargado, como nube de ENCARGO para su
+    equipo (D6). `asigna`: si además puede asignarla en el mismo acto (el encargado o el administrador). La usan la ruta
+    que la añade y la hoja que ofrece a qué incidencias puede ir: la pantalla no decide."""
+    sus = set(sus_papeles)
+    if {'revisor', 'admin'} & sus:
+        clase = 'observacion'
+    elif 'encargado' in sus:
+        clase = 'encargo'
+    else:
+        return None
+    return clase, bool({'encargado', 'admin'} & sus)
+
+
 def visible(nube, sus_papeles, empresa_del_usuario=None):
     """Quién ve una nube. Las de observación, todo el que ve la incidencia. Las de encargo (trabajo en proceso del
     equipo del encargado), el equipo y quien revisa: «el revisor principal debe ver todo» (el dueño, 3-nov-2026)."""
@@ -185,6 +200,12 @@ def deudor(nube, issue=None):
     if nube.get('destino_usuario'):
         return nube['destino_usuario'], None
     return None, nube.get('destino_empresa')
+
+
+def por_entregar(nube, issue):
+    """¿Le falta entregar a alguien en esta nube? Lo que la leyenda del plano y el panel cuentan «por entregar»: pedida
+    o devuelta, en una incidencia viva (cerrada o anulada, ya no se le debe nada a nadie)."""
+    return nube.get('estado') in ESTADOS_QUE_DEBE_EL_APORTANTE and incidencia_viva(issue)
 
 
 def plazo(nube, issue):

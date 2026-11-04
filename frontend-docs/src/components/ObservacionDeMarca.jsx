@@ -13,7 +13,7 @@ import { apiFetch } from '../utils/apiFetch';
 import { estadoDeObservacion, observacionViva, aQuienLeToca, fechaDeDia } from '../utils/marcasConEnlace';
 import IncidenciaLateral from './IncidenciaLateral';
 import { pedirCompararNube } from './AsignacionDeNube';
-import { destinoDelLector } from './ObservacionesDelPlano';
+import { useDestinoDelLector } from '../utils/contextoDelLector';
 
 export function EtiquetaDeObservacion({ obs }) {
   if (!obs) return null;
@@ -28,6 +28,7 @@ export function EtiquetaDeObservacion({ obs }) {
 }
 
 export default function ObservacionDeMarca({ API, obra, marca, esAutor, onCambio }) {
+  const destino = useDestinoDelLector();
   const obs = marca.observacion || null;
   const [lateral, setLateral] = useState(null);          // 'nueva' | id de la observación
 
@@ -83,7 +84,7 @@ export default function ObservacionDeMarca({ API, obra, marca, esAutor, onCambio
       ) : <p className="mce-vacio">Sin observación. La levanta quien dibujó la marca.</p>}
 
       {lateral && (
-        <IncidenciaLateral API={API} obra={obra} contenedor={destinoDelLector()} onVolver={() => setLateral(null)}
+        <IncidenciaLateral API={API} obra={obra} contenedor={destino} onVolver={() => setLateral(null)}
           issueId={lateral === 'nueva' ? null : lateral}
           // Abierta desde su marca: el panel va a la pestaña «Nubes», a ESTA nube.
           nube={lateral === 'nueva' ? null : marca.id}

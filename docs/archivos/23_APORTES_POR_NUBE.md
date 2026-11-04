@@ -377,7 +377,47 @@ la nube no se abre el panel», «al alejarme la nube se hace más negrita», «n
 - **Sin textos de ayuda** en la pestaña Nubes ni en las notas.
 - Las nubes salen **en el orden en que se levantaron**: los números ya no cambian al asignar una.
 
-### 6.9 · Lo que sigue
+### 6.9 · Segunda vuelta en producción (4-nov-2026, tarde)
+
+El dueño: «no veo dónde asignar», «se sigue viendo grande cuando me alejo», «hay nombres asignados que están ocultos»,
+«hago clic a la nube y me pierdo», «iconos de mejor relieve», «que el pin no lleve número y sea propio», «el Escape o el
+clic fuera deben soltar lo elegido», «si hago clic al issue no me lleva a su información», «aparece una manito».
+
+- **Una nube dibujada después también se asigna** desde su barra («Asignar»): elige su incidencia (si el plano tiene
+  una, ya viene puesta). Quien revisa la **añade** (nube de observación) y la asigna su encargado; el encargado la añade
+  como nube de encargo y la asigna en el acto. Servidor: `acto: 'crear'` decide la clase por el papel (`_crear_encargo`).
+- **La hoja numera como el panel**: cada nube lleva en la hoja el número de su fila en la pestaña Nubes (y, asignada,
+  las iniciales); sin asignar, en gris. `nubes_de_issue.numeros_de_nubes` es el orden único de los dos sitios.
+- **El rótulo va dentro de la nube** cuando encima no cabe (antes se cortaba en el borde de la hoja).
+- ~~La barra y su nota encogen al alejar, hasta el 75 %.~~ Retirado en la fase 3 (doc 25): la barra no baja de su
+  tamaño (botones de 24 px como mínimo, WCAG 2.5.8, como ACC y Procore); lo que encoge al alejar es lo dibujado.
+- **Iconos con más trazo** (1,9) y texto más oscuro en la barra.
+- **Pin propio**: un hito (rombo con su punto), sin número.
+- **Clic en el pin → pestaña «Incidencia»**, aunque el panel estuviera en «Nubes»; clic en una nube → «Nubes».
+- **Escape suelta la nube aunque el foco esté en el panel** (el panel paraba las teclas); en un campo de texto, no.
+- **Flecha, no mano**, en «Seleccionar y mover»; la mano solo mientras se arrastra. La hoja ya no se tiñe de azul con
+  un doble clic o Ctrl+A (`user-select: none` en el lienzo, salvo campos de texto).
+- **Entrega solo quien tiene la nube asignada**, también en el servidor: el administrador ya no entrega por otro
+  (`ACTOS['entregar']` = solo `aportante`; el dueño: «solo sube el que es asignado»).
+- **Entregada, le llega al encargado** («dueño del plano»: el «Asignada a» de la incidencia, o su empresa): un pendiente
+  «Entregado en ISS-…: lo pedido» en «Mi trabajo», con su correo (`encargos.avisar`), que se cierra al aceptar o
+  devolver. `nubes_de_issue.deudor(nube, issue)` dice a quién le toca: aportante mientras debe entregar; encargado
+  cuando está entregada. La conciliación de encargos lo entiende igual.
+- **Una entrega para cualquier pedido** (el dueño: «hay casos con fotos o documentos y otros donde solo se trata de
+  mover un cuadro o borrar una descripción… profesional, estándar y escalable»): como la respuesta de ACC o el «listo
+  para revisar» de Procore, quien aporta **responde qué hizo** («Qué se hizo») y, si hace falta, **adjunta** (a
+  INCIDENCIAS/<código>/ o enlazado de Docs). Basta una de las dos; quien pidió acepta o devuelve. Sin tipos de pedido
+  ni migración: el servidor ya aceptaba notas y documentos.
+
+Probado en el banco: `ensayo_nubes.py` 51/51 (además: «ni Eva, administradora, entrega por Mario (403)», «entregada,
+le llega a Luis», «…y Luis lo ve en «Mi trabajo»», «aceptada, a Luis ya no le queda nada en esa nube»); en el navegador,
+Mario entrega solo con texto y a Luis le queda abierto «Entregado en ISS-001: …». Antes de estas tres:
+`ensayo_nubes.py` 47/47 (incluye «la hoja y el panel dan el mismo número a cada nube», «Ana añade
+una nube suya: entra como observación», «asignarla es del encargado (403)» y «la nube añadida también cuenta: no se
+cierra sin levantarla (409)»); en el navegador del banco, pin → Incidencia tras estar en Nubes, Escape con el foco en el
+panel y clic fuera (barra superior y mesa) sueltan la nube; cursor `default` y `user-select: none` medidos.
+
+### 6.10 · Lo que sigue
 
 1. Más adelante: «Enviar desde View» (una vista 3D guardada a la nube) y exportar a BCF.
 
