@@ -153,9 +153,7 @@ export default function AccesoAHerramientas({ obra, persona, onClose }) {
                                   fontSize: 13, color: apagada ? '#cccac0' : '#52524d',
                                   cursor: apagada ? 'not-allowed'
                                         : guardando === h.codigo ? 'wait' : 'pointer' }}
-                         title={apagada
-                           ? 'Apagada para toda la obra: se enciende en Configuración'
-                           : undefined}>
+                         title={apagada ? 'Apagada en la obra' : undefined}>
                     <input type="checkbox" checked={h.acceso_del_miembro}
                            disabled={apagada || guardando === h.codigo || Boolean(error)}
                            onChange={e => cambiar(h, e.target.checked)} />

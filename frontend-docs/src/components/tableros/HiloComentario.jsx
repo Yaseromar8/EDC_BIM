@@ -59,7 +59,7 @@ export default function HiloComentario({ comentario: c, yo, isAdmin, soloLectura
         <span style={{ fontSize: 14, fontWeight: 600, flex: 1 }}>{nuevo ? 'Nuevo comentario' : 'Comentario'}</span>
         {c.resuelto && <span style={{ fontSize: 12, color: GRIS, marginRight: 4 }}>Resuelto</span>}
         {!nuevo && !soloLectura && (
-          <button type="button" style={boton} onClick={() => onResolver(!c.resuelto)} title={c.resuelto ? 'Volver a abrir el comentario' : 'Marcar como resuelto'}
+          <button type="button" style={boton} onClick={() => onResolver(!c.resuelto)} title={c.resuelto ? 'Reabrir' : 'Resolver'}
             onMouseEnter={e => { e.currentTarget.style.background = SUAVE; }} onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               {c.resuelto ? <path d="M4.6 7A8 8 0 1 1 4 12M4.5 2.5V7H9" /> : <path d="m5 12.5 4.5 4.5L19 7.5" />}</svg>
@@ -97,7 +97,7 @@ export default function HiloComentario({ comentario: c, yo, isAdmin, soloLectura
                   <span style={{ fontSize: 12, color: GRIS, whiteSpace: 'nowrap' }}>{cuando(m.fecha)}</span>
                   <span style={{ flex: 1 }} />
                   {i > 0 && !soloLectura && puedeBorrarMensaje(c, m, yo) && (
-                    <button type="button" aria-label="Eliminar mi respuesta" title="Eliminar mi respuesta" onClick={() => onBorrarMensaje(m.id)}
+                    <button type="button" aria-label="Eliminar mi respuesta" title="Eliminar" onClick={() => onBorrarMensaje(m.id)}
                       style={{ border: 'none', background: 'none', padding: 2, cursor: 'pointer', color: GRIS, display: 'flex' }}>
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" aria-hidden="true"><path d="M5 7h14M10 7V4.5h4V7M7 7l1 13h8l1-13" /></svg>
                     </button>

@@ -634,7 +634,7 @@ export default function DocumentViewer({
 
         <div className="file-viewer-actions">
            {esCad && !isShared && !esVistaPuente && accLinkFor === accKey && accLink && (
-             <span title="Se usa la vista ya preparada de Autodesk; el original sigue en Docs"
+             <span
                style={{ marginRight: 12, color: '#507294', fontSize: 13 }}>
                {previewOnly ? 'Prueba local' : 'Vista ACC'} · V{accLink.version_number || '?'}
              </span>
@@ -647,7 +647,6 @@ export default function DocumentViewer({
            )}
            {abribleEnEscritorio && !isShared && (
              <button onClick={abrirEnEscritorio}
-               title="Descarga el original con su nombre real; al abrirlo, Windows usa la aplicacion asociada"
                style={{ display: 'inline-flex', alignItems: 'center', gap: 7, marginRight: 14,
                         padding: '5px 12px', fontSize: 13, fontWeight: 600,
                         background: '#fff', border: '1px solid var(--accent)', color: 'var(--accent)',
@@ -663,16 +662,14 @@ export default function DocumentViewer({
            )}
            {esHojaDeCalculo && vistaDecidida && (
              <span className="cajetin__alternar cajetin__vista" role="group" aria-label="Cómo se ve la hoja de cálculo">
-               <button type="button" aria-pressed={vistaDeLaHoja === 'excel'} title="Verla como en Excel, con su formato"
+               <button type="button" aria-pressed={vistaDeLaHoja === 'excel'}
                  onClick={() => setVistaElegida(v => ({ ...v, [file.id]: 'excel' }))}>Excel</button>
                <button type="button" aria-pressed={vistaDeLaHoja === 'planilla'}
-                 title="Leerla como planilla: buscar por ítem y vincular planos (metrados)"
                  onClick={() => setVistaElegida(v => ({ ...v, [file.id]: 'planilla' }))}>Planilla</button>
              </span>
            )}
            {esDwgSustento && sustento.disponible && (sustento.vinculos.length > 0 || intencionVigente) && (
              <button type="button" className="cajetin__metrados" aria-pressed={sustentoAbierto}
-               title="Las partidas que salen de este plano, con su zona"
                onClick={() => { setSustentoAbierto(a => !a); setDibujandoZona(false); setZonaBorrador(null); }}>
                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"
                  strokeLinecap="round" strokeLinejoin="round"><path d="M17.5 5.5V5H6.5l6 7-6 7h11v-.5" /></svg>

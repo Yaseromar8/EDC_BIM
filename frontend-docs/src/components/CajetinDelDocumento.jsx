@@ -61,7 +61,7 @@ export default function CajetinDelDocumento({ API, obra, vv, file, historial, mo
 
       {onVersiones ? (
         <button type="button" className={`cajetin__cas cajetin__cas--ver${version.aviso ? ' es-aviso' : ''}`}
-          onClick={onVersiones} title="Ver el historial de versiones">
+          onClick={onVersiones} title="Versiones">
           <span className="cajetin__rot">{version.rotulo}</span>
           <b className="cajetin__val">{version.valor} <span aria-hidden="true" className="cajetin__flecha">▾</span></b>
           <small className="cajetin__det">{version.detalle}</small>
@@ -78,8 +78,7 @@ export default function CajetinDelDocumento({ API, obra, vv, file, historial, mo
       </Casilla>
 
       <div className={`cajetin__cas cajetin__cas--vig${vigencia.tono === 'aviso' ? ' es-aviso' : ''}`}
-        title={[vigencia.huella ? `SHA-256 de esta versión: ${vigencia.huella}` : '', conConmutador ? vigencia.detalle : '']
-          .filter(Boolean).join(' · ') || undefined}
+        title={conConmutador && vigencia.detalle ? vigencia.detalle : undefined}
         role={vigencia.tono === 'aviso' ? 'status' : undefined}>
         <span className="cajetin__rot">{vigencia.rotulo}</span>
         <b className={`cajetin__val cajetin__vig cajetin__vig--${vigencia.tono || 'nada'}`}>{vigencia.valor}</b>
@@ -88,12 +87,12 @@ export default function CajetinDelDocumento({ API, obra, vv, file, historial, mo
         {conConmutador ? (
           <span className="cajetin__alternar" role="group" aria-label="Versión que se mira">
             <button type="button" aria-pressed={alternar.enVigente} onClick={alternar.enVigente ? undefined : onIrVigente}
-              title={`Ver la vigente (V${alternar.vigente})`}>Vigente</button>
+              title={`Ver V${alternar.vigente}`}>Vigente</button>
             <button type="button" aria-pressed={alternar.enAnterior} onClick={alternar.enAnterior ? undefined : onIrAnterior}
-              title={`Ver la anterior (V${alternar.anterior}), la que sustituyó la vigente`}>Anterior</button>
+              title={`Ver V${alternar.anterior}`}>Anterior</button>
             {alternar.masAtras && onIrVersion && (
               <button type="button" aria-pressed={false} onClick={() => onIrVersion(alternar.masAtras)}
-                title={`Ver la V${alternar.masAtras}, la anterior a esta`}>‹ V{alternar.masAtras}</button>
+                title={`Ver V${alternar.masAtras}`}>‹ V{alternar.masAtras}</button>
             )}
           </span>
         ) : vigencia.boton && onIrVigente

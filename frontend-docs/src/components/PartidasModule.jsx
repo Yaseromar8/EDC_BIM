@@ -750,11 +750,11 @@ const PartidasModule = ({ project, API, user, isAdmin }) => {
               </button>
             </>
           )}
-          <button onClick={() => setCollapsedNodes(new Set(parentPrefixes))} title="Contraer Todo" style={{ height: 36, padding: '0 12px', background: '#f5f5f5', border: '1px solid #ddd', borderRadius: 4, cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', gap: 6 }}>
+          <button onClick={() => setCollapsedNodes(new Set(parentPrefixes))} title="Plegar todo" style={{ height: 36, padding: '0 12px', background: '#f5f5f5', border: '1px solid #ddd', borderRadius: 4, cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', gap: 6 }}>
              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="18 15 12 9 6 15"></polyline></svg>
              Contraer Todo
           </button>
-          <button onClick={() => setCollapsedNodes(new Set())} title="Expandir Todo" style={{ height: 36, padding: '0 12px', background: '#f5f5f5', border: '1px solid #ddd', borderRadius: 4, cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', gap: 6 }}>
+          <button onClick={() => setCollapsedNodes(new Set())} title="Desplegar todo" style={{ height: 36, padding: '0 12px', background: '#f5f5f5', border: '1px solid #ddd', borderRadius: 4, cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', gap: 6 }}>
              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
              Expandir Todo
           </button>

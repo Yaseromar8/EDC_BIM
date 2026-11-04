@@ -721,7 +721,7 @@ function TableroEditor({ id, project, user, isAdmin, vistaInicial = null, onCerr
         )}
         {datos && (
           <div style={{ position: 'relative' }}>
-            <button type="button" aria-haspopup="menu" aria-expanded={menuVistas} onClick={() => setMenuVistas(m => !m)} onMouseDown={sinFoco} title="Las vistas publicadas de este tablero"
+            <button type="button" aria-haspopup="menu" aria-expanded={menuVistas} onClick={() => setMenuVistas(m => !m)} onMouseDown={sinFoco} title="Vistas publicadas"
               style={{ display: 'flex', alignItems: 'center', gap: 6, height: 32, padding: '0 10px', border: 'none', borderRadius: 6, background: menuVistas ? SUAVE : 'transparent', cursor: 'pointer', fontSize: 14, fontFamily: 'inherit', color: TINTA }}
               onMouseEnter={e => { e.currentTarget.style.background = SUAVE; }} onMouseLeave={e => { if (!menuVistas) e.currentTarget.style.background = 'transparent'; }}>
               Vistas{vistas.length ? ` (${vistas.length})` : ''}

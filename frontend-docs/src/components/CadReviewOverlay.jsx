@@ -373,13 +373,13 @@ export default function CadReviewOverlay({ viewer, nodeId, versionId, viewGuid, 
         width={Math.abs(drag.start.x - drag.end.x)} height={Math.abs(drag.start.y - drag.end.y)}
         fill="rgba(228,72,61,.07)" stroke="#e4483d" strokeDasharray="5 4" />}
     </svg>
-    <div className="cad-review-tools" aria-label="Herramientas de revisión" title={availability === 'missing' ? 'El backend conectado todavía no dispone de revisión CAD' : undefined}>
+    <div className="cad-review-tools" aria-label="Herramientas de revisión" title={availability === 'missing' ? 'No disponible' : undefined}>
       <button title="Seleccionar" aria-label="Seleccionar" className={!tool && availability === 'ready' ? 'active' : ''} disabled={availability !== 'ready'} onClick={() => { setTool(null); setDrag(null); }}><ReviewIcon kind="select" /></button>
       <span className="cad-review-tools-divider" aria-hidden="true" />
       {[['cloud', 'Nube'], ['text', 'Texto'], ['photo', 'Foto']].map(([key, label]) =>
         <button key={key} title={label} aria-label={label} disabled={availability !== 'ready'} className={tool === key ? 'active' : ''} onClick={() => { setTool(tool === key ? null : key); setSelectedId(null); setTextPlacement(null); }}><ReviewIcon kind={key} /></button>)}
       {tool && <button title="Cancelar dibujo" onClick={() => { setTool(null); setDrag(null); }}>×</button>}
-      {availability === 'missing' && <><span className="cad-review-tools-divider" aria-hidden="true" /><button title="¿Por qué no están activas las herramientas?" aria-label="Estado de revisión" className="cad-review-info-button" onClick={() => setShowAvailabilityInfo(v => !v)}><ReviewIcon kind="info" /></button></>}
+      {availability === 'missing' && <><span className="cad-review-tools-divider" aria-hidden="true" /><button title="Ayuda" aria-label="Estado de revisión" className="cad-review-info-button" onClick={() => setShowAvailabilityInfo(v => !v)}><ReviewIcon kind="info" /></button></>}
     </div>
     {availability === 'missing' && showAvailabilityInfo && <div className="cad-review-unavailable" role="status">
       La revisión de planos aún no está habilitada en el backend conectado.
@@ -394,7 +394,7 @@ export default function CadReviewOverlay({ viewer, nodeId, versionId, viewGuid, 
       {selected.kind === 'cloud' && selected.mine && <div className="cad-review-actions"><button onClick={() => setPicker('plan')}>+ Referencia a plano</button><button onClick={() => setPicker('file')}>+ Referencia a archivo</button></div>}
       {selected.kind === 'photo' && selected.mine && <div className="cad-review-actions"><button onClick={() => setPicker('photo')}>+ Foto de ALEPHIA</button><button onClick={() => fileInputRef.current?.click()}>+ Subir foto</button><input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp" hidden onChange={event => { const chosen = event.target.files?.[0]; event.target.value = ''; if (!chosen) return; const form = new FormData(); form.append('file', chosen); run(() => apiJson(`${BASE}/${selected.id}/photos`, { method: 'POST', body: form, isUpload: true })); }} /></div>}
       {selected.attachments?.map(ref => <div className="cad-review-ref" key={ref.id}>
-        <button className="cad-review-ref-open" onClick={() => openReference(selected, ref)} title="Ver en ventana flotante">
+        <button className="cad-review-ref-open" onClick={() => openReference(selected, ref)} title="Ventana flotante">
           <ReviewIcon kind={ref.kind === 'photo' ? 'photo' : ref.kind === 'plan' ? 'plan' : 'file'} />
           <span>{ref.name}</span>
         </button>

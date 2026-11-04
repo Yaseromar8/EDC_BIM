@@ -85,7 +85,7 @@ export default function VisorDelTablero({ el, obra, onCerrar, onAbrirEnArchivos 
             versionHistory={estado.historial} viewedVersionInfo={version} setViewedVersionInfo={setVersion}
             showVersions={verVersiones} setShowVersions={setVerVersiones}
             accionExtra={(clase) => (
-              <button type="button" className={clase} onClick={() => onAbrirEnArchivos(el, version)} title="Abrir en Archivos (otra pestaña)" aria-label="Abrir en Archivos">
+              <button type="button" className={clase} onClick={() => onAbrirEnArchivos(el, version)} title="Abrir en Archivos" aria-label="Abrir en Archivos">
                 <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                   <path d="M14 4h6v6" /><path d="M20 4 11 13" /><path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5" />
                 </svg>

@@ -166,7 +166,7 @@ export default function VersionPanel({
                <button
                  onClick={() => canCompare && setCompareOpen(true)}
                  disabled={!canCompare}
-                 title={canCompare ? 'Comparar las 2 versiones seleccionadas' : 'Marca exactamente 2 versiones para comparar'}
+                 title={canCompare ? 'Comparar' : 'Marca 2 versiones'}
                  style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6, padding: '5px 12px', background: canCompare ? 'var(--accent)' : '#f1f0e8', color: canCompare ? '#fff' : '#b0aea5', border: 'none', borderRadius: 4, fontSize: 13, fontWeight: 600, cursor: canCompare ? 'pointer' : 'default' }}>
                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="2" y="4" width="9" height="16" rx="1"/><rect x="13" y="4" width="9" height="16" rx="1"/></svg>
                  Comparar versiones

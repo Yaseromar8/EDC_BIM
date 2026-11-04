@@ -241,7 +241,7 @@ const TiradorColumna = ({ columna, etiqueta, ancho, iniciar, ajustar }) => (
     aria-valuemin={ANCHO_MINIMO}
     aria-valuemax={ANCHO_MAXIMO}
     tabIndex={0}
-    title={`Arrastra para cambiar el ancho de ${etiqueta}. Con el teclado: flechas, y inicio para el ancho original.`}
+    title="Cambiar ancho"
     onPointerDown={e => iniciar(e, columna)}
     onKeyDown={e => {
       const paso = e.shiftKey ? PASO_TECLADO_GRANDE : PASO_TECLADO;
@@ -613,11 +613,11 @@ const TableRow = ({ index, style, data }) => {
               como campos aparte al cargar; aquí ya están en el nombre ISO 19650.
               Se enseña el CÓDIGO, no un significado: ese lo fija cada obra. */}
           <div className="td-cell codigo-leido-celda" style={{ width: columnWidths.tipo }}
-            title={codigo ? `Tipo de documento «${codigo.tipo}», leído del nombre` : undefined}>
+            title={codigo ? `Tipo ${codigo.tipo}` : undefined}>
             {codigo ? codigo.tipo : ''}
           </div>
           <div className="td-cell codigo-leido-celda" style={{ width: columnWidths.disciplina }}
-            title={codigo ? `Disciplina «${codigo.disciplina}», leída del nombre` : undefined}>
+            title={codigo ? `Disciplina ${codigo.disciplina}` : undefined}>
             {codigo ? codigo.disciplina : ''}
           </div>
           <div className="td-cell" style={{ width: columnWidths.version }}>
@@ -625,9 +625,7 @@ const TableRow = ({ index, style, data }) => {
               <button
                 className="version-link-acc"
                 onClick={(e) => { e.stopPropagation(); onShowVersions(item, e); }}
-                title={item.codigo_revision
-                  ? `Revisión emitida ${item.codigo_revision} · subida V${item.version || 1}`
-                  : `Subida V${item.version || 1} — todavía sin emitir`}
+                title={item.codigo_revision ? `${item.codigo_revision} · V${item.version || 1}` : `V${item.version || 1} · sin emitir`}
               >
                 {/* La REVISIÓN es la emisión formal; la V es el contador de
                     subidas. Corregir una errata sube la V y no la revisión, y

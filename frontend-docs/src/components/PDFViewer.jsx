@@ -466,7 +466,7 @@ function cronoFin(extra) {
 function BotonObservacionesDelPlano({ activo, cuantas, onClick }) {
   return (
     <button type="button" className="pdf-rail-btn pdf-rail-btn--obs" aria-pressed={activo}
-      aria-label="Incidencias del plano" data-tip="Incidencias del plano" title="Incidencias del plano"
+      aria-label="Incidencias del plano" data-tip="Incidencias del plano"
       onClick={onClick}>
       <IconoModulo nombre="incidencia" tamano={20} />
       {cuantas > 0 && <span className="pdf-rail-btn__num">{cuantas > 99 ? '99+' : cuantas}</span>}
@@ -2345,7 +2345,7 @@ export default function PDFViewer({ url, preparando = false,
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
           </button>
           <button className="pdf-ico" aria-label="Buscar en el documento" aria-pressed={searchOpen}
-            title="Buscar en el documento (Ctrl+F)"
+            title="Buscar (Ctrl+F)"
             onClick={() => { setSearchOpen(o => !o); setTimeout(() => document.getElementById('pdf-search-input')?.focus(), 0); }}>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.6-3.6"/></svg>
           </button>
@@ -2378,7 +2378,7 @@ export default function PDFViewer({ url, preparando = false,
             <div className="pdf-ident">
               {versionLabel && (onVersionClick ? (
                 <button className="pdf-chip-ver pdf-chip-ver--menu" onClick={onVersionClick}
-                  title="Ver el historial de versiones">
+                  title="Versiones">
                   {versionLabel}
                   <svg width="9" height="9" viewBox="0 0 24 24" fill="currentColor"><path d="M7 10l5 5 5-5z"/></svg>
                 </button>
@@ -2417,7 +2417,7 @@ export default function PDFViewer({ url, preparando = false,
           {onClose && (
             <>
               <span className="pdf-sep" />
-              <button className="pdf-ico" onClick={onClose} title="Cerrar documento" aria-label="Cerrar documento">
+              <button className="pdf-ico" onClick={onClose} title="Cerrar" aria-label="Cerrar documento">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                   strokeWidth="1.5" strokeLinecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>
               </button>
@@ -2726,7 +2726,7 @@ export default function PDFViewer({ url, preparando = false,
               <>
                 <span className="pdf-sep" />
                 <button className="pdf-ico" onClick={() => irAHermano(-1)}
-                  disabled={indiceActual <= 0} title="Documento anterior de la carpeta">
+                  disabled={indiceActual <= 0} title="Documento anterior">
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                     strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
                 </button>
@@ -2748,7 +2748,7 @@ export default function PDFViewer({ url, preparando = false,
                 )}
                 <button className="pdf-ico" onClick={() => irAHermano(1)}
                   disabled={indiceActual < 0 || indiceActual >= hermanos.length - 1}
-                  title="Documento siguiente de la carpeta">
+                  title="Documento siguiente">
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                     strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M9 6l6 6-6 6"/></svg>
                 </button>
@@ -2774,7 +2774,7 @@ export default function PDFViewer({ url, preparando = false,
                     dueno: las miniaturas ya se generan solas al abrir la
                     carpeta, asi que pedirlas a mano sobraba. */}
                 <button className="pdf-tira-cerrar" onClick={() => setTiraAbierta(false)}
-                  title="Cerrar la tira">✕</button>
+                  title="Cerrar">✕</button>
               </div>
               <div className="pdf-tira-carril" ref={carrilRef}>
                 {hermanos.map(h => (

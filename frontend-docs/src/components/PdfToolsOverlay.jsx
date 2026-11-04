@@ -1017,7 +1017,7 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
             : <span>{enOtras.reduce((s, v) => s + v.marcas, 0) === 1 ? 'Hay 1 marca' : `Hay ${enOtras.reduce((s, v) => s + v.marcas, 0)} marcas`} en versiones anteriores:</span>}
           {enOtras.map(v => (
             <button key={v.version_id} type="button" disabled={!onIrAVersion} onClick={() => onIrAVersion?.(v.version_id)}
-              title={`Ver la V${v.version_number} con sus marcas`}>
+              title={`Ver V${v.version_number}`}>
               V{v.version_number} <small>{v.marcas}</small>
             </button>
           ))}

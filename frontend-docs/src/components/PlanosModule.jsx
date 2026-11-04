@@ -174,7 +174,7 @@ export default function PlanosModule({ project, API, user, isAdmin }) {
                   rev {p.vigente.codigo} · vigente
                 </span>
               ) : (
-                <span title="Este plano no tiene ninguna revisión emitida: no hay nada que usar en obra."
+                <span title="Sin revisión emitida"
                       style={{ padding: '3px 10px', borderRadius: 11, fontSize: 13,
                                fontWeight: 700, background: '#f9eeda', color: '#734500' }}>
                   sin revisión emitida
@@ -237,7 +237,7 @@ export default function PlanosModule({ project, API, user, isAdmin }) {
                         <span style={{ fontSize: 12, color: '#52524d' }}>· {r.set}</span>
                       )}
                       {r.anclajes > 0 && (
-                        <span title="Observaciones, RFI o submittals clavados sobre esta revisión concreta"
+                        <span title="De esta revisión"
                               style={{ fontSize: 12, color: '#507294', fontWeight: 600 }}>
                           · {r.anclajes} anclado{r.anclajes === 1 ? '' : 's'}
                         </span>

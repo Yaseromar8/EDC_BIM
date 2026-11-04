@@ -709,7 +709,7 @@ export default function MultimediaModule({ project, user }) {
                       </div>
                     ) : (
                       <div onClick={() => { setDescriptionDraft(selectedPhoto.desc || ''); setEditingDescription(true); }}
-                           title="Clic para editar la descripción"
+                           title="Editar descripción"
                            style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, cursor: 'text', textAlign: 'center' }}>
                         <span style={{ fontSize: 15, fontWeight: 600, color: selectedPhoto.desc ? '#fff' : 'rgba(255,255,255,0.6)' }}>
                           {selectedPhoto.desc || 'Añade una descripción…'}

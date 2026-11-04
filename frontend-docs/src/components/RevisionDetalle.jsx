@@ -331,18 +331,18 @@ export default function RevisionDetalle({ rid, projectPrefix, onVolver, onCambio
                 // Sin versión válida no se ofrece abrirlo: la previsualización
                 // resuelve por la versión y enseñaría otro documento con este nombre.
                 <span style={S.docInvalido}
-                      title="Esta revisión no tiene fijada una versión válida de este documento">
+                      title="Sin versión válida">
                   {it.name} · sin versión válida
                 </span>
               ) : (
                 <button type="button" onClick={() => openDoc(it)} className="rev-doc"
-                        title="Abrir la versión que se revisa">
+                        title="Abrir versión">
                   {it.name}
                 </button>
               )}
               {it.asociacion_valida !== false && <Chip>{etiquetaDeVersion(it)}</Chip>}
               {it.es_version_vigente === false && (
-                <Chip tono="aviso" title="Se subió una versión más reciente después de mandar esto a revisión">
+                <Chip tono="aviso" title="Hay una versión nueva">
                   hay v{it.version_vigente_numero}
                 </Chip>
               )}

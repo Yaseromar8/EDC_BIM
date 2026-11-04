@@ -53,7 +53,7 @@ export function TarjetaIncidencia({ elemento: el, elegido }) {
 // Una tarjeta pequeña dentro de una columna del kanban; doble clic abre su detalle.
 function Mini({ i, nombres, abrir }) {
   return (
-    <div onDoubleClick={(e) => { e.stopPropagation(); abrir(i.id); }} title="Doble clic para abrirla"
+    <div onDoubleClick={(e) => { e.stopPropagation(); abrir(i.id); }}
       style={{ background: '#fff', border: `1px solid ${BORDE}`, borderRadius: 5, padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 5, cursor: 'default' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
         <span style={{ fontSize: 12, fontWeight: 700, color: TINTA }}>{i.codigo}</span>
@@ -108,7 +108,7 @@ export function BarraIncidencia({ el, abrir }) {
   const { porId } = useContext(IncidenciasDelTablero);
   if (!porId[el.issueId]) return null;
   return (
-    <button type="button" style={BOTON} title="Abrir la incidencia aquí, encima del tablero (doble clic también)" onClick={() => abrir(el.issueId)}>
+    <button type="button" style={BOTON} title="Abrir aquí" onClick={() => abrir(el.issueId)}>
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
         <path d="M14 4h6v6" /><path d="M20 4 11 13" /><path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5" />
       </svg>

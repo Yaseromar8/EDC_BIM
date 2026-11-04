@@ -259,7 +259,7 @@ function FilaSeccion({ s, onAbrir, onSometer }) {
       {/* Cuantos submittals se han sometido contra esta seccion: el dato que
           dice si la especificacion se esta USANDO o solo guardando. */}
       <span style={{ fontSize: 12, color: s.submittals ? '#507294' : '#cccac0' }}
-            title="Submittals sometidos contra esta sección">
+            title="Submittals">
         {s.submittals} sometimiento(s)
       </span>
 

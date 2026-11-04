@@ -20,7 +20,7 @@ export default function PanelDeGrupos({ grupos = [], activo = null, onElegir, on
       <div className="grupos-panel__titulo">Grupos</div>
       {grupos.map(g => (
         <button key={g.id} type="button" className={`grupos-item${activo === g.id ? ' es-activo' : ''}`}
-          onClick={() => onElegir(g)} title={g.de_la_obra ? 'Grupo de la obra: lo ven todos' : 'Tu grupo: solo lo ves tú'}>
+          onClick={() => onElegir(g)} title={g.de_la_obra ? 'De la obra' : 'Solo tuyo'}>
           <IconoGrupo />
           <span className="grupos-item__nombre">{g.nombre}</span>
           {g.de_la_obra && <span className="grupos-obra">OBRA</span>}

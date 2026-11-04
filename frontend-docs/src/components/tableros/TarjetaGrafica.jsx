@@ -103,7 +103,7 @@ export default function TarjetaGrafica({ elemento: g }) {
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, paddingTop: 8, borderTop: `1px solid ${BORDE}`, fontSize: 11, color: GRIS }}>
         <span style={{ flex: 1, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
-          title="Una foto de la gráfica de View. Para ponerla al día, vuelve a enviarla desde View.">
+          title="Foto de View">
           Datos del {fechaDeDatos(g.fecha)}{g.enviadaPor ? ` · ${g.enviadaPor}` : ''} · de View
         </span>
         {enlace && (

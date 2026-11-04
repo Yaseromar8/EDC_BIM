@@ -149,7 +149,7 @@ export default function FlujosDeRevisionModule({ project, API, user, isAdmin }) 
                 v{p.version}
               </span>
               {p.alcance === 'ENTIDAD' && (
-                <span title="Definida en la entidad: sirve en todas las obras"
+                <span title="De la entidad"
                       style={{ fontSize: 12, fontWeight: 700, padding: '2px 8px',
                                borderRadius: 10, background: '#ecf0f1', color: '#507294' }}>
                   DE LA ENTIDAD

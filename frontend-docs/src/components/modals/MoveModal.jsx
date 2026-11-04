@@ -131,7 +131,7 @@ export default function MoveModal({ moveState, setMoveState, projectPrefix, proj
           <button 
             className={!moveState.destPath ? 'acc-btn-disabled' : 'acc-btn-primary-2'} 
             disabled={!moveState.destPath}
-            title={!moveState.destPath ? 'Elige antes una carpeta de destino' : undefined}
+            title={!moveState.destPath ? 'Elige el destino' : undefined}
             onClick={() => { if (moveState.destPath) onExecuteMove(); }}
             style={{ 
               padding: '8px 24px', 

@@ -1166,7 +1166,7 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
                 doble clic para volver al ancho de siempre. El ancho se recuerda. */}
             <div className="divisor-arbol" role="separator" aria-orientation="vertical" tabIndex={0}
                  aria-label="Ancho del panel de carpetas" aria-valuenow={treeSidebarWidth} aria-valuemin={arbolMin} aria-valuemax={arbolMax}
-                 title="Arrastra para cambiar el ancho · doble clic para restablecerlo"
+                 title="Cambiar ancho"
                  onPointerDown={startTreeResize} onKeyDown={teclaTree} onDoubleClick={resetTree}>
               <span className="divisor-arbol__asa" />
             </div>
@@ -1184,7 +1184,7 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
                   <button type="button" onClick={() => fe.setShowUploadModal(true)} className="barra-btn barra-btn--primario">Cargar archivos</button>
                 )}
                 {fe.puedeEditarAqui && !fe.isTrashMode && !enVista && (
-                  <button type="button" onClick={() => { fe.setNewFolderParentPath(''); fe.setShowNewFolder(true); }} title="Crear carpeta en la ubicación actual"
+                  <button type="button" onClick={() => { fe.setNewFolderParentPath(''); fe.setShowNewFolder(true); }} title="Nueva carpeta"
                     className="barra-btn barra-btn--contorno">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/><line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/></svg>
                     Nueva carpeta
@@ -1197,7 +1197,7 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
                       id: fe.currentNodeId,
                       name: fe.currentPath.replace(/\/+$/, '').split('/').at(-1),
                     })}
-                    title="Vincular, cambiar o desactivar el destino ACC de esta carpeta"
+                    title="Destino ACC"
                     aria-label="Configurar vínculo ACC de la carpeta actual"
                     className="barra-btn barra-btn--contorno">
                     <span aria-hidden="true">↔</span> Vincular ACC
@@ -1237,7 +1237,7 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
                   const doc = selFiles[0];
                   return (
                     <button type="button" onClick={() => publicarAlVisor(doc)} disabled={publicando}
-                      title="Llevar este modelo al visor sin volver a subirlo"
+                      title="Abrir en View"
                       className="barra-btn barra-btn--texto">
                       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="7.5 4.21 12 6.81 16.5 4.21"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
                       {publicando ? 'Publicando…' : 'Publicar al visor'}
@@ -1305,7 +1305,7 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
 
                 {!fe.isTrashMode && (
                   <select value={fe.statusFilter} onChange={e => fe.setStatusFilter(e.target.value)}
-                    title="Filtrar por estado de revisión"
+                    title="Filtrar por estado"
                     className="barra-campo"
                     style={{ padding: '0 8px', color: fe.statusFilter === 'ALL' ? 'var(--a-text-secondary)' : 'var(--accent)', fontWeight: fe.statusFilter === 'ALL' ? 400 : 600, cursor: 'pointer' }}>
                     <option value="ALL">Todos los estados</option>
@@ -1429,7 +1429,7 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
                     <button
                       onClick={() => { if (!enRaiz) fe.navigate(rutaDelPadre, null); }}
                       disabled={enRaiz}
-                      title={enRaiz ? 'Ya estás en la raíz del proyecto' : 'Subir a la carpeta anterior'}
+                      title={enRaiz ? 'Ya en la raíz' : 'Carpeta anterior'}
                       aria-label="Subir a la carpeta anterior"
                       style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 24, height: 24, marginRight: 4,
                                background: 'none', border: 'none', borderRadius: 4, padding: 0,

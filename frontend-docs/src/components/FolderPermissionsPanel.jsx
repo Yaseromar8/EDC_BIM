@@ -373,7 +373,7 @@ export default function FolderPermissionsPanel({ folder, modelUrn, apiBaseUrl, o
             <span>{cuantas} {cuantas === 1 ? 'regla en esta carpeta' : 'reglas en esta carpeta'}</span>
           </p>
         </div>
-        <button className="close-btn" onClick={onClose} title="Cerrar panel">×</button>
+        <button className="close-btn" onClick={onClose} title="Cerrar">×</button>
       </div>
 
       <div className="permissions-toolbar">
@@ -381,7 +381,7 @@ export default function FolderPermissionsPanel({ folder, modelUrn, apiBaseUrl, o
           <button className="btn-primary" onClick={() => setShowAddModal(true)}>
             <PlusIcon /> Conceder
           </button>
-          <button className="btn-secondary" title="Exportación a Excel: próximamente" disabled>Exportar</button>
+          <button className="btn-secondary" title="Próximamente" disabled>Exportar</button>
         </div>
         <div className="search-box">
           <span className="search-icon" style={{ display: 'inline-flex' }}><SearchIcon /></span>
@@ -446,7 +446,7 @@ export default function FolderPermissionsPanel({ folder, modelUrn, apiBaseUrl, o
                       <ChipSujeto tipo={perm.sujeto_tipo}>{perm.sujeto_etiqueta}</ChipSujeto>
                     </td>
                     <td>
-                      <button className="icon-btn action-delete" onClick={() => removePermission(perm)} title="Retirar esta regla">
+                      <button className="icon-btn action-delete" onClick={() => removePermission(perm)} title="Retirar">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
                       </button>
                     </td>

@@ -132,7 +132,7 @@ function UsersTab() {
               <tr key={u.id}>
                 <td style={{ fontWeight: 500, whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden', maxWidth: 150 }}>
                   {/* P4: el nombre abre la ficha transversal (solo lectura). */}
-                  <span onClick={() => setFichaDe(u.id)} title="Ver ficha de la persona"
+                  <span onClick={() => setFichaDe(u.id)} title="Ver ficha"
                         style={{ cursor: 'pointer', color: 'var(--link)' }}>{u.name}</span>
                 </td>
                 <td style={{ whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden', maxWidth: 200 }} title={u.email}>{u.email}</td>
@@ -163,22 +163,22 @@ function UsersTab() {
                       la deja pendiente otra vez). El backend además lo exige:
                       reactivar responde 409 INVITACION_REVOCADA. */}
                   {u.role !== 'admin' && u.activo === false && !u.pendiente && (
-                    <button className="btn btn-secondary" style={{ padding: '3px 10px', fontSize: 12 }} onClick={(e) => { e.stopPropagation(); handleReactivar(u.id); }} title="Devolver el acceso; el rastro se conservó">
+                    <button className="btn btn-secondary" style={{ padding: '3px 10px', fontSize: 12 }} onClick={(e) => { e.stopPropagation(); handleReactivar(u.id); }} title="Devolver acceso">
                       Reactivar
                     </button>
                   )}
                   {u.role !== 'admin' && u.activo === false && u.pendiente && (
-                    <button className="btn btn-secondary" style={{ padding: '3px 10px', fontSize: 12 }} onClick={(e) => { e.stopPropagation(); handleReinvitar(u); }} title="Emitir un enlace nuevo: la invitación vuelve a quedar pendiente">
+                    <button className="btn btn-secondary" style={{ padding: '3px 10px', fontSize: 12 }} onClick={(e) => { e.stopPropagation(); handleReinvitar(u); }} title="Reenviar invitación">
                       Reinvitar
                     </button>
                   )}
                   {u.role !== 'admin' && u.activo !== false && u.pendiente && (
-                    <button className="btn btn-secondary" style={{ padding: '3px 10px', fontSize: 12, marginRight: 6 }} onClick={(e) => { e.stopPropagation(); handleReinvitar(u); }} title="Emitir un enlace nuevo; los anteriores dejan de valer">
+                    <button className="btn btn-secondary" style={{ padding: '3px 10px', fontSize: 12, marginRight: 6 }} onClick={(e) => { e.stopPropagation(); handleReinvitar(u); }} title="Nuevo enlace">
                       Reinvitar
                     </button>
                   )}
                   {u.role !== 'admin' && u.activo !== false && (
-                    <button className="btn-icon" onClick={(e) => { e.stopPropagation(); u.pendiente ? handleRevocar(u.id) : handleDelete(u.id); }} title={u.pendiente ? 'Revocar invitación (la cuenta se desactiva)' : 'Retirar acceso'}>
+                    <button className="btn-icon" onClick={(e) => { e.stopPropagation(); u.pendiente ? handleRevocar(u.id) : handleDelete(u.id); }} title={u.pendiente ? 'Revocar invitación' : 'Retirar acceso'}>
                       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
                       </svg>
@@ -449,7 +449,7 @@ function TagsTab({ obras = [] }) {
               )}
             </div>
           )}
-        </td><td style={{ width: 50 }}><button className="btn-icon" title={resumen[c.id] && (resumen[c.id].personas || resumen[c.id].obras.length || resumen[c.id].reglas_de_permiso) ? 'En uso: retira antes sus referencias' : 'Borrar empresa'} onClick={() => handleDeleteComp(c.id)}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></svg></button></td></tr>))}</tbody></table>
+        </td><td style={{ width: 50 }}><button className="btn-icon" title={resumen[c.id] && (resumen[c.id].personas || resumen[c.id].obras.length || resumen[c.id].reglas_de_permiso) ? 'En uso' : 'Borrar empresa'} onClick={() => handleDeleteComp(c.id)}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></svg></button></td></tr>))}</tbody></table>
       </div>
       <div style={{ flex: '1 1 380px', minWidth: 300, background: '#fff', borderRadius: 6, padding: 18, border: '1px solid #e8e6dc' }}>
         <h3 style={{ marginBottom: 14, fontSize: 15 }}>Cargos</h3>
@@ -603,7 +603,7 @@ export default function SecureProjectsPage({ user, onSelectProject, onLogout, on
           <span
             className="header-logo"
             onClick={onBackToHub}
-            title="Volver al inicio (elegir producto)"
+            title="Inicio"
             style={{ display: 'flex', alignItems: 'center', gap: 9, cursor: onBackToHub ? 'pointer' : 'default' }}
           >
             {/* Cabecera Dark 12 (paleta oficial de Claude, D-24) ⇒ logo en Light.
@@ -704,7 +704,7 @@ export default function SecureProjectsPage({ user, onSelectProject, onLogout, on
                           </td>
                         )}
                         <td style={{ fontSize: 14 }}>{formatDate(p.created_at)}</td>
-                        {isAdmin && (<td><button className="btn btn-secondary" style={{ padding: '0 10px', fontSize: 13, display: 'inline-flex', alignItems: 'center', gap: 6 }} title="Elegir qué usuarios acceden a este proyecto" onClick={(e) => openAccess(p, e)}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /></svg>Accesos</button></td>)}
+                        {isAdmin && (<td><button className="btn btn-secondary" style={{ padding: '0 10px', fontSize: 13, display: 'inline-flex', alignItems: 'center', gap: 6 }} title="Usuarios" onClick={(e) => openAccess(p, e)}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /></svg>Accesos</button></td>)}
                       </tr>
                     ))}
                   </tbody>

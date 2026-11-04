@@ -47,7 +47,7 @@ export function RolDeMiembro({ miembro, isAdmin, onCambiado }) {
   // que siempre contesta «no» solo enseña a desconfiar de los controles.
   if (!isAdmin || esYo) {
     return (
-      <span title={esYo ? 'Tu propio rol lo cambia otro administrador.' : undefined}
+      <span title={esYo ? 'Lo cambia otro administrador' : undefined}
             style={{ padding: '3px 10px', borderRadius: 12, fontSize: 12, fontWeight: 600,
                      textTransform: 'uppercase', background: '#f1f0e8', color: '#507294' }}>
         {rol}
@@ -114,7 +114,7 @@ export function RolDeMiembro({ miembro, isAdmin, onCambiado }) {
   return (
     <select value={rol} disabled={cambiando}
             onChange={e => cambiar(e.target.value)}
-            title="Cambiar el rol de este miembro"
+            title="Cambiar rol"
             style={{
               padding: '4px 8px', borderRadius: 8, fontSize: 13, fontWeight: 600,
               border: '1px solid #ecf0f1', background: cambiando ? '#f1f0e8' : '#fff',

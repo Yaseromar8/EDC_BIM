@@ -248,23 +248,23 @@ export default function LectorDeTabla({ url, cargando = false, codigo = '', vers
           <div className="tabla-lda__niveles" role="group" aria-label="Niveles visibles de la planilla">
             <span className="tabla-lda__niveles-rot">Niveles:</span>
             <button type="button" className={plegados.size === 0 ? 'es-activo' : ''}
-              onClick={() => verJerarquia('todo')} title="Mostrar todos los niveles y partidas">
+              onClick={() => verJerarquia('todo')} title="Desplegar todo">
               Todo
             </button>
             <button type="button"
               className={plegados.size > 0 && plegados.size < gruposConHijos.length ? 'es-activo' : ''}
-              onClick={() => verJerarquia('subtitulos')} title="Plegar el último nivel de partidas">
+              onClick={() => verJerarquia('subtitulos')} title="Plegar un nivel">
               Estructura
             </button>
             <button type="button"
               className={plegados.size === gruposConHijos.length && gruposConHijos.length > 0 ? 'es-activo' : ''}
-              onClick={() => verJerarquia('titulos')} title="Plegar al primer nivel">
+              onClick={() => verJerarquia('titulos')} title="Plegar todo">
               Nivel 1
             </button>
           </div>
         )}
         {conSustento && columnasDeCabecera.length > 0 && (
-          <label className="tabla-lda__metrado" title="La columna contra la que se cuadra el sustento de cada partida">
+          <label className="tabla-lda__metrado" title="Columna de cuadre">
             Metrado:
             <select value={colMetrado ?? ''} onChange={e => elegirMetrado(e.target.value)}>
               <option value="">— sin columna —</option>
@@ -317,7 +317,7 @@ export default function LectorDeTabla({ url, cargando = false, codigo = '', vers
                             {j.tieneHijos ? (
                               <button type="button" className="celda-jerarquia__plegar"
                                 aria-expanded={!plegado}
-                                title={plegado ? `Desplegar ${j.codigo} (${j.partidas} partidas)` : `Plegar ${j.codigo}`}
+                                title={plegado ? `Desplegar ${j.codigo}` : `Plegar ${j.codigo}`}
                                 onClick={e => alternarGrupo(j.codigo, e)}>
                                 {plegado ? '▸' : '▾'}
                               </button>
@@ -361,7 +361,7 @@ export default function LectorDeTabla({ url, cargando = false, codigo = '', vers
                             : q.estado === 'cuadra' ? ' · cuadra' : q.estado === 'falta' ? ` · faltan ${cantidadLegible(q.diferencia, q.vs[0].unidad)}`
                             : q.estado === 'sobra' ? ` · sobran ${cantidadLegible(-q.diferencia, q.vs[0].unidad)}` : ''}
                         </span>
-                        {q.vs.some(v => avisoDeVersion(v)) && <span className="sus-chip sus-version" title="Alguna zona se midió sobre una versión anterior del plano">revisar versión</span>}
+                        {q.vs.some(v => avisoDeVersion(v)) && <span className="sus-chip sus-version" title="Medido en una versión anterior">revisar versión</span>}
                       </td>
                     );
                   })()}
@@ -380,7 +380,7 @@ export default function LectorDeTabla({ url, cargando = false, codigo = '', vers
           <span>Fila <b>{elegida + 1}</b> de la hoja «{hoja}»</span>
           {valorClave
             ? <><span>· ítem <b>{valorClave}</b></span>
-                <code title="Dirección de esta fila según el estándar LDA">{ancla}</code>
+                <code title="Dirección LDA">{ancla}</code>
                 <button type="button" onClick={copiarAncla}>Copiar ancla</button></>
             : <span className="tabla-lda__sin">· esta fila no tiene ítem: no se puede anclar</span>}
         </div>
@@ -418,7 +418,7 @@ export default function LectorDeTabla({ url, cargando = false, codigo = '', vers
               </span>
             )}
             <button type="button" className="sus-vincular" onClick={() => setEligiendoPlano(true)}
-              title="Elegir el plano y marcar en él la zona que sustenta esta partida">+ Vincular un plano</button>
+              title="Vincular plano">+ Vincular un plano</button>
           </div>
         );
       })()}

@@ -286,7 +286,6 @@ export default function BarraDeMarca({ API, obra, marca, esAutor, editable, colo
           <form className="bdm-anotar" onSubmit={e => { e.preventDefault(); comentar(); }}>
             <input value={comentario} maxLength={TOPE_COMENTARIO} autoFocus aria-label="Comentario"
               placeholder={comentarios.length ? 'Responder…' : 'Anotar un comentario…'}
-              title="Queda con tu nombre y la hora; no se edita ni se borra."
               onChange={e => setComentario(e.target.value)} />
             <button type="submit" aria-label="Comentar" data-tip="Comentar" disabled={!comentario.trim() || comentando}>
               <Ico size={14}><path d="M5 12h13" /><path d="M13 6l6 6-6 6" /></Ico>

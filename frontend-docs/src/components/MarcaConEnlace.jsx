@@ -87,7 +87,7 @@ function MiniaturaDeFoto({ API, foto, onAbrir, onQuitar }) {
       </button>
       {onQuitar && (
         <button type="button" className="mce-mini__quitar" onClick={onQuitar} aria-label="Quitar esta foto de la marca"
-          title="Quitar de la marca (la foto sigue en la obra)"><IcoQuitar size={12} /></button>
+          title="Quitar"><IcoQuitar size={12} /></button>
       )}
     </div>
   );
@@ -419,11 +419,11 @@ export function PanelDeMarca({ API, obra, marca, esAutor, versionVigente = null,
         <footer className="mce-panel__pie">
           <button type="button" className="mce-btn mce-btn--sec" onClick={onPublicar}
             disabled={marca.publicado && observacionViva(marca.observacion)}
-            title={marca.publicado && observacionViva(marca.observacion) ? 'Tiene una observación abierta: el responsable la necesita a la vista' : undefined}>
+            title={marca.publicado && observacionViva(marca.observacion) ? 'Observación abierta' : undefined}>
             {marca.publicado ? 'Retirar de la obra' : 'Publicar'}</button>
           <button type="button" className="mce-btn mce-btn--peligro"
             disabled={observacionViva(marca.observacion)}
-            title={observacionViva(marca.observacion) ? 'Tiene una observación abierta: anúlala o ciérrala antes' : undefined}
+            title={observacionViva(marca.observacion) ? 'Observación abierta' : undefined}
             onClick={async () => {
             const ok = await confirmAction({
               title: `¿Borrar esta ${tipo.toLowerCase()}?`,
@@ -492,7 +492,7 @@ export function CitadoEn({ API, file }) {
   return (
     <div className="mce-citado" ref={caja}>
       <button type="button" className="cajetin__cas mce-citado__boton" onClick={() => setAbierto(a => !a)}
-        aria-expanded={abierto} title="Qué marcas de qué planos citan este documento">
+        aria-expanded={abierto}>
         <span className="cajetin__rot">Citado en</span>
         <b className="cajetin__val">{grupos.length === 1 ? '1 plano' : `${grupos.length} planos`} <span aria-hidden="true" className="cajetin__flecha">▾</span></b>
         <small className="cajetin__det">{citas.length === 1 ? '1 marca' : `${citas.length} marcas`}</small>

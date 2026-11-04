@@ -62,8 +62,7 @@ export default function AvanceModule({ project, API, user, isAdmin }) {
           Avance físico
         </h1>
         {dataset && (
-          <span style={{ fontSize: 12, color: 'var(--text-secondary, #777)' }}
-            title={dataset.huella}>plan: {dataset.id}</span>
+          <span style={{ fontSize: 12, color: 'var(--text-secondary, #777)' }}>plan: {dataset.id}</span>
         )}
       </div>
       <p style={{ fontSize: 13, color: 'var(--text-secondary, #666)', margin: '0 0 14px' }}>
@@ -134,7 +133,7 @@ function Actividades({ actividades }) {
               <td style={{ padding: '8px 10px', fontVariantNumeric: 'tabular-nums' }}>{a.metrado ?? '—'}</td>
               <td style={{ padding: '8px 10px', fontVariantNumeric: 'tabular-nums' }}>
                 {a.acumulado_aprobado}
-                {a.exceso && <span title="El aprobado excede el objetivo: quedó confirmado explícitamente al aprobar"
+                {a.exceso && <span title="Sobre el objetivo"
                   style={{ marginLeft: 6, fontSize: 12, color: '#b3261e', fontWeight: 700 }}>EXCESO</span>}
               </td>
               <td style={{ padding: '8px 10px', fontVariantNumeric: 'tabular-nums' }}>

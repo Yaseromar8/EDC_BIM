@@ -917,7 +917,7 @@ const IssueModule = ({ project, API, user, isAdmin, cfg }) => {
                             type="date"
                             value={(editFormData.vence_en || '').slice(0, 10)}
                             onChange={e => handleFieldChange('vence_en', e.target.value || null)}
-                            title="Fecha límite (día calendario). No hay calendario de días hábiles: un plazo vence en la fecha indicada aunque caiga en fin de semana."
+                            title="Fecha límite"
                             style={{ padding: '4px 6px', border: '1px solid #e8e6dc', borderRadius: 4, fontSize: 13, width: '100%' }}
                           />
                         ) : (
@@ -929,7 +929,7 @@ const IssueModule = ({ project, API, user, isAdmin, cfg }) => {
                             const vencido = Boolean(rfi.vence_en) && !resuelto && dia(rfi.vence_en) < dia(Date.now());
                             return (
                               <span style={{ fontSize: 13, color: !rfi.vence_en ? '#cccac0' : vencido ? '#b93535' : '#52524d', fontWeight: vencido ? 600 : 400 }}
-                                title={vencido ? 'Plazo vencido y sin responder' : undefined}>
+                                title={vencido ? 'Vencido' : undefined}>
                                 {rfi.vence_en ? new Date(rfi.vence_en).toLocaleDateString() : '—'}
                               </span>
                             );
@@ -1110,7 +1110,7 @@ const IssueModule = ({ project, API, user, isAdmin, cfg }) => {
                           const adjKey = `${rfi.id}-${idx}`;
                           const isLoadingThis = loadingAdjuntoKey === adjKey;
                           return (
-                          <div key={idx} style={{ position: 'relative', cursor: isEditing ? 'default' : 'pointer' }} title={`${aj.name} — Click para abrir`}>
+                          <div key={idx} style={{ position: 'relative', cursor: isEditing ? 'default' : 'pointer' }} title={aj.name}>
                             <span 
                               onClick={() => !isEditing && !isLoadingThis && handleAdjuntoClick(aj, rfi.id, idx)}
                               style={{

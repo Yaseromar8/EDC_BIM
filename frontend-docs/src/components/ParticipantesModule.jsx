@@ -459,7 +459,7 @@ export default function ParticipantesModule({ project, isAdmin }) {
                     <td style={{ padding: '11px 12px' }}>
                       <button onClick={() => quitarEmpresa(e.company_id, e.nombre)}
                               disabled={guardando === 'empresa:' + e.company_id}
-                              title="Quitar del directorio de esta obra"
+                              title="Quitar"
                               style={{ border: 'none', background: 'none', cursor: 'pointer',
                                        color: '#b93535', fontSize: 15 }}>×</button>
                     </td>
@@ -554,7 +554,7 @@ export default function ParticipantesModule({ project, isAdmin }) {
 
                 {candidatoElegido && !candidatoElegido.company_id && (
                   <select value={addEmpresa} onChange={e => { setAddEmpresa(e.target.value); setAddFuncion(''); }}
-                          title="La empresa es de la persona: quedará en su perfil, la misma en todas las obras"
+                          title="Empresa"
                           style={{ padding: '6px 8px', border: '1px solid #e8e6dc', borderRadius: 5,
                                    fontSize: 14, minWidth: 170 }}>
                     <option value="">Su empresa… (opcional)</option>
@@ -564,7 +564,7 @@ export default function ParticipantesModule({ project, isAdmin }) {
 
                 {candidatoElegido && empresaSinFuncionAqui && (
                   <select value={addFuncion} onChange={e => setAddFuncion(e.target.value)}
-                          title="La función es de la empresa EN ESTA OBRA — no concede permisos"
+                          title="Función en la obra"
                           style={{ padding: '6px 8px', border: '1px solid #e8e6dc', borderRadius: 5,
                                    fontSize: 14 }}>
                     <option value="">Función de su empresa aquí… (opcional)</option>
@@ -674,7 +674,7 @@ export default function ParticipantesModule({ project, isAdmin }) {
                     value={p.company_id ?? ''}
                     disabled={guardando === 'persona:' + p.id}
                     onChange={ev => ponerEmpresaDe(p.id, ev.target.value)}
-                    title="La empresa es de la persona: cambiarla afecta a todas las obras"
+                    title="Empresa"
                     style={{ padding: '4px 6px', border: '1px solid #e8e6dc',
                              borderRadius: 4, fontSize: 13, minWidth: 150 }}>
                     <option value="">— sin empresa —</option>
@@ -699,7 +699,7 @@ export default function ParticipantesModule({ project, isAdmin }) {
                   // ENTITY ADMIN: administra la instancia entera, así que esta
                   // obra también. No hay nada que nombrar ni que retirar aquí,
                   // y fingir un interruptor que no hace nada sería peor.
-                  <span title="Administra toda la entidad, no solo esta obra"
+                  <span title="Admin de la entidad"
                         style={{ fontSize: 12, color: '#507294', fontWeight: 500 }}>
                     Administrador de la entidad
                   </span>
@@ -724,7 +724,7 @@ export default function ParticipantesModule({ project, isAdmin }) {
                   {/* CAPA 08: a que herramientas entra. Separado de retirar y
                       de la administracion: son tres cosas distintas. */}
                   <button onClick={() => setHerramientasDe(p)}
-                          title="A qué herramientas entra en esta obra"
+                          title="Herramientas"
                           style={{ border: '1px solid #e8e6dc', background: '#fff',
                                    borderRadius: 4, padding: '3px 9px', fontSize: 12,
                                    color: '#507294', cursor: 'pointer', marginRight: 6 }}>
@@ -735,7 +735,7 @@ export default function ParticipantesModule({ project, isAdmin }) {
                       igual, y retirarlo no le quita la administración. */}
                   <button onClick={() => retirarPersona(p)}
                           disabled={guardando === 'persona:' + p.id}
-                          title="Retirar de esta obra (la cuenta y su historia se conservan)"
+                          title="Retirar de la obra"
                           style={{ border: 'none', background: 'none', cursor: 'pointer',
                                    color: '#b93535', fontSize: 15 }}>×</button>
                 </td>

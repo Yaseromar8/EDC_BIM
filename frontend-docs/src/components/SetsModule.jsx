@@ -152,12 +152,12 @@ export function SetsView({ projectPrefix, isAdmin }) {
                       puesto. Las filas anteriores al arreglo no tienen version_id y
                       no hay forma de adivinarlo a posteriori: se dicen como son. */}
                   {it.version_id ? (
-                    <span title="Se abre exactamente el contenido que tenía al añadirlo"
+                    <span title="Versión fija"
                       style={{ fontSize: 12, fontWeight: 700, color: 'var(--accent)', background: 'var(--bg-accent)', padding: '2px 8px', borderRadius: 10 }}>
                       V{it.version_number || 1} congelada
                     </span>
                   ) : (
-                    <span title="Se añadió antes de que se guardara la referencia a la versión: abre el contenido actual del documento"
+                    <span title="Contenido actual"
                       style={{ fontSize: 12, fontWeight: 700, color: 'var(--warning)', background: 'var(--bg-warning)', padding: '2px 8px', borderRadius: 10 }}>
                       V{it.version_number || 1} · sin congelar
                     </span>

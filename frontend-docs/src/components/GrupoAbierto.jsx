@@ -100,19 +100,19 @@ export default function GrupoAbierto({ grupo, puedeEscribir, servicio, onAbrir, 
               <tr key={d.file.id}>
                 <td>
                   <button type="button" className="grupo-doc" onClick={() => onAbrir(d.file, d.fijo, docs.map(x => x.file))}
-                    title={d.fijo ? `Abrir la V${d.fijo.version_number} (fija)` : 'Abrir la versión vigente'}>
+                    title={d.fijo ? `Abrir V${d.fijo.version_number}` : 'Abrir la vigente'}>
                     <Icono nombre={d.file.name} />
                     <span>{d.file.name}</span>
                   </button>
                 </td>
                 <td>
                   <button type="button" className="grupo-vive" onClick={() => onIrACarpeta(d)}
-                    title="Ir a la carpeta donde vive">{d.ruta.length ? d.ruta.join(' › ') : 'Archivos de proyecto'}</button>
+                    title="Ir a la carpeta">{d.ruta.length ? d.ruta.join(' › ') : 'Archivos de proyecto'}</button>
                 </td>
                 <td>
                   {puedeEscribir ? (
                     <button type="button" className={`grupo-sigue${d.fijo ? ' es-fijo' : ''}`} onClick={() => alternarFijo(d)}
-                      title={d.fijo ? 'Pulsar para seguir siempre la vigente' : 'Pulsar para fijar la versión de hoy'}>
+                      title={d.fijo ? 'Seguir la vigente' : 'Fijar esta versión'}>
                       {d.fijo ? `fijo · V${d.fijo.version_number}` : 'la vigente'}
                     </button>
                   ) : (
@@ -121,12 +121,12 @@ export default function GrupoAbierto({ grupo, puedeEscribir, servicio, onAbrir, 
                 </td>
                 <td className="grupo-version">
                   V{d.version_vigente || '—'}{d.file.codigo_revision ? ` · ${d.file.codigo_revision}` : ''}
-                  {d.nueva_version && <span className="grupo-nueva" title="Subida en los últimos 7 días">nueva versión</span>}
+                  {d.nueva_version && <span className="grupo-nueva" title="Nueva">nueva versión</span>}
                 </td>
                 <td>
                   {puedeEscribir && (
                     <button type="button" className="grupo-quitar" onClick={() => quitar(d)}
-                      title="Quitar del grupo (el documento no se borra)" aria-label={`Quitar ${d.file.name} del grupo`}>✕</button>
+                      title="Quitar del grupo" aria-label={`Quitar ${d.file.name} del grupo`}>✕</button>
                   )}
                 </td>
               </tr>

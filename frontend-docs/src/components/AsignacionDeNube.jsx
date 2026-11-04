@@ -143,7 +143,7 @@ function Formulario({ API, obra, obsId, marcaId, nube, pedidoSugerido, onHecha, 
       <input value={pedido} maxLength={2000} aria-label="Qué se le pide" placeholder="Qué se le pide"
         onChange={e => setPedido(e.target.value)} />
       <div className="bdm-asignar__fila">
-        <input type="date" value={vence} min={hoy()} aria-label="Para cuándo" title="Para cuándo (opcional)"
+        <input type="date" value={vence} min={hoy()} aria-label="Para cuándo"
           onChange={e => setVence(e.target.value)} />
         <button type="button" className="bdm-accion" onClick={onCancelar}>Cancelar</button>
         <button type="submit" className="bdm-accion bdm-accion--prim" disabled={!quien || !pedido.trim() || ocupado}>

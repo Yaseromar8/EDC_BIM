@@ -143,7 +143,7 @@ export default function ShareModal({ isOpen, shareTarget, user, projectPrefix, s
         <div className="share-footer" style={{ position: 'relative' }}>
           <button className="btn-copy-link"
             disabled={creating || bloqueada || puerta.estado === 'consultando'}
-            title={bloqueada ? 'Falta el triaje de seguridad de la obra' : undefined}
+            title={bloqueada ? 'Falta el triaje' : undefined}
             onClick={handleCopyLink}>
             {creating ? 'Creando…' : puerta.estado === 'consultando' ? 'Comprobando…' : 'Copiar enlace'}
           </button>

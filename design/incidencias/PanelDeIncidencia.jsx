@@ -538,7 +538,6 @@ function Detalle({ entorno, obra, ob, issueId, extraDetalle, nube = null, onIrAM
           )}
           {i.estado !== 'Borrador' && (
             <button type="button" className={`pinc-seguir${sigo ? ' es-activo' : ''}`} disabled={ocupado} aria-pressed={sigo}
-              data-tip={sigo ? 'Te avisamos de cada paso. Clic para dejar de seguirla' : 'Recibe un aviso en cada paso'}
               onClick={() => hacer('editar', { seguir: !sigo }, sigo ? 'Ya no la sigues' : 'La sigues: te avisaremos de cada paso')}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill={sigo ? 'currentColor' : 'none'} stroke="currentColor"
                 strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -791,7 +790,6 @@ function Detalle({ entorno, obra, ob, issueId, extraDetalle, nube = null, onIrAM
       <div className="pinc-comentar">
         <textarea value={comentario} onChange={ev => setComentario(ev.target.value)} rows={/\n/.test(comentario) || comentario.length > 60 ? 3 : 1}
           maxLength={2000} placeholder="Escribe un comentario…" aria-label="Comentario"
-          data-tip="Queda en el expediente: no se edita ni se borra. Ctrl+Enter envía."
           onKeyDown={ev => { if (ev.key === 'Enter' && (ev.ctrlKey || ev.metaKey)) { ev.preventDefault(); comentar(); } }} />
         <button type="button" className="pinc-btn pinc-btn--prim" disabled={!comentario.trim() || ocupado} onClick={comentar}>Comentar</button>
       </div>

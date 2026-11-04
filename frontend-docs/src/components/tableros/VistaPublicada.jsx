@@ -130,7 +130,7 @@ export default function VistaPublicada({ vista, contenido, tipos, tablero, obra,
             onKeyDown={e => { if (e.key === 'Enter') terminarRenombrado(true); if (e.key === 'Escape') terminarRenombrado(false); }}
             style={{ width: `${Math.max(12, titulo.length + 2)}ch`, maxWidth: 480, height: 30, padding: '0 8px', border: `1px solid ${LINEA}`, borderRadius: 6, fontSize: 14, fontWeight: 600, fontFamily: 'inherit', color: TINTA, outline: 'none' }} />
         ) : (
-          <span onDoubleClick={() => puedeEditar && setRenombrando(true)} title={puedeEditar ? 'Doble clic para renombrar' : undefined}
+          <span onDoubleClick={() => puedeEditar && setRenombrando(true)} title={puedeEditar ? 'Renombrar' : undefined}
             style={{ fontSize: 14, fontWeight: 600, color: TINTA, padding: '0 8px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 480 }}>{vista.titulo}</span>
         )}
         <span style={{ fontSize: 13, color: GRIS, whiteSpace: 'nowrap' }}>Vista de consulta · {cuantos === 1 ? '1 elemento' : `${cuantos} elementos`}</span>

@@ -143,7 +143,7 @@ export function TarjetaDocumento({ elemento: el, elegido, ajustar }) {
         {cuerpo}
       </div>
       {hayNueva && !meta.ver && (
-        <span title={`Esta tarjeta muestra la V${el.version}; en Docs ya está la V${vigente.version}`}
+        <span title={`V${el.version} · hay V${vigente.version}`}
           style={{ position: 'absolute', top: 8, right: 8, fontSize: 12, fontWeight: 600, padding: '2px 7px', borderRadius: 4, pointerEvents: 'none',
             color: 'var(--a-status-warning)', border: '1px solid var(--a-status-warning-border)', background: 'var(--a-status-warning-surface)' }}>
           Hay V{vigente.version}
@@ -190,7 +190,7 @@ function MenuVersiones({ el, vigente, hayNueva, actualizar }) {
   return (
     <span ref={ref} style={{ position: 'relative', display: 'inline-flex' }}>
       <button type="button" aria-haspopup="listbox" aria-expanded={abierto} onClick={() => setAbierto(a => !a)}
-        title={hayNueva ? `La tarjeta muestra la V${el.version}; en Docs ya está la V${vigente.version}` : 'Versión que muestra la tarjeta'}
+        title={hayNueva ? `V${el.version} · hay V${vigente.version}` : `V${el.version}`}
         style={hayNueva ? { ...BOTON, color: 'var(--a-status-warning)', borderColor: 'var(--a-status-warning-border)', background: 'var(--a-status-warning-surface)' } : BOTON}>
         V{el.version || '?'}
         <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M2 3.5 5 6.5 8 3.5" fill="none" stroke="currentColor" strokeWidth="1.4" /></svg>
@@ -309,7 +309,7 @@ function Hojas({ el, actualizar, extraer }) {
           style={{ ...ICONO, opacity: hoja >= total ? 0.35 : 1, cursor: hoja >= total ? 'default' : 'pointer' }}>{ICONOS.despues}</button>
       </span>
       {extraer && (
-        <button type="button" aria-label="Extraer páginas" title={`Extraer páginas (una tarjeta por hoja: ${total})`} style={ICONO}
+        <button type="button" aria-label="Extraer páginas" title="Extraer páginas" style={ICONO}
           onClick={() => extraer(el, total)}>{ICONOS.extraer}</button>
       )}
     </>
@@ -327,7 +327,7 @@ export function BarraDocumento({ el, actualizar, abrir, extraer }) {
     <>
       <MenuVersiones el={el} vigente={vigente} hayNueva={hayNueva} actualizar={actualizar} />
       <Hojas el={el} actualizar={actualizar} extraer={extraer} />
-      <button type="button" style={BOTON} title="Abrir el documento aquí, encima del tablero (doble clic también)" onClick={() => abrir(el)}>
+      <button type="button" style={BOTON} title="Abrir aquí" onClick={() => abrir(el)}>
         {ICONOS.abrir}
         Abrir
       </button>

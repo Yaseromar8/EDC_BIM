@@ -462,7 +462,7 @@ export function ReviewModal({ isOpen, onClose, items, projectPrefix, onCreated }
                       : 'Días CALENDARIO de plazo para este paso (opcional): un plazo de 3 días vence en 3 días aunque caigan en fin de semana. Los días hábiles se eligen en el flujo.'}
                     style={{ width: 52, border: '1px solid #cccac0', borderRadius: 8, padding: '1px 5px', fontSize: 12, color: '#507294', background: '#fff' }}
                   />
-                  <button type="button" aria-label={`Quitar el paso ${i + 1}`} title="Quitar este paso"
+                  <button type="button" aria-label={`Quitar el paso ${i + 1}`} title="Quitar"
                     onClick={() => { soltarPlantilla(); setSteps(prev => prev.filter((_x, j) => j !== i)); }}
                     className="rev-quitar-paso">×</button>
                 </span>

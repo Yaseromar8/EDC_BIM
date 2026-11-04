@@ -12,7 +12,8 @@
   margin: 0;
   border: 0;
   overflow: visible;
-  max-width: 280px;
+  /* 200 px, como Procore: si el nombre de la acción no cabe, sobra texto (docs/ux/TOOLTIPS_ACC_PROCORE.md). */
+  max-width: 200px;
   padding: var(--a-space-4) var(--a-space-8);
   border-radius: var(--a-radius-md);
   background: var(--a-neutral-800);

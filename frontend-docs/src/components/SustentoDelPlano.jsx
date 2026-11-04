@@ -216,7 +216,7 @@ export function PanelDeSustento({ vinculos = [], abierto, onCerrar, dibujando, o
                 <span>{v.vista_nombre || (v.vista ? 'vista del dibujo' : `pág. ${v.pagina}`)} · V{v.version_number} · {v.autor || '—'}</span>
                 <span className="sustento-acciones">
                   {v.planilla_node_id && onAbrirPlanilla && (
-                    <button type="button" className="sustento-planilla" title="Abrir la planilla en esta partida"
+                    <button type="button" className="sustento-planilla" title="Abrir en la planilla"
                       onClick={(e) => { e.stopPropagation(); onAbrirPlanilla(v); }}>Planilla ›</button>
                   )}
                   {v.mio && <button type="button" className="sustento-retirar"

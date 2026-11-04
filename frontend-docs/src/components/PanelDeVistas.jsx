@@ -78,7 +78,7 @@ export default function PanelDeVistas({ recuentos, hayPlan, activa, propias, onE
                     <span>{v.nombre}</span>
                   </button>
                   <button type="button" className="vistas__borrar" aria-label={`Borrar la vista ${v.nombre}`}
-                    title="Borrar esta vista" onClick={() => onBorrar(v)}>✕</button>
+                    title="Borrar" onClick={() => onBorrar(v)}>✕</button>
                 </li>
               ))}
             </ul>

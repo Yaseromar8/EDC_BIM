@@ -750,7 +750,7 @@ export default function PdfCompareView({ fileName, nodeId = null, versiones = []
               <span className="cmp-cifra">{Math.round(vista.s * 100)} %</span>
               <button type="button" className="cmp-icono" onClick={() => zoomBoton(1.25)} aria-label="Acercar" data-tip="Acercar (+)">
                 <Ico><path d="M6 12h12M12 6v12" /></Ico></button>
-              <button type="button" className="cmp-icono" onClick={ajustar} aria-label="Hoja entera" data-tip="Hoja entera (0 o doble clic)">
+              <button type="button" className="cmp-icono" onClick={ajustar} aria-label="Hoja entera" data-tip="Hoja entera (0)">
                 <Ico><path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5" /></Ico></button>
               {modo === 'lado' && (
                 <button type="button" className={`cmp-icono${enlazado ? ' cmp-icono--on' : ''}`} aria-pressed={enlazado}
@@ -761,7 +761,7 @@ export default function PdfCompareView({ fileName, nodeId = null, versiones = []
             </div>
             <span className="cmp-sep" />
             <button type="button" className={`cmp-icono cmp-icono--texto${alineando ? ' cmp-icono--on' : ''}`} onClick={() => (alineando ? setAlineando(false) : empezarAlinear())}
-              aria-pressed={alineando} data-tip="Alinear, si una versión viene corrida">
+              aria-pressed={alineando} data-tip="Alinear">
               <Ico><path d="M12 3.5v17M3.5 12h17" /><rect x="7.5" y="7.5" width="9" height="9" rx="1" /></Ico>Alinear
               {(desfase.dx || desfase.dy) && !alineando ? <small>{desfase.dx}, {desfase.dy}</small> : null}
             </button>
@@ -778,7 +778,7 @@ export default function PdfCompareView({ fileName, nodeId = null, versiones = []
                   <button type="button" className="cmp-capa-boton cmp-capa-boton--b" aria-pressed={capas.verB}
                     onClick={() => setCapas(c => ({ ...c, verB: !c.verB }))} data-tip={capas.verB ? `Ocultar la ${etiqueta(vB)}` : `Mostrar la ${etiqueta(vB)}`}>
                     <i /><span>Añadido · solo en {etiqueta(vB)}</span></button>
-                  <label className="cmp-atenuar" data-tip="Cuánto se ve lo que no cambió">
+                  <label className="cmp-atenuar" data-tip="Atenuar">
                     <i />Igual
                     <input type="range" min="0.1" max="1" step="0.05" value={capas.atenuar}
                       onChange={e => setCapas(c => ({ ...c, atenuar: Number(e.target.value) }))} aria-label="Intensidad de lo que no cambió" />

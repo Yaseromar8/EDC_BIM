@@ -291,7 +291,7 @@ export default function FichaDocumento({ item, lista, onCambiar, onCerrar, onAbr
                         <div>{e.texto}{e.detalle && <span className="ficha-mudo"> · {e.detalle}</span>}</div>
                         <div className="ficha-linea__por">
                           {e.por}
-                          {e.sellado === false && <span className="ficha-sin-sello" title="Este evento se escribió fuera de la cadena: no se puede demostrar que no se alteró."> · sin sellar</span>}
+                          {e.sellado === false && <span className="ficha-sin-sello" title="Fuera de la cadena"> · sin sellar</span>}
                         </div>
                       </div>
                     </li>

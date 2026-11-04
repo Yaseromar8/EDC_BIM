@@ -115,7 +115,7 @@ export default function PanelConsulta({ item, onCerrar, onAbrir, onVersiones, on
               {cadena.roturas && cadena.roturas.length > 0
                 ? ` · ${cadena.roturas.length} sin sello o alterados`
                 : cadena.sellados === cadena.eventos && cadena.tramo_integro ? ' · sin alteraciones' : ''}.
-              {' '}<span title="Cada evento lleva la huella del anterior: si alguien altera o borra uno, se nota. Detecta cambios; no impide que se hagan.">ⓘ</span>
+              {' '}<span>ⓘ</span>
             </p>
           )}
         </section>

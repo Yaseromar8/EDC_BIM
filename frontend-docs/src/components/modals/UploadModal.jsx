@@ -204,7 +204,7 @@ export default function UploadModal({
             <span className="sub-destino" title={currentPath}><IcoCarpeta /> {destino}</span>
           </div>
           <button type="button" className="sub-icono" onClick={() => setSopMinimized(true)}
-            aria-label="Minimizar" title="Minimizar: la subida sigue"><IcoMinimizar /></button>
+            aria-label="Minimizar" title="Minimizar"><IcoMinimizar /></button>
           <button type="button" className="sub-icono" onClick={cerrar} aria-label="Cerrar" title="Cerrar"><IcoCerrar /></button>
         </header>
 

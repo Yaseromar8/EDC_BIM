@@ -615,7 +615,7 @@ function ModalPlantilla({ API, urn, catalogo, onCerrar, onCreada }) {
             </select>
             <label style={{ fontSize: 12, color: '#52524d', display: 'flex',
                             alignItems: 'center', gap: 4, whiteSpace: 'nowrap' }}
-                   title="Si se marca No conforme, exigirá foto">
+                   title="Exige foto">
               <input type="checkbox"
                      checked={(it.exige_si_no_conforme || []).includes('foto')}
                      onChange={e => setItems(a => a.map((x, i) => i === n
