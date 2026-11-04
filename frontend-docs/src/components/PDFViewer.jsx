@@ -26,6 +26,7 @@ import {
 } from '../utils/navegacionLector';
 import useSeleccionDelLector from '../utils/useSeleccionDelLector';
 import { ContextoDelLector } from '../utils/contextoDelLector';
+import { vistaDePdf, encuadreDePdf } from '../utils/vistaDeApertura';
 import { colorAlAzar } from '../../../design/incidencias/reglas.js';
 import './PDFViewer.css';
 
@@ -497,7 +498,10 @@ export default function PDFViewer({ url, preparando = false,
   // Con cajetín: sus acciones (copiar enlace, comparar), lo que se añade al grupo «Ver» del estuche
   // ([{ id, etiqueta, icono, activo, onClick }]: p. ej. «Metrados», solo si el plano los tiene) y el
   // nombre del juego que recorren ‹ › («Publicados», la carpeta…), para el pie.
-  accionesDelCajetin = null, extrasDelEstuche = [], nombreDelJuego = '' }) {
+  accionesDelCajetin = null, extrasDelEstuche = [], nombreDelJuego = '',
+  // LA VISTA DE APERTURA de la carpeta desde la que se abre (docs/archivos/28): {vista, listo}. `capturarVistaRef`
+  // recibe la función que devuelve la vista que se mira (hoja, zoom y centro), para fijarla.
+  vistaDeApertura = null, capturarVistaRef = null }) {
   const viewerRef = useRef(null); // Para Fullscreen
   const canvasRef = useRef(null);
   const wrapRef = useRef(null); // Envuelve canvas + overlay de herramientas
@@ -1780,6 +1784,62 @@ export default function PDFViewer({ url, preparando = false,
     zoomHacia(pedido, r.left + cont.clientWidth / 2, r.top + cont.clientHeight / 2);
   }, [zoomHacia]);
   const zoomIn = useCallback(() => zoomDesdeElCentro({ lnPaso: Math.log(PASO_DE_TECLADO) }), [zoomDesdeElCentro]);
+
+  // ── LA VISTA DE APERTURA (docs/archivos/28) ───────────────────────────────
+  //
+  // Una vez por documento: ir a su hoja y, con ella ya encuadrada, ponerla al zoom y con el punto guardado en el
+  // centro, por el MISMO camino que la rueda (`aplicarEscala`), así la hoja nítida y las marcas siguen como siempre.
+  // Una dirección con ?pagina= (llegada desde «Citado en») manda sobre ella.
+  const aperturaPendienteRef = useRef(null);
+  const aperturaHechaRef = useRef(null);
+  useEffect(() => {
+    const v = vistaDeApertura?.listo ? vistaDeApertura.vista : null;
+    if (!numPages || aperturaHechaRef.current === nodeId) return;
+    if (!vistaDeApertura?.listo) return;
+    aperturaHechaRef.current = nodeId;
+    if (v?.tipo !== 'pdf' || paginaPedida.current || marcaDeLaDireccion(window.location.search).pagina) return;
+    const pagina = Math.max(1, Math.min(v.pagina, numPages));
+    aperturaPendienteRef.current = { ...v, pagina };
+    if (pagina !== currentPage) goToPage(pagina);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [numPages, vistaDeApertura, nodeId]);
+  useEffect(() => {
+    const v = aperturaPendienteRef.current;
+    if (!v || encuadrado !== docNonce || currentPage !== v.pagina) return;
+    const base = baseVpRef.current[`${currentPage}:${rotation}`];
+    if (!base?.width) return;
+    const raf = requestAnimationFrame(() => {
+      const cont = containerRef.current;
+      if (!cont || aperturaPendienteRef.current !== v) return;
+      const r = cont.getBoundingClientRect();
+      const rectVista = { left: r.left, top: r.top, width: cont.clientWidth, height: cont.clientHeight };
+      const e = encuadreDePdf(v, base, rectVista);
+      if (!e) return;
+      aperturaPendienteRef.current = null;
+      const { minimo, maximo } = limitesDeZoom({ anchoHoja: base.width, altoHoja: base.height,
+                                                 anchoVista: cont.clientWidth, altoVista: cont.clientHeight });
+      const escala = Math.max(minimo, Math.min(maximo, e.escala));
+      pararZoom(false);
+      fitModeRef.current = 'custom';
+      setFitMode('custom');
+      aplicarEscala(escala, e.punto, base);
+      setScale(escala);
+      setEscalaFijada(n => n + 1);
+    });
+    return () => cancelAnimationFrame(raf);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [encuadrado, docNonce, currentPage, rotation, vpInfo]);
+  // LA VISTA QUE SE MIRA, para fijarla: la hoja, el zoom sobre la hoja entera y el punto que está en el centro.
+  if (capturarVistaRef) {
+    capturarVistaRef.current = () => {
+      const cont = containerRef.current, hoja = wrapRef.current;
+      const base = baseVpRef.current[`${currentPage}:${rotation}`];
+      if (!cont || !hoja || !base) return null;
+      const r = cont.getBoundingClientRect();
+      return vistaDePdf({ pagina: currentPage, rectHoja: hoja.getBoundingClientRect(), base,
+                          rectVista: { left: r.left, top: r.top, width: cont.clientWidth, height: cont.clientHeight } });
+    };
+  }
   const zoomOut = useCallback(() => zoomDesdeElCentro({ lnPaso: -Math.log(PASO_DE_TECLADO) }), [zoomDesdeElCentro]);
 
   // DOBLE CLIC = LA HOJA ENTERA, con un viaje de medio segundo, como en ACC.

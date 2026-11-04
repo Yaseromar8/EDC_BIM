@@ -25,10 +25,14 @@
  *                                (`origen: 'guardado'`), como un plano ya traducido
  *   window.__fallarDocumento     cuántas cargas del documento fallan (el URN guardado
  *                                ya no existe en Autodesk)
+ *   window.__apertura(estado)    la vista de apertura de la carpeta ({listo, vista}, docs/archivos/28)
+ *   window.__camara              lo que devuelve `getState({viewport})` (la cámara que se mira)
  *
  * LECTURAS
  *   window.__peticionesTraduccion  el cuerpo de cada POST a translate
  *   window.__visoresVivos          visores creados y no terminados (debe ser 0 o 1)
+ *   window.__restaurada            la última cámara que el visor pidió restaurar (`restoreState`)
+ *   window.__capturar()            la vista que se fijaría (presentación y cámara)
  *
  * No entra en producción: `vite.config.js` no lo conoce.
  */
@@ -125,6 +129,7 @@ const nodos = () => window.__vistas.map(v => ({
 }));
 window.Autodesk = {
   Viewing: {
+    PROGRESS_UPDATE_EVENT: 'progress',
     Initializer: (cfg, cb) => { anotar('Initializer'); cfg.getAccessToken?.(() => {}); setTimeout(cb, 30); },
     GuiViewer3D: function (contenedor) {
       anotar('GuiViewer3D creado');
@@ -135,6 +140,11 @@ window.Autodesk = {
       let marca = null;
       this.start = () => { anotar('viewer.start()'); marca = document.createElement('div'); marca.className = 'sustituto-lmv'; marca.textContent = 'MOTOR SUSTITUIDO (el banco no mide navegación)'; marca.style.cssText = 'position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#72706b;font-size:12px;'; contenedor.appendChild(marca); };
       this.loadDocumentNode = (doc, node) => { anotar(`loadDocumentNode ${node.data.name}`); window.__vistaMontada = node.data.name; window.__cargas = (window.__cargas || 0) + 1; return Promise.resolve(); };
+      // El progreso de carga (la barra «Cargando el plano · N %»): el visor se suscribe al arrancar.
+      this.addEventListener = () => {};
+      // La cámara: lo que se fijaría y lo que se pide restaurar (la vista de apertura).
+      this.getState = (filtro) => (filtro?.viewport ? { viewport: window.__camara } : {});
+      this.restoreState = (estado) => { anotar(`restoreState ${JSON.stringify(estado.viewport)}`); window.__restaurada = estado.viewport; return true; };
       this.finish = () => { anotar('viewer.finish()'); window.__visoresVivos -= 1; if (marca) marca.remove(); };
     },
     Document: {
@@ -158,6 +168,12 @@ window.Autodesk = {
 const FICHERO = { id: 'n-1', name: 'PLANO_GENERAL_R03.dwg', gcs_urn: 'gcs://banco/plano.dwg' };
 function Banco() {
   const [montado, setMontado] = React.useState(false);
+  const [apertura, setApertura] = React.useState(null);
+  const capturaRef = React.useRef(null);
+  React.useEffect(() => {
+    window.__apertura = setApertura;
+    window.__capturar = () => capturaRef.current?.() || null;
+  }, []);
   React.useEffect(() => {
     window.__abrir = (cual) => {
       if (cual) { window.__archivo = cual; window.__vistas = window.__FIXTURES[cual];
@@ -169,7 +185,7 @@ function Banco() {
   return (
     <div style={{ height: '100vh', background: '#141413' }}>
       {montado
-        ? <CadViewer file={FICHERO} projectPrefix="banco" />
+        ? <CadViewer file={FICHERO} projectPrefix="banco" vistaDeApertura={apertura} capturarVistaRef={capturaRef} />
         : <div style={{ color: '#72706b', padding: 24, fontSize: 13 }}>Pulsa window.__abrir() para abrir el archivo.</div>}
     </div>
   );

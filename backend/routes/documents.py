@@ -1913,6 +1913,9 @@ def quitar_enlace(eid):
         with get_db_connection() as conn:
             cur = conn.cursor()
             enl.quitar(cur, eid)
+            # Su vista de apertura (docs/archivos/28) era la de ESTE enlace: se va con él.
+            import vistas_de_apertura as _vda
+            _vda.quitar(cur, documento, carpeta)
             cur.execute("SELECT id::text, name FROM file_nodes WHERE id = ANY(%s::uuid[])", ([documento, carpeta],))
             nombres = dict(cur.fetchall())
             conn.commit()
@@ -1922,6 +1925,80 @@ def quitar_enlace(eid):
     except Exception as e:
         print(f"[ENLACES] {e}")
         return jsonify({"success": False, "error": "No se pudo quitar el enlace."}), 500
+
+
+@documents_bp.route('/api/docs/vista-de-apertura', methods=['GET', 'PUT', 'DELETE'])
+def vista_de_apertura():
+    """LA VISTA DE APERTURA de un CAD o un PDF en una carpeta (5-nov-2026, docs/archivos/28, migración 49).
+
+    ?model_urn&documento[&carpeta] (en el cuerpo para PUT): la carpeta desde la que se abre, la suya si no se dice o
+    una que lo enlaza. GET → {vista, fijada_por, fijada_en, carpeta, puede_fijar}. PUT {vista} → la fija para todo el
+    que abra el documento desde esa carpeta. DELETE → vuelve a la vista por defecto. Leer pide «Ver» en el documento;
+    fijar y restablecer, además «Editar» en la carpeta. Las reglas, en `vistas_de_apertura.py`."""
+    import vistas_de_apertura as vda
+    from flask import g
+    from db import get_db_connection, log_activity
+    from folder_permissions import PERMISSION_LEVELS, get_effective_permission
+
+    user = getattr(g, 'current_user', None)
+    data = (request.get_json(silent=True) or {}) if request.method == 'PUT' else {}
+    fuente = data if request.method == 'PUT' else request.args
+    model_urn = str(fuente.get('model_urn') or '').strip()
+    documento = str(fuente.get('documento') or '').strip()
+    carpeta = str(fuente.get('carpeta') or '').strip() or None
+    if not user or not model_urn or not verify_project_access(user, model_urn):
+        return jsonify({"success": False, "error": "No tienes acceso a este proyecto."}), 403
+    if not _ES_UUID.match(documento) or (carpeta and not _ES_UUID.match(carpeta)):
+        return jsonify({"success": False, "error": "Documento o carpeta no válido."}), 400
+    rbac = check_folder_permission(user, documento, model_urn, 'viewer', 'ver cómo se abre este documento')
+    if rbac:
+        return rbac
+    uid = (user or {}).get('id')
+    try:
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            try:
+                nombre, carpeta, version = vda.contexto(cur, model_urn, documento, carpeta)
+            except vda.Negativa as e:
+                return jsonify({"success": False, "error": e.texto, "code": e.codigo}), e.http
+            puede_fijar = PERMISSION_LEVELS.get(get_effective_permission(uid, carpeta, model_urn, cursor=cur), -1) \
+                >= PERMISSION_LEVELS['edit']
+            cur.execute("SELECT name FROM file_nodes WHERE id = %s", (carpeta,))
+            fila = cur.fetchone()
+            nombre_carpeta = fila[0] if fila else None
+
+            if request.method == 'GET':
+                guardada = vda.leer(cur, documento, carpeta) or {}
+                resp = jsonify({"success": True, **guardada, "vista": guardada.get('vista'),
+                                "carpeta": {"id": carpeta, "nombre": nombre_carpeta}, "puede_fijar": puede_fijar,
+                                "disponible": vda.hay_tabla(cur)})
+                resp.headers['Cache-Control'] = 'private, no-store'
+                return resp
+
+            rbac = check_folder_permission(user, carpeta, model_urn, 'edit',
+                                           'fijar la vista de apertura en esta carpeta')
+            if rbac:
+                return rbac
+            try:
+                if request.method == 'PUT':
+                    vista = vda.validar(data.get('vista'), nombre)
+                    vda.fijar(cur, model_urn, documento, carpeta, vista, version, uid)
+                    accion = 'set_opening_view'
+                else:
+                    if not vda.quitar(cur, documento, carpeta):
+                        return jsonify({"success": True, "vista": None, "ya_estaba": True}), 200
+                    vista, accion = None, 'reset_opening_view'
+            except vda.Negativa as e:
+                conn.rollback()
+                return jsonify({"success": False, "error": e.texto, "code": e.codigo}), e.http
+            conn.commit()
+        log_activity(model_urn, accion, 'file', entity_id=documento, entity_name=nombre,
+                     performed_by=_autor_verificado(),
+                     details={'carpeta': carpeta, 'en': nombre_carpeta, 'vista': vista})
+        return jsonify({"success": True, "vista": vista}), 200
+    except Exception as e:
+        print(f"[VISTA DE APERTURA] {e}")
+        return jsonify({"success": False, "error": "No se pudo guardar la vista de apertura."}), 500
 
 
 @documents_bp.route('/api/docs/upload-url', methods=['POST'])

@@ -1,5 +1,5 @@
 // frontend-docs/src/components/DocumentViewer.jsx
-import React, { useState, useEffect, useRef, lazy, Suspense } from 'react';
+import React, { useState, useEffect, useRef, useMemo, lazy, Suspense } from 'react';
 import PDFViewer from './PDFViewer';
 import SelloEscritorio from './SelloEscritorio';
 import AccLinkPicker from './AccLinkPicker';
@@ -20,6 +20,9 @@ import { accPreviewEnabled, accPreviewKey, readAccPreview } from '../utils/accPr
 import { getRecentPdfUrl } from '../utils/recentPdfCache';
 import { urlFirmadaEnMano, pedirUrlFirmada } from '../utils/urlFirmada';
 import toast from 'react-hot-toast';
+import VistaDeApertura from './VistaDeApertura';
+import { useVistaDeApertura } from '../hooks/useVistaDeApertura';
+import { tipoDeVista } from '../utils/vistaDeApertura';
 
 // El visor CAD arrastra el visor de Autodesk: diferido para que no pese en el
 // arranque de quien nunca abre un DWG.
@@ -57,6 +60,8 @@ export default function DocumentViewer({
   
   API,
   onClose,
+  // LA VISTA DE APERTURA (docs/archivos/28): la carpeta desde la que se abre --la de un enlace--; sin ella, la suya.
+  carpetaDeContexto = null,
   // LDA C9: copiar el enlace de lo que se mira (el explorador sabe hacerlo) y el nombre del juego que
   // recorren ‹ › («Publicados», la carpeta…), para el pie del lector.
   onCopiarEnlace = null,
@@ -101,6 +106,14 @@ export default function DocumentViewer({
   // En el DWG: la vista que se mira (la da CadViewer) y cómo pedirle otra (un vínculo de otra presentación).
   const [vistaCad, setVistaCad] = useState(null);
   const irAVistaRef = useRef(null);
+  // LA VISTA DE APERTURA de un CAD o un PDF en ESTA carpeta (docs/archivos/28): la que se fijó para quien entra por
+  // ella, y cómo fijar la que se mira. No en enlaces compartidos: el invitado no está en ninguna carpeta.
+  const tipoDeLaVista = !isShared ? tipoDeVista(file?.name) : null;
+  const apertura = useVistaDeApertura(API, projectPrefix, file?.id, carpetaDeContexto, !!tipoDeLaVista);
+  const aperturaParaElVisor = useMemo(() => ({ listo: apertura.listo, vista: apertura.vista }),
+    [apertura.listo, apertura.vista]);
+  const capturarVistaRef = useRef(null);
+  const capturarVista = () => capturarVistaRef.current?.() || null;
   // La presentación con la que abrir, si la dirección la trae (la planilla abre el DWG en la del vínculo).
   const [vistaPedida] = useState(() => {
     const p = new URLSearchParams(window.location.search);
@@ -645,6 +658,9 @@ export default function DocumentViewer({
                {previewOnly ? 'Probar vista ACC' : accLinkFor === accKey && accLink ? 'Cambiar vista ACC' : 'Vincular vista ACC'}
              </button>
            )}
+           {tipoDeLaVista === 'cad' && (
+             <VistaDeApertura estado={apertura} capturar={capturarVista} estiloBoton={{ marginRight: 12, padding: '4px 8px', background: '#fff', border: '1px solid #cccac0', borderRadius: 4, cursor: 'pointer' }} />
+           )}
            {abribleEnEscritorio && !isShared && (
              <button onClick={abrirEnEscritorio}
                style={{ display: 'inline-flex', alignItems: 'center', gap: 7, marginRight: 14,
@@ -909,6 +925,7 @@ export default function DocumentViewer({
             // No en enlaces compartidos: el invitado no tiene el historial.
             const sello = isShared ? null : verdadDelPlano({ vv, file, historial: versionHistory })?.sello;
             return <PDFViewer url={fileUrl} fileName={file.name}
+              vistaDeApertura={tipoDeLaVista === 'pdf' ? aperturaParaElVisor : null} capturarVistaRef={capturarVistaRef}
               cajetin={isShared ? null : ({ apaisada }) => (
                 <CajetinDelDocumento API={API} obra={projectPrefix} vv={vv} file={file} historial={versionHistory}
                   modo={modoDelDocumento({ nombre: file.name, apaisada })}
@@ -919,6 +936,7 @@ export default function DocumentViewer({
                 <>
                   <AccionesDelCajetin claseBoton="pdf-ico" onCopiarEnlace={copiarEnlaceDeLoQueSeMira}
                     onComparar={puedeComparar ? () => setCompararAbierto(true) : null} />
+                  {tipoDeLaVista === 'pdf' && <VistaDeApertura estado={apertura} capturar={capturarVista} claseBoton="pdf-ico" />}
                   {accionExtra?.('pdf-ico')}
                 </>
               )}
@@ -1074,6 +1092,8 @@ export default function DocumentViewer({
                            urnDirecto={accLink?.viewer_urn || null}
                            versionId={viewedVersionInfo ? viewedVersionInfo.id : null}
                            vistaInicial={vistaPedida} onVista={setVistaCad} irAVistaRef={irAVistaRef}
+                           vistaDeApertura={tipoDeLaVista === 'cad' ? aperturaParaElVisor : null}
+                           capturarVistaRef={capturarVistaRef}
                            capa={esDwgSustento && sustento.disponible && (sustentoAbierto || dibujandoZona || sustento.vinculos.length > 0)
                              ? ({ viewer, vista }) => (
                                <CapaDeSustentoEnCad viewer={viewer} vista={vista.guid} vinculos={sustento.vinculos}

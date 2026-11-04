@@ -14,6 +14,7 @@ import { apiFetch } from '../utils/apiFetch';
 import toast from 'react-hot-toast';
 import { visiblesDelDwg, capasQueApagar } from '../utils/capasDelDwg';
 import CadReviewOverlay from './CadReviewOverlay';
+import { presentacionDeApertura, vistaDeCad } from '../utils/vistaDeApertura';
 
 const VIEWER_JS = 'https://developer.api.autodesk.com/modelderivative/v2/viewers/7.*/viewer3D.min.js';
 const VIEWER_CSS = 'https://developer.api.autodesk.com/modelderivative/v2/viewers/7.*/style.min.css';
@@ -142,6 +143,7 @@ function describirVista(n) {
   return {
     guid: n.data.guid,
     nombre: n.data.name || 'Sin nombre',
+    viewableID: n.data.viewableID || null,
     es2D: esVista2D(n),
     es3D: esVista3D(n),
     // Etiqueta SÓLO cuando el dato la sostiene. `null` = sin etiqueta.
@@ -307,9 +309,13 @@ function PanelContenido({ vistas, vistaActiva, onElegir }) {
  * { viewer, vista: { guid, nombre }, irAVista }. `vistaInicial`: el guid de la vista con la que abrir (un
  * vínculo apunta a su presentación). `onVista`: avisa de la vista que se mira; `irAVistaRef` recibe la
  * función para cambiar de vista desde fuera (el panel de Metrados).
+ * `vistaDeApertura` (docs/archivos/28): la vista fijada para la carpeta desde la que se abre ({vista, listo}); se aplica
+ * al abrir, o en cuanto llegue si llega tarde y nadie ha cambiado de vista todavía. `capturarVistaRef` recibe la función
+ * que devuelve la vista que se mira, para fijarla.
  */
 export default function CadViewer({ file, projectPrefix = '', urnDirecto = null, versionId = null, reviewEnabled = true,
-                                    capa = null, vistaInicial = null, onVista = null, irAVistaRef = null }) {
+                                    capa = null, vistaInicial = null, onVista = null, irAVistaRef = null,
+                                    vistaDeApertura = null, capturarVistaRef = null }) {
   const containerRef = useRef(null);
   const viewerRef = useRef(null);
   // abriendo | preparando | traduciendo | listo | error
@@ -342,6 +348,13 @@ export default function CadViewer({ file, projectPrefix = '', urnDirecto = null,
   // dice `retry_legacy` y este visor vuelve a la traduccion de siempre.
   const sinVistasAutocadRef = useRef(false);
   const soltarRueda = useRef(null);
+  // LA VISTA DE APERTURA de esta carpeta (docs/archivos/28). Se lee en el momento de abrir, no al montar: la respuesta
+  // puede llegar antes o después que el plano. `aplicada`: ya se usó en este documento; `tocada`: quien mira ya
+  // cambió de vista, y una que llegue tarde no se la quita.
+  const aperturaRef = useRef(vistaDeApertura);
+  aperturaRef.current = vistaDeApertura;
+  const aperturaAplicadaRef = useRef(false);
+  const vistaTocadaRef = useRef(false);
 
   // Un reloj que corre. Aunque Autodesk no de porcentaje durante el envio, ver
   // el tiempo avanzar es la diferencia entre "esta trabajando" y "se colgo".
@@ -450,7 +463,15 @@ export default function CadViewer({ file, projectPrefix = '', urnDirecto = null,
             // archivo donde esto no aplique se comporta igual que hasta hoy --
             // y un Revit, que no tiene espacio modelo, sigue abriendo en 3D.
             const esModel = (v) => /^\s*model\s*$/i.test(v.data.name || '');
+            // La vista de apertura de la carpeta, si ya se sabe (una dirección con ?vista= manda sobre ella).
+            aperturaAplicadaRef.current = false;
+            vistaTocadaRef.current = false;
+            const apertura = !vistaInicial && aperturaRef.current?.listo ? aperturaRef.current.vista : null;
+            const deApertura = apertura
+              ? presentacionDeApertura(todas.map(v => ({ guid: v.data.guid, nombre: v.data.name })), apertura) : null;
+            if (aperturaRef.current?.listo || vistaInicial) aperturaAplicadaRef.current = true;
             const node = (vistaInicial && todas.find(v => v.data.guid === vistaInicial))
+                      || (deApertura?.guid && todas.find(v => v.data.guid === deApertura.guid))
                       || todas.find(esEspacioModelo)
                       || todas.find(esModel)
                       || todas.find(v => v.data.role === '3d')
@@ -459,6 +480,7 @@ export default function CadViewer({ file, projectPrefix = '', urnDirecto = null,
             setVistaActiva(node.data.guid);
             viewer.loadDocumentNode(doc, node).then(() => {
               if (cancelled) return;
+              if (apertura) terminarApertura(viewer, apertura, deApertura);
               aplicarCapasDelDwg(viewer, visiblesDelDwgRef);
               setPhase('listo');
             });
@@ -602,12 +624,25 @@ export default function CadViewer({ file, projectPrefix = '', urnDirecto = null,
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [file.id, intento, urnDirecto, versionId]);
 
+  // EL ENCUADRE DE LA VISTA DE APERTURA, sobre la presentación ya cargada. Si la presentación ya no está en esta
+  // versión del plano, se abre la de por defecto y SE DICE: nunca un encuadre de otra presentación.
+  function terminarApertura(viewer, apertura, deApertura) {
+    if (!deApertura?.guid) {
+      const cual = apertura.presentacion?.nombre ? `«${apertura.presentacion.nombre}»` : 'otra presentación';
+      setAviso(`La vista de apertura de esta carpeta era ${cual}, que ya no está en esta versión del plano: se abre la vista por defecto.`);
+      return;
+    }
+    try { viewer.restoreState({ viewport: apertura.camara }, undefined, true); }
+    catch { /* la presentación se ve igual, con su encuadre de siempre */ }
+  }
+
   // CAMBIAR DE VISTA: lo usan el panel CONTENIDO y, desde fuera, el panel de Metrados (un vínculo de otra
-  // presentación). Mismo `loadDocumentNode` que antes.
-  const abrirVista = (guid) => {
+  // presentación). Mismo `loadDocumentNode` que antes. `despues`: qué hacer con ella ya cargada.
+  const cambiarDeVista = (guid, despues = null) => {
     const doc = documentoRef.current;
     const viewer = viewerRef.current;
-    if (!doc || !viewer || guid === vistaActiva) return;
+    if (!doc || !viewer) return;
+    if (guid === vistaActiva) { despues?.(viewer); return; }
     const node = (doc.getRoot().search({ type: 'geometry' }) || []).find(n => n.data.guid === guid);
     if (!node) return;
     setPhase('abriendo');
@@ -617,13 +652,36 @@ export default function CadViewer({ file, projectPrefix = '', urnDirecto = null,
       aplicarCapasDelDwg(viewer, visiblesDelDwgRef);
       setVistaActiva(guid);
       setPhase('listo');
+      despues?.(viewer);
     }).catch(() => {
       setPhase('listo');
       toast.error('No se pudo abrir esta vista del plano.');
     });
   };
+  const abrirVista = (guid) => { vistaTocadaRef.current = true; cambiarDeVista(guid); };
+
+  // UNA VISTA DE APERTURA QUE LLEGA TARDE (el plano abrió antes que la respuesta): se aplica una vez, si nadie ha
+  // cambiado de vista todavía.
+  useEffect(() => {
+    if (phase !== 'listo' || !vistaDeApertura?.listo || aperturaAplicadaRef.current || vistaInicial) return;
+    aperturaAplicadaRef.current = true;
+    const apertura = vistaDeApertura.vista;
+    if (!apertura || vistaTocadaRef.current) return;
+    const deApertura = presentacionDeApertura(vistas, apertura);
+    if (!deApertura.guid) { terminarApertura(viewerRef.current, apertura, deApertura); return; }
+    cambiarDeVista(deApertura.guid, (viewer) => terminarApertura(viewer, apertura, deApertura));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, vistaDeApertura]);
   if (irAVistaRef) irAVistaRef.current = abrirVista;
   const vistaDescrita = vistas.find(v => v.guid === vistaActiva) || null;
+  // LA VISTA QUE SE MIRA, para fijarla como vista de apertura: la presentación y la cámara del visor.
+  if (capturarVistaRef) {
+    capturarVistaRef.current = () => {
+      const viewer = viewerRef.current;
+      if (phase !== 'listo' || !viewer || !vistaDescrita) return null;
+      try { return vistaDeCad(vistaDescrita, viewer.getState({ viewport: true })?.viewport); } catch { return null; }
+    };
+  }
   useEffect(() => {
     if (onVista) onVista(vistaDescrita ? { guid: vistaDescrita.guid, nombre: vistaDescrita.nombre, es2D: vistaDescrita.es2D } : null);
   }, [vistaDescrita, onVista]);

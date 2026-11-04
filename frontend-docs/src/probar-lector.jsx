@@ -93,6 +93,14 @@ function Banco() {
   }, []);
   const [preparando, setPreparando] = useState(false);
   const t0 = useRef(0);
+  // LA VISTA DE APERTURA (docs/archivos/28): `__apertura({listo: true, vista})` la fija para la próxima apertura y
+  // `__capturar()` devuelve la vista que se mira (hoja, zoom y centro), como el botón del lector.
+  const [apertura, setApertura] = useState(null);
+  const capturaRef = useRef(null);
+  useEffect(() => {
+    window.__apertura = setApertura;
+    window.__capturar = () => capturaRef.current?.() || null;
+  }, []);
 
   const saltar = useCallback((destino) => {
     // P1 · `irA(-1)` cierra el documento, como el aspa del explorador: asi se
@@ -127,6 +135,7 @@ function Banco() {
       // Con nodo, el lector monta su capa de marcas: asi se ve si siguen a la
       // hoja durante el zoom. Las marcas las sirve el fetch simulado de abajo.
       nodeId={'banco-' + PLANOS[i].id}
+      vistaDeApertura={apertura} capturarVistaRef={capturaRef}
       // `?cajetin` monta el lector como en Docs (con cajetín), para ver el estuche compacto (29-oct-2026).
       cajetin={new URLSearchParams(window.location.search).has('cajetin') ? () => null : null}
       projectPrefix="banco"

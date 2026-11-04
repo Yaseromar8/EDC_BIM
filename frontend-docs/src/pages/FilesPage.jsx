@@ -1736,6 +1736,8 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
 
       {fe.activeFile && fe.activeFile.type !== 'folder' && (
         <DocumentViewer file={fe.activeFile} projectPrefix={projectPrefix} versionHistory={vh.versionHistory}
+          // La carpeta desde la que se abre un ENLACE: su vista de apertura es la de esa carpeta (docs/archivos/28).
+          carpetaDeContexto={fe.activeFile?.enlace ? fe.currentNodeId : null}
           viewedVersionInfo={fe.viewedVersionInfo} setViewedVersionInfo={fe.verVersion}
           showVersions={fe.showVersions} setShowVersions={fe.setShowVersions} isAdmin={isAdmin} esEntityAdmin={esEntityAdmin}
           onPromote={vh.handlePromote} API={API}

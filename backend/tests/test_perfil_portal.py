@@ -235,7 +235,11 @@ def test_el_recorte_es_real(rutas_portal):
     # un documento en otras carpetas sin copiarlo (el dueño: «un único archivo que sirve a varias calles»,
     # docs/archivos/27). Producto documental de Archivos, con guardia de obra, «Ver» en el documento y «Editar» en
     # cada carpeta; quitar exige «Editar» en la carpeta del enlace, con la obra sacada del propio enlace.
-    TECHO = 318
+    # 318 -> 319 (5-nov-2026, migración 49): `GET|PUT|DELETE /api/docs/vista-de-apertura`. La vista con la que abre un
+    # CAD (presentación y cámara) o un PDF (página y zoom) desde cada carpeta, la suya o una que lo enlaza (el dueño:
+    # «esas carpetas representan distintas vistas», docs/archivos/28). Guardia de obra, «Ver» en el documento y
+    # «Editar» en la carpeta para fijarla o restablecerla.
+    TECHO = 319
     sin_puente = [r for r in rutas_portal
                   if r not in puente_acc and r not in revision_cad]
     assert len(sin_puente) < TECHO, (
