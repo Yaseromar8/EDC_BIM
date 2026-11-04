@@ -60,6 +60,7 @@ import ShareModal from '../components/modals/ShareModal';
 import MoveModal from '../components/modals/MoveModal';
 import CopiarEstructuraModal from '../components/modals/CopiarEstructuraModal';
 import EnlazarModal from '../components/modals/EnlazarModal';
+import EnlacesDelDocumento from '../components/EnlacesDelDocumento';
 import UploadModal from '../components/modals/UploadModal';
 import VersionPanel from '../components/panels/VersionPanel';
 import DeletedTable from '../components/panels/DeletedTable';
@@ -347,6 +348,8 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
   const [copiandoEstructura, setCopiandoEstructura] = React.useState(null);
   // ENLAZAR (5-nov-2026, docs/archivos/27): los documentos que se están enlazando, mientras se eligen las carpetas.
   const [enlazando, setEnlazando] = React.useState(null);
+  // Dónde está enlazado un original, abierto desde su marca en la fila: { item, ancla }.
+  const [verEnlaces, setVerEnlaces] = React.useState(null);
   // ‹ › del lector recorren el grupo cuando el documento se abrió desde él.
   const [juegoDelGrupo, setJuegoDelGrupo] = React.useState(null);
   React.useEffect(() => { setGrupoActivoId(null); }, [fe.currentPath, fe.isTrashMode, fe.sidebarView, projectPrefix]);
@@ -1611,6 +1614,7 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
                       formatSize={formatSize} formatDate={formatDate} getInitials={getInitials} user={user} isAdmin={isAdmin}
                       isTrashMode={fe.isTrashMode} onShowVersions={vh.onShowVersions}
                       onRowMenu={(item, e) => { fe.setRightClickedId(item.id); fe.setActiveRowMenu({ item, x: e.clientX, y: e.clientY, source: 'table' }); }}
+                      onVerEnlaces={!fe.isTrashMode ? (item, ancla) => setVerEnlaces({ item, ancla }) : null}
                       editingNodeId={fe.editingNodeId} setEditingNodeId={fe.setEditingNodeId} processingIds={fe.processingIds}
                       rightClickedId={fe.rightClickedId} startResizing={startResizing} ajustarAncho={ajustarAncho} setSelected={fe.setSelected}
                       renderFileIconSop={renderFileIconSop}
@@ -1759,6 +1763,12 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
         <CopiarEstructuraModal carpetas={copiandoEstructura} projectPrefix={projectPrefix} projectRootId={fe.projectRootId}
           onCerrar={() => setCopiandoEstructura(null)}
           onHecho={() => { setCopiandoEstructura(null); fe.triggerRefresh(fe.currentPath); }} />
+      )}
+      {verEnlaces && (
+        <EnlacesDelDocumento documento={verEnlaces.item} ancla={verEnlaces.ancla} obra={projectPrefix}
+          onCerrar={() => setVerEnlaces(null)}
+          onIr={(carpeta) => navegarYSalir([projectPrefix, ...(carpeta.ruta || [])].join('/') + '/', carpeta.id)}
+          onCambio={() => fe.triggerRefresh(fe.currentPath)} />
       )}
       {enlazando && (
         <EnlazarModal documentos={enlazando} carpetaActual={fe.currentNodeId} projectPrefix={projectPrefix}

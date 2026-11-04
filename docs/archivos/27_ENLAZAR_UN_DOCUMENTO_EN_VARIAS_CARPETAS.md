@@ -39,6 +39,10 @@ Dentro de un mismo proyecto, en ACC se copia, y las copias se desactualizan.
 **En el original**
 - Su fila lleva la marca con la cifra: «⤷ 3» («Enlazado en 3 carpetas más»).
 - Su ficha dice **«Enlazado en»** con la ruta de cada carpeta (solo las que quien mira puede ver).
+- **Pulsar esa marca** (5-nov-2026) abre la lista de carpetas donde está enlazado, cada una con **«Ir»** y, si se
+  tiene «Editar» en ella, **«Quitar»**. Es para el enlace puesto por error en una carpeta que no se recuerda, sin añadir
+  nada al botón derecho. El servidor dice carpeta por carpeta si se puede quitar (`puede_quitar`): lo mismo que exige
+  `DELETE`.
 
 **En la fila enlazada, botón derecho**
 - **«Ir al original»**: abre la carpeta donde vive.

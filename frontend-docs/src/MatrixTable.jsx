@@ -257,7 +257,7 @@ const TiradorColumna = ({ columna, etiqueta, ancho, iniciar, ajustar }) => (
  * TableRow Component - Renders an individual row in the virtualized list.
  */
 const TableRow = ({ index, style, data }) => {
-  const { items, selected, toggle, navigate, setActiveFile, onUpdateDescription, onRename, formatSize, formatDate, getInitials, isAdmin, onRowMenu, isTrashMode, onShowVersions, columnWidths, renderFileIconSop, editingNodeId, setEditingNodeId, rightClickedId, processingIds, onStatusChange, estadosCad = {}, onConsultar, consultadoId, soloLectura = false } = data;
+  const { items, selected, toggle, navigate, setActiveFile, onUpdateDescription, onRename, formatSize, formatDate, getInitials, isAdmin, onRowMenu, isTrashMode, onShowVersions, columnWidths, renderFileIconSop, editingNodeId, setEditingNodeId, rightClickedId, processingIds, onStatusChange, estadosCad = {}, onConsultar, consultadoId, soloLectura = false, onVerEnlaces = null } = data;
   
   const item = items && items[index] ? items[index] : {};
 
@@ -511,7 +511,7 @@ const TableRow = ({ index, style, data }) => {
             {!isFolder && item.enlace && <MarcaDeEnlace texto={`Enlazado desde ${(item.enlace.desde?.ruta || []).join(' / ') || 'Archivos de proyecto'}`} />}
             {!isFolder && !item.enlace && item.enlazado_en > 0 && (
               <MarcaDeEnlace texto={`Enlazado en ${item.enlazado_en === 1 ? '1 carpeta más' : `${item.enlazado_en} carpetas más`}`}
-                cifra={item.enlazado_en} />
+                cifra={item.enlazado_en} onClick={onVerEnlaces ? (ancla) => onVerEnlaces(item, ancla) : null} />
             )}
             {/* Como va la preparacion del plano (ver ES_CAD arriba). Lo listo y
                 lo que nadie ha preparado no dicen nada: solo se habla cuando hay
@@ -794,7 +794,9 @@ const MatrixTable = ({
   // ORDEN DESDE FUERA (opcional): las vistas propias guardan el orden de la tabla. Sin
   // estas dos props, la tabla ordena por su cuenta como siempre.
   orden: ordenControlado = null,
-  onOrdenar = null
+  onOrdenar = null,
+  // Pulsar la marca de enlazado de un original (docs/archivos/27): (documento, rectángulo de la marca).
+  onVerEnlaces = null
 }) => {
   // ORDENAR POR COLUMNA, como ACC (UI polish, 13-oct-2026): pulsar una
   // cabecera ordena por ella y pulsarla otra vez invierte el sentido. Las
@@ -1031,7 +1033,8 @@ const MatrixTable = ({
                   estadosCad: avisosDeCad,
                   onConsultar,
                   consultadoId,
-                  soloLectura
+                  soloLectura,
+                  onVerEnlaces
                 }}
               >
                 {TableRow}

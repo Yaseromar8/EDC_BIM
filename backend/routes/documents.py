@@ -1820,11 +1820,14 @@ def enlaces_de_documentos():
                 cur.execute("SELECT 1 FROM file_nodes WHERE id = %s AND model_urn = %s", (documento, model_urn))
                 if not cur.fetchone():
                     return jsonify({"success": False, "error": "Documento no encontrado en esta obra."}), 404
-                # Solo las carpetas que quien pregunta puede ver: el aviso no anuncia carpetas restringidas.
-                lista = [x for x in enl.enlazado_en(cur, model_urn, documento)
-                         if PERMISSION_LEVELS.get(get_effective_permission(uid, x['carpeta']['id'], model_urn,
-                                                                          cursor=cur), -1)
-                         >= PERMISSION_LEVELS['viewer']]
+                # Solo las carpetas que quien pregunta puede ver: el aviso no anuncia carpetas restringidas. Y en cada
+                # una, si puede quitar el enlace desde el original (5-nov-2026): lo que exige DELETE, «Editar» en ella.
+                lista = []
+                for x in enl.enlazado_en(cur, model_urn, documento):
+                    nivel = PERMISSION_LEVELS.get(get_effective_permission(uid, x['carpeta']['id'], model_urn,
+                                                                           cursor=cur), -1)
+                    if nivel >= PERMISSION_LEVELS['viewer']:
+                        lista.append({**x, 'puede_quitar': nivel >= PERMISSION_LEVELS['edit']})
             resp = jsonify({"success": True, "enlazado_en": lista})
             resp.headers['Cache-Control'] = 'private, no-store'
             return resp
