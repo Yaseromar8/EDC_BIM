@@ -34,6 +34,7 @@ const ETIQUETA = {
   RFI: 'RFI',
   REDLINE: 'Observación',
   TRANSMITTAL: 'Emisión',
+  NUBE: 'Nube',
 };
 
 function diasPara(iso) {
@@ -92,7 +93,9 @@ export default function MiTrabajo({ compacto = false, onAbrir = null, onAbrirInc
             const vencido = dias !== null && dias < 0;
             const esRevision = Boolean(onAbrir) && p.objeto_tipo === 'REVIEW' && p.objeto_id && p.project_id;
             const esIncidencia = Boolean(onAbrirIncidencia) && p.objeto_tipo === 'ISSUE' && p.objeto_id && p.project_id;
-            const abrible = esRevision || esIncidencia;
+            // Una NUBE que te toca alimentar (46): a su plano, con su incidencia abierta en ESA nube.
+            const esNube = Boolean(onAbrirIncidencia) && p.objeto_tipo === 'NUBE' && p.incidencia && p.project_id;
+            const abrible = esRevision || esIncidencia || esNube;
             const contenido = (
               <>
                 <span style={{ ...S.tipo, ...(vencido ? S.tipoVencido : {}) }}>
@@ -116,11 +119,15 @@ export default function MiTrabajo({ compacto = false, onAbrir = null, onAbrirInc
               <li key={p.id} style={{ ...(abrible ? S.filaAbrible : S.fila), ...(i === 0 ? S.primera : {}) }}>
                 {abrible ? (
                   <button type="button" className="mt-abrir"
-                          title={esRevision ? 'Abrir la revisión' : p.documento ? 'Abrir el plano y la incidencia' : 'Abrir la incidencia'}
+                          title={esRevision ? 'Abrir la revisión' : esNube ? 'Abrir el plano en esta nube'
+                            : p.documento ? 'Abrir el plano y la incidencia' : 'Abrir la incidencia'}
                           onClick={() => (esRevision
                             ? onAbrir({ obra: p.project_id, revision: p.objeto_id })
-                            : onAbrirIncidencia({ obra: p.project_id, incidencia: p.objeto_id,
-                                                  documento: p.documento || null, version: p.version || null }))}>
+                            : esNube
+                              ? onAbrirIncidencia({ obra: p.project_id, incidencia: p.incidencia, documento: p.documento || null,
+                                                    version: p.version || null, nube: p.marca || null })
+                              : onAbrirIncidencia({ obra: p.project_id, incidencia: p.objeto_id,
+                                                    documento: p.documento || null, version: p.version || null }))}>
                     {contenido}
                   </button>
                 ) : contenido}

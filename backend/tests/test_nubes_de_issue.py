@@ -192,12 +192,30 @@ def test_el_asunto_de_una_nube_dice_que_hay_que_aportar():
 
 def test_una_nube_en_mi_trabajo_lleva_a_su_incidencia_y_su_plano():
     import encargos as enc
-    cur = CursorGuion([[(8, 7, [{'tipo': 'plano', 'documento': 'doc-1', 'version_id': 'v2'}])]])
+    cur = CursorGuion([[(8, 7, [{'tipo': 'plano', 'documento': 'doc-1', 'version_id': 'v2'}], 55)]])
     salida = enc._nubes_con_su_documento(cur, [{'objeto_tipo': 'NUBE', 'objeto_id': '8'},
                                                {'objeto_tipo': 'RFI', 'objeto_id': '8'}])
+    # …y a ESA nube (`marca`): «Mi trabajo» abre la incidencia en la pestaña Nubes, en ella.
     assert salida[0] == {'objeto_tipo': 'NUBE', 'objeto_id': '8', 'incidencia': '7', 'documento': 'doc-1',
-                         'version': 'v2'}
+                         'version': 'v2', 'marca': '55'}
     assert 'incidencia' not in salida[1]
+
+
+def test_mi_trabajo_con_solo_nubes_tambien_las_completa():
+    # Fallo de la parte 1: sin ninguna incidencia en la lista, `con_su_documento` salía antes de mirar las nubes.
+    import encargos as enc
+    cur = CursorGuion([[(8, 7, [{'tipo': 'plano', 'documento': 'doc-1'}], 55)]])
+    salida = enc.con_su_documento(cur, [{'objeto_tipo': 'NUBE', 'objeto_id': '8'}])
+    assert salida[0]['incidencia'] == '7' and salida[0]['marca'] == '55'
+
+
+def test_la_carpeta_de_la_incidencia_es_exactamente_incidencias_y_su_codigo():
+    assert nub.codigo_de_la_carpeta('INCIDENCIAS/ISS-002/') == 'ISS-002'
+    assert nub.codigo_de_la_carpeta('INCIDENCIAS/ISS-002') == 'ISS-002'
+    assert nub.codigo_de_la_carpeta('INCIDENCIAS/ISS-002/otra/') is None        # una subcarpeta, no
+    assert nub.codigo_de_la_carpeta('MULTIMEDIA/') is None
+    assert nub.codigo_de_la_carpeta('X/INCIDENCIAS/ISS-002/') is None
+    assert nub.codigo_de_la_carpeta('') is None and nub.codigo_de_la_carpeta(None) is None
 
 
 def test_la_funcion_subcontratista_existe_en_codigo_migracion_y_manifiesto():

@@ -20,6 +20,7 @@ import { estadoDeIssue, issueViva } from '../utils/estadosDeIssue';
 import { fechaDeDia, observacionViva } from '../utils/marcasConEnlace';
 import { exportarExcel, exportarPdf, filasDelInforme } from '../utils/informeDeIncidencias';
 import IncidenciaLateral from './IncidenciaLateral';
+import { pedirCompararNube } from './AsignacionDeNube';
 import IconoModulo from './IconoModulo';
 import { AISLADO, PinDeIncidencia, numeroDe } from '../../../design/incidencias/PanelDeIncidencia.jsx';
 
@@ -105,6 +106,8 @@ export default function ObservacionesDelPlano({ API, obra, nodeId, nombre = '', 
   const [lista, setLista] = useState(null);
   const [vista, setVista] = useState(pedido?.vista ?? 'lista');   // 'lista' | 'nueva' | id de una observación
   const [pin, setPin] = useState(pedido?.pin || null);             // el punto de la hoja de la que se levanta
+  // La nube en la que se abre (desde «Mi trabajo»), atada a SU incidencia: abrir otra de la lista no la arrastra.
+  const [nubePedida, setNubePedida] = useState(pedido?.nube != null ? { vista: pedido.vista, nube: pedido.nube } : null);
   const libres = useMemo(() => marcas.filter(m => !observacionViva(m.observacion)), [marcas]);
   // Con pin se señala UN sitio: no se le cuelgan todas las marcas libres por defecto.
   const [elegidas, setElegidas] = useState(() => new Set(pedido?.pin ? [] : libres.map(m => m.id)));
@@ -113,6 +116,7 @@ export default function ObservacionesDelPlano({ API, obra, nodeId, nombre = '', 
     if (!pedido) return;
     setVista(pedido.vista);
     setPin(pedido.pin || null);
+    setNubePedida(pedido.nube != null ? { vista: pedido.vista, nube: pedido.nube } : null);
     if (pedido.vista === 'nueva') setElegidas(new Set(pedido.pin ? [] : libres.map(m => m.id)));
   }, [pedido?.n]); // eslint-disable-line react-hooks/exhaustive-deps
   // El pin fantasma de la hoja dura lo que dura el alta.
@@ -160,6 +164,8 @@ export default function ObservacionesDelPlano({ API, obra, nodeId, nombre = '', 
         titulo={pin ? 'Nueva incidencia' : 'Nueva incidencia del plano'}
         crear={crearDelPlano}
         onIrAMarca={(id) => { const m = porId.get(String(id)); if (m) onIrAMarca?.(m); }}
+        onCompararNube={pedirCompararNube}
+        nube={nubePedida && String(nubePedida.vista) === String(vista) ? nubePedida.nube : null}
         extraAlta={<>
           {pin && (
             <div className="pinc-campo">

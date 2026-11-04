@@ -61,7 +61,9 @@ function Entrega({ entorno, obra, codigo, ronda, ocupado, onEntregar }) {
     for (const f of [...(ficheros || [])]) {
       setSubiendo(true);
       try {
-        const s = await entorno.subirFoto(obra, f, `Aporte a ${codigo || 'una incidencia'}`);
+        // A la CARPETA DE LA INCIDENCIA (D4): ahí sube quien aporta aunque solo pueda ver el plano.
+        const s = await entorno.subirFoto(obra, f, `Aporte a ${codigo || 'una incidencia'}`,
+          codigo ? `INCIDENCIAS/${codigo}/` : undefined);
         setLista(l => [...l, { tipo: 'documento', documento: String(s.id), nombre: s.nombre || f.name, subido: true }]);
       } catch (e) { entorno.avisar.error(`${f.name}: ${e.message}`); } finally { setSubiendo(false); }
     }
@@ -72,14 +74,14 @@ function Entrega({ entorno, obra, codigo, ronda, ocupado, onEntregar }) {
   return (
     <div className="pinc-acto nub-entrega">
       <b>Entregar{ronda > 1 ? ` la ronda ${ronda}` : ''}</b>
-      <p className="pinc-nota">Lo que entregas queda en Docs y enlazado a esta nube, con fecha y hora. El encargado del
-        plano lo acepta o te lo devuelve aquí mismo si falta algo.</p>
+      <p className="pinc-nota">Lo que subes queda en Docs, en la carpeta INCIDENCIAS/{codigo || '…'}, enlazado a esta nube
+        con fecha y hora. El encargado del plano lo acepta o te lo devuelve aquí mismo si falta algo.</p>
       {lista.length > 0 && (
         <ul className="nub-entregas">
           {lista.map((e, k) => (
             <li key={`${e.documento}-${k}`} className="nub-ent">
               <span className="nub-ent__nombre">{e.nombre}</span>
-              <small>{e.subido ? 'subido a Docs' : 'enlazado desde Docs'}</small>
+              <small>{e.subido ? `subido a INCIDENCIAS/${codigo || ''}` : 'enlazado desde Docs'}</small>
               <button type="button" className="pinc-quitar" aria-label={`Quitar ${e.nombre}`}
                 onClick={() => setLista(l => l.filter((_, j) => j !== k))}>×</button>
             </li>
@@ -168,7 +170,7 @@ function Ronda({ entorno, r, ultima }) {
   );
 }
 
-function Nube({ entorno, obra, ob, i, n, numero, color, abierta, onAbrir, ocupado, hacer, onIrAMarca }) {
+function Nube({ entorno, obra, ob, i, n, numero, color, abierta, onAbrir, ocupado, hacer, onIrAMarca, onComparar }) {
   const [acto, setActo] = useState(null);
   const caja = useRef(null);
   useEffect(() => {
@@ -236,6 +238,11 @@ function Nube({ entorno, obra, ob, i, n, numero, color, abierta, onAbrir, ocupad
               {puede('devolver') && <button type="button" className="pinc-btn" disabled={ocupado}
                 onClick={() => setActo('devolver')}>Devolver (falta algo)</button>}
               {puede('verificar') && n.por_verificar && <>
+                {/* Antes de decidir, mirarlo: «Comparar versiones» encuadrado en ESTA nube (doc 23 §6.7). */}
+                {onComparar && n.marca?.geometria && (
+                  <button type="button" className="pinc-btn" disabled={ocupado} onClick={() => onComparar(n)}>
+                    Comparar en esta nube</button>
+                )}
                 <button type="button" className="pinc-btn pinc-btn--prim" disabled={ocupado}
                   onClick={() => dar({ acto: 'verificar', resultado: 'levantada' }, 'Nube levantada')}>Levantada</button>
                 <button type="button" className="pinc-btn pinc-btn--plano pinc-btn--rojo" disabled={ocupado}
@@ -253,7 +260,8 @@ function Nube({ entorno, obra, ob, i, n, numero, color, abierta, onAbrir, ocupad
  * La pestaña. `datos` es lo que devuelve GET /api/issues/<id>/nubes; `foco`, la marca a abrir (la nube que se pulsó
  * en el plano); `onCambio(datos)` recibe la respuesta tras cada acto.
  */
-export default function NubesDeIncidencia({ entorno, obra, ob, i, datos, foco = null, onCambio, onIrAMarca = null }) {
+export default function NubesDeIncidencia({ entorno, obra, ob, i, datos, foco = null, onCambio, onIrAMarca = null,
+                                            onComparar = null }) {
   const API = entorno.API ?? '';
   const [abierta, setAbierta] = useState(foco != null ? String(foco) : null);
   const [ocupado, setOcupado] = useState(false);
@@ -286,7 +294,8 @@ export default function NubesDeIncidencia({ entorno, obra, ob, i, datos, foco = 
           return (
             <Nube key={clave(n)} entorno={entorno} obra={obra} ob={ob} i={i} n={n} numero={k + 1}
               color={n.color != null ? colorDeIndice(n.color) : quien ? colorDe(quien) : '#b0aea5'} abierta={abierta === clave(n)} ocupado={ocupado} hacer={hacer}
-              onAbrir={() => setAbierta(a => (a === clave(n) ? null : clave(n)))} onIrAMarca={onIrAMarca} />
+              onAbrir={() => setAbierta(a => (a === clave(n) ? null : clave(n)))} onIrAMarca={onIrAMarca}
+              onComparar={onComparar} />
           );
         })}
       </ol>

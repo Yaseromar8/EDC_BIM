@@ -35,7 +35,7 @@ export function useEntornoDocs({ API = API_DOCS, user = null, project = null } =
     // La miniatura de una foto adjunta: la misma que la galería (proxy del documento con `thumb=1`).
     miniatura: (id) => apiFetch(`${API}/api/docs/proxy?id=${encodeURIComponent(id)}&thumb=1`)
       .then(r => (r.ok ? r.blob() : null)),
-    subirFoto: (obra, f, descripcion) => subirFoto(API, obra, f, descripcion),
+    subirFoto: (obra, f, descripcion, carpeta) => subirFoto(API, obra, f, descripcion, carpeta),
     ElegirDocumento: ({ obra, titulo, ayuda, onElegir, onCerrar }) => (
       <SelectorDeDocumento API={API} project={{ id: obra, model_urn: obra }} titulo={titulo} ayuda={ayuda}
         onElegir={onElegir} onCerrar={onCerrar} />

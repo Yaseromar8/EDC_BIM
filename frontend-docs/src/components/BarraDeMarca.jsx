@@ -27,7 +27,7 @@ import { conSuConversacion, estadoDeObservacion, etiquetaDeCita, fechaCorta, fec
 import SelectorDeDocumento from './SelectorDeDocumento';
 import IconoModulo from './IconoModulo';
 import IncidenciaLateral from './IncidenciaLateral';
-import AsignacionDeNube, { CrearEncargo, useNubeDeLaMarca } from './AsignacionDeNube';
+import AsignacionDeNube, { CrearEncargo, pedirCompararNube, useNubeDeLaMarca } from './AsignacionDeNube';
 import { destinoDelLector } from './ObservacionesDelPlano';
 import { DialogoDeSello } from './MarcaConEnlace';
 import { AISLADO } from '../../../design/incidencias/PanelDeIncidencia.jsx';
@@ -464,6 +464,7 @@ export default function BarraDeMarca({ API, obra, marca, esAutor, editable, colo
           issueId={lateral === 'nueva' ? null : lateral}
           // Abierta desde su marca: el panel va a la pestaña «Nubes», a ESTA nube.
           nube={lateral === 'nueva' ? null : marca.id}
+          onCompararNube={pedirCompararNube}
           nueva={lateral === 'nueva' ? { tipo: 'OBSERVACION', lugar: `Desde una marca · pág. ${marca.page}` } : null}
           titulo="Nueva observación de la marca" crear={crearDesdeLaMarca}
           onCreada={releerObservacion} onCambio={releerObservacion} onCerrar={() => setLateral(null)} />

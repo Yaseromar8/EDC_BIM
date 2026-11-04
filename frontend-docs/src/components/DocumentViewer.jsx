@@ -6,6 +6,7 @@ import AccLinkPicker from './AccLinkPicker';
 import DecisionEnLector from './DecisionEnLector';
 const LectorDeTabla = lazy(() => import('./LectorDeTabla'));
 import CajetinDelDocumento, { SelloSustituida, AccionesDelCajetin } from './CajetinDelDocumento';
+import { PEDIR_COMPARAR_NUBE } from './AsignacionDeNube';
 import { CapaDeSustento, CapaDeSustentoEnCad, PanelDeSustento } from './SustentoDelPlano';
 import { useSustento } from '../hooks/useSustento';
 import { vincularDeLaDireccion, sinCircuito, conCircuito, numeroDe, cantidadLegible } from '../utils/sustento';
@@ -138,6 +139,8 @@ export default function DocumentViewer({
   const [sustentoAbierto, setSustentoAbierto] = useState(() => !!desdePlanilla);
   const [dibujandoZona, setDibujandoZona] = useState(() => !!desdePlanilla);
   const [compararAbierto, setCompararAbierto] = useState(false);
+  // «Comparar en esta nube» (doc 23 §6.7): con qué versión y dónde encuadrar; null = la comparación de siempre.
+  const [compararEnNube, setCompararEnNube] = useState(null);   // { versionA, enfoque: { pagina, geometria } }
   const [zonaBorrador, setZonaBorrador] = useState(null);   // { zona, pagina }
   const [vinculoElegido, setVinculoElegido] = useState(null);
   // La zona a medio guardar es de UN documento: al pasar a otro (‹ ›) deja de valer sola.
@@ -387,6 +390,25 @@ export default function DocumentViewer({
   const [conectorListo, setConectorListo] = useState(() => {
     try { return localStorage.getItem('alephia_conector') === 'si'; } catch { return false; }
   });
+
+  // El panel de la incidencia pide comparar EN UNA NUBE de este plano: la versión en que se dibujó contra la vigente,
+  // encuadrado en ella (AsignacionDeNube.pedirCompararNube).
+  useEffect(() => {
+    const alPedir = (e) => {
+      const d = e.detail || {};
+      if (!file || isShared || !d.documento || String(d.documento) !== String(file.id) || !/\.pdfx?$/i.test(file.name || '')) return;
+      const lista = versionHistory || [];
+      const deLaNube = lista.find(v => String(v.id) === String(d.version));
+      if (!deLaNube || lista.length < 2 || deLaNube === lista[0]) {
+        toast('Esta nube es de la versión vigente: aún no hay una versión nueva con la que compararla.');
+        return;
+      }
+      setCompararEnNube({ versionA: deLaNube, enfoque: { pagina: d.pagina || 1, geometria: d.geometria } });
+      setCompararAbierto(true);
+    };
+    window.addEventListener(PEDIR_COMPARAR_NUBE, alPedir);
+    return () => window.removeEventListener(PEDIR_COMPARAR_NUBE, alPedir);
+  }, [file, isShared, versionHistory]);
 
   if (!file) return null;
 
@@ -1134,9 +1156,9 @@ export default function DocumentViewer({
         {compararAbierto && puedeComparar && (
           <Suspense fallback={null}>
             <PdfCompareView fileName={file.name} nodeId={file.id} versiones={versionHistory}
-              versionA={enVersionAnterior ? vvActual : versionHistory[1]}
-              versionB={versionHistory[0]}
-              projectPrefix={projectPrefix} onClose={() => setCompararAbierto(false)} />
+              versionA={compararEnNube?.versionA || (enVersionAnterior ? vvActual : versionHistory[1])}
+              versionB={versionHistory[0]} enfoque={compararEnNube?.enfoque || null}
+              projectPrefix={projectPrefix} onClose={() => { setCompararAbierto(false); setCompararEnNube(null); }} />
           </Suspense>
         )}
       </div>

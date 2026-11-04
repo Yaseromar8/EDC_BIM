@@ -457,7 +457,7 @@ def con_su_documento(cur, pendientes):
     ids = sorted({int(p['objeto_id']) for p in pendientes
                   if p.get('objeto_tipo') == 'ISSUE' and str(p.get('objeto_id') or '').isdigit()})
     if not ids:
-        return pendientes
+        return _nubes_con_su_documento(cur, pendientes)   # sin incidencias en la lista, las nubes también van
     cur.execute("SELECT id, evidencia FROM doc_issues WHERE id = ANY(%s)", (ids,))
     donde = {}
     for iid, evidencia in cur.fetchall():
@@ -477,12 +477,13 @@ def _nubes_con_su_documento(cur, pendientes):
                   if p.get('objeto_tipo') == 'NUBE' and str(p.get('objeto_id') or '').isdigit()})
     if not ids:
         return pendientes
-    cur.execute("""SELECT n.id, n.issue_id, i.evidencia
+    cur.execute("""SELECT n.id, n.issue_id, i.evidencia, n.markup_id
                      FROM doc_issue_nubes n JOIN doc_issues i ON i.id = n.issue_id
                     WHERE n.id = ANY(%s)""", (ids,))
     donde = {}
-    for nid, iid, evidencia in cur.fetchall():
-        d = {'incidencia': str(iid)}
+    for nid, iid, evidencia, marca in cur.fetchall():
+        # `marca`: la nube en el plano, para que «Mi trabajo» abra la incidencia EN ESA NUBE.
+        d = {'incidencia': str(iid), 'marca': str(marca) if marca else None}
         for e in (evidencia or []):
             if isinstance(e, dict) and e.get('tipo') in ('plano', 'marca') and e.get('documento'):
                 d.update({'documento': str(e['documento']), 'version': e.get('version_id') or None})

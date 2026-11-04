@@ -24,7 +24,8 @@ export function abrirDocumento(documento, extra = {}) {
 }
 
 // ── Subir una foto: upload-url → PUT firmado → upload-confirm en MULTIMEDIA/ ─────
-export async function subirFoto(API, obra, file, descripcion = 'Foto marcada sobre un plano') {
+// `carpeta`: dónde queda en Docs (por omisión MULTIMEDIA/; los aportes a una nube, en INCIDENCIAS/<código>/, D4).
+export async function subirFoto(API, obra, file, descripcion = 'Foto marcada sobre un plano', carpeta = CARPETA_DE_FOTOS) {
   const nombre = nombreParaSubir(file.name);
   const tipo = file.type || 'application/octet-stream';
   const r1 = await apiFetch(`${API}/api/docs/upload-url`, {
@@ -37,7 +38,7 @@ export async function subirFoto(API, obra, file, descripcion = 'Foto marcada sob
   const r2 = await apiFetch(`${API}/api/docs/upload-confirm`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ filename: nombre, gcs_urn: d1.gcs_urn, size_bytes: file.size, mime_type: tipo,
-                           path: CARPETA_DE_FOTOS, model_urn: obra,
+                           path: carpeta || CARPETA_DE_FOTOS, model_urn: obra,
                            description: descripcion }),
   });
   const d2 = await r2.json().catch(() => ({}));

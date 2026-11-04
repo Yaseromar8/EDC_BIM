@@ -1239,9 +1239,11 @@ def _marcas(cur, ids):
     """{markup_id: {page, kind, created_by, version_id}} de esas marcas."""
     if not ids:
         return {}
-    cur.execute("""SELECT id, page, kind, created_by, file_version_id::text, file_node_id::text
+    cur.execute("""SELECT id, page, kind, created_by, file_version_id::text, file_node_id::text, geometry
                      FROM pdf_markups WHERE id = ANY(%s)""", (list(ids),))
-    return {r[0]: {'page': r[1], 'kind': r[2], 'created_by': r[3], 'version_id': r[4], 'documento': r[5]}
+    # `geometria` (en puntos del PDF): para encuadrar la nube al compararla con la versión corregida.
+    return {r[0]: {'page': r[1], 'kind': r[2], 'created_by': r[3], 'version_id': r[4], 'documento': r[5],
+                   'geometria': r[6]}
             for r in cur.fetchall()}
 
 

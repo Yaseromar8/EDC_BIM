@@ -338,7 +338,8 @@ function Miniatura({ entorno, adjunto, onAbrir, onQuitar }) {
   );
 }
 
-function Detalle({ entorno, obra, ob, issueId, extraDetalle, nube = null, onIrAMarca = null, onCambio, onCargada, onDescartada }) {
+function Detalle({ entorno, obra, ob, issueId, extraDetalle, nube = null, onIrAMarca = null, onCompararNube = null,
+                  onCambio, onCargada, onDescartada }) {
   const API = entorno.API ?? '';
   const [i, setI] = useState(null);
   const [acto, setActo] = useState(null);
@@ -623,6 +624,7 @@ function Detalle({ entorno, obra, ob, issueId, extraDetalle, nube = null, onIrAM
 
       {verPestana === 'nubes' && (
         <NubesDeIncidencia entorno={entorno} obra={obra} ob={ob} i={i} datos={nubes} foco={nube} onIrAMarca={onIrAMarca}
+          onComparar={onCompararNube}
           onCambio={(d) => { setNubes(d); cargar(); }} />
       )}
 
@@ -870,7 +872,7 @@ export const AISLADO = Object.fromEntries(['onMouseDown', 'onMouseUp', 'onMouseM
 
 export default function PanelDeIncidencia({ entorno, obra, issueId = null, nueva = null, crear = null, titulo = null,
                                             extraAlta = null, extraDetalle = null, contenedor = null,
-                                            nube = null, onIrAMarca = null,
+                                            nube = null, onIrAMarca = null, onCompararNube = null,
                                             onVolver = null, onCreada, onCambio, onCerrar }) {
   const ob = useObraDeIncidencias(entorno, obra);
   const [id, setId] = useState(issueId);
@@ -896,7 +898,7 @@ export default function PanelDeIncidencia({ entorno, obra, issueId = null, nueva
       </header>
       {id ? (
         <Detalle key={id} entorno={entorno} obra={obra} ob={ob} issueId={id} extraDetalle={extraDetalle}
-          nube={nube} onIrAMarca={onIrAMarca}
+          nube={nube} onIrAMarca={onIrAMarca} onCompararNube={onCompararNube}
           onCargada={(d) => { setCodigo(d?.codigo || null); setCargada(d); }} onCambio={onCambio}
           onDescartada={() => { onCambio?.(null); if (onVolver) onVolver(); else onCerrar?.(); }} />
       ) : (

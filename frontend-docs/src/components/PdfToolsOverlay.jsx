@@ -3,7 +3,7 @@
 // y calibración de escala. Geometrías en coordenadas PDF (independientes del zoom).
 import React, { useState, useEffect, useRef, useCallback, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { incidenciaDeLaDireccion, sinIncidencia } from '../utils/enlacesDeArchivos';
+import { incidenciaDeLaDireccion, nubeDeLaDireccion, sinIncidencia } from '../utils/enlacesDeArchivos';
 import toast from 'react-hot-toast';
 import { API } from '../utils/helpers';
 import { apiFetch } from '../utils/apiFetch';
@@ -164,8 +164,8 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
   const [abiertaDelPlano, setAbiertaDelPlano] = useState(null);
   const [pedidoDelPlano, setPedidoDelPlano] = useState(null);
   const [pedidoDeMarca, setPedidoDeMarca] = useState(null);   // { id, que, n }: abrir el menú de la marca en algo
-  const pedirAlPlano = (vista, pin = null) => {
-    setPedidoDelPlano(p => ({ vista, pin, n: (p?.n || 0) + 1 }));
+  const pedirAlPlano = (vista, pin = null, nube = null) => {
+    setPedidoDelPlano(p => ({ vista, pin, nube, n: (p?.n || 0) + 1 }));
     onPanelDelPlano?.(true);
   };
   // Desde «Mi trabajo» (3-nov-2026): la dirección trae una incidencia de ESTE plano; se abre en su panel una vez.
@@ -173,12 +173,13 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
     if (!nodeId) return undefined;
     const id = incidenciaDeLaDireccion(window.location.search, nodeId);
     if (id === null) return undefined;
+    const nube = nubeDeLaDireccion(window.location.search);   // y, si viene de una nube, en ella
     // Tras el arranque del lector: al cambiar de documento, PDFViewer cierra el panel del plano en SU efecto, que corre
     // después de este.
     const t = setTimeout(() => {
       window.history.replaceState(window.history.state, '',
         window.location.pathname + sinIncidencia(window.location.search) + window.location.hash);
-      pedirAlPlano(id);
+      pedirAlPlano(id, null, nube);
     }, 0);
     return () => clearTimeout(t);
   }, [nodeId]); // eslint-disable-line react-hooks/exhaustive-deps

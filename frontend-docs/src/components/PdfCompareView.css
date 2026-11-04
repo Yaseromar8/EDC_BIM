@@ -187,3 +187,6 @@
   .cmp-panel { top: 92px; width: 100%; }
   .cmp-atenuar { display: none; }
 }
+
+/* La nube que se viene a verificar (doc 23 §6.7): trazo discontinuo, sin relleno, por encima de los cambios. */
+.cmp-foco { fill: none; stroke: #141413; stroke-width: 1.5; stroke-dasharray: 6 4; vector-effect: non-scaling-stroke; }

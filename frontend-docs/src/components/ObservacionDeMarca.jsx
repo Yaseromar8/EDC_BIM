@@ -12,6 +12,7 @@ import React, { useCallback, useState } from 'react';
 import { apiFetch } from '../utils/apiFetch';
 import { estadoDeObservacion, observacionViva, aQuienLeToca, fechaDeDia } from '../utils/marcasConEnlace';
 import IncidenciaLateral from './IncidenciaLateral';
+import { pedirCompararNube } from './AsignacionDeNube';
 import { destinoDelLector } from './ObservacionesDelPlano';
 
 export function EtiquetaDeObservacion({ obs }) {
@@ -86,6 +87,7 @@ export default function ObservacionDeMarca({ API, obra, marca, esAutor, onCambio
           issueId={lateral === 'nueva' ? null : lateral}
           // Abierta desde su marca: el panel va a la pestaña «Nubes», a ESTA nube.
           nube={lateral === 'nueva' ? null : marca.id}
+          onCompararNube={pedirCompararNube}
           nueva={lateral === 'nueva' ? { tipo: 'OBSERVACION', lugar: `Desde una marca · pág. ${marca.page}` } : null}
           titulo="Nueva observación de la marca" crear={crearDesdeLaMarca}
           onCreada={releer} onCambio={releer} onCerrar={() => setLateral(null)} />

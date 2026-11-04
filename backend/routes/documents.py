@@ -1729,6 +1729,23 @@ def get_upload_url():
         return jsonify({"success": True, "uploadUrl": upload_url, "gcs_urn": gcs_urn}), 200
     return jsonify({"success": False, "error": "Error generando URL"}), 500
 
+def _aporta_a_su_incidencia(user, model_urn, folder_path):
+    """¿Sube a «INCIDENCIAS/<código>/» alguien que participa en esa incidencia? (D4, doc 24)."""
+    import nubes_de_issue as nub
+    if not nub.codigo_de_la_carpeta(folder_path):
+        return False
+    try:
+        from db import get_db_connection
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            cur.execute('SELECT company_id FROM users WHERE id = %s', ((user or {}).get('id'),))
+            f = cur.fetchone()
+            return nub.puede_subir_a_su_carpeta(cur, user, f[0] if f else None, model_urn, folder_path)
+    except Exception as e:
+        print(f"[upload-confirm] carpeta de incidencia: {e}")
+        return False
+
+
 @documents_bp.route('/api/docs/upload-confirm', methods=['POST'])
 def confirm_upload():
     """Validates the uploaded file exists and creates the DB record for the item."""
@@ -1754,6 +1771,8 @@ def confirm_upload():
     from file_system_db import resolve_path_to_node_id
     parent_node_id = resolve_path_to_node_id(folder_path, model_urn, auto_create=False)
     rbac = check_folder_permission(user, parent_node_id, model_urn, 'edit', 'confirmar subidas')
+    if rbac and _aporta_a_su_incidencia(user, model_urn, folder_path):
+        rbac = None     # D4: a la carpeta de SU incidencia sube quien participa en ella (nubes_de_issue)
     if rbac: return rbac
 
     if folder_path and not folder_path.endswith('/'):

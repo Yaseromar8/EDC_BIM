@@ -341,12 +341,29 @@ elegida) y «Crear encargo». Al crearla:
 El servidor no deja convertir en encargo la nube de otro (403). Arreglo de paso: al volver a pedir las marcas tras un
 acto, la marca elegida ya no se suelta sola (solo al cambiar de documento o versión). Ensayo 41/41.
 
-### 6.7 · Lo que sigue
+### 6.7 · Cerrar el ciclo de la nube (3-nov-2026)
 
-1. Verificar con «Comparar versiones» encuadrado en la nube.
-2. Subir los aportes a una carpeta de la incidencia en vez de MULTIMEDIA.
-3. Abrir desde «Mi trabajo» en la nube concreta (hoy abre la incidencia por la pestaña Incidencia).
-4. Más adelante: «Enviar desde View» (una vista 3D guardada a la nube) y exportar a BCF.
+1. **Comparar en esta nube.** Quien revisa, con la incidencia «Corregida», tiene en cada nube por verificar
+   «Comparar en esta nube»: abre «Comparar versiones» entre la versión en que se dibujó la nube y la vigente,
+   encuadrado en ella y con su caja en trazo discontinuo. Luego decide «Levantada» o «No levantada». La nube viaja
+   con su geometría (puntos del PDF); el lector la convierte a la hoja comparada. Si la nube es de la vigente (aún no
+   hay versión nueva), lo dice y no abre nada.
+2. **La carpeta de la incidencia (D4).** Lo que se sube al entregar va a `INCIDENCIAS/<código>/` de la obra, no a
+   MULTIMEDIA. Ahí, y solo ahí, sube quien participa en la incidencia abierta aunque no tenga «Editar»: quien la
+   revisa, el encargado y quien tiene una nube suya por entregar (o su empresa). Una subcarpeta, otra incidencia,
+   otra obra o MULTIMEDIA siguen con la regla de siempre. Entregada la nube, quien aportó deja de poder subir.
+3. **«Mi trabajo» lleva a la nube.** El aviso «Aportar en ISS-002» se pulsa y abre el plano con la incidencia en la
+   pestaña Nubes, en ESA nube (`&nube=<marca>` en la dirección). Arreglo de la parte 1: con solo nubes en la lista
+   (ninguna incidencia), «Mi trabajo» no las completaba con su plano.
+
+Probado: ensayo de la carpeta, «Mi trabajo» y la geometría contra la base desechable, 12/12; la regla de la ruta
+real de subida con los mismos usuarios; «Comparar en esta nube» en el banco de comparar (encuadre y caja). No probado
+en pantalla: el botón dentro del lector con dos versiones reales (ningún banco tiene el lector con dos versiones) y la
+subida real de un fichero (el banco no tiene el almacén).
+
+### 6.8 · Lo que sigue
+
+1. Más adelante: «Enviar desde View» (una vista 3D guardada a la nube) y exportar a BCF.
 
 ## Fuentes
 

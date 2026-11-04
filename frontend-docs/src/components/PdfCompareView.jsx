@@ -217,7 +217,24 @@ const Ico = ({ children, size = 18 }) => (
     strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{children}</svg>
 );
 
-export default function PdfCompareView({ fileName, nodeId = null, versiones = [], versionA, versionB, projectPrefix, onClose }) {
+/** La caja (x, y, w, h) en píxeles de una geometría de marca, con `aPx(x, y)` de puntos del PDF a píxeles. */
+function cajaDeGeometria(g, aPx) {
+  if (!g) return null;
+  let pts = [];
+  if (Array.isArray(g.points)) pts = g.points.map(p => aPx(p[0], p[1]));
+  else if (g.p1 && g.p2) pts = [aPx(g.p1[0], g.p1[1]), aPx(g.p2[0], g.p2[1])];
+  else if (g.w != null && g.h != null) pts = [aPx(g.x, g.y), aPx(g.x + g.w, g.y + g.h)];
+  else if (g.p) { const c = aPx(g.p[0], g.p[1]); pts = [[c[0] - 20, c[1] - 20], [c[0] + 20, c[1] + 20]]; }
+  if (!pts.length) return null;
+  const xs = pts.map(p => p[0]), ys = pts.map(p => p[1]);
+  const x = Math.min(...xs), y = Math.min(...ys);
+  return { x, y, w: Math.max(4, Math.max(...xs) - x), h: Math.max(4, Math.max(...ys) - y) };
+}
+
+// `enfoque` { pagina, geometria } (doc 23 §6.7): abrir encuadrado en una NUBE de una incidencia, con su zona marcada,
+// para decidir si quedó levantada. `geometria` en puntos del PDF, como la guardan las marcas.
+export default function PdfCompareView({ fileName, nodeId = null, versiones = [], versionA, versionB, projectPrefix, onClose,
+                                         enfoque = null }) {
   const lista = useMemo(() => {
     const todas = versiones.length ? versiones : [versionB, versionA].filter(Boolean);
     return [...todas].sort((p, q) => (q.version_number || 0) - (p.version_number || 0));
@@ -229,7 +246,8 @@ export default function PdfCompareView({ fileName, nodeId = null, versiones = []
   const vB = lista.find(v => String(v.id) === idB) || versionB;
   const etiqueta = (v) => (v ? `V${v.version_number || 1}` : '—');
 
-  const [pagina, setPagina] = useState(1);
+  const [pagina, setPagina] = useState(enfoque?.pagina || 1);
+  const [zonaDeLaNube, setZonaDeLaNube] = useState(null);   // { x, y, w, h } en píxeles de la hoja comparada
   const [paginas, setPaginas] = useState(1);
   const [modo, setModo] = useState('superpuesto');      // 'superpuesto' | 'cortina' | 'lado'
   const [capas, setCapas] = useState({ colores: true, verA: true, verB: true, atenuar: 0.35, nubes: true });
@@ -348,6 +366,19 @@ export default function PdfCompareView({ fileName, nodeId = null, versiones = []
         const [wa, wb] = await Promise.all([anchoPt(qa), anchoPt(qb)]);
         const [ta, tb] = await Promise.all([textosDe(qa, pagina, w / wa), textosDe(qb, pagina, w / wb)]);
         if (vivo) setTextos({ a: ta, b: tb });
+        // LA NUBE que se viene a verificar: de puntos del PDF a píxeles de esta hoja, y se encuadra en ella.
+        if (vivo && enfoque?.geometria && (enfoque.pagina || 1) === pagina && pagina <= qb.numPages) {
+          const vpN = (await qb.getPage(pagina)).getViewport({ scale: w / wb });
+          const caja = cajaDeGeometria(enfoque.geometria, (x, y) => vpN.convertToViewportPoint(x, y));
+          if (vivo && caja) {
+            setZonaDeLaNube(caja);
+            primeraVista.current = false;
+            const m = medida(visor.current);
+            const v = encuadrar(caja, m.w, m.h, { aire: 0.9, maximo: 3 });
+            setVista(v);
+            setVistaA(v);
+          }
+        }
       } catch (e) {
         if (vivo) setEstado({ que: 'error', texto: e.message || 'No se pudo comparar.' });
       }
@@ -549,6 +580,12 @@ export default function PdfCompareView({ fileName, nodeId = null, versiones = []
 
   // ── Dibujo ──
   const transformar = (v) => ({ transform: `translate(${v.x}px, ${v.y}px) scale(${v.s})` });
+  // La nube que se verifica, en trazo discontinuo: no es un cambio encontrado, es el sitio que hay que mirar.
+  const laNube = (dx = 0, dy = 0) => (hoja && zonaDeLaNube && (
+    <svg className="cmp-nubes" width={hoja.w} height={hoja.h} viewBox={`0 0 ${hoja.w} ${hoja.h}`} aria-hidden="true">
+      <rect className="cmp-foco" x={zonaDeLaNube.x + dx} y={zonaDeLaNube.y + dy} width={zonaDeLaNube.w} height={zonaDeLaNube.h} />
+    </svg>
+  ));
   // LAS MARCAS DE LOS CAMBIOS: un rectángulo fino y una etiqueta con su número, de tamaño fijo en pantalla (3-nov-2026,
   // el dueño: «más profesional y serio»; las nubes de festones, a toda la hoja, se veían recargadas).
   const nubes = (dx = 0, dy = 0) => (hoja && capas.nubes && !alineando && visibles.length > 0 && (
@@ -640,6 +677,7 @@ export default function PdfCompareView({ fileName, nodeId = null, versiones = []
                   <Lienzo canvas={hoja.lienzoA} />
                   {enlazado && nitido(detalle?.A, 'lado')}
                   {nubes(-desfase.dx, -desfase.dy)}
+                  {laNube(-desfase.dx, -desfase.dy)}
                 </div>
               )}
             </div>
@@ -671,6 +709,7 @@ export default function PdfCompareView({ fileName, nodeId = null, versiones = []
                 {modo === 'lado' && <Lienzo canvas={hoja.lienzoB} />}
                 {modo === 'lado' && nitido(detalle?.B, 'lado')}
                 {nubes()}
+                {laNube()}
               </div>
             )}
             {modo === 'cortina' && hoja && (

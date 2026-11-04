@@ -19,6 +19,19 @@ const fechaDeDia = (s) => {
   return m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])).toLocaleDateString('es-PE', { day: '2-digit', month: 'short' }) : '';
 };
 
+/**
+ * «COMPARAR EN ESTA NUBE» (doc 23 §6.7): el panel de la incidencia lo pide y el lector del plano (DocumentViewer) abre
+ * «Comparar versiones» entre la versión de la nube y la vigente, encuadrado en ella. Un aviso de ventana: el panel vive
+ * en design/ y no conoce al lector.
+ */
+export const PEDIR_COMPARAR_NUBE = 'alephia:comparar-nube';
+export function pedirCompararNube(n) {
+  const m = n?.marca || {};
+  window.dispatchEvent(new CustomEvent(PEDIR_COMPARAR_NUBE, { detail: {
+    documento: m.documento, version: m.version_id, pagina: m.page || 1, geometria: m.geometria,
+  } }));
+}
+
 /** Quién está en esta sesión (su id), como lo guarda el inicio de sesión. */
 export function miIdDeSesion() {
   try {

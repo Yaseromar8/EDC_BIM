@@ -59,9 +59,16 @@ export function incidenciaDeLaDireccion(search, documento = undefined) {
   return Number(id);
 }
 
+// `&nube=<marca>` (3-nov-2026): con la incidencia, la nube en la que se abre su panel (pestaña «Nubes»).
+export function nubeDeLaDireccion(search) {
+  const id = (new URLSearchParams(search || '').get('nube') || '').trim();
+  return /^\d+$/.test(id) ? Number(id) : null;
+}
+
 export function sinIncidencia(search) {
   const p = new URLSearchParams(search || '');
   p.delete('incidencia');
+  p.delete('nube');
   return cadena(p);
 }
 

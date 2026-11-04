@@ -55,6 +55,8 @@ Detalle en `docs/archivos/18`, `19`, `20` y `21`.
 - Commit siguiente (3-nov): lector — al alejar, los rótulos de las marcas encogen con la hoja (bajo 700 px, hasta 40 %).
 - Commit siguiente (3-nov, doc 23 §6.6): el encargado reparte con «Encargo para mi equipo» desde la barra de su nube
   (se publica, rótulo discontinuo, se asigna en su nota). Ensayo 41/41.
+- Commit siguiente (3-nov, doc 23 §6.7): «Comparar en esta nube», aportes a INCIDENCIAS/<código>/ (D4: sube quien
+  participa aunque no tenga «Editar») y «Mi trabajo» abre en la nube. Ensayo 12/12.
 - EXACT NEXT ACTION (histórica, ya hecha para c3144a3d): Manual Deploy de `visor-ecd-backend-va` y DESPUÉS de `visor-ecd-portal` con el HEAD de main;
   comprobar `/api/health` y el bundle del portal (Cloudflare ~5 min). Luego, recorrido real con dos personas (correo
   a observadores y subida de fotos sin probar en producción).

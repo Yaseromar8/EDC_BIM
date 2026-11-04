@@ -27,6 +27,8 @@ LA VIDA DE UNA NUBE (rondas en la MISMA nube, D7):
   … → levantada | no_levantada (con motivo). Una no levantada puede volver a asignarse: es otra ronda.
 """
 
+import re
+
 CLASES = ('observacion', 'encargo')
 
 SIN_ASIGNAR = 'sin_asignar'
@@ -191,6 +193,40 @@ def colores_del_plano(cur, nodo):
         clave = clave_de_destino({'destino_usuario': u, 'destino_empresa': e})
         colores.setdefault(clave, len(colores))
     return colores
+
+
+# LA CARPETA DE LA INCIDENCIA (D4, doc 24): lo que se aporta a sus nubes se sube a «INCIDENCIAS/<código>/» de la obra.
+CARPETA_DE_INCIDENCIAS = 'INCIDENCIAS'
+_CARPETA = re.compile(r'^INCIDENCIAS/([A-Z]{2,8}-\d{1,6})/?$')
+
+
+def codigo_de_la_carpeta(carpeta):
+    """'ISS-002' si `carpeta` es exactamente la carpeta de una incidencia («INCIDENCIAS/ISS-002/»); si no, None."""
+    m = _CARPETA.match(str(carpeta or '').strip())
+    return m.group(1) if m else None
+
+
+def puede_subir_a_su_carpeta(cur, usuario, empresa_del_usuario, obra, carpeta):
+    """D4: para aportar basta con VER el plano; lo subido va a la carpeta de la incidencia, que es un contenedor nuevo y
+    no una edición del plano. Así que a esa carpeta, y solo a ella, sube quien participa en la incidencia abierta:
+    quien la revisa, el encargado, y quien tiene una nube suya por entregar (o su empresa). Lo demás, como siempre."""
+    codigo = codigo_de_la_carpeta(carpeta)
+    uid = (usuario or {}).get('id')
+    if not codigo or not uid or not obra:
+        return False
+    import flujo_de_issue as iss
+    cur.execute("""SELECT id, estado, autor_id, verificador_id, responsable_id, responsable_empresa
+                     FROM doc_issues WHERE model_urn = %s AND codigo = %s""", (str(obra), codigo))
+    f = cur.fetchone()
+    if not f or iss.esta_cerrado(f[1]) or f[1] == iss.BORRADOR:
+        return False
+    if uid in (f[2], f[3], f[4]) or (f[5] and empresa_del_usuario and f[5] == empresa_del_usuario):
+        return True
+    cur.execute("""SELECT 1 FROM doc_issue_nubes
+                    WHERE issue_id = %s AND estado = ANY(%s)
+                      AND (destino_usuario = %s OR (destino_empresa IS NOT NULL AND destino_empresa = %s))
+                    LIMIT 1""", (f[0], list(ESTADOS_QUE_DEBE_EL_APORTANTE), uid, empresa_del_usuario))
+    return cur.fetchone() is not None
 
 
 def documento_de_la_incidencia(issue):

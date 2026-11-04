@@ -17,6 +17,7 @@ import {
   leerEnlaceDeArchivos, conArchivos, sinCarpetaNiDocumento, enlaceDeArchivos, mismoEnlace,
   rutaDeLaCadena, estadoDeArchivos, pideLaVistaDeCarpetas, destinoDeArchivosTrasNavegar,
   esIdentificador, ENLACE_NO_DISPONIBLE, CLAVE_DEL_ENLACE_DE_ARCHIVOS,
+  incidenciaDeLaDireccion, nubeDeLaDireccion, sinIncidencia,
 } from '../src/utils/enlacesDeArchivos.js';
 import { leerEnlace, conRevision, CLAVE_DEL_ENLACE_PENDIENTE } from '../src/utils/revisiones.js';
 
@@ -164,6 +165,14 @@ await test('la raiz de la obra solo sale de un listado de la raiz, tambien entra
   assert.ok(ex.includes("listaLaRaiz && data.current_node_id"), 'la raíz no se limita a un listado de la raíz');
   assert.ok(ex.includes('if (!projectRootIdRef.current && !enLaRaiz(ruta)) pedirLaRaiz();'),
             'entrando por un enlace nadie pide la raíz: el árbol y «Desplazar» se quedan sin ella');
+});
+
+await test('desde «Mi trabajo», una nube: la incidencia y la nube se leen una vez y se quitan juntas', () => {
+  const s = `?obra=${OBRA}&documento=${D}&incidencia=12&nube=345`;
+  assert.equal(incidenciaDeLaDireccion(s, D), 12);
+  assert.equal(nubeDeLaDireccion(s), 345);
+  assert.equal(nubeDeLaDireccion(`?obra=${OBRA}&nube=x`), null);              // solo un número
+  assert.equal(sinIncidencia(s), `?obra=${OBRA}&documento=${D}`);             // ni incidencia ni nube quedan
 });
 
 console.log(JSON.stringify({ banco: 'enlacesDeArchivos', pass, fail }));
