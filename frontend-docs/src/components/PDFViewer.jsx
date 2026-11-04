@@ -26,6 +26,7 @@ import {
 } from '../utils/navegacionLector';
 import useSeleccionDelLector from '../utils/useSeleccionDelLector';
 import { ContextoDelLector } from '../utils/contextoDelLector';
+import { colorAlAzar } from '../../../design/incidencias/reglas.js';
 import './PDFViewer.css';
 
 // El worker y los recursos de pdf.js se configuran en un solo sitio.
@@ -963,7 +964,9 @@ export default function PDFViewer({ url, preparando = false,
   const [cuerpo, setCuerpo] = useState(null);
   const [marco, setMarco] = useState(null);
   const sitios = useMemo(() => ({ cuerpo, marco }), [cuerpo, marco]);
-  const [markupColor, setMarkupColor] = useState(COLORS[0]);
+  // EL COLOR DE LA PRÓXIMA MARCA, AL AZAR DE LA PALETA (5-nov-2026, el dueño: «aleatorio para no perder el tiempo
+  // eligiendo»): uno al abrir y otro tras cada marca guardada. Se puede elegir igual en la paleta del estuche.
+  const [markupColor, setMarkupColor] = useState(() => colorAlAzar(null));
   // Estuche compacto: la última variante de cada familia y el desplegable abierto (uno a la vez).
   const [variante, setVariante] = useState({ medir: 'measure', marcar: 'cloud' });
   const [desplegable, setDesplegable] = useState(null);
@@ -2581,7 +2584,7 @@ export default function PDFViewer({ url, preparando = false,
                 {nodeId && (
                   <PdfToolsOverlay vpInfo={vpInfo} page={currentPage} nodeId={nodeId}
                     projectPrefix={projectPrefix} tool={tool} setTool={setTool}
-                    color={markupColor} userName={userName}
+                    color={markupColor} userName={userName} alGuardarMarca={(usado) => setMarkupColor(colorAlAzar(usado))}
                     versionDeLasMarcas={versionDeLasMarcas} versionVigente={versionVigente} onIrAVersion={onIrAVersion}
                     seleccion={seleccion} despachar={despachar} onIrAPagina={goToPage}
                     onObservacionesDelPlano={setObsDelPlano} nombreDelDocumento={fileName} />

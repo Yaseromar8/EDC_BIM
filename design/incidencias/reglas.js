@@ -113,16 +113,27 @@ export const EVENTOS_DE_ISSUE = {
   cloud_created: 'Creó una nube de encargo',
 };
 
-// UN COLOR POR PERSONA EN CADA PLANO (3-nov-2026, docs/archivos/23). Diez tonos sobrios de la paleta, en el orden en
-// que aparece cada persona o empresa en las nubes de la incidencia; la undécima repite desde el primero.
 /** «Ana Pérez» → «AP»; «luis.rios@obra.pe» → «LR». Las iniciales de una persona o empresa, igual en toda la pantalla. */
 export function iniciales(nombre) {
   const p = String(nombre || '?').replace(/@.*/, '').split(/[\s._-]+/).filter(Boolean);
   return ((p[0] || '?')[0] + (p[1] ? p[1][0] : '')).toUpperCase();
 }
 
-export const COLORES_DE_PERSONA = ['#507294', '#b93535', '#64744e', '#9e5943', '#2f6f6a', '#8a6d1f', '#3d4f66',
-  '#7d5a3c', '#5b7f3a', '#6b6a65'];
+// LOS COLORES DE LAS MARCAS (5-nov-2026, el dueño: «no usemos el rojo; de acuerdo a nuestra paleta y aleatorio para no
+// perder el tiempo eligiendo»). Siete tonos de la lista cerrada de la paleta oficial (D-24,
+// docs/ux/PALETA_OFICIAL_CLAUDE_DEFINICION.md), ordenados para que los vecinos se distingan: azul 30D, verde 20D,
+// naranja 30D, aviso, azul, verde y gris 700. Sin el rojo de error (#b93535): en un plano el rojo dice «error».
+export const PALETA_DE_MARCAS = ['#507294', '#64744e', '#9e5943', '#734500', '#6a9bcc', '#788c5d', '#52524d'];
+
+/** Un color de la paleta al azar, distinto de `anterior`: el de la próxima marca, sin tener que elegirlo. */
+export function colorAlAzar(anterior, azar = Math.random) {
+  const otros = PALETA_DE_MARCAS.filter(c => c !== anterior);
+  return otros[Math.floor(azar() * otros.length) % otros.length];
+}
+
+// UN COLOR POR PERSONA EN CADA PLANO (3-nov-2026, docs/archivos/23): los de la paleta, en el orden en que aparece cada
+// persona o empresa en las nubes del plano; la octava repite desde el primero.
+export const COLORES_DE_PERSONA = PALETA_DE_MARCAS;
 
 // El servidor numera a cada persona o empresa en el plano (`color`: 0, 1, 2…): el mismo en la hoja y en el panel.
 export const colorDeIndice = (k) => (k == null ? '#b0aea5' : COLORES_DE_PERSONA[k % COLORES_DE_PERSONA.length]);

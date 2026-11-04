@@ -3,12 +3,14 @@
 //   · lo elegido en el lector, una sola máquina de estados (seleccionDelLector.js);
 //   · las nubes de cada incidencia, una sola copia para toda la pantalla (datosDeNubes.js);
 //   · Escape y el clic fuera, como capas (capas.js);
-//   · la leyenda cuenta lo que el servidor dice que se debe.
+//   · la leyenda cuenta lo que el servidor dice que se debe;
+//   · los colores de las marcas: de la paleta, sin rojo y al azar (5-nov-2026).
 import { SIN_SELECCION, seleccion, pedidoAlPanel, pedidoALaBarra } from '../src/utils/seleccionDelLector.js';
 import { genteDeLasNubes } from '../src/utils/leyendaDeNubes.js';
 import { cargarNubes, fijarNubes, recargarNubes, alCambiarNubes, leerDe, nubesGuardadas, _olvidarNubes }
   from '../../design/incidencias/datosDeNubes.js';
 import { abrirCapa, _capasAbiertas, _paraProbar } from '../../design/ui/capas.js';
+import { PALETA_DE_MARCAS, COLORES_DE_PERSONA, colorAlAzar, colorDeIndice } from '../../design/incidencias/reglas.js';
 
 let pass = 0, fail = 0;
 // Las pruebas comparten la copia de las nubes y la pila de capas: corren UNA tras otra, en orden.
@@ -211,6 +213,28 @@ test('la leyenda cuenta «por entregar» lo que dice el servidor, una fila por p
   const nube = (nombre, color, por_entregar) => ({ nube: { destino_nombre: nombre, color, por_entregar } });
   const g = genteDeLasNubes([nube('Mario', 1, true), nube('Mario', 1, false), nube('Luis', 0, false), { nube: null }]);
   igual(g.map(x => [x.nombre, x.nubes, x.deben]), [['Luis', 1, 0], ['Mario', 2, 1]]);
+});
+
+// ── Los colores ────────────────────────────────────────────────────────────────────────────────────────────────
+test('los colores de las marcas son de la paleta oficial y ninguno es rojo', () => {
+  // La lista cerrada de D-24 (docs/ux/PALETA_OFICIAL_CLAUDE_DEFINICION.md) que sirve para trazar sobre un plano.
+  const D24 = ['#507294', '#64744e', '#9e5943', '#734500', '#6a9bcc', '#788c5d', '#52524d', '#d97757', '#72706b'];
+  cierto(PALETA_DE_MARCAS.every(c => D24.includes(c)), 'fuera de la paleta');
+  cierto(!PALETA_DE_MARCAS.some(c => ['#b93535', '#e53935'].includes(c)), 'hay rojo');
+  igual(new Set(PALETA_DE_MARCAS).size, PALETA_DE_MARCAS.length);
+  igual(COLORES_DE_PERSONA, PALETA_DE_MARCAS);
+  igual(colorDeIndice(PALETA_DE_MARCAS.length), PALETA_DE_MARCAS[0]);     // la octava persona repite el primero
+});
+
+test('la próxima marca toma un color al azar de la paleta, nunca el mismo que la anterior', () => {
+  for (const anterior of [null, ...PALETA_DE_MARCAS]) {
+    for (const r of [0, 0.3, 0.5, 0.9999]) {
+      const c = colorAlAzar(anterior, () => r);
+      cierto(PALETA_DE_MARCAS.includes(c) && c !== anterior, `${anterior} → ${c}`);
+    }
+  }
+  const vistos = new Set(Array.from({ length: 400 }, () => colorAlAzar(null)));
+  igual(vistos.size, PALETA_DE_MARCAS.length);                            // salen todos
 });
 
 for (const [nombre, fn] of pruebas) {

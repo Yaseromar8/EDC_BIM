@@ -9,7 +9,7 @@ import { PanelDeMarca, DialogoDeSello } from './MarcaConEnlace';
 import BarraDeMarca from './BarraDeMarca';
 import ObservacionesDelPlano from './ObservacionesDelPlano';
 import { GEOMETRIA_DEL_PIN, PinDeIncidencia, numeroDe } from '../../../design/incidencias/PanelDeIncidencia.jsx';
-import { colorDeIndice } from '../../../design/incidencias/reglas.js';
+import { colorDeIndice, PALETA_DE_MARCAS } from '../../../design/incidencias/reglas.js';
 import { alCambiarNubes } from '../../../design/incidencias/datosDeNubes.js';
 import { fuentesListas } from '../../../design/ui/medirTexto.js';
 import { estadoDeIssue } from '../utils/estadosDeIssue';
@@ -29,9 +29,10 @@ const SELLO_ANCHO = 150, SELLO_ALTO = 62;
 // El marcador de foto mide lo mismo EN PANTALLA (px), como el conteo: se ve igual a cualquier zoom.
 const FOTO_R = 13, FOTO_ABANICO = 36, FOTO_APERTURA = 50;
 
-// Colores de marca de la paleta oficial (D-24, lista cerrada; docs/ux/ESTUCHE_COMPACTO.md): error, naranja 30D,
-// aviso, azul 30D, verde 20D y Dark. Las marcas ya guardadas conservan el color con que se dibujaron.
-const COLORS = ['#b93535', '#9e5943', '#734500', '#507294', '#64744e', '#141413'];
+// Colores de marca: los de la paleta (design/incidencias/reglas.js, sin rojo desde el 5-nov-2026). Cada marca nueva
+// toma uno al azar (`alGuardarMarca` cambia el siguiente). Las marcas ya guardadas conservan el color con que se
+// dibujaron; una nube asignada se pinta del color de su persona.
+const COLORS = PALETA_DE_MARCAS;
 
 function dist2d(a, b) { return Math.hypot(b[0] - a[0], b[1] - a[1]); }
 function polyLength(pts) { let s = 0; for (let i = 1; i < pts.length; i++) s += dist2d(pts[i - 1], pts[i]); return s; }
@@ -143,7 +144,8 @@ function conTirador(g, i, p) {
 export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, tool, setTool, color, userName,
                                          versionDeLasMarcas = null, versionVigente = null, onIrAVersion = null,
                                          seleccion = SIN_SELECCION, despachar = () => {}, onIrAPagina = null,
-                                         onObservacionesDelPlano = null, nombreDelDocumento = '' }) {
+                                         onObservacionesDelPlano = null, nombreDelDocumento = '',
+                                         alGuardarMarca = null }) {
   const [markups, setMarkups] = useState([]);          // todos los del documento
   const [calibrations, setCalibrations] = useState({}); // { page: {units_per_pdf, display_unit} }
   const [draft, setDraft] = useState(null);            // figura en construcción
@@ -269,6 +271,7 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
         setMarkups(prev => prev.map(m => m.id === local.id
           ? { ...m, id: d.id, _unsaved: false, ...(d.puede_unirse_a?.length ? { puede_unirse_a: d.puede_unirse_a } : {}) }
           : m));
+        alGuardarMarca?.(style.color);      // la próxima marca, de otro color de la paleta
         return d.id;
       }
       throw new Error(d.error || 'fallo');
@@ -597,7 +600,7 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
     // UNA NUBE ASIGNADA SE PINTA DEL COLOR DE QUIEN APORTA (46, el dueño: «el color que dijimos en cada nube por
     // usuario»). Sin asignar, el que le dio quien la dibujó. Es solo cómo se pinta: su estilo guardado no cambia.
     const c = m.kind === 'cloud' && m.nube?.destino_nombre && m.nube.color != null
-      ? colorDeIndice(m.nube.color) : (m.style?.color || '#e53935');
+      ? colorDeIndice(m.nube.color) : (m.style?.color || PALETA_DE_MARCAS[0]);
     // Con Seleccionar, una marca tuya en borrador se arrastra entera (y se elige); las demás solo se eligen.
     const arrastrable = tool === 'pan' && editable(m);
     const common = {
