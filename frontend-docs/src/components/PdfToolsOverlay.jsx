@@ -12,6 +12,7 @@ import BarraDeMarca from './BarraDeMarca';
 import ObservacionesDelPlano from './ObservacionesDelPlano';
 import { PinDeIncidencia, numeroDe } from '../../../design/incidencias/PanelDeIncidencia.jsx';
 import { colorDeIndice } from '../../../design/incidencias/reglas.js';
+import { miIdDeSesion } from './AsignacionDeNube';
 import { estadoDeIssue } from '../utils/estadosDeIssue';
 import { estadoDeObservacion, observacionViva } from '../utils/marcasConEnlace';
 import { estadoDeSello, marcaDeLaDireccion, fechaCorta } from '../utils/marcasConEnlace';
@@ -203,9 +204,15 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
   const faltaEscala = midiendo && (!cal || recalibrar);
 
   // ── Cargar markups + calibraciones del documento ──
+  // Solo al cambiar de documento o de versión se suelta la marca elegida: una recarga tras un acto (`vuelta`, p. ej.
+  // al crear un encargo) la deja abierta, para seguir con ella (antes se cerraba sola).
+  const cargadoDe = useRef(null);
   useEffect(() => {
     if (!nodeId) return undefined;
-    setElegida(null);   // otro documento: el panel de una marca del anterior no sigue abierto
+    if (cargadoDe.current !== `${nodeId}|${versionId}`) {
+      cargadoDe.current = `${nodeId}|${versionId}`;
+      setElegida(null);   // otro documento: el panel de una marca del anterior no sigue abierto
+    }
     // Saltar a otro documento mientras estas dos respuestas viajaban pintaba
     // las marcas -y la escala- del documento ANTERIOR encima del que estas
     // mirando. Una redlinea sobre el plano equivocado no es una demora, es un
@@ -888,9 +895,10 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
             <g transform={`translate(${ex} ${ey}) scale(${esc})`}
               style={{ pointerEvents: tocable ? 'all' : 'none', cursor: tool === 'pan' ? 'pointer' : 'default' }}
               onClick={tocable ? alTocar(m) : undefined}>
-              <title>{`${obs.titulo || ''}${obs.responsable ? ` — ${obs.responsable}` : ''}${m.nube?.destino_nombre
+              <title>{`${obs.encargo ? 'Encargo del equipo · ' : ''}${obs.titulo || ''}${obs.responsable ? ` — ${obs.responsable}` : ''}${m.nube?.destino_nombre
                 ? `\nNube asignada a ${m.nube.destino_nombre} · ${m.nube.estado_etiqueta}` : ''}`}</title>
-              <rect width={anchoE} height="18" rx="3" fill="#fff" stroke={obs.vencida ? '#b93535' : '#cccac0'} strokeWidth="1" />
+              <rect width={anchoE} height="18" rx="3" fill="#fff" stroke={obs.vencida ? '#b93535' : m.nube?.clase === 'encargo' ? '#8a877f' : '#cccac0'}
+                strokeWidth="1" strokeDasharray={m.nube?.clase === 'encargo' || obs.encargo ? '3 2' : undefined} />
               <rect x="0.5" y="0.5" width="4" height="17" rx="2" fill={est.color} />
               <text x="10" y="12.6" fontSize="10.5" fontWeight="500" fill={obs.vencida ? '#b93535' : '#141413'}
                 fontFamily="'IBM Plex Sans', sans-serif" style={{ pointerEvents: 'none' }}>{texto}</text>
@@ -1047,6 +1055,20 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
               ? () => llevarMarca(marcaElegida) : null}
             onDuplicar={() => duplicarMarca(marcaElegida)}
             onCambio={(nueva) => setMarkups(prev => prev.map(x => x.id === nueva.id ? { ...x, ...nueva } : x))}
+            // EL ENCARGADO REPARTE (doc 23 §6.6): las incidencias abiertas del plano de las que es encargado (por
+            // persona; si va a una empresa, decide el servidor). Tras crear el encargo, las marcas se vuelven a pedir.
+            incidenciasParaEncargo={(() => {
+              const yo = miIdDeSesion();
+              const vistas = new Map();
+              for (const o of [...obsPlano, ...markups.map(x => x.observacion)]) {
+                if (!o || o.cerrada || o.estado === 'Borrador' || o.encargo) continue;
+                if ((yo != null && String(o.responsable_id) === String(yo)) || (!o.responsable_id && o.responsable_empresa)) {
+                  vistas.set(String(o.id), o);
+                }
+              }
+              return [...vistas.values()];
+            })()}
+            onRecargar={() => setVuelta(v => v + 1)}
             // Publicar o retirar es un acto terminado: el menú se cierra (antes se quedaba abierto, con el botón
             // marcado).
             onPublicar={() => { setElegida(null); publicarMarkup(marcaElegida); }}

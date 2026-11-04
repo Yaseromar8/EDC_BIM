@@ -328,11 +328,25 @@ Arriba a la izquierda del lector, en su marco (no en la hoja: no se mueve ni se 
 «Nubes» y las iniciales de color de cada persona o empresa con nubes asignadas en el plano. Abierta: su nombre y cuántas
 le faltan por entregar (o cuántas tiene). Solo aparece si hay alguna nube asignada.
 
-### 6.6 · Lo que sigue
+### 6.6 · El encargado reparte con nubes de encargo
 
-1. Crear nubes de encargo desde la barra de la nube (el servidor ya lo hace; falta el botón).
-2. Verificar con «Comparar versiones» encuadrado en la nube.
-3. Subir los aportes a una carpeta de la incidencia en vez de MULTIMEDIA.
+En la barra de una nube SUYA que aún no es de ninguna incidencia, quien es encargado de alguna incidencia abierta del
+plano ve «Encargo para mi equipo». La nota bajo la nube pregunta de qué incidencia (si hay una sola, ya viene
+elegida) y «Crear encargo». Al crearla:
+
+- la nube se publica, para que su equipo y quien revisa la vean en el plano;
+- la hoja la rotula con su incidencia y con BORDE DISCONTINUO (se distingue de las del revisor);
+- la nota se queda abierta en «Asignar a…», para dársela al cadista o modelador. La acepta el encargado.
+
+El servidor no deja convertir en encargo la nube de otro (403). Arreglo de paso: al volver a pedir las marcas tras un
+acto, la marca elegida ya no se suelta sola (solo al cambiar de documento o versión). Ensayo 41/41.
+
+### 6.7 · Lo que sigue
+
+1. Verificar con «Comparar versiones» encuadrado en la nube.
+2. Subir los aportes a una carpeta de la incidencia en vez de MULTIMEDIA.
+3. Abrir desde «Mi trabajo» en la nube concreta (hoy abre la incidencia por la pestaña Incidencia).
+4. Más adelante: «Enviar desde View» (una vista 3D guardada a la nube) y exportar a BCF.
 
 ## Fuentes
 

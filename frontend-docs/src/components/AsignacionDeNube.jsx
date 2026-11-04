@@ -19,6 +19,51 @@ const fechaDeDia = (s) => {
   return m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])).toLocaleDateString('es-PE', { day: '2-digit', month: 'short' }) : '';
 };
 
+/** Quién está en esta sesión (su id), como lo guarda el inicio de sesión. */
+export function miIdDeSesion() {
+  try {
+    const u = JSON.parse(localStorage.getItem('visor_user') || sessionStorage.getItem('visor_user') || '{}');
+    return u?.id ?? null;
+  } catch { return null; }
+}
+
+/**
+ * EL ENCARGADO REPARTE TRABAJO A SU EQUIPO (D6, doc 23): una nube suya se vuelve nube de ENCARGO de una incidencia de la
+ * que es encargado. Luego la asigna a su cadista o modelador desde la nota, como cualquier otra nube.
+ */
+export function CrearEncargo({ API, marca, incidencias, onHecho, onCancelar }) {
+  const [iid, setIid] = useState(incidencias.length === 1 ? String(incidencias[0].id) : '');
+  const [ocupado, setOcupado] = useState(false);
+  const crear = async () => {
+    setOcupado(true);
+    try {
+      const r = await apiFetch(`${API}/api/issues/${iid}/nubes`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ acto: 'crear', marca: marca.id }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d.error || 'No se pudo crear el encargo.');
+      toast.success('Nube de encargo creada: asígnala a quien la haga');
+      onHecho();
+    } catch (e) { toast.error(e.message); } finally { setOcupado(false); }
+  };
+  return (
+    <form className="bdm-asignar" onSubmit={e => { e.preventDefault(); if (iid) crear(); }}>
+      <span className="bdm-asignar__titulo">Encargo para tu equipo</span>
+      <select value={iid} autoFocus aria-label="De qué incidencia" onChange={e => setIid(e.target.value)}>
+        {incidencias.length > 1 && <option value="">¿De qué incidencia?</option>}
+        {incidencias.map(o => <option key={o.id} value={o.id}>{o.codigo}{o.titulo ? ` · ${o.titulo}` : ''}</option>)}
+      </select>
+      <small className="bdm-asignar__ayuda">La asignas a tu cadista o modelador y la aceptas tú. La ven tu equipo y quien
+        revisa.</small>
+      <div className="bdm-asignar__fila">
+        <button type="button" className="bdm-accion" onClick={onCancelar}>Cancelar</button>
+        <button type="submit" className="bdm-accion bdm-accion--prim" disabled={!iid || ocupado}>Crear encargo</button>
+      </div>
+    </form>
+  );
+}
+
 /** La nube de esta marca en su incidencia (GET /api/issues/<id>/nubes), o null si la marca no es nube de ninguna. */
 export function useNubeDeLaMarca(API, marca) {
   const obs = marca?.observacion;

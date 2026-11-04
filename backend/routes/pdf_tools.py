@@ -1095,23 +1095,40 @@ def _con_nube(cur, rows, node_id):
     import nubes_de_issue as nub
     for m in rows:
         m['nube'] = None
+    # Una NUBE DE ENCARGO no está en la evidencia de su incidencia (la crea el encargado después): su incidencia sale de
+    # la propia nube, para que la hoja la rotule y su nota sepa a quién se asigna.
+    sin_obs = [m['id'] for m in rows if m.get('kind') == nub.TIPO_DE_NUBE and not m.get('observacion') and m.get('id') is not None]
+    if sin_obs:
+        cur.execute("""SELECT DISTINCT ON (n.markup_id) n.markup_id,
+                              i.id, i.codigo, i.estado, i.titulo, i.responsable_id, i.verificador_id, i.vence_en, i.origen_id
+                         FROM doc_issue_nubes n JOIN doc_issues i ON i.id = n.issue_id
+                        WHERE n.markup_id = ANY(%s) AND n.clase = 'encargo'
+                        ORDER BY n.markup_id, n.id DESC""", (sin_obs,))
+        filas = cur.fetchall()
+        if filas:
+            nombres, hoy = _nombres(cur, [x for r in filas for x in (r[5], r[6])]), _hoy_en_obra()
+            por_marca = {r[0]: {**_resumen_de_observacion(r[1:], nombres, hoy), 'encargo': True} for r in filas}
+            _con_empresas(cur, list(por_marca.values()))
+            for m in rows:
+                if m.get('id') in por_marca:
+                    m['observacion'] = por_marca[m['id']]
     ids = [m['id'] for m in rows if m.get('kind') == nub.TIPO_DE_NUBE and m.get('observacion') and m.get('id') is not None]
     if not ids:
         return rows
     cur.execute("""SELECT DISTINCT ON (n.markup_id) n.markup_id, n.estado, n.destino_usuario, n.destino_empresa,
-                          u.name, c.name
+                          u.name, c.name, n.clase
                      FROM doc_issue_nubes n
                      LEFT JOIN users u ON u.id = n.destino_usuario
                      LEFT JOIN companies c ON c.id = n.destino_empresa
                     WHERE n.markup_id = ANY(%s)
                     ORDER BY n.markup_id, n.id DESC""", (ids,))
-    filas = [f for f in cur.fetchall() if f[2] or f[3]]
+    filas = cur.fetchall()
     if not filas:
         return rows
     colores = nub.colores_del_plano(cur, node_id)
     por_marca = {}
-    for mid, estado, uid, eid, persona, empresa in filas:
-        por_marca[mid] = {'estado': estado, 'estado_etiqueta': nub.ETIQUETAS.get(estado, estado),
+    for mid, estado, uid, eid, persona, empresa, clase in filas:
+        por_marca[mid] = {'estado': estado, 'estado_etiqueta': nub.ETIQUETAS.get(estado, estado), 'clase': clase,
                           'destino_nombre': persona or empresa, 'destino_es_empresa': bool(eid),
                           'color': colores.get(nub.clave_de_destino({'destino_usuario': uid, 'destino_empresa': eid}))}
     for m in rows:

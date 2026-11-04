@@ -1535,6 +1535,8 @@ def _crear_encargo(cur, d, data, admin, empresa):
         return jsonify({'error': 'La marca tiene que ser de este plano.'}), 400
     if m.get('kind') != _nub.TIPO_DE_NUBE:
         return jsonify({'error': 'Solo una nube se reparte: dibuja una nube sobre lo que hay que hacer.'}), 400
+    if m.get('created_by') != (_usuario().get('name') or ''):      # las marcas guardan el NOMBRE de su autor
+        return jsonify({'error': 'Reparte con una nube tuya: dibújala sobre lo que hay que hacer.', 'code': 'NO_PUEDE'}), 403
     nubes = _nubes_de(cur, d)
     if any(x.get('markup_id') == marca for x in nubes):
         return jsonify({'error': 'Esa marca ya es una nube de la incidencia.'}), 409
@@ -1547,6 +1549,9 @@ def _crear_encargo(cur, d, data, admin, empresa):
     nid = _crear_fila(cur, d, marca, clase='encargo', padre_id=padre, empresa_equipo=empresa)
     if not nid:
         return jsonify({'error': 'No se pudo crear la nube.'}), 500
+    # Su equipo y quien revisa la tienen que ver en el plano: la nube se publica (un borrador solo lo ve su autor).
+    cur.execute("""UPDATE pdf_markups SET publicado = TRUE, publicado_en = CURRENT_TIMESTAMP, publicado_por = %s
+                    WHERE id = %s AND NOT publicado""", (_usuario().get('id'), marca))
     _historial(cur, int(d['id']), d['history'], 'cloud_created', nube=nid, marca=marca, clase='encargo',
                padre=padre)
     log_activity(d['model_urn'], 'CLOUD_CREATE', 'ISSUE', str(d['id']), d['codigo'], _actor(), {'nube': nid})

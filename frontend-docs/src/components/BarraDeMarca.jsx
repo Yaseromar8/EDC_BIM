@@ -27,7 +27,7 @@ import { conSuConversacion, estadoDeObservacion, etiquetaDeCita, fechaCorta, fec
 import SelectorDeDocumento from './SelectorDeDocumento';
 import IconoModulo from './IconoModulo';
 import IncidenciaLateral from './IncidenciaLateral';
-import AsignacionDeNube, { useNubeDeLaMarca } from './AsignacionDeNube';
+import AsignacionDeNube, { CrearEncargo, useNubeDeLaMarca } from './AsignacionDeNube';
 import { destinoDelLector } from './ObservacionesDelPlano';
 import { DialogoDeSello } from './MarcaConEnlace';
 import { AISLADO } from '../../../design/incidencias/PanelDeIncidencia.jsx';
@@ -78,6 +78,7 @@ function Boton({ etiqueta, activo, onClick, disabled, peligro, children, conText
 
 export default function BarraDeMarca({ API, obra, marca, esAutor, editable, colores = [], posicion, versionVigente = null,
                                        revisionSugerida = '', pedido = null, bajoLaMarca = null,
+                                       incidenciasParaEncargo = [], onRecargar = null,
                                        onLlevar = null, onDuplicar, onCambio, onPublicar, onBorrar, onCerrar }) {
   const [abierto, setAbierto] = useState(null);         // 'estilo' | 'texto' | 'referencias' | 'comentarios'
   const [comentario, setComentario] = useState('');
@@ -97,6 +98,8 @@ export default function BarraDeMarca({ API, obra, marca, esAutor, editable, colo
   // Si esta marca es una NUBE de su incidencia (46), a quién le toca aportar va en su nota, arriba de los comentarios.
   const [nube, setNube] = useNubeDeLaMarca(API, marca);
   const asignable = !!nube && (nube.actos || []).includes('asignar');
+  // Una nube SUYA que aún no es de ninguna incidencia: el encargado puede repartirla a su equipo (encargo).
+  const repartible = marca.kind === 'cloud' && !obs && esAutor && !marca._unsaved && incidenciasParaEncargo.length > 0;
   const estilo = marca.style || {};
   // El chip «🔗 N» de la hoja abre la lista de referencias, no solo elige la marca.
   useEffect(() => { if (pedido) setAbierto(pedido.que); }, [pedido?.n]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -238,7 +241,13 @@ export default function BarraDeMarca({ API, obra, marca, esAutor, editable, colo
 
   // La nota de comentarios va DEBAJO de la marca, no debajo del menú: el menú está encima de la marca y lo que despliega
   // la tapaba (el dueño, 3-nov-2026).
-  const notaAparte = abierto === 'comentarios' && bajoLaMarca;
+  const notaAparte = (abierto === 'comentarios' || abierto === 'encargo') && bajoLaMarca;
+  const notaDeEncargo = (
+    <div className="bdm-menu bdm-nota-de-marca" role="dialog" aria-label="Encargo para tu equipo">
+      <CrearEncargo API={API} marca={marca} incidencias={incidenciasParaEncargo} onCancelar={() => setAbierto(null)}
+        onHecho={() => { setAbierto('comentarios'); onRecargar?.(); }} />
+    </div>
+  );
   const notaDeComentarios = (
         // Una nota discreta junto a la nube, no un panel (el dueño, 3-nov-2026: «solo para anotar… que no tape todo»).
         <div className="bdm-menu bdm-nota-de-marca" role="dialog" aria-label="Comentarios">
@@ -310,6 +319,11 @@ export default function BarraDeMarca({ API, obra, marca, esAutor, editable, colo
           </button>
         ) : esAutor && (
           <Boton etiqueta="Crear observación" onClick={() => setLateral('nueva')}><IcoIssue /></Boton>
+        )}
+        {repartible && (
+          <Boton etiqueta="Encargo para mi equipo" activo={abierto === 'encargo'} onClick={() => alternar('encargo')}>
+            <Ico><circle cx="9" cy="8" r="3" /><path d="M3.5 19a5.5 5.5 0 0 1 11 0" /><path d="M16 11h5M18.5 8.5v5" /></Ico>
+          </Boton>
         )}
 
         <span className="bdm-sep" />
@@ -427,6 +441,7 @@ export default function BarraDeMarca({ API, obra, marca, esAutor, editable, colo
       )}
 
       {abierto === 'comentarios' && !notaAparte && notaDeComentarios}
+      {abierto === 'encargo' && !notaAparte && notaDeEncargo}
 
       {eligiendo && createPortal(
         <SelectorDeDocumento API={API} project={{ id: obra, model_urn: obra }} titulo="Añadir una referencia"
@@ -456,7 +471,7 @@ export default function BarraDeMarca({ API, obra, marca, esAutor, editable, colo
     </div>
     {notaAparte && (
       <div ref={nota} className="bdm bdm-suelta" style={bajoLaMarca} {...AISLADO} onKeyDown={alTeclearDentro}>
-        {notaDeComentarios}
+        {abierto === 'encargo' ? notaDeEncargo : notaDeComentarios}
       </div>
     )}
     </>
