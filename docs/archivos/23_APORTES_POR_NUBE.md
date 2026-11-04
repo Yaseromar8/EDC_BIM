@@ -361,7 +361,23 @@ real de subida con los mismos usuarios; «Comparar en esta nube» en el banco de
 en pantalla: el botón dentro del lector con dos versiones reales (ningún banco tiene el lector con dos versiones) y la
 subida real de un fichero (el banco no tiene el almacén).
 
-### 6.8 · Lo que sigue
+### 6.8 · Tras verlo en producción (4-nov-2026)
+
+El dueño: «es muy confuso tener que ir hasta el mensaje», «el título de la incidencia quita espacio», «al hacer clic a
+la nube no se abre el panel», «al alejarme la nube se hace más negrita», «no veo el color en cada nube por usuario»,
+«todo debe ser intuitivo, simplista pero profesional; no hay que explicarlo todo».
+
+- **Asignar, directo en la barra de la nube**: un botón propio (una persona; ya asignada, sus iniciales en su color)
+  con su nota: sin asignar, el formulario directamente; asignada, a quién y «Cambiar». Los comentarios, solo comentarios.
+- **La nube se pinta del color de quien aporta** (su estilo guardado no cambia; sin asignar, el de quien la dibujó).
+- **Sin «ISS-002 · Abierta» sobre cada nube**: solo las iniciales en su color. En la barra, el código con el punto de su
+  estado.
+- **Pulsar la nube abre también su panel**, en la pestaña Nubes y en ella; la barra se aparta para no quedar debajo.
+- **Al alejar, el trazo y los festones encogen con la hoja** (el festón tenía 2,5 px de mínimo y se amontonaba).
+- **Sin textos de ayuda** en la pestaña Nubes ni en las notas.
+- Las nubes salen **en el orden en que se levantaron**: los números ya no cambian al asignar una.
+
+### 6.9 · Lo que sigue
 
 1. Más adelante: «Enviar desde View» (una vista 3D guardada a la nube) y exportar a BCF.
 

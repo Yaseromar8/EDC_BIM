@@ -1218,7 +1218,12 @@ def _nubes_de(cur, d):
                   'ronda': 0, 'rondas': [], 'verificacion': None, 'history': [], 'creado_por': None,
                   'creado_en': None, 'actualizado_en': None}
                  for m in marcas]
-    return guardadas + virtuales
+    # EN EL ORDEN EN QUE SE LEVANTARON (las de la evidencia, por su sitio en ella; las de encargo, después, por alta):
+    # la «nube 2» sigue siendo la 2 aunque la 1 aún no tenga fila. Antes, las guardadas iban primero y al asignar una
+    # los números cambiaban.
+    orden = {m: k for k, m in enumerate(_nub.marcas_de_la_incidencia(d))}
+    return sorted(guardadas + virtuales,
+                  key=lambda n: (orden.get(n.get('markup_id'), len(orden)), n['id'] if n['id'] is not None else 0))
 
 
 def _nombres(cur, nubes):

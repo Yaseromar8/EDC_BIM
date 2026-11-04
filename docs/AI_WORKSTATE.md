@@ -57,6 +57,10 @@ Detalle en `docs/archivos/18`, `19`, `20` y `21`.
   (se publica, rótulo discontinuo, se asigna en su nota). Ensayo 41/41.
 - Commit siguiente (3-nov, doc 23 §6.7): «Comparar en esta nube», aportes a INCIDENCIAS/<código>/ (D4: sube quien
   participa aunque no tenga «Editar») y «Mi trabajo» abre en la nube. Ensayo 12/12.
+- 4-nov: migración 46 aplicada por el dueño; backend y portal DESPLEGADOS en 37344967 (health y bundle verificados).
+- Commit siguiente (4-nov, doc 23 §6.8): tras verlo en producción — «Asignar» directo en la barra, la nube del color de
+  quien aporta, sin rótulo de incidencia en cada nube, el panel se abre al pulsarla, trazo proporcional al alejar, sin
+  textos de ayuda, orden estable. Ensayo 41/41.
 - EXACT NEXT ACTION (histórica, ya hecha para c3144a3d): Manual Deploy de `visor-ecd-backend-va` y DESPUÉS de `visor-ecd-portal` con el HEAD de main;
   comprobar `/api/health` y el bundle del portal (Cloudflare ~5 min). Luego, recorrido real con dos personas (correo
   a observadores y subida de fotos sin probar en producción).

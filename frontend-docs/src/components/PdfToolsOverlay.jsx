@@ -62,8 +62,8 @@ const GROSOR = { fino: 0.6, medio: 1, grueso: 1.8 };
 // mediano mide 10 pt de radio (unos 3,5 mm impreso a escala 1:1).
 const FESTON_PT = { pequenos: 6, medianos: 10, grandes: 16 };
 const grosorDe = (m) => GROSOR[m?.style?.grosor] || 1;
-const radioDeFeston = (m, escala, lado) =>
-  Math.max(2.5, Math.min((FESTON_PT[m?.style?.festones] || FESTON_PT.medianos) * (escala || 1), lado / 2.5));
+const radioDeFeston = (m, escala, lado, minimo = 2.5) =>
+  Math.max(minimo, Math.min((FESTON_PT[m?.style?.festones] || FESTON_PT.medianos) * (escala || 1), lado / 2.5));
 
 function cloudPath(x, y, w, h, r) {
   const seg = (x1, y1, x2, y2) => {
@@ -253,11 +253,16 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
   });
 
   // El panel de una marca y el del plano ocupan el mismo costado: abrir uno cierra el otro.
-  useEffect(() => { if (elegida != null) onPanelDelPlano?.(false); }, [elegida]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Salvo una NUBE de una incidencia: su barra y su panel van juntos.
+  const esNubeConPanel = (id) => {
+    const m = id == null ? null : markups.find(x => x.id === id);
+    return !!(m && m.kind === 'cloud' && m.observacion?.id);
+  };
+  useEffect(() => { if (elegida != null && !esNubeConPanel(elegida)) onPanelDelPlano?.(false); }, [elegida]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
-    if (panelDelPlano) setElegida(null);
+    if (panelDelPlano) { if (!esNubeConPanel(elegida)) setElegida(null); }
     else { setPinPendiente(null); setAbiertaDelPlano(null); setPedidoDelPlano(null); }
-  }, [panelDelPlano]);
+  }, [panelDelPlano]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Transformaciones ──
   const toPdf = useCallback((e) => {
@@ -572,7 +577,12 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
   const alTocar = (m) => (e) => {
     e.stopPropagation();
     if (tool === 'erase') deleteMarkup(m);
-    else if (tool === 'pan' && !String(m.id).startsWith('tmp_')) setElegida(m.id);
+    else if (tool === 'pan' && !String(m.id).startsWith('tmp_')) {
+      setElegida(m.id);
+      // Una NUBE de una incidencia abre también su panel, en ella (el dueño: «cuando le hago clic a la nube no se
+      // abre el panel»). La barra y el panel conviven solo en este caso.
+      if (m.kind === 'cloud' && m.observacion?.id) pedirAlPlano(String(m.observacion.id), null, m.id);
+    }
   };
   // La caja del sello en pantalla: esquina en el clic, tamaño fijo en puntos de hoja × escala del dibujado.
   const cajaDelSello = (p) => {
@@ -594,8 +604,15 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
     return { x: Math.min(...xs), y: Math.min(...ys), x2: Math.max(...xs), y2: Math.max(...ys) };
   };
 
+  // AL ALEJAR, RÓTULOS Y TRAZOS ENCOGEN CON LA HOJA (3/4-nov-2026, el dueño: «me alejo y se agrandan», «la nube se hace
+  // más negrita»). Con la hoja a 700 px o más en pantalla van a su tamaño; por debajo, en proporción a ella, hasta el
+  // 40 %. Los pines y la barra de la marca no: son para pulsar.
+  const esc = Math.min(1, Math.max(0.4, (vpInfo.w || 700) / 700));
   const renderMarkup = (m, i) => {
-    const c = m.style?.color || '#e53935';
+    // UNA NUBE ASIGNADA SE PINTA DEL COLOR DE QUIEN APORTA (46, el dueño: «el color que dijimos en cada nube por
+    // usuario»). Sin asignar, el que le dio quien la dibujó. Es solo cómo se pinta: su estilo guardado no cambia.
+    const c = m.kind === 'cloud' && m.nube?.destino_nombre && m.nube.color != null
+      ? colorDeIndice(m.nube.color) : (m.style?.color || '#e53935');
     // Con Seleccionar, una marca tuya en borrador se arrastra entera (y se elige); las demás solo se eligen.
     const arrastrable = tool === 'pan' && editable(m);
     const common = {
@@ -699,8 +716,8 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
       const relleno = m.style?.relleno ? { fill: m.style.relleno, fillOpacity: 0.14 } : {};
       return (
         <g key={m.id}>
-          <path d={cloudPolyPath(pts, radioDeFeston(m, vp?.scale, Math.min(caja.x2 - caja.x, caja.y2 - caja.y)))}
-            {...common} {...relleno} strokeWidth={2.2 * grosorDe(m)} />
+          <path d={cloudPolyPath(pts, radioDeFeston(m, vp?.scale, Math.min(caja.x2 - caja.x, caja.y2 - caja.y), 2.5 * esc))}
+            {...common} {...relleno} strokeWidth={2.2 * grosorDe(m) * esc} />
           {m.style?.triangulo && <TrianguloDeRevision caja={caja} codigo={m.style.triangulo} color={c} escala={vp?.scale} />}
         </g>
       );
@@ -712,8 +729,8 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
       return m.kind === 'cloud'
         ? (
           <g key={m.id}>
-            <path d={cloudPath(x, y, w, h, radioDeFeston(m, vp?.scale, Math.min(w, h)))} {...common} {...relleno}
-              strokeWidth={2.2 * grosorDe(m)} />
+            <path d={cloudPath(x, y, w, h, radioDeFeston(m, vp?.scale, Math.min(w, h), 2.5 * esc))} {...common} {...relleno}
+              strokeWidth={2.2 * grosorDe(m) * esc} />
             {m.style?.triangulo && <TrianguloDeRevision caja={{ x, y, x2: x + w, y2: y + h }} codigo={m.style.triangulo}
               color={c} escala={vp?.scale} />}
           </g>
@@ -816,10 +833,6 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
   // 3-nov-2026: «¿por qué la flecha debería tener “Abierta”?»). Una incidencia sin ninguna nube en la hoja lo sigue
   // llevando en sus marcas, para no perderla de vista.
   const conNube = new Set(pageMarkups.filter(x => x.kind === 'cloud' && x.observacion).map(x => String(x.observacion.id)));
-  // AL ALEJAR, LOS RÓTULOS ENCOGEN CON LA HOJA (3-nov-2026, el dueño: «me alejo y se agrandan»). Con la hoja a
-  // 700 px o más en pantalla van a su tamaño; por debajo, en proporción a ella, hasta el 40 %. Los pines y la barra
-  // de la marca no: son para pulsar.
-  const esc = Math.min(1, Math.max(0.4, (vpInfo.w || 700) / 700));
   const renderEnlaces = () => pageMarkups.map(m => {
     const n = (m.citas || []).length;
     const nc = (m.style?.comentarios || []).length;
@@ -880,7 +893,26 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
             <text x="18" y="11.6" fontSize="10" fontWeight="600" fill="#507294" fontFamily="'IBM Plex Mono', monospace" style={{ pointerEvents: 'none' }}>{nc}</text>
           </g>
         )}
-        {obs && (() => {
+        {obs && m.kind === 'cloud' && (() => {
+          // LA NUBE DE UNA INCIDENCIA: solo a quién le toca, con sus iniciales en su color. Lo demás, al pulsarla.
+          if (!m.nube?.destino_nombre) return null;
+          const quien = inicialesDe(m.nube.destino_nombre);
+          const anchoQ = quien.length * 7 + 8;
+          const qx = Math.max(4, Math.min(k.x2 - anchoQ * esc, vpInfo.w - anchoQ * esc - 4));
+          const qy = k.y - 16 * esc - 2 < 2 ? k.y2 + 2 : k.y - 16 * esc - 2;
+          return (
+            <g transform={`translate(${qx} ${qy}) scale(${esc})`}
+              style={{ pointerEvents: tocable ? 'all' : 'none', cursor: tool === 'pan' ? 'pointer' : 'default' }}
+              onClick={tocable ? alTocar(m) : undefined}>
+              <title>{`${m.nube.destino_nombre} · ${m.nube.estado_etiqueta} · ${obs.codigo}`}</title>
+              <rect width={anchoQ} height="16" rx="2" fill={colorDeIndice(m.nube.color)}
+                strokeDasharray={m.nube.clase === 'encargo' ? '3 2' : undefined} stroke={m.nube.clase === 'encargo' ? '#fff' : 'none'} />
+              <text x={anchoQ / 2} y="11.6" fontSize="9.5" fontWeight="600" fill="#fff" textAnchor="middle"
+                fontFamily="'IBM Plex Mono', monospace" style={{ pointerEvents: 'none' }}>{quien}</text>
+            </g>
+          );
+        })()}
+        {obs && m.kind !== 'cloud' && (() => {
           // OBSERVACIÓN (37): «ISS-012 · Abierta» bajo la marca, con la barra del color de su estado.
           const est = estadoDeObservacion(obs.estado);
           const texto = `${obs.codigo} · ${obs.vencida ? 'Vencida' : est.etiqueta}`;
@@ -1044,6 +1076,9 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
         const arriba = k.y > 56;
         return (
           <BarraDeMarca key={marcaElegida.id} API={API} obra={projectPrefix} marca={marcaElegida} colores={COLORS}
+            onAbrirIncidencia={marcaElegida.observacion?.id
+              ? () => pedirAlPlano(String(marcaElegida.observacion.id), null, marcaElegida.kind === 'cloud' ? marcaElegida.id : null)
+              : null}
             revisionSugerida={(/(?:^|[-_ .])([A-Z]\d{1,2})(?=\.[a-z0-9]+$|[-_ ])/i.exec(nombreDelDocumento || '') || [])[1] || ''}
             pedido={pedidoDeMarca && pedidoDeMarca.id === marcaElegida.id ? pedidoDeMarca : null}
             esAutor={!!userName && marcaElegida.created_by === userName} editable={editable(marcaElegida)}

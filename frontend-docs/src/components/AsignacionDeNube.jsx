@@ -67,8 +67,6 @@ export function CrearEncargo({ API, marca, incidencias, onHecho, onCancelar }) {
         {incidencias.length > 1 && <option value="">¿De qué incidencia?</option>}
         {incidencias.map(o => <option key={o.id} value={o.id}>{o.codigo}{o.titulo ? ` · ${o.titulo}` : ''}</option>)}
       </select>
-      <small className="bdm-asignar__ayuda">La asignas a tu cadista o modelador y la aceptas tú. La ven tu equipo y quien
-        revisa.</small>
       <div className="bdm-asignar__fila">
         <button type="button" className="bdm-accion" onClick={onCancelar}>Cancelar</button>
         <button type="submit" className="bdm-accion bdm-accion--prim" disabled={!iid || ocupado}>Crear encargo</button>
@@ -156,15 +154,17 @@ function Formulario({ API, obra, obsId, marcaId, nube, pedidoSugerido, onHecha, 
 }
 
 /** La línea de arriba de la nota: «Asignada a Mario · pedida · vence 20 nov.» y, a quien puede, asignar o cambiar. */
-export default function AsignacionDeNube({ API, obra, marca, nube, onCambio, pedidoSugerido = '' }) {
-  const [editando, setEditando] = useState(false);
+export default function AsignacionDeNube({ API, obra, marca, nube, onCambio, pedidoSugerido = '', editarDeEntrada = false,
+                                          onCerrar = null }) {
+  // Desde el botón «Asignar» de la barra, una nube sin asignar abre ya el formulario.
+  const [editando, setEditando] = useState(editarDeEntrada && !!nube && !nube.destino_nombre);
   if (!nube) return null;
   const puede = (nube.actos || []).includes('asignar');
   if (!nube.destino_nombre && !puede) return null;
   if (editando) {
     return (
       <Formulario API={API} obra={obra} obsId={marca.observacion.id} marcaId={marca.id} nube={nube}
-        pedidoSugerido={pedidoSugerido} onCancelar={() => setEditando(false)}
+        pedidoSugerido={pedidoSugerido} onCancelar={() => (editarDeEntrada && !nube.destino_nombre ? onCerrar?.() : setEditando(false))}
         onHecha={(n) => { setEditando(false); if (n) onCambio(n); }} />
     );
   }

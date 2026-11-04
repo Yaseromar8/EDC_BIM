@@ -28,6 +28,7 @@ import SelectorDeDocumento from './SelectorDeDocumento';
 import IconoModulo from './IconoModulo';
 import IncidenciaLateral from './IncidenciaLateral';
 import AsignacionDeNube, { CrearEncargo, pedirCompararNube, useNubeDeLaMarca } from './AsignacionDeNube';
+import { colorDeIndice } from '../../../design/incidencias/reglas.js';
 import { destinoDelLector } from './ObservacionesDelPlano';
 import { DialogoDeSello } from './MarcaConEnlace';
 import { AISLADO } from '../../../design/incidencias/PanelDeIncidencia.jsx';
@@ -49,6 +50,10 @@ const Ico = ({ children, size = 16 }) => (
 const IcoTexto = () => <Ico><path d="M5 6h14M12 6v13" /></Ico>;
 const IcoRef = () => <Ico><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1" /><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1" /></Ico>;
 const IcoIssue = () => <IconoModulo nombre="incidencia" tamano={16} />;
+function iniciales(nombre) {
+  const p = String(nombre || '?').replace(/@.*/, '').split(/[\s._-]+/).filter(Boolean);
+  return ((p[0] || '?')[0] + (p[1] ? p[1][0] : '')).toUpperCase();
+}
 const IcoComentario = () => <IconoModulo nombre="comentario" tamano={16} />;
 const TOPE_COMENTARIO = 2000;
 // «11:14» si es de hoy; si no, «03 nov.»: la fecha entera va en el título.
@@ -78,7 +83,7 @@ function Boton({ etiqueta, activo, onClick, disabled, peligro, children, conText
 
 export default function BarraDeMarca({ API, obra, marca, esAutor, editable, colores = [], posicion, versionVigente = null,
                                        revisionSugerida = '', pedido = null, bajoLaMarca = null,
-                                       incidenciasParaEncargo = [], onRecargar = null,
+                                       incidenciasParaEncargo = [], onRecargar = null, onAbrirIncidencia = null,
                                        onLlevar = null, onDuplicar, onCambio, onPublicar, onBorrar, onCerrar }) {
   const [abierto, setAbierto] = useState(null);         // 'estilo' | 'texto' | 'referencias' | 'comentarios'
   const [comentario, setComentario] = useState('');
@@ -182,6 +187,12 @@ export default function BarraDeMarca({ API, obra, marca, esAutor, editable, colo
 
   // Que el menú y lo desplegado queden enteros a la vista: si chocan con la columna de herramientas del lector o con el
   // borde de la ventana, se corren a la izquierda (el de comentarios, con su botón, quedaba debajo, 3-nov-2026).
+  // El panel de la incidencia llega un instante después de elegir la nube: se vuelve a medir cuando ya está.
+  const [remedida, setRemedida] = useState(0);
+  useEffect(() => {
+    const t = setTimeout(() => setRemedida(x => x + 1), 400);
+    return () => clearTimeout(t);
+  }, [marca.id, abierto]);
   useLayoutEffect(() => {
     for (const el of [raiz.current, nota.current]) {
       if (!el) continue;
@@ -198,10 +209,13 @@ export default function BarraDeMarca({ API, obra, marca, esAutor, editable, colo
       let tope = window.innerWidth - 8;
       const columna = document.querySelector('.pdf-rail')?.getBoundingClientRect();
       if (columna && columna.width && columna.top < caja.bottom && columna.bottom > caja.top) tope = Math.min(tope, columna.left - 8);
+      // Tampoco debajo del PANEL DE LA INCIDENCIA, que se abre a la vez al pulsar una nube (4-nov-2026).
+      const panel = document.querySelector('.pinc--dentro')?.getBoundingClientRect();
+      if (panel && panel.width && panel.top < caja.bottom && panel.bottom > caja.top) tope = Math.min(tope, panel.left - 8);
       const sobra = Math.min(derecha - tope, caja.left - 8);
       if (sobra > 0) el.style.marginLeft = `${-sobra}px`;
     }
-  }, [abierto, posicion?.left, posicion?.top, bajoLaMarca?.top, comentarios.length]);
+  }, [abierto, posicion?.left, posicion?.top, bajoLaMarca?.top, comentarios.length, remedida]);
 
   // Al abrir la conversación, se ve lo último.
   useEffect(() => {
@@ -241,18 +255,24 @@ export default function BarraDeMarca({ API, obra, marca, esAutor, editable, colo
 
   // La nota de comentarios va DEBAJO de la marca, no debajo del menú: el menú está encima de la marca y lo que despliega
   // la tapaba (el dueño, 3-nov-2026).
-  const notaAparte = (abierto === 'comentarios' || abierto === 'encargo') && bajoLaMarca;
+  const notaAparte = (abierto === 'comentarios' || abierto === 'encargo' || abierto === 'asignar') && bajoLaMarca;
+  // ASIGNAR, DIRECTO EN LA BARRA (4-nov-2026, el dueño: «es muy confuso tener que ir hasta el mensaje»): su propia nota.
+  const notaDeAsignar = (
+    <div className="bdm-menu bdm-nota-de-marca" role="dialog" aria-label="Asignar la nube">
+      <AsignacionDeNube API={API} obra={obra} marca={marca} nube={nube} editarDeEntrada
+        onCambio={(n) => { setNube(n); onRecargar?.(); }} onCerrar={() => setAbierto(null)}
+        pedidoSugerido={comentarios[comentarios.length - 1]?.texto || ''} />
+    </div>
+  );
   const notaDeEncargo = (
     <div className="bdm-menu bdm-nota-de-marca" role="dialog" aria-label="Encargo para tu equipo">
       <CrearEncargo API={API} marca={marca} incidencias={incidenciasParaEncargo} onCancelar={() => setAbierto(null)}
-        onHecho={() => { setAbierto('comentarios'); onRecargar?.(); }} />
+        onHecho={() => { setAbierto('asignar'); onRecargar?.(); }} />
     </div>
   );
   const notaDeComentarios = (
         // Una nota discreta junto a la nube, no un panel (el dueño, 3-nov-2026: «solo para anotar… que no tape todo»).
         <div className="bdm-menu bdm-nota-de-marca" role="dialog" aria-label="Comentarios">
-          <AsignacionDeNube API={API} obra={obra} marca={marca} nube={nube} onCambio={setNube}
-            pedidoSugerido={comentario.trim() || comentarios[comentarios.length - 1]?.texto || ''} />
           {comentarios.length > 0 && (
             <ol className="bdm-comentarios" ref={listaDeComentarios}>
               {comentarios.map(c => (
@@ -304,18 +324,27 @@ export default function BarraDeMarca({ API, obra, marca, esAutor, editable, colo
         </Boton>
 
         {!marca._unsaved && (
-          <Boton etiqueta={comentarios.length ? `Comentarios (${comentarios.length})${asignable ? ' y asignación' : ''}`
-            : asignable ? 'Comentar o asignar' : 'Comentar'}
+          <Boton etiqueta={comentarios.length ? `Comentarios (${comentarios.length})` : 'Comentar'}
             activo={abierto === 'comentarios'} onClick={() => alternar('comentarios')} conTexto={comentarios.length > 0}>
             <IcoComentario />{comentarios.length > 0 && <b>{comentarios.length}</b>}
           </Boton>
         )}
 
+        {nube && (asignable || nube.destino_nombre) && (
+          <Boton etiqueta={nube.destino_nombre ? `Asignada a ${nube.destino_nombre}` : 'Asignar'} activo={abierto === 'asignar'}
+            onClick={() => alternar('asignar')} conTexto={!!nube.destino_nombre}>
+            {nube.destino_nombre
+              ? <span className="bdm-quien-chip" style={{ background: colorDeIndice(nube.color) }}>{iniciales(nube.destino_nombre)}</span>
+              : <Ico><circle cx="12" cy="8" r="3.5" /><path d="M5 20a7 7 0 0 1 14 0" /></Ico>}
+          </Boton>
+        )}
+
         {obs ? (
-          <button type="button" className="bdm-obs" style={{ '--estado': est.color }} data-tip={obs.titulo}
-            onClick={() => setLateral(String(obs.id))}>
-            {/* El estado lo lleva la NUBE; una flecha o un texto de la incidencia solo dice de cuál es. */}
-            {marca.kind === 'cloud' ? <><i />{obs.codigo} · {obs.vencida ? 'Vencida' : est.etiqueta}</> : obs.codigo}
+          // Solo su código, con el punto de su estado: el detalle, en el panel (el dueño: «quita espacio»).
+          <button type="button" className="bdm-obs" style={{ '--estado': est.color }}
+            data-tip={`${obs.titulo || obs.codigo} · ${obs.vencida ? 'Vencida' : est.etiqueta}`}
+            onClick={() => (onAbrirIncidencia ? onAbrirIncidencia() : setLateral(String(obs.id)))}>
+            <i />{obs.codigo}
           </button>
         ) : esAutor && (
           <Boton etiqueta="Crear observación" onClick={() => setLateral('nueva')}><IcoIssue /></Boton>
@@ -442,6 +471,7 @@ export default function BarraDeMarca({ API, obra, marca, esAutor, editable, colo
 
       {abierto === 'comentarios' && !notaAparte && notaDeComentarios}
       {abierto === 'encargo' && !notaAparte && notaDeEncargo}
+      {abierto === 'asignar' && !notaAparte && notaDeAsignar}
 
       {eligiendo && createPortal(
         <SelectorDeDocumento API={API} project={{ id: obra, model_urn: obra }} titulo="Añadir una referencia"
@@ -472,7 +502,7 @@ export default function BarraDeMarca({ API, obra, marca, esAutor, editable, colo
     </div>
     {notaAparte && (
       <div ref={nota} className="bdm bdm-suelta" style={bajoLaMarca} {...AISLADO} onKeyDown={alTeclearDentro}>
-        {abierto === 'encargo' ? notaDeEncargo : notaDeComentarios}
+        {abierto === 'encargo' ? notaDeEncargo : abierto === 'asignar' ? notaDeAsignar : notaDeComentarios}
       </div>
     )}
     </>

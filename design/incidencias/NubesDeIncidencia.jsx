@@ -74,8 +74,6 @@ function Entrega({ entorno, obra, codigo, ronda, ocupado, onEntregar }) {
   return (
     <div className="pinc-acto nub-entrega">
       <b>Entregar{ronda > 1 ? ` la ronda ${ronda}` : ''}</b>
-      <p className="pinc-nota">Lo que subes queda en Docs, en la carpeta INCIDENCIAS/{codigo || '…'}, enlazado a esta nube
-        con fecha y hora. El encargado del plano lo acepta o te lo devuelve aquí mismo si falta algo.</p>
       {lista.length > 0 && (
         <ul className="nub-entregas">
           {lista.map((e, k) => (
@@ -107,7 +105,6 @@ function Entrega({ entorno, obra, codigo, ronda, ocupado, onEntregar }) {
       </div>
       {eligiendo && Elegir && createPortal(
         <Elegir obra={obra} titulo="Enlazar un documento de Docs"
-          ayuda="Un plano, modelo, informe o foto de esta obra. No se copia: la nube lo enlaza, y quien no pueda abrirlo no lo abrirá."
           onElegir={(doc) => {
             setEligiendo(false);
             const id = String(doc.file_node_id || doc.id);
@@ -122,12 +119,11 @@ function Entrega({ entorno, obra, codigo, ronda, ocupado, onEntregar }) {
 }
 
 /** Una decisión con su motivo: devolver (falta algo) o no levantada (qué rehacer). */
-function Motivo({ titulo, ayuda, boton, peligro, ocupado, onHacer, onCancelar }) {
+function Motivo({ titulo, boton, peligro, ocupado, onHacer, onCancelar }) {
   const [texto, setTexto] = useState('');
   return (
     <div className="pinc-acto">
       <b>{titulo}</b>
-      <p className="pinc-nota">{ayuda}</p>
       <textarea value={texto} rows={2} maxLength={2000} autoFocus onChange={e => setTexto(e.target.value)}
         placeholder="Motivo (obligatorio)" />
       <div className="pinc-botones">
@@ -216,15 +212,10 @@ function Nube({ entorno, obra, ob, i, n, numero, color, abierta, onAbrir, ocupad
               {n.verificacion.motivo && <p>{n.verificacion.motivo}</p>}
             </div>
           )}
-          {n.clase === 'observacion' && !n.verificacion && n.estado === 'aceptada' && !n.por_verificar && (
-            <p className="nub-verif">Pendiente de la versión corregida: entonces quien revisa dice si quedó <b>levantada</b>.</p>
-          )}
 
           {acto === 'devolver' && <Motivo titulo="Devolver: falta algo" boton="Devolver" ocupado={ocupado}
-            ayuda="Vuelve a quien aportó, en esta misma nube y con otra ronda. Di qué falta: es lo que tendrá que entregar."
             onCancelar={() => setActo(null)} onHacer={(m) => dar({ acto: 'devolver', motivo: m }, 'Devuelta: le llega de nuevo')} />}
           {acto === 'no_levantada' && <Motivo titulo="No quedó levantada" boton="No levantada" peligro ocupado={ocupado}
-            ayuda="Di qué sigue mal en la versión corregida: es lo que el encargado tiene que volver a hacer."
             onCancelar={() => setActo(null)} onHacer={(m) => dar({ acto: 'verificar', resultado: 'no_levantada', motivo: m }, 'Nube no levantada')} />}
           {acto === 'entregar' && <Entrega entorno={entorno} obra={obra} codigo={i.codigo} ronda={n.ronda} ocupado={ocupado}
             onEntregar={(entregas) => dar({ acto: 'entregar', entregas }, 'Entregado: le llega al encargado del plano')} />}
@@ -280,14 +271,8 @@ export default function NubesDeIncidencia({ entorno, obra, ob, i, datos, foco = 
     } catch (e) { entorno.avisar.error(e.message); return false; } finally { setOcupado(false); }
   };
   const clave = (n) => String(n.markup_id ?? `n${n.id}`);
-  const porAsignar = nubes.some(n => n.estado === 'sin_asignar' && (n.actos || []).includes('asignar'));
   return (
     <div className="nub-pestana">
-      {porAsignar && <p className="pinc-nota">Para asignar una nube, púlsala en el plano y elige «Comentar o asignar».</p>}
-      {!nubes.length && (
-        <p className="pinc-nota">Esta incidencia no tiene nubes en el plano. Las nubes son las marcas que se eligieron al
-          levantarla: cada una se puede asignar a quien tenga que aportar.</p>
-      )}
       <ol className="nub-lista">
         {nubes.map((n, k) => {
           const quien = n.destino_usuario ? `u${n.destino_usuario}` : n.destino_empresa ? `e${n.destino_empresa}` : null;
@@ -299,10 +284,6 @@ export default function NubesDeIncidencia({ entorno, obra, ob, i, datos, foco = 
           );
         })}
       </ol>
-      {datos?.encargos_internos > 0 && (
-        <p className="pinc-nota">Además, el equipo del plano reparte {datos.encargos_internos === 1 ? 'una nube de encargo'
-          : `${datos.encargos_internos} nubes de encargo`} entre los suyos: es su trabajo en proceso y no se enseña aquí.</p>
-      )}
     </div>
   );
 }
