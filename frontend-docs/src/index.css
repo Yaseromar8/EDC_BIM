@@ -4764,38 +4764,8 @@ button:not([class]):not(:disabled):not([aria-disabled="true"]):active {
 .filtros-meta__ficha button:hover { background: #C8D8E7; }
 .filtros-meta__limpiar { border: 0; background: none; color: #507294; font-size: 13px; cursor: pointer; text-decoration: underline; }
 
-/* A2-2 · Vistas encima del árbol y «Guardar como vista» (14-oct-2026). Lista cerrada D-24:
-   texto y una cifra, raya Orange en lo activo (--a-indicador), sin píldoras. */
-.vistas { padding: 0 8px 10px; margin-bottom: 8px; border-bottom: 1px solid #E8E6DC; }
-.vistas__titulo {
-  display: flex; align-items: center; justify-content: space-between; width: 100%;
-  padding: 2px 8px 6px; border: 0; background: none; cursor: pointer;
-  font: inherit; font-size: 12px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: #52524D;
-}
-.vistas__activa {
-  flex: 1; min-width: 0; margin: 0 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  font-size: 12px; font-weight: 500; letter-spacing: 0; text-transform: none; color: #507294; text-align: right;
-}
-.vistas__nivel { margin: 6px 8px 2px; font-size: 12px; font-weight: 400; color: #72706B; }
-.vistas ul { list-style: none; margin: 0; padding: 0; }
-.vistas__op {
-  display: flex; justify-content: space-between; align-items: center; gap: 8px; width: 100%;
-  padding: 5px 8px; border: 0; border-radius: 6px; background: none; color: #141413;
-  font: inherit; font-size: 14px; text-align: left; cursor: pointer;
-}
-.vistas__op span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.vistas__op b { font-weight: 400; color: #72706B; font-variant-numeric: tabular-nums; }
-.vistas__op:hover { background: #F1F0E8; }
-.vistas__op.es-activa { background: #FFFFFF; box-shadow: inset 2px 0 0 var(--a-indicador, #D97757); font-weight: 600; }
-.vistas__propia { display: flex; align-items: center; }
-.vistas__borrar {
-  flex-shrink: 0; width: 22px; height: 22px; border: 0; border-radius: 4px; background: none;
-  color: #72706B; font-size: 12px; cursor: pointer; visibility: hidden;
-}
-.vistas__propia:hover .vistas__borrar, .vistas__borrar:focus-visible { visibility: visible; }
-.vistas__borrar:hover { background: #E8E6DC; color: #141413; }
-.vistas__vacio { margin: 2px 8px 0; font-size: 13px; color: #72706B; }
-
+/* A2-2 · La cabecera de una vista abierta desde la portada (14-oct-2026). El panel «Vistas» y «Guardar como
+   vista» se quitaron el 5-nov-2026. */
 .vista-cabecera {
   display: flex; align-items: center; flex-wrap: wrap; gap: 4px 12px;
   padding: 8px 16px; font-size: 14px; background: #FAF9F5; border-bottom: 1px solid #F1F0E8;
@@ -4809,23 +4779,6 @@ button:not([class]):not(:disabled):not([aria-disabled="true"]):active {
 
 .filtros-y-vista { display: flex; align-items: flex-start; flex-wrap: wrap; }
 .filtros-y-vista .filtros-meta__fichas { padding-right: 8px; }
-.guardar-vista { position: relative; padding: 2px 16px 8px 0; }
-.filtros-y-vista > .guardar-vista:first-child { padding-left: 16px; }
-.guardar-vista__caja {
-  position: absolute; top: calc(100% - 2px); left: 0; z-index: 60; width: 280px;
-  display: grid; gap: 8px; padding: 12px; background: #FFFFFF; border: 1px solid #E8E6DC; border-radius: 8px;
-  box-shadow: 0 8px 24px rgb(20 20 19 / .12); font-size: 13px; color: #141413;
-}
-.guardar-vista__caja label { display: grid; gap: 4px; }
-.guardar-vista__caja input[type=text], .guardar-vista__caja input:not([type]) {
-  height: 30px; padding: 0 8px; border: 1px solid #E8E6DC; border-radius: 6px; font: inherit;
-}
-.guardar-vista__caja fieldset { display: grid; gap: 4px; margin: 0; padding: 0; border: 0; }
-.guardar-vista__caja fieldset label { display: flex; align-items: center; gap: 6px; }
-.guardar-vista__caja input[type=radio] { accent-color: #141413; }
-.guardar-vista__filtros { margin: 0; color: #52524D; }
-.guardar-vista__nota { margin: 0; color: #72706B; font-size: 12px; }
-.guardar-vista__botones { display: flex; justify-content: flex-end; gap: 8px; }
 
 /* La carpeta de cada documento, bajo su nombre, solo en una vista. */
 .nombre-con-ubicacion { display: flex; flex-direction: column; min-width: 0; line-height: 1.25; }

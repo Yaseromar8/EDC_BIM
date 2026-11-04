@@ -69,12 +69,11 @@ import PanelConsulta from '../components/PanelConsulta';
 import FichaDocumento from '../components/FichaDocumento';
 import PortadaObra from '../components/PortadaObra';
 import FiltrosDeArchivos, { FichasDeFiltros } from '../components/FiltrosDeArchivos';
-import PanelDeVistas, { GuardarComoVista } from '../components/PanelDeVistas';
 import { useVistasDeArchivos } from '../hooks/useVistasDeArchivos';
 import PanelDeGrupos, { ElegirGrupo } from '../components/PanelDeGrupos';
 import GrupoAbierto from '../components/GrupoAbierto';
 import { useGrupos } from '../hooks/useGrupos';
-import { aplicarFiltros, hayFiltros, describirFiltros, criteriosDeFiltros, ORDEN_POR_DEFECTO } from '../utils/vistasDeArchivos';
+import { aplicarFiltros, ORDEN_POR_DEFECTO } from '../utils/vistasDeArchivos';
 import { hermanosDelLector } from '../utils/lectorDePlanos';
 import { EstadoVacio, IlustracionPlano, IlustracionCasco } from '../components/IlustracionesDeObra';
 import FolderPermissionsPanel from '../components/FolderPermissionsPanel';
@@ -322,20 +321,19 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
   }, []);
   React.useEffect(() => { setConsultado(null); }, [fe.currentPath, fe.isTrashMode]);
 
-  // VISTAS (A2-2, 14-oct-2026): «Me toca revisar», «Plazo del plan vencido»… y
-  // las propias, sobre toda la obra. Con una vista activa la tabla muestra sus
-  // filas; sin ella, Archivos es el de siempre. Ver hooks/useVistasDeArchivos.js.
-  const vistas = useVistasDeArchivos({ fe, projectPrefix: fe.projectPrefix, user,
+  // VISTAS (A2-2, 14-oct-2026): «Me toca revisar», «Plazo del plan vencido»…, sobre toda la obra, abiertas desde
+  // la portada. Con una vista activa la tabla muestra sus filas; sin ella, Archivos es el de siempre. 5-nov-2026: sin
+  // el panel de Archivos ni las vistas propias (el dueño: «no nos comunica nada»). Ver hooks/useVistasDeArchivos.js.
+  const vistas = useVistasDeArchivos({ fe, projectPrefix: fe.projectPrefix,
                                        enArchivos: fe.sidebarView === 'files',
-                                       conCifras: fe.sidebarView === 'files' || fe.sidebarView === 'portada' });
+                                       conCifras: fe.sidebarView === 'portada' });
   const enVista = Boolean(vistas.activa);
   React.useEffect(() => { setConsultado(null); }, [vistas.activa]);
   const filasDeVista = enVista
     ? aplicarFiltros(vistas.filas || [], { texto: fe.searchQuery, estado: fe.statusFilter, meta: fe.filtrosMeta })
     : null;
-  const filtrosPuestos = hayFiltros({ texto: fe.searchQuery, estado: fe.statusFilter, meta: fe.filtrosMeta });
-  // EL ORDEN DE LA TABLA vive aquí (antes dentro de la tabla, con el mismo valor de
-  // partida): así una vista propia lo guarda y lo devuelve al abrirse.
+  // EL ORDEN DE LA TABLA vive aquí (antes dentro de la tabla, con el mismo valor de partida): la carpeta y la vista
+  // abierta lo comparten.
   const [ordenTabla, setOrdenTabla] = React.useState(ORDEN_POR_DEFECTO);
   // GRUPOS DE DOCUMENTOS (15-oct-2026): los documentos viven en sus carpetas y cada uno arma sus grupos,
   // que solo apuntan a ellos (routes/grupos.py). Un grupo abierto se pinta ENCIMA del panel de datos: la
@@ -361,7 +359,6 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
 
   const elegirVista = (v) => {
     setGrupoActivoId(null);
-    if (v.tipo === 'propia' && v.vista?.orden) setOrdenTabla(v.vista.orden);
     vistas.elegir(v);
   };
   // Salir de la vista al elegir una carpeta, aunque sea la que ya estaba abierta.
@@ -1142,10 +1139,6 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
           <div className="acc-workspace" style={{ flex: 1, display: 'flex', overflow: 'hidden', visibility: ficha && !fe.isTrashMode ? 'hidden' : 'visible' }}>
             {/* TREE SECTION */}
             <aside style={{ width: treeSidebarWidth, flexShrink: 0, borderRight: '1px solid #e8e6dc', background: 'var(--bg-tertiary)', overflowY: 'auto', padding: '16px 0' }}>
-              {!fe.isTrashMode && (
-                <PanelDeVistas recuentos={vistas.recuentos} hayPlan={vistas.hayPlan} activa={vistas.activa}
-                  propias={vistas.propias} onElegir={elegirVista} onBorrar={vistas.borrar} />
-              )}
               {!fe.isTrashMode && grupos.disponible && (
                 <PanelDeGrupos grupos={grupos.grupos} activo={grupoActivo?.id || null} onElegir={elegirGrupo}
                   onCrear={grupos.crear} puedeCrearDeLaObra={grupos.puedeCrearDeLaObra} />
@@ -1355,21 +1348,6 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
               {!fe.isTrashMode && (
                 <div className="filtros-y-vista">
                   <FichasDeFiltros filtros={fe.filtrosMeta} setFiltros={fe.setFiltrosMeta} />
-                  {/* GUARDAR COMO VISTA (A2-2): los filtros puestos, con un nombre. No
-                      dentro de una vista: guardaría solo una parte de lo que se ve. */}
-                  {!enVista && filtrosPuestos && vistas.puedeGuardar && (
-                    <GuardarComoVista
-                      descripcion={describirFiltros({ texto: fe.searchQuery.trim(), estado: fe.statusFilter, ...fe.filtrosMeta })}
-                      carpeta={fe.currentPath && fe.currentPath.replace(/\/+$/, '') !== projectPrefix
-                        ? { ruta: fe.currentPath, id: fe.currentNodeId ? String(fe.currentNodeId) : null,
-                            nombre: fe.currentPath.replace(/\/+$/, '').split('/').pop() }
-                        : null}
-                      onGuardar={({ nombre, alcance }) => vistas.guardar({ nombre, alcance, orden: ordenTabla,
-                        carpeta: alcance === 'carpeta'
-                          ? { ruta: fe.currentPath, id: fe.currentNodeId ? String(fe.currentNodeId) : null,
-                              nombre: fe.currentPath.replace(/\/+$/, '').split('/').pop() }
-                          : null })} />
-                  )}
                 </div>
               )}
 
@@ -1378,7 +1356,7 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
                 <div className="vista-cabecera" role="status">
                   {/* MIGAS «colección › vista», como en Procore. */}
                   <span className="vista-cabecera__nombre">
-                    <span className="vista-cabecera__coleccion">{vistas.activa.tipo === 'propia' ? 'Mías' : (vistas.activa.coleccion || 'Vistas')} ›</span>{' '}
+                    <span className="vista-cabecera__coleccion">{vistas.activa.coleccion || 'Vistas'} ›</span>{' '}
                     {vistas.activa.nombre}
                   </span>
                   <span className="vista-cabecera__dato">
@@ -1391,7 +1369,7 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
                       la definición de la vista: no se quitan; los filtros que se añadan encima
                       salen debajo, con su ✕, como siempre. */}
                   <span className="vista-cabecera__criterios" aria-label="Criterios de la vista">
-                    {(vistas.activa.tipo === 'propia' ? criteriosDeFiltros(vistas.activa.vista.filtros) : (vistas.activa.criterios || []))
+                    {(vistas.activa.criterios || [])
                       .map(([campo, valor]) => (
                         <span key={campo + valor} className="vista-criterio" title="Criterio de la vista">
                           {campo}: <b>{valor}</b>

@@ -2,7 +2,8 @@
  * useVistasDeArchivos — el estado de las VISTAS de Archivos (A2-2, 14-oct-2026).
  *
  * Una vista activa sustituye las filas de la carpeta por las de la vista (toda
- * la obra). Todo lo demás sigue igual: la tabla, el orden, el panel de consulta,
+ * la obra). Se abren desde la portada de la obra (5-nov-2026: el panel de Archivos y
+ * las vistas propias se quitaron). Todo lo demás sigue igual: la tabla, el orden, el panel de consulta,
  * el buscador, el desplegable de estado y las fichas, que filtran DENTRO de la
  * vista. Sin vista activa, Archivos es exactamente el de antes.
  *
@@ -13,27 +14,20 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 import { API } from '../utils/helpers';
 import { apiFetch } from '../utils/apiFetch';
-import {
-  FILTROS_VACIOS, describirFiltros, guardarVistaPropia, borrarVistaPropia,
-  leerVistasPropias, parametrosDeVista,
-} from '../utils/vistasDeArchivos';
+import { FILTROS_VACIOS } from '../utils/vistasDeArchivos';
 
-export function useVistasDeArchivos({ fe, projectPrefix, user, enArchivos, conCifras = enArchivos }) {
-  const usuario = user?.id ?? user?.email ?? null;
+export function useVistasDeArchivos({ fe, projectPrefix, enArchivos, conCifras = enArchivos }) {
   const [activa, setActiva] = useState(null);       // { tipo: 'serie'|'propia', id, nombre, … }
   const [filas, setFilas] = useState(null);
   const [cargando, setCargando] = useState(false);
   const [info, setInfo] = useState({ total: 0, limite: 0, vencidosSinDocumento: 0 });
   const [recuentos, setRecuentos] = useState(null);
   const [hayPlan, setHayPlan] = useState(false);
-  const [propias, setPropias] = useState(() => leerVistasPropias(null, projectPrefix, usuario));
   const pedido = useRef(0);
   const activaRef = useRef(null);
   useEffect(() => { activaRef.current = activa; }, [activa]);
 
-  useEffect(() => { setPropias(leerVistasPropias(null, projectPrefix, usuario)); }, [projectPrefix, usuario]);
-
-  // LAS CIFRAS DEL PANEL: una sola petición, y otra cuando algo cambia en Archivos
+  // LAS CIFRAS DE LA PORTADA: una sola petición, y otra cuando algo cambia en Archivos
   // (subir, cambiar de estado…), con un respiro para no repetirla en ráfaga.
   useEffect(() => {
     if (!conCifras || !projectPrefix) return undefined;
@@ -54,7 +48,7 @@ export function useVistasDeArchivos({ fe, projectPrefix, user, enArchivos, conCi
   const cargar = useCallback(async (v) => {
     const n = ++pedido.current;
     setCargando(true);
-    const consulta = v.tipo === 'serie' ? `vista=${encodeURIComponent(v.id)}` : parametrosDeVista(v.vista.filtros);
+    const consulta = `vista=${encodeURIComponent(v.id)}`;
     try {
       const r = await apiFetch(`${API}/api/docs/search?${consulta}&model_urn=${encodeURIComponent(projectPrefix)}`);
       const d = await r.json().catch(() => ({}));
@@ -89,16 +83,6 @@ export function useVistasDeArchivos({ fe, projectPrefix, user, enArchivos, conCi
 
   const elegir = (v) => {
     limpiarFiltros();
-    if (v.tipo === 'propia' && v.vista.alcance === 'carpeta') {
-      // Una vista de carpeta es ir a esa carpeta con sus filtros puestos.
-      salir();
-      const f = v.vista.filtros;
-      fe.navigate(v.vista.carpeta.ruta, v.vista.carpeta.id);
-      fe.setSearchQuery(f.texto || '');      // después de navegar, que la vacía
-      fe.setStatusFilter(f.estado || 'ALL');
-      fe.setFiltrosMeta({ tipo: f.tipo, disciplina: f.disciplina, entrega: f.entrega });
-      return;
-    }
     if (fe.isTrashMode) fe.switchMode(false);
     setActiva(v);
     setFilas(null);
@@ -113,26 +97,5 @@ export function useVistasDeArchivos({ fe, projectPrefix, user, enArchivos, conCi
     if (activaRef.current && (fe.isTrashMode || !enArchivos)) salir();
   }, [fe.isTrashMode, enArchivos, salir]);
 
-  const guardar = ({ nombre, alcance, carpeta, orden }) => {
-    const filtros = {
-      texto: fe.searchQuery,
-      estado: fe.statusFilter, ...fe.filtrosMeta,
-    };
-    const r = guardarVistaPropia(null, projectPrefix, usuario, { nombre, alcance, carpeta, filtros, orden });
-    if (!r.ok) { toast.error(r.motivo); return false; }
-    setPropias(r.lista);
-    toast.success(`Vista «${r.vista.nombre}» guardada: ${describirFiltros(r.vista.filtros)}`);
-    return true;
-  };
-
-  const borrar = (v) => {
-    setPropias(borrarVistaPropia(null, projectPrefix, usuario, v.id));
-    if (activaRef.current?.tipo === 'propia' && activaRef.current.id === v.id) salir();
-    toast.success(`Vista «${v.nombre}» borrada`);
-  };
-
-  return {
-    activa, filas, cargando, info, recuentos, hayPlan, propias,
-    elegir, salir, recargar, guardar, borrar, puedeGuardar: Boolean(usuario),
-  };
+  return { activa, filas, cargando, info, recuentos, hayPlan, elegir, salir, recargar };
 }
