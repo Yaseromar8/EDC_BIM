@@ -326,12 +326,15 @@ def test_crear_observacion_desde_la_marca(app, monkeypatch):
     vence = datetime(2099, 1, 15)
     cur, conn = _conectar(monkeypatch, [
         _fila_marca(), (1,), (1,), None, (55,),
+        [(5,)], (300,),                 # 47: la marca es nube → su fila nace con la incidencia
         [(55, 'ISS-012', 'Abierto', 'Cota de fondo', 9, 7, vence, '5')],
         [(9, 'Luis'), (7, 'Ana')],
     ])
     r = app.test_client().post('/api/pdf/markups/5/observacion', json={
         'titulo': ' Cota de fondo ', 'responsable_id': 9, 'vence_en': MANANA})
     assert r.status_code == 201, r.get_json()
+    alta_nube = [q for q in cur.queries if 'INSERT INTO doc_issue_nubes' in q[0]]
+    assert len(alta_nube) == 1 and alta_nube[0][1][:2] == (55, 5)      # la nube 5, de la incidencia 55
     o = r.get_json()['observacion']
     assert o['codigo'] == 'ISS-012' and o['estado'] == 'Abierto' and o['responsable'] == 'Luis'
     assert o['verificador_id'] == 7 and o['vence_en'] == MANANA and not o['vencida']

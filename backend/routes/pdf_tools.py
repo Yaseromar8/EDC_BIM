@@ -13,6 +13,7 @@ from flask import Blueprint, request, jsonify, g
 from db import get_db_connection
 from folder_permissions import check_folder_permission
 from perimetro_de_obra import guardia_de_recurso
+import almacen_de_nubes as _alm
 
 pdf_tools_bp = Blueprint('pdf_tools', __name__)
 
@@ -1088,58 +1089,84 @@ def _con_observacion(cur, rows, node_id=None):
 
 
 def _con_nube(cur, rows, node_id):
-    """Cada NUBE de una incidencia (46) lleva a quién se asignó, su estado y su color en este plano (`nube`, o None).
+    """Cada NUBE de una incidencia (46/47) lleva su número (`nube_numero`, el de su fila: el mismo que en el panel),
+    a quién se asignó, su estado y su color en este plano (`nube`), y su incidencia (`observacion`) si no le venía por
+    la evidencia (una nube añadida después).
 
-    Las de encargo también: la marca solo la ve quien puede verla, y quien revisa lo ve todo (el dueño, 3-nov-2026).
-    """
+    LA MISMA REGLA QUE EL PANEL (`nubes_de_issue.visible`, docs/archivos/25 S3): una nube de encargo que esta persona
+    no ve en el panel —trabajo en proceso de otro equipo— tampoco sale en la hoja, ni su marca. Cinco consultas como
+    mucho, sean cuantas sean las nubes."""
+    import almacen_de_nubes as alm
     import nubes_de_issue as nub
+    from administracion_de_obra import es_admin_de_obra
     for m in rows:
         m['nube'] = None
-    # Una NUBE DE ENCARGO no está en la evidencia de su incidencia (la crea el encargado después): su incidencia sale de
-    # la propia nube, para que la hoja la rotule y su nota sepa a quién se asigna.
-    sin_obs = [m['id'] for m in rows if m.get('kind') == nub.TIPO_DE_NUBE and not m.get('observacion') and m.get('id') is not None]
+    de_marca = alm.de_las_marcas(cur, [m['id'] for m in rows
+                                       if m.get('kind') == nub.TIPO_DE_NUBE and m.get('id') is not None])
+    if not de_marca:
+        return rows
+    yo = _user()
+    empresa = None
+    if yo.get('id'):
+        cur.execute('SELECT company_id FROM users WHERE id = %s', (yo['id'],))
+        f = cur.fetchone()
+        empresa = f[0] if f else None
+    admin_en = {}
+    visibles = {}
+    for mid, (n, issue) in de_marca.items():
+        obra = issue['project_id']
+        if obra not in admin_en:
+            admin_en[obra] = es_admin_de_obra(cur, yo, obra)
+        if nub.visible(n, nub.papeles(yo, issue, n, admin_en[obra], empresa), empresa):
+            visibles[mid] = (n, issue)
+    rows[:] = [m for m in rows if m.get('id') not in de_marca or m['id'] in visibles]
+    if not visibles:
+        return rows
+
+    # Su incidencia, en las marcas que no la traían por la evidencia.
+    sin_obs = {visibles[m['id']][1]['id'] for m in rows if m['id'] in visibles and not m.get('observacion')}
     if sin_obs:
-        cur.execute("""SELECT DISTINCT ON (n.markup_id) n.markup_id,
-                              i.id, i.codigo, i.estado, i.titulo, i.responsable_id, i.verificador_id, i.vence_en, i.origen_id
-                         FROM doc_issue_nubes n JOIN doc_issues i ON i.id = n.issue_id
-                        WHERE n.markup_id = ANY(%s) AND n.clase = 'encargo'
-                        ORDER BY n.markup_id, n.id DESC""", (sin_obs,))
+        cur.execute("""SELECT id, codigo, estado, titulo, responsable_id, verificador_id, vence_en, origen_id
+                         FROM doc_issues WHERE id = ANY(%s)""", (sorted(sin_obs),))
         filas = cur.fetchall()
-        if filas:
-            nombres, hoy = _nombres(cur, [x for r in filas for x in (r[5], r[6])]), _hoy_en_obra()
-            por_marca = {r[0]: {**_resumen_de_observacion(r[1:], nombres, hoy), 'encargo': True} for r in filas}
-            _con_empresas(cur, list(por_marca.values()))
-            for m in rows:
-                if m.get('id') in por_marca:
-                    m['observacion'] = por_marca[m['id']]
-    ids = [m['id'] for m in rows if m.get('kind') == nub.TIPO_DE_NUBE and m.get('observacion') and m.get('id') is not None]
-    if not ids:
-        return rows
-    cur.execute("""SELECT DISTINCT ON (n.markup_id) n.markup_id, n.estado, n.destino_usuario, n.destino_empresa,
-                          u.name, c.name, n.clase
-                     FROM doc_issue_nubes n
-                     LEFT JOIN users u ON u.id = n.destino_usuario
-                     LEFT JOIN companies c ON c.id = n.destino_empresa
-                    WHERE n.markup_id = ANY(%s)
-                    ORDER BY n.markup_id, n.id DESC""", (ids,))
-    filas = cur.fetchall()
-    if not filas:
-        return rows
+        nombres, hoy = _nombres(cur, [x for r in filas for x in (r[4], r[5])]), _hoy_en_obra()
+        resumen = {r[0]: _resumen_de_observacion(r, nombres, hoy) for r in filas}
+        _con_empresas(cur, list(resumen.values()))
+        for m in rows:
+            if m['id'] in visibles and not m.get('observacion'):
+                n, issue = visibles[m['id']]
+                if issue['id'] in resumen:
+                    m['observacion'] = {**resumen[issue['id']], 'encargo': n['clase'] == 'encargo'}
+
+    # A quién va cada una y su color en este plano.
+    uids = sorted({n['destino_usuario'] for n, _i in visibles.values() if n['destino_usuario']})
+    eids = sorted({n['destino_empresa'] for n, _i in visibles.values() if n['destino_empresa']})
+    personas, empresas = {}, {}
+    if uids:
+        cur.execute('SELECT id, name FROM users WHERE id = ANY(%s)', (uids,))
+        personas = dict(cur.fetchall())
+    if eids:
+        cur.execute('SELECT id, name FROM companies WHERE id = ANY(%s)', (eids,))
+        empresas = dict(cur.fetchall())
     colores = nub.colores_del_plano(cur, node_id)
-    por_marca = {}
-    for mid, estado, uid, eid, persona, empresa, clase in filas:
-        por_marca[mid] = {'estado': estado, 'estado_etiqueta': nub.ETIQUETAS.get(estado, estado), 'clase': clase,
-                          'destino_nombre': persona or empresa, 'destino_es_empresa': bool(eid),
-                          'color': colores.get(nub.clave_de_destino({'destino_usuario': uid, 'destino_empresa': eid}))}
     for m in rows:
-        m['nube'] = por_marca.get(m.get('id'))
+        if m['id'] not in visibles:
+            continue
+        n, _issue = visibles[m['id']]
+        m['nube_numero'] = n['numero']
+        m['nube'] = {'estado': n['estado'], 'estado_etiqueta': nub.ETIQUETAS.get(n['estado'], n['estado']),
+                     'clase': n['clase'], 'numero': n['numero'],
+                     'destino_nombre': personas.get(n['destino_usuario']) or empresas.get(n['destino_empresa']),
+                     'destino_es_empresa': bool(n['destino_empresa']),
+                     'color': colores.get(nub.clave_de_destino(n))}
     return rows
 
 
 def _observaciones_del_plano(cur, node_id):
     """Las observaciones del plano entero (las más recientes primero), con su versión y sus marcas."""
     import flujo_de_issue as iss
-    cur.execute("""SELECT id, codigo, estado, titulo, responsable_id, verificador_id, vence_en, origen_id, evidencia
+    cur.execute("""SELECT id, codigo, estado, titulo, responsable_id, verificador_id, vence_en, origen_id, evidencia,
+                          autor_id
                      FROM doc_issues
                     WHERE origen_tipo = %s AND origen_id = %s AND tipo = %s AND """ + _NO_ES_BORRADOR_AJENO + """
                     ORDER BY creado_en DESC, id DESC LIMIT 50""", (ORIGEN_PLANO, str(node_id), iss.OBSERVACION, _yo()))
@@ -1150,6 +1177,7 @@ def _observaciones_del_plano(cur, node_id):
         evidencia = [e for e in (r[8] or []) if isinstance(e, dict)]
         plano = next((e for e in evidencia if e.get('tipo') == 'plano'), {})
         salida.append({**_resumen_de_observacion(r[:8], nombres, hoy), 'del_plano': True,
+                       'autor_id': r[9] if len(r) > 9 else None,
                        'version_id': plano.get('version_id'), 'version_numero': plano.get('version_numero'),
                        # EL PIN EN LA HOJA (2-nov-2026, como ACC): página y punto en coordenadas del PDF.
                        'pin': plano.get('pin'),
@@ -1312,6 +1340,7 @@ def crear_observacion(markup_id):
             evidencia = [{'tipo': 'marca', 'marca': markup_id, 'documento': nodo, 'nombre': nombre,
                           'version_id': version_id, 'version_numero': version_num, 'pagina': pagina,
                           'clase': kind}]
+            origen_tipo, origen_id = ORIGEN_MARCA, str(markup_id)
             iid = codigo = None
             for intento in range(5):
                 codigo = reg.siguiente_codigo(cur, iss.SEMANTICA, obra)
@@ -1325,13 +1354,17 @@ def crear_observacion(markup_id):
                         RETURNING id""",
                         (obra, model_urn, codigo, iss.OBSERVACION, titulo, descripcion, ubicacion,
                          uid, responsable, uid, actor, vence, json.dumps(evidencia),
-                         ORIGEN_MARCA, str(markup_id),
+                         origen_tipo, origen_id,
                          json.dumps([reg.entrada('detected', actor, codigo=codigo, tipo=iss.OBSERVACION,
                                                  desde_marca=markup_id)])))
                     iid = cur.fetchone()[0]
                     if borrador:
                         cur.execute('UPDATE doc_issues SET estado = %s WHERE id = %s', (iss.BORRADOR, iid))
                     guardar_datos_de_la_45(cur, iid, datos45)
+                    # Sus nubes nacen con ella, numeradas en el orden de su evidencia (47).
+                    _alm.crear_filas_de_la_incidencia(cur, {
+                        'id': iid, 'model_urn': model_urn, 'evidencia': evidencia,
+                        'origen_tipo': origen_tipo, 'origen_id': origen_id}, creado_por=uid)
                     cur.execute('RELEASE SAVEPOINT alta_observacion')
                     break
                 except Exception:
@@ -1570,6 +1603,7 @@ def observacion_del_plano(node_id):
                           'version_numero': version_num, **({'pin': pin} if pin else {})}] + [
                 {'tipo': 'marca', 'marca': m[0], 'documento': nodo, 'nombre': nombre, 'version_id': version_id,
                  'version_numero': version_num, 'pagina': m[3], 'clase': m[4]} for m in marcas]
+            origen_tipo, origen_id = ORIGEN_PLANO, nodo
             iid = codigo = None
             for intento in range(5):
                 codigo = reg.siguiente_codigo(cur, iss.SEMANTICA, obra)
@@ -1583,13 +1617,17 @@ def observacion_del_plano(node_id):
                         RETURNING id""",
                         (obra, model_urn, codigo, iss.OBSERVACION, titulo, descripcion, ubicacion,
                          uid, responsable, uid, actor, vence, json.dumps(evidencia),
-                         ORIGEN_PLANO, nodo,
+                         origen_tipo, origen_id,
                          json.dumps([reg.entrada('detected', actor, codigo=codigo, tipo=iss.OBSERVACION,
                                                  desde_plano=nodo, marcas=len(marcas))])))
                     iid = cur.fetchone()[0]
                     if borrador:
                         cur.execute('UPDATE doc_issues SET estado = %s WHERE id = %s', (iss.BORRADOR, iid))
                     guardar_datos_de_la_45(cur, iid, datos45)
+                    # Sus nubes nacen con ella, numeradas en el orden de su evidencia (47).
+                    _alm.crear_filas_de_la_incidencia(cur, {
+                        'id': iid, 'model_urn': model_urn, 'evidencia': evidencia,
+                        'origen_tipo': origen_tipo, 'origen_id': origen_id}, creado_por=uid)
                     cur.execute('RELEASE SAVEPOINT alta_observacion')
                     break
                 except Exception:

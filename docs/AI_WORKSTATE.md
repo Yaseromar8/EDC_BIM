@@ -65,6 +65,21 @@ Detalle en `docs/archivos/18`, `19`, `20` y `21`.
   tooltips del portal en una a tres palabras, sin explicaciones ni la huella SHA; ancho máximo 200 px como Procore.
 - Commit siguiente (4-nov): pestaña Nubes como lista ligera, asignar sin fecha (manda la de la incidencia, también en
   «Mi trabajo»), la barra de la nube sin el código; y se devuelve el tooltip de «el móvil marcó» que exige GAP 07.
+- 4-nov: `c1c35d73` DESPLEGADO por el dueño (health `c1c35d734ad0`, bundle del portal verificado).
+- 4-nov, AUDITORÍA (docs/archivos/25): el dueño pidió «profesional, estándar y escalable, nada de parches». Seis
+  defectos de integridad en el servidor y parches en la pantalla; plan en tres fases. El commit `11d072a4` (rama
+  `publicar-4nov-c`, NO empujado) queda SIN publicar: lleva parches de pantalla que se rehacen en las fases 2 y 3.
+- Commit siguiente (4-nov, doc 25 §4 bis): FASE 1, integridad del servidor. MIGRACIÓN 47
+  `backend/sql/47_nubes_numero_estable.sql` (número de la nube que pone la base, filas desde el alta, índices; la app ya
+  no puede reescribir `numero`). Publicar: 47 como ecd_migrator → backend → VOLVER A APLICAR la 47 (es repetible: crea
+  las filas de lo que el backend anterior dio de alta entre medias). El portal no cambia. Cierre y anulación cierran los
+  pendientes de sus nubes; toda escritura bloquea la incidencia (`FOR UPDATE`); el historial se añade en la base; el
+  correo de las nubes sale tras el commit; la hoja oculta lo que el panel oculta; conciliación sin N+1. Incluye la parte
+  de servidor de `11d072a4` (solo entrega el asignado; entregada, el pendiente va al encargado; añadir una nube suelta
+  según el papel). Pruebas: suite backend verde salvo el fallo previo ajeno de `test_reconstruccion_desde_cero`;
+  ensayo de la fase 1 22/22, de nubes 51/51 y de la carpeta 12/12 contra PostgreSQL real con la 47 aplicada dos veces.
+- EXACT NEXT ACTION (nubes): el dueño autoriza el push de la fase 1; luego 47 → backend → 47. Después, fase 2
+  (doc 25 §4: el cliente solo pinta).
 - EXACT NEXT ACTION (histórica, ya hecha para c3144a3d): Manual Deploy de `visor-ecd-backend-va` y DESPUÉS de `visor-ecd-portal` con el HEAD de main;
   comprobar `/api/health` y el bundle del portal (Cloudflare ~5 min). Luego, recorrido real con dos personas (correo
   a observadores y subida de fotos sin probar en producción).

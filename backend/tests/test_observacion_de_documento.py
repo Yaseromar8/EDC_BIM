@@ -81,8 +81,9 @@ def test_comentar_solo_anade_al_historial(app, monkeypatch):
     sql, params = [q for q in cur.queries if q[0].startswith('UPDATE doc_issues SET history')][0]
     import json
     h = json.loads(params[0])
-    assert h[0] == previo[0]                                   # lo anterior no se toca
-    assert h[1]['event'] == 'commented' and h[1]['texto'] == 'Ya subí la Rev 2' and h[1]['by'] == 'luis@obra.pe'
+    # Lo anterior no se toca: el evento se AÑADE en la base (`history || …`), no se reescribe la lista leída (doc 25).
+    assert "|| %s::jsonb" in sql and len(h) == 1
+    assert h[0]['event'] == 'commented' and h[0]['texto'] == 'Ya subí la Rev 2' and h[0]['by'] == 'luis@obra.pe'
     assert not any(q[0].startswith('UPDATE') and 'estado' in q[0] for q in cur.queries)     # comentar no mueve el estado
 
 

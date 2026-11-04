@@ -11,7 +11,8 @@ LOS PAPELES SON DE LA INCIDENCIA, NO CARGOS (D1; Plan BIM Perú: «son funciones
                  asigna las nubes, acepta o devuelve lo entregado y crea las nubes de encargo de su equipo;
   · aportante  — a quien se asignó ESA nube (persona, o alguien de su empresa): entrega lo pedido. Quien revisa
                  la incidencia no lo es nunca, ni por su empresa: pide y verifica, no entrega;
-  · admin      — el administrador de la obra: puede todo, como corresponde a quien coordina.
+  · admin      — el administrador de la obra: coordina (asigna, acepta, devuelve, verifica), pero NO entrega por
+                 otro: entrega solo a quien se le asignó la nube (4-nov-2026, el dueño: «solo sube el que es asignado»).
 
 DOS CLASES DE NUBE:
   · observación — la dibuja el revisor: lo que hay que corregir. La verifica el revisor, sobre la versión nueva.
@@ -19,6 +20,10 @@ DOS CLASES DE NUBE:
                   de ese equipo: la ven el encargado, quien la tiene asignada, su empresa, el admin y QUIEN REVISA
                   (el dueño, 3-nov-2026: «el revisor principal debe ver todo»; corrige la D6, que se la ocultaba).
                   No se verifica por separado: el revisor juzga la observación.
+
+CADA NUBE TIENE SU NÚMERO (47): lo pone la base al crear su fila y no cambia (el disparador `tg_issue_nubes_numero`).
+Las filas se crean al dar de alta la incidencia: no hay nubes «virtuales». Con la incidencia cerrada, nadie debe nada
+en sus nubes (`deudor`).
 
 LA VIDA DE UNA NUBE (rondas en la MISMA nube, D7):
   sin_asignar ─asignar→ pedida ─entregar→ entregada ─aceptar→ aceptada
@@ -28,6 +33,8 @@ LA VIDA DE UNA NUBE (rondas en la MISMA nube, D7):
 """
 
 import re
+
+import flujo_de_issue as _iss
 
 CLASES = ('observacion', 'encargo')
 
@@ -47,6 +54,8 @@ ETIQUETAS = {
 
 # Lo que le debe a alguien una nube en ese estado: el aportante, mientras le toque entregar.
 ESTADOS_QUE_DEBE_EL_APORTANTE = (PEDIDA, DEVUELTA)
+# Los estados en los que ALGUIEN debe algo en la nube: el aportante (pedida, devuelta) o el encargado (entregada).
+ESTADOS_CON_DEUDOR = ESTADOS_QUE_DEBE_EL_APORTANTE + (ENTREGADA,)
 
 # Estado de la incidencia en el que hay versión corregida que verificar (flujo_de_issue.CORREGIDO).
 CORREGIDO = 'Corregido'
@@ -60,12 +69,29 @@ TOPE_ENTREGAS = 20
 # acto → (estados de origen, estado de destino, papeles que pueden, solo de esta clase)
 ACTOS = {
     'asignar':  ((SIN_ASIGNAR, PEDIDA, DEVUELTA, NO_LEVANTADA, ACEPTADA), PEDIDA, ('encargado', 'admin'), None),
-    'entregar': ((PEDIDA, DEVUELTA), ENTREGADA, ('aportante', 'admin'), None),
+    'entregar': ((PEDIDA, DEVUELTA), ENTREGADA, ('aportante',), None),
     'aceptar':  ((ENTREGADA,), ACEPTADA, ('encargado', 'admin'), None),
     'devolver': ((ENTREGADA,), DEVUELTA, ('encargado', 'admin'), None),
     'verificar': ((SIN_ASIGNAR, PEDIDA, ENTREGADA, DEVUELTA, ACEPTADA, NO_LEVANTADA), None,
                   ('revisor', 'admin'), 'observacion'),
 }
+
+
+class Motivo(str):
+    """Por qué no se puede: el texto para la persona y su TIPO para el código HTTP (no se deduce del texto)."""
+    def __new__(cls, tipo, texto):
+        m = super().__new__(cls, texto)
+        m.tipo = tipo
+        return m
+
+
+# El código HTTP de cada tipo de negativa: acto inexistente, papel que no toca, clase de nube o estado que no lo admite.
+HTTP_DE_LA_NEGATIVA = {'acto': 400, 'papel': 403, 'clase': 409, 'estado': 409}
+
+
+def es_revisor(uid, issue):
+    """Quien revisa la incidencia: quien la levantó o figura en «Verifica». Pide y verifica; no aporta."""
+    return bool(uid) and uid in (issue.get('autor_id'), issue.get('verificador_id'))
 
 
 def papeles(usuario, issue, nube=None, admin=False, empresa_del_usuario=None):
@@ -74,7 +100,7 @@ def papeles(usuario, issue, nube=None, admin=False, empresa_del_usuario=None):
     p = set()
     if admin:
         p.add('admin')
-    if uid and uid in (issue.get('autor_id'), issue.get('verificador_id')):
+    if es_revisor(uid, issue):
         p.add('revisor')
     if uid and (uid == issue.get('responsable_id') or
                 (issue.get('responsable_empresa') and empresa_del_usuario
@@ -90,22 +116,22 @@ def papeles(usuario, issue, nube=None, admin=False, empresa_del_usuario=None):
 def puede(acto, nube, issue, sus_papeles):
     """(True, None) o (False, por qué). No mira permisos de carpeta: eso lo hace la ruta antes."""
     if acto not in ACTOS:
-        return False, 'acto desconocido'
+        return False, Motivo('acto', 'acto desconocido')
     origen, _destino, quienes, clase = ACTOS[acto]
     if clase and nube.get('clase') != clase:
-        return False, 'solo una nube de observación se verifica: las de encargo las acepta el encargado'
+        return False, Motivo('clase', 'solo una nube de observación se verifica: las de encargo las acepta el encargado')
     if not (set(quienes) & set(sus_papeles)):
-        return False, {
+        return False, Motivo('papel', {
             'asignar': 'solo el encargado del plano asigna las nubes',
             'entregar': 'solo a quien se le asignó la nube puede entregar en ella',
             'aceptar': 'solo el encargado del plano acepta lo entregado',
             'devolver': 'solo el encargado del plano devuelve lo entregado',
             'verificar': 'solo quien revisa la incidencia dice si la nube quedó levantada',
-        }[acto]
+        }[acto])
     if nube.get('estado', SIN_ASIGNAR) not in origen:
-        return False, 'la nube está «%s»' % ETIQUETAS.get(nube.get('estado'), nube.get('estado'))
+        return False, Motivo('estado', 'la nube está «%s»' % ETIQUETAS.get(nube.get('estado'), nube.get('estado')))
     if acto == 'verificar' and issue.get('estado') != CORREGIDO:
-        return False, 'aún no hay versión corregida que verificar'
+        return False, Motivo('estado', 'aún no hay versión corregida que verificar')
     return True, None
 
 
@@ -137,13 +163,33 @@ def por_verificar(nube, issue):
             and nube.get('estado') != LEVANTADA)
 
 
-def deudor(nube):
-    """(usuario, empresa) a quien le toca entregar AHORA, o (None, None)."""
+def incidencia_viva(issue):
+    """Abierta y enviada: ni cerrada (verificada, anulada) ni borrador. Solo en una viva se le debe algo a alguien."""
+    estado = (issue or {}).get('estado')
+    return not _iss.esta_cerrado(estado) and estado != _iss.BORRADOR
+
+
+def deudor(nube, issue=None):
+    """(usuario, empresa) a quien le toca actuar AHORA en la nube, o (None, None): el aportante mientras le toque
+    entregar; ENTREGADA, el encargado de la incidencia (si se da `issue`), que ya puede corregir con lo aportado y
+    aceptarlo o devolverlo (4-nov-2026, el dueño: «que le alerte al dueño del plano»). Con la incidencia cerrada o en
+    borrador (si se da `issue` con su `estado`), nadie: así el cierre cierra también lo que se debía en sus nubes."""
+    if issue and 'estado' in issue and not incidencia_viva(issue):
+        return None, None
+    if nube.get('estado') == ENTREGADA and issue:
+        if issue.get('responsable_id'):
+            return issue['responsable_id'], None
+        return None, issue.get('responsable_empresa') or None
     if nube.get('estado') not in ESTADOS_QUE_DEBE_EL_APORTANTE:
         return None, None
     if nube.get('destino_usuario'):
         return nube['destino_usuario'], None
     return None, nube.get('destino_empresa')
+
+
+def plazo(nube, issue):
+    """Para cuándo: el de la nube si lo tiene; si no, el de la incidencia («basta con la fecha del issue principal»)."""
+    return nube.get('vence_en') or (issue or {}).get('vence_en')
 
 
 def observaciones_sin_levantar(nubes):
@@ -184,7 +230,7 @@ def colores_del_plano(cur, nodo):
         return {}
     cur.execute("""SELECT n.destino_usuario, n.destino_empresa, min(n.id) AS primera
                      FROM doc_issue_nubes n JOIN pdf_markups m ON m.id = n.markup_id
-                    WHERE m.file_node_id::text = %s
+                    WHERE m.file_node_id = %s
                       AND (n.destino_usuario IS NOT NULL OR n.destino_empresa IS NOT NULL)
                     GROUP BY n.destino_usuario, n.destino_empresa
                     ORDER BY primera""", (str(nodo),))
@@ -209,18 +255,20 @@ def codigo_de_la_carpeta(carpeta):
 def puede_subir_a_su_carpeta(cur, usuario, empresa_del_usuario, obra, carpeta):
     """D4: para aportar basta con VER el plano; lo subido va a la carpeta de la incidencia, que es un contenedor nuevo y
     no una edición del plano. Así que a esa carpeta, y solo a ella, sube quien participa en la incidencia abierta:
-    quien la revisa, el encargado, y quien tiene una nube suya por entregar (o su empresa). Lo demás, como siempre."""
+    quien la revisa, el encargado, y quien tiene una nube suya por entregar (o su empresa). Lo demás, como siempre.
+    Los papeles son los de `papeles()`: la misma regla que el resto de la incidencia."""
     codigo = codigo_de_la_carpeta(carpeta)
     uid = (usuario or {}).get('id')
     if not codigo or not uid or not obra:
         return False
-    import flujo_de_issue as iss
     cur.execute("""SELECT id, estado, autor_id, verificador_id, responsable_id, responsable_empresa
                      FROM doc_issues WHERE model_urn = %s AND codigo = %s""", (str(obra), codigo))
     f = cur.fetchone()
-    if not f or iss.esta_cerrado(f[1]) or f[1] == iss.BORRADOR:
+    issue = f and {'estado': f[1], 'autor_id': f[2], 'verificador_id': f[3], 'responsable_id': f[4],
+                   'responsable_empresa': f[5]}
+    if not issue or not incidencia_viva(issue):
         return False
-    if uid in (f[2], f[3], f[4]) or (f[5] and empresa_del_usuario and f[5] == empresa_del_usuario):
+    if {'revisor', 'encargado'} & papeles(usuario, issue, None, False, empresa_del_usuario):
         return True
     cur.execute("""SELECT 1 FROM doc_issue_nubes
                     WHERE issue_id = %s AND estado = ANY(%s)

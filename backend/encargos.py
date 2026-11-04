@@ -279,6 +279,14 @@ def cerrar_los_de(cur, objeto_tipo, objeto_id, cerrado_por=None, destino_usuario
     return cur.rowcount
 
 
+def cerrar_uno(cur, encargo_id, cerrado_por=None):
+    """Cierra UN encargo abierto por su id (lo usa la sincronización de las nubes: cierra el que ya no toca y deja
+    el que sigue siendo correcto). Devuelve 1 si lo cerró."""
+    cur.execute("UPDATE encargos SET estado='cerrado', cerrado_en=CURRENT_TIMESTAMP, cerrado_por=%s "
+                " WHERE id=%s AND estado='abierto'", (cerrado_por, int(encargo_id)))
+    return cur.rowcount
+
+
 def avisar(cur, encargo_id, enlace=None, es_recordatorio=False):
     """Avisa por correo a quien le toca. Nunca revienta la operacion de origen.
 
@@ -439,11 +447,13 @@ def mi_trabajo(cur, user_id, project_id=None):
     return salida
 
 
-def asunto_de_nube(codigo, pedido):
-    """«Aportar en ISS-002: imagen 3D de la junta» (lo que se lee en «Mi trabajo»)."""
+def asunto_de_nube(codigo, pedido, entregada=False):
+    """«Aportar en ISS-002: imagen 3D de la junta» (lo que se lee en «Mi trabajo»); ya entregada, lo que lee el
+    encargado: «Entregado en ISS-002: …»."""
     texto = (pedido or '').strip()
     texto = texto if len(texto) <= 120 else texto[:119] + '…'
-    return 'Aportar en %s%s' % (codigo or 'la incidencia', ': %s' % texto if texto else '')
+    return '%s %s%s' % ('Entregado en' if entregada else 'Aportar en', codigo or 'la incidencia',
+                        ': %s' % texto if texto else '')
 
 
 def con_su_documento(cur, pendientes):
@@ -948,14 +958,20 @@ def _sigue_debiendose(cur, tipo, objeto_id, destino_usuario):
         return uid == destino_usuario
 
     if tipo == 'NUBE':
-        # La debe quien la tiene asignada mientras le toque entregar (pedida o devuelta).
-        cur.execute("""SELECT estado, destino_usuario, destino_empresa
-                         FROM doc_issue_nubes WHERE id::text = %s""", (str(objeto_id),))
+        # Quién la debe lo dice `deudor()`: el aportante (pedida, devuelta), el encargado (entregada) y nadie con la
+        # incidencia cerrada. Por la clave primaria, sin convertirla a texto.
+        if not str(objeto_id).isdigit():
+            return None
+        cur.execute("""SELECT n.estado, n.destino_usuario, n.destino_empresa,
+                              i.estado, i.responsable_id, i.responsable_empresa
+                         FROM doc_issue_nubes n JOIN doc_issues i ON i.id = n.issue_id
+                        WHERE n.id = %s""", (int(objeto_id),))
         fila = cur.fetchone()
         if not fila:
             return None
         import nubes_de_issue as nubes
-        uid, empresa = nubes.deudor({'estado': fila[0], 'destino_usuario': fila[1], 'destino_empresa': fila[2]})
+        uid, empresa = nubes.deudor({'estado': fila[0], 'destino_usuario': fila[1], 'destino_empresa': fila[2]},
+                                    {'estado': fila[3], 'responsable_id': fila[4], 'responsable_empresa': fila[5]})
         if uid is None and empresa is None:
             return False
         if uid is None:
@@ -1249,24 +1265,41 @@ def _faltantes(cur):
     except Exception:
         cur.connection.rollback()
 
-    # Nubes que alguien tiene que alimentar (46): pedidas o devueltas, con su destino.
+    # Nubes (46/47): quien debe algo en ellas AHORA según `deudor()`, que ya cuenta la incidencia cerrada. Tres
+    # consultas en total, no una por nube: las nubes con deudor posible (índice `idx_issue_nubes_debidas`), sus
+    # encargos abiertos y la pertenencia a la obra de quien las debe.
     try:
-        cur.execute("""SELECT n.id, n.model_urn, n.destino_usuario, n.destino_empresa, n.vence_en,
-                                i.codigo, n.pedido
+        import nubes_de_issue as nubes
+        cur.execute("""SELECT n.id, n.destino_usuario, n.destino_empresa, n.vence_en, n.pedido, n.estado,
+                                i.codigo, i.estado, i.responsable_id, i.responsable_empresa, i.vence_en, i.project_id
                            FROM doc_issue_nubes n JOIN doc_issues i ON i.id = n.issue_id
-                          WHERE n.estado IN ('pedida', 'devuelta')""")
-        for nid, obra, uid, empresa, vence, codigo, pedido in cur.fetchall():
-            asunto = asunto_de_nube(codigo, pedido)
+                          WHERE n.estado = ANY(%s)""", (list(nubes.ESTADOS_CON_DEUDOR),))
+        filas = cur.fetchall()
+        cur.execute("""SELECT objeto_id, destino_usuario, destino_empresa FROM encargos
+                          WHERE objeto_tipo = 'NUBE' AND estado = 'abierto'""")
+        abiertos = {(r[0], r[1], r[2]) for r in cur.fetchall()}
+        quienes = sorted({u for f in filas for u in (f[1], f[8]) if u})
+        miembros = set()
+        if quienes:
+            cur.execute('SELECT project_id, user_id FROM project_users WHERE user_id = ANY(%s)', (quienes,))
+            miembros = {(str(r[0]), r[1]) for r in cur.fetchall()}
+        for nid, du, de, n_vence, pedido, estado, codigo, i_estado, ru, re_, i_vence, obra in filas:
+            nube = {'estado': estado, 'destino_usuario': du, 'destino_empresa': de, 'vence_en': n_vence}
+            issue = {'estado': i_estado, 'responsable_id': ru, 'responsable_empresa': re_, 'vence_en': i_vence}
+            uid, empresa = nubes.deudor(nube, issue)
+            if not uid and not empresa:
+                continue
+            asunto = asunto_de_nube(codigo, pedido, entregada=estado == nubes.ENTREGADA)
+            vence = nubes.plazo(nube, issue)
             if uid:
-                cur.execute("SELECT 1 FROM encargos WHERE objeto_tipo='NUBE' AND objeto_id=%s "
-                            "   AND destino_usuario=%s AND estado='abierto'", (str(nid), uid))
-                if not cur.fetchone():
-                    faltan.append(('NUBE', str(nid), uid, asunto, vence))
-            elif empresa:
-                cur.execute("SELECT 1 FROM encargos WHERE objeto_tipo='NUBE' AND objeto_id=%s "
-                            "   AND destino_empresa=%s AND estado='abierto'", (str(nid), empresa))
-                if not cur.fetchone():
-                    faltan.append(('NUBE', str(nid), None, asunto, vence, empresa))
+                if (str(nid), uid, None) in abiertos:
+                    continue
+                if (str(obra), uid) not in miembros:
+                    bloqueadas.append(('NUBE', str(nid), codigo or '', 'quien la debe ya no pertenece a la obra'))
+                    continue
+                faltan.append(('NUBE', str(nid), uid, asunto, vence))
+            elif (str(nid), None, empresa) not in abiertos:
+                faltan.append(('NUBE', str(nid), None, asunto, vence, empresa))
     except Exception:
         cur.connection.rollback()
 

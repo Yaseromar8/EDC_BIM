@@ -101,6 +101,7 @@ def test_una_observacion_para_todo_el_plano_con_sus_marcas(app, monkeypatch, alt
         [(3, 'Ana', False, 1, 'cloud'), (4, 'Luis', True, 2, 'arrow')],        # las dos marcas
         None, None,                                                            # ninguna en otra observación abierta
         (55,),                                                                 # el alta
+        [(3,)], (300,),                                                        # 47: la nube 3 nace con su fila
         [(55, 'ISS-020', 'Abierto', 'Revisar cotas del buzón', 9, 7, VENCE, PLANO, _evidencia(3, 4))],
         [(9, 'Luis'), (7, 'Ana')],
     ])
@@ -120,6 +121,9 @@ def test_una_observacion_para_todo_el_plano_con_sus_marcas(app, monkeypatch, alt
     pub = next(q for q in cur.queries if 'SET publicado = TRUE' in q[0])
     assert pub[1] == (7, [3], 'Ana') and d['publicadas'] == [3]
     assert alta['encargo'][1]['destino_usuario'] == 9 and conn.committed
+    # Solo la NUBE tiene fila (la flecha 4 acompaña sin estado), y nace con la incidencia.
+    filas = [q[1] for q in cur.queries if 'INSERT INTO doc_issue_nubes' in q[0]]
+    assert [f[:2] for f in filas] == [(55, 3)]
 
 
 def test_tambien_el_plano_entero_sin_marcas(app, monkeypatch, alta):
@@ -195,6 +199,7 @@ def test_un_borrador_del_plano_no_publica_marcas_ni_avisa(app, monkeypatch, alta
         ('obra', 'DR-803.pdf', VIGENTE, 2), (1,), (1,),
         [(3, 'Ana', False, 1, 'cloud')], None,
         (57,),
+        [(3,)], (301,),                                                        # 47: su nube, también en borrador
         [(57, 'ISS-021', 'Borrador', 'Revisar cotas del buzón', 9, 7, VENCE, PLANO, _evidencia(3))],
         [(9, 'Luis'), (7, 'Ana')],
     ])
