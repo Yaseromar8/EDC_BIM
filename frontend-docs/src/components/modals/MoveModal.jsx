@@ -9,7 +9,11 @@ import { apiFetch } from '../../utils/apiFetch';
 import { API } from '../../utils/helpers';
 
 // ── Mini Select Folder Tree (Embedded) ──
-function SelectFolderNode({ folder, defaultExpanded = false, selectedPath, onSelect, modelUrn }) {
+// Con `elegidas` (un Map o Set de ids) elige VARIAS: cada fila lleva su casilla y `onSelect` alterna (copiar la
+// estructura a varias carpetas, 4-nov-2026). Sin él, como siempre: una sola, por su ruta. `noElegibles`: ids que no
+// se pueden elegir (la propia carpeta modelo, la raíz).
+function SelectFolderNode({ folder, defaultExpanded = false, selectedPath, onSelect, modelUrn, elegidas = null,
+                            noElegibles = null }) {
   const [expanded, setExpanded] = useState(defaultExpanded);
   const [children, setChildren] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -38,13 +42,17 @@ function SelectFolderNode({ folder, defaultExpanded = false, selectedPath, onSel
     setExpanded(!expanded);
   };
 
-  const isSelected = selectedPath === folder.fullName;
+  const multiple = !!elegidas;
+  const elegible = !(noElegibles && noElegibles.has(String(folder.id)));
+  const isSelected = multiple ? elegidas.has(String(folder.id)) : selectedPath === folder.fullName;
 
   return (
     <div style={{ marginLeft: 16 }}>
       <div
-        style={{ display: 'flex', alignItems: 'center', padding: '4px 8px', cursor: 'pointer', background: isSelected ? '#ecf0f1' : 'transparent', color: isSelected ? 'var(--accent)' : '#333330', borderRadius: 4 }}
-        onClick={() => onSelect(folder.fullName, folder.id)}
+        style={{ display: 'flex', alignItems: 'center', padding: '4px 8px', cursor: elegible ? 'pointer' : 'default', background: isSelected ? '#ecf0f1' : 'transparent', color: isSelected ? 'var(--accent)' : elegible ? '#333330' : '#72706b', borderRadius: 4 }}
+        onClick={() => { if (elegible) onSelect(folder.fullName, folder.id); }}
+        role={multiple ? 'checkbox' : undefined} aria-checked={multiple ? isSelected : undefined}
+        aria-disabled={multiple && !elegible ? true : undefined}
       >
         <div style={{ width: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', marginRight: 4, cursor: 'pointer' }} onClick={handleToggle}>
           {loading ? <div className="adsk-spinner" style={{ width: 10, height: 10, borderWidth: 1 }} /> : (
@@ -53,6 +61,9 @@ function SelectFolderNode({ folder, defaultExpanded = false, selectedPath, onSel
             </svg>
           )}
         </div>
+        {multiple && elegible && (
+          <input type="checkbox" readOnly checked={isSelected} tabIndex={-1} aria-hidden="true" style={{ margin: '0 6px 0 0' }} />
+        )}
         <svg viewBox="0 0 24 24" width="18" height="18" style={{ marginRight: 6, fill: isSelected ? 'var(--accent)' : 'var(--text-muted)' }}>
           <path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"></path>
         </svg>
@@ -60,7 +71,8 @@ function SelectFolderNode({ folder, defaultExpanded = false, selectedPath, onSel
       </div>
       {expanded && children && (
         <div>
-          {children.map(c => <SelectFolderNode key={c.fullName} folder={c} selectedPath={selectedPath} onSelect={onSelect} modelUrn={modelUrn} />)}
+          {children.map(c => <SelectFolderNode key={c.fullName} folder={c} selectedPath={selectedPath} onSelect={onSelect} modelUrn={modelUrn}
+            elegidas={elegidas} noElegibles={noElegibles} />)}
         </div>
       )}
     </div>

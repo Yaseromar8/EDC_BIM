@@ -23,6 +23,7 @@ export default function ContextMenu({
   // Action callbacks
   onClose,
   onCreateChild,
+  onCopiarEstructura,
   onOpenPermissions,
   onOpenAccBridge,
   onRename,
@@ -86,7 +87,8 @@ export default function ContextMenu({
   // Alto estimado: se CUENTAN las acciones visibles en vez de suponerlas. Con
   // el número fijo, un menú corto se pegaba al borde inferior sin necesidad.
   const acciones =
-    (item.type === 'folder' ? (isAdmin ? 1 : 0) + (esEntityAdmin && onOpenAccBridge ? 1 : 0) + (visible('subcarpeta') ? 1 : 0) : 0) +
+    (item.type === 'folder' ? (isAdmin ? 1 : 0) + (esEntityAdmin && onOpenAccBridge ? 1 : 0) + (visible('subcarpeta') ? 1 : 0)
+      + (onCopiarEstructura && visible('copiar_estructura') ? 1 : 0) : 0) +
     (item.type !== 'folder' && puedeEditar ? 1 : 0) +
     (item.type !== 'folder' && onNuevaVersion && visible('nueva_version') ? 1 : 0) +
     (isAdmin ? 2 : 0) +
@@ -116,6 +118,13 @@ export default function ContextMenu({
         <button {...props('subcarpeta')} onClick={() => { if (!cap('subcarpeta').disponible) return; onClose(); onCreateChild(item.id || item.fullName); }}>
           <div className="menu-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg></div>
           Añadir subcarpeta
+        </button>
+      )}
+      {/* COPIAR LA ESTRUCTURA (4-nov-2026): sus subcarpetas, vacías, en otras carpetas. */}
+      {item.type === 'folder' && onCopiarEstructura && visible('copiar_estructura') && (
+        <button {...props('copiar_estructura')} onClick={() => { if (!cap('copiar_estructura').disponible) return; onClose(); onCopiarEstructura(item); }}>
+          <div className="menu-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round"><path d="M8 7h4l1.5 2H20v9H8z"></path><path d="M5 10v10h12"></path></svg></div>
+          Copiar estructura
         </button>
       )}
       {item.type === 'folder' && isAdmin && (

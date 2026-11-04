@@ -58,6 +58,7 @@ const HERRAMIENTA_DE_MODO = {
 import NewFolderModal from '../components/modals/NewFolderModal';
 import ShareModal from '../components/modals/ShareModal';
 import MoveModal from '../components/modals/MoveModal';
+import CopiarEstructuraModal from '../components/modals/CopiarEstructuraModal';
 import UploadModal from '../components/modals/UploadModal';
 import VersionPanel from '../components/panels/VersionPanel';
 import DeletedTable from '../components/panels/DeletedTable';
@@ -343,6 +344,8 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
   const [grupoActivoId, setGrupoActivoId] = React.useState(null);
   const grupoActivo = grupoActivoId ? (grupos.grupos.find(g => g.id === grupoActivoId) || null) : null;
   const [paraAgrupar, setParaAgrupar] = React.useState(null);
+  // COPIAR LA ESTRUCTURA de una carpeta (4-nov-2026): la carpeta modelo, mientras se eligen los destinos.
+  const [copiandoEstructura, setCopiandoEstructura] = React.useState(null);
   // ‹ › del lector recorren el grupo cuando el documento se abrió desde él.
   const [juegoDelGrupo, setJuegoDelGrupo] = React.useState(null);
   React.useEffect(() => { setGrupoActivoId(null); }, [fe.currentPath, fe.isTrashMode, fe.sidebarView, projectPrefix]);
@@ -1678,6 +1681,7 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
         user={user} onRefresh={() => fe.triggerRefresh(fe.currentPath)}
         onClose={() => { fe.setActiveRowMenu(null); fe.setRightClickedId(null); }}
         onCreateChild={(id) => fe.setCreatingChildParentId(id)}
+        onCopiarEstructura={!fe.isTrashMode ? (item) => setCopiandoEstructura(item) : undefined}
         onOpenPermissions={(item) => fe.setPermissionsFolder(item)}
         onOpenAccBridge={(item) => setAccBridgeFolder(item)}
         onRename={(data) => fe.setEditingNodeId(data)}
@@ -1748,6 +1752,11 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
       <DeleteModal isOpen={fe.showDeleteModal} deleteTask={fe.deleteTask} onConfirm={fe.confirmBatchDelete} onClose={() => fe.setShowDeleteModal(false)} />
 
       <MoveModal moveState={fe.moveState} setMoveState={fe.setMoveState} projectPrefix={projectPrefix} projectRootId={fe.projectRootId} onExecuteMove={fe.handleExecuteMove} />
+      {copiandoEstructura && (
+        <CopiarEstructuraModal carpeta={copiandoEstructura} projectPrefix={projectPrefix} projectRootId={fe.projectRootId}
+          onCerrar={() => setCopiandoEstructura(null)}
+          onHecho={() => { setCopiandoEstructura(null); fe.triggerRefresh(fe.currentPath); }} />
+      )}
 
       {fe.pendingBanner && fe.pendingBanner.count > 0 && (
         <div 

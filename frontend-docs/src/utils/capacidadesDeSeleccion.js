@@ -19,6 +19,8 @@
  *     renombrar · compartir · desplazar · reservar  ->  'edit'
  *     añadir subcarpeta · subir nueva versión       ->  'edit'
  *     suprimir (y restaurar, en la papelera)        ->  'edit' (14-sep-2026; antes 'admin')
+ *     copiar la estructura de una carpeta           ->  'viewer' en ella (4-nov-2026; los destinos los mira el
+ *                                                       servidor: «Editar» en cada uno)
  *
  * Antes la interfaz exigía «administrador de obra» para las cuatro primeras, y
  * eso ESCONDÍA capacidades a quien el servidor sí se las concede. La interfaz
@@ -45,14 +47,18 @@ export const EXIGE = {
     // «Administrar». Una carpeta con subcarpetas donde no se llega a «Editar» la niega
     // el servidor, que es quien conoce el subárbol: aquí no se adivina.
     suprimir:  'edit',
+    // Copiar la estructura LEE la carpeta modelo; donde se escribe es en los destinos, que se eligen después y los
+    // comprueba el servidor (`POST /api/docs/carpetas/copiar-estructura`, 4-nov-2026).
+    copiar_estructura: 'viewer',
 };
 
 /** Capacidades que sólo tienen sentido sobre UN elemento. */
-const SOLO_UNO = new Set(['renombrar', 'compartir', 'reservar', 'atributos', 'subcarpeta', 'nueva_version']);
+const SOLO_UNO = new Set(['renombrar', 'compartir', 'reservar', 'atributos', 'subcarpeta', 'nueva_version',
+                          'copiar_estructura']);
 /** Capacidades que sólo tienen sentido sobre un DOCUMENTO. */
 const SOLO_ARCHIVO = new Set(['reservar', 'atributos', 'nueva_version']);
 /** Capacidades que sólo tienen sentido sobre una CARPETA. */
-const SOLO_CARPETA = new Set(['subcarpeta']);
+const SOLO_CARPETA = new Set(['subcarpeta', 'copiar_estructura']);
 
 const nivelDe = (item, isAdmin) => {
     const n = NIVELES[item?.permission_level];
@@ -82,7 +88,7 @@ export const puedeEditarEn = (nivel, isAdmin = false) =>
  */
 export function capacidadesDeSeleccion({ elementos = [], isAdmin = false, isTrashMode = false } = {}) {
     const capacidades = ['renombrar', 'compartir', 'desplazar', 'suprimir', 'reservar', 'atributos', 'descargar',
-                         'subcarpeta', 'nueva_version'];
+                         'subcarpeta', 'nueva_version', 'copiar_estructura'];
     const r = {};
 
     for (const cap of capacidades) {

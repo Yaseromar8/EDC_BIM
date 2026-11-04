@@ -154,6 +154,14 @@ await test('añadir subcarpeta: solo sobre UNA carpeta y con `edit`', () => {
     assert.equal(sobreDoc.mostrar, 'oculta', 'una subcarpeta dentro de un documento no significa nada');
 });
 
+await test('copiar la estructura: solo sobre UNA carpeta, y basta con verla (los destinos los mira el servidor)', () => {
+    assert.equal(capacidadesDeSeleccion({ elementos: [carpeta({ permission_level: 'viewer' })] }).copiar_estructura.disponible, true);
+    assert.equal(capacidadesDeSeleccion({ elementos: [doc()] }).copiar_estructura.mostrar, 'oculta');
+    const dos = capacidadesDeSeleccion({ elementos: [carpeta({ id: 'a' }), carpeta({ id: 'b' })] }).copiar_estructura;
+    assert.equal(dos.disponible, false);
+    assert.equal(capacidadesDeSeleccion({ elementos: [carpeta({ permission_level: 'none' })] }).copiar_estructura.disponible, false);
+});
+
 await test('subir nueva version: solo sobre UN documento y con `edit`', () => {
     assert.equal(capacidadesDeSeleccion({ elementos: [doc({ permission_level: 'edit' })] }).nueva_version.disponible, true);
     assert.equal(capacidadesDeSeleccion({ elementos: [doc({ permission_level: 'view_markup' })] }).nueva_version.disponible, false);
@@ -174,13 +182,16 @@ await test('en la papelera el repertorio documental no aplica', () => {
 
 await test('los niveles exigidos son los que se trazaron contra el backend', () => {
     assert.deepEqual(EXIGE, { renombrar: 'edit', compartir: 'edit', desplazar: 'edit', reservar: 'edit',
-                              subcarpeta: 'edit', nueva_version: 'edit', suprimir: 'edit' });
+                              subcarpeta: 'edit', nueva_version: 'edit', suprimir: 'edit',
+                              copiar_estructura: 'viewer' });
     assert.equal(NIVELES.admin > NIVELES.edit, true);
     // Y el servidor pide lo mismo para suprimir, en lote y restaurar.
     const servidor = readFileSync(join(aqui, '..', '..', 'backend', 'routes', 'documents.py'), 'utf8');
     assert.match(servidor, /'edit', 'suprimir archivos'/, 'suprimir de uno en uno');
     assert.match(servidor, /'edit',\s+'suprimir documentos'/, 'suprimir en lote');
     assert.match(servidor, /'edit', 'restaurar elementos'/, 'restaurar');
+    assert.match(servidor, /'viewer', 'copiar la estructura de esta carpeta'/, 'copiar estructura: la modelo');
+    assert.match(servidor, /'edit', 'crear carpetas en ese destino'/, 'copiar estructura: cada destino');
 });
 
 await test('llamarla sin argumentos no revienta', () => {

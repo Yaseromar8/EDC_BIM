@@ -104,8 +104,15 @@ Detalle en `docs/archivos/18`, `19`, `20` y `21`.
 - Commit siguiente (4-nov, doc 25 §5.4): el dueño decide que quien entregó una ronda no la acepta ni la devuelve
   (separación de funciones). Solo backend, sin migración. Ensayo de fase 1 33/33 (F11), nubes 51/51, carpeta 12/12,
   suite verde salvo el fallo previo ajeno.
-- EXACT NEXT ACTION (nubes): push de este commit (lo autoriza el dueño); luego 47 como ecd_migrator → backend → 47 →
-  portal. Pendiente del dueño: dónde viven los adjuntos de las incidencias (hoy carpetas visibles INCIDENCIAS/<código>/ y
+- Commit siguiente (4-nov, docs/archivos/26): COPIAR LA ESTRUCTURA DE UNA CARPETA (pedido del dueño). Las subcarpetas
+  de una carpeta modelo, vacías, en una o varias carpetas destino.
+  - Lo que ya existe se usa; solo se copia lo que se ve; las nuevas heredan los permisos del destino.
+  - Exige «Ver» en la modelo y «Editar» en cada destino, y pasa las reglas de crear carpeta. Todo o nada.
+  - Ruta nueva `POST /api/docs/carpetas/copiar-estructura` (techo del perfil portal 315 → 316). Sin migración.
+  - Toca backend y portal.
+  - Pruebas: suite 2623; ensayo contra PostgreSQL 9/9; `npm test` 35 en verde; diálogo probado en el navegador.
+- EXACT NEXT ACTION (nubes y carpetas): push de `nubes-separacion` y del commit de copiar estructura (lo autoriza el
+  dueño); luego 47 como ecd_migrator → backend → 47 → portal. Pendiente del dueño: dónde viven los adjuntos de las incidencias (hoy carpetas visibles INCIDENCIAS/<código>/ y
   MULTIMEDIA/; propuesta: ocultas, con el acceso de la propia incidencia).
 - EXACT NEXT ACTION (histórica, ya hecha para c3144a3d): Manual Deploy de `visor-ecd-backend-va` y DESPUÉS de `visor-ecd-portal` con el HEAD de main;
   comprobar `/api/health` y el bundle del portal (Cloudflare ~5 min). Luego, recorrido real con dos personas (correo

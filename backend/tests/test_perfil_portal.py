@@ -228,7 +228,10 @@ def test_el_recorte_es_real(rutas_portal):
     # 314 -> 315 (3-nov-2026): `GET/POST /api/issues/<id>/nubes`. Las nubes de una incidencia: a quién se asigna
     # cada una, sus rondas de entrega y devolución y si quedó levantada (migración 46, docs/archivos/23 y 24). Una
     # sola ruta para leer y para todos los actos, con la misma guardia de recurso que la incidencia.
-    TECHO = 315
+    # 315 -> 316 (4-nov-2026): `POST /api/docs/carpetas/copiar-estructura`. Copiar las subcarpetas de una carpeta,
+    # vacías, a otras (el dueño: «tengo 10 carpetas que tendrán las mismas subcarpetas»). Producto documental de
+    # Archivos, con guardia de obra, «Ver» en la modelo y «Editar» en cada destino, y las reglas de crear carpeta.
+    TECHO = 316
     sin_puente = [r for r in rutas_portal
                   if r not in puente_acc and r not in revision_cad]
     assert len(sin_puente) < TECHO, (
