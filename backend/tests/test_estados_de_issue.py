@@ -449,3 +449,39 @@ def test_nadie_ajeno_adjunta(app, monkeypatch, quien):
     monkeypatch.setattr(rutas, 'es_admin_de_obra', lambda cur, u, obra: False)
     _conectar(monkeypatch, [fila('Abierto')])
     assert app.test_client().post('/api/issues/55/adjuntar', json={'documento': 'x'}).status_code == 403
+
+
+# ── Quitar un adjunto (5-nov-2026) ─────────────────────────────────────────
+# El dueño: «probé cargar una imagen y tampoco me permite deshacerla; debe quedar en el historial quién eliminó».
+# Los adjuntos que se subían AL LEVANTAR la incidencia solo guardaban `por` (el correo), sin `por_id`, y la pantalla
+# exigía `por_id`: nadie podía quitarlos. Ahora la regla es una sola, la del servidor, y la pantalla la recibe.
+
+def test_un_adjunto_del_alta_lo_quita_quien_lo_subio_y_queda_en_el_historial(app, monkeypatch, quien):
+    quien.update(id=ANA, name='Ana', email='ana@obra.pe')
+    monkeypatch.setattr(rutas, 'es_admin_de_obra', lambda cur, u, obra: False)
+    doc = '44444444-4444-4444-8444-444444444444'
+    del_alta = [{'documento': doc, 'nombre': 'foto-alta.jpg', 'por': 'ana@obra.pe'}]       # sin por_id
+    cur, _ = _conectar(monkeypatch, [fila('Abierto', adjuntos=del_alta), fila('Abierto')])
+    r = app.test_client().post('/api/issues/55/adjuntar', json={'quitar': doc})
+    assert r.status_code == 200, r.get_json()
+    escrito = json.loads(next(q for q in cur.queries if q[0].startswith('UPDATE doc_issues SET adjuntos'))[1][0])
+    assert escrito == []
+    evento = json.loads(next(q for q in cur.queries if 'SET history' in q[0])[1][0])[0]
+    assert evento['event'] == 'detached' and evento['nombre'] == 'foto-alta.jpg' and evento['by'] == 'ana@obra.pe'
+
+
+def test_la_pantalla_recibe_que_adjuntos_puede_quitar_quien_mira(app, monkeypatch, quien):
+    suyo = {'documento': 'a', 'nombre': 'a.jpg', 'por': 'luis@obra.pe', 'por_id': LUIS}
+    de_otro = {'documento': 'b', 'nombre': 'b.jpg', 'por': 'ana@obra.pe', 'por_id': ANA}
+    del_alta = {'documento': 'c', 'nombre': 'c.jpg', 'por': 'luis@obra.pe'}
+    _conectar(monkeypatch, [fila('Abierto', adjuntos=[suyo, de_otro, del_alta])])
+    assert app.test_client().get('/api/issues/55').get_json()['adjuntos_que_puedo_quitar'] == ['a', 'c']
+    # Cerrada, ninguno: sus adjuntos ya no cambian.
+    _conectar(monkeypatch, [fila('Verificado', adjuntos=[suyo, del_alta])])
+    assert app.test_client().get('/api/issues/55').get_json()['adjuntos_que_puedo_quitar'] == []
+    # Y lo que se guarda no lleva esa lista: es de quien mira, no de la incidencia.
+    cur, _ = _conectar(monkeypatch, [fila('Abierto', adjuntos=[suyo, de_otro]), fila('Abierto')])
+    monkeypatch.setattr(rutas, 'es_admin_de_obra', lambda cur, u, obra: False)
+    assert app.test_client().post('/api/issues/55/adjuntar', json={'quitar': 'a'}).status_code == 200
+    escrito = json.loads(next(q for q in cur.queries if q[0].startswith('UPDATE doc_issues SET adjuntos'))[1][0])
+    assert escrito == [de_otro]

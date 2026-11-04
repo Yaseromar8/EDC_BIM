@@ -111,7 +111,28 @@ def _leer(cur, iid, bloquear=False):
     r = cur.fetchone()
     d = _fila(r) if r else None
     # Un borrador descartado ya no existe para nadie: ni se lee ni admite actos.
-    return None if d and iss.es_descartada(d.get('history')) else d
+    if not d or iss.es_descartada(d.get('history')):
+        return None
+    # Qué adjuntos puede quitar QUIEN MIRA, con la misma regla que la ruta que los quita: la pantalla no la repite.
+    try:
+        d['adjuntos_que_puedo_quitar'] = [a['documento'] for a in (d.get('adjuntos') or [])
+                                          if isinstance(a, dict) and a.get('documento')
+                                          and _puede_quitar_adjunto(a, d)]
+    except Exception:
+        d['adjuntos_que_puedo_quitar'] = []      # sin sesión (fuera de una petición): ninguno
+    return d
+
+
+def _puede_quitar_adjunto(adjunto, issue):
+    """Quita una foto o un documento quien lo añadió, mientras la incidencia no esté cerrada; y queda en el
+    historial quién y cuándo («detached»). Por su id (`por_id`); los que se añadieron AL LEVANTARLA antes del
+    5-nov-2026 solo guardaban `por` (el correo o el nombre), y por eso nadie podía quitarlos: valen igual."""
+    if iss.esta_cerrado(issue.get('estado')):
+        return False
+    yo = _usuario().get('id')
+    if adjunto.get('por_id') is not None:
+        return yo is not None and str(adjunto['por_id']) == str(yo)
+    return bool(adjunto.get('por')) and adjunto.get('por') == _actor()
 
 
 def _historial(cur, iid, history, evento, **datos):
@@ -255,7 +276,9 @@ def datos_de_la_45(cur, obra, tipo, data, responsable, verificador, borrador=Fal
         if nombres is None or len(nombres) != len(set(map(str, ids))):
             return None, (jsonify({'error': 'Algún adjunto no es un documento de esta obra.',
                                    'code': 'ADJUNTO_AJENO'}), 400)
-        adjuntos = [{'documento': i, 'nombre': nombres[i], 'por': _actor()} for i in dict.fromkeys(map(str, ids))]
+        # Con `por_id`, como al añadirlo después: sin él, quien lo subió al levantarla no podía quitarlo (5-nov-2026).
+        adjuntos = [{'documento': i, 'nombre': nombres[i], 'por': _actor(), 'por_id': _usuario().get('id')}
+                    for i in dict.fromkeys(map(str, ids))]
     config = config if config is not None else iss.config_de_obra(cur, obra)
     subtipo = (str(data.get('subtipo') or '').strip()[:80]) or None
     lista = (config.get('subtipos') or {}).get(tipo) or []
@@ -1097,7 +1120,7 @@ def adjuntar(iid):
             antes = next((a for a in adjuntos if a.get('documento') == quitar), None)
             if not antes:
                 return jsonify({'error': 'Ese adjunto no está.'}), 404
-            if antes.get('por') != _actor():
+            if not _puede_quitar_adjunto(antes, d):
                 return jsonify({'error': 'Solo lo quita quien lo añadió.', 'code': 'NO_AUTOR'}), 403
             adjuntos = [a for a in adjuntos if a.get('documento') != quitar]
             evento = ('detached', {'documento': quitar, 'nombre': antes.get('nombre')})

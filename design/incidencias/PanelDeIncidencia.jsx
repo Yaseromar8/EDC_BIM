@@ -767,7 +767,7 @@ function Detalle({ entorno, obra, ob, issueId, extraDetalle, nube = null, vez = 
         <ul className="pinc-minis">
           {(i.adjuntos || []).map(a => (
             <Miniatura key={a.documento} entorno={entorno} adjunto={a} onAbrir={() => entorno.abrirDocumento?.(a.documento)}
-              onQuitar={!cerrada && a.por_id != null && String(a.por_id) === String(yo)
+              onQuitar={(i.adjuntos_que_puedo_quitar || []).includes(a.documento)
                 ? () => hacer('adjuntar', { quitar: a.documento }, 'Adjunto quitado') : null} />
           ))}
           {interviene && !cerrada && (
