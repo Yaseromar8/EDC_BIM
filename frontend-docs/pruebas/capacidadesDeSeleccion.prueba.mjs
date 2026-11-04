@@ -154,12 +154,16 @@ await test('añadir subcarpeta: solo sobre UNA carpeta y con `edit`', () => {
     assert.equal(sobreDoc.mostrar, 'oculta', 'una subcarpeta dentro de un documento no significa nada');
 });
 
-await test('copiar la estructura: solo sobre UNA carpeta, y basta con verla (los destinos los mira el servidor)', () => {
+await test('copiar la estructura: sobre una o VARIAS carpetas, y basta con verlas (los destinos los mira el servidor)', () => {
     assert.equal(capacidadesDeSeleccion({ elementos: [carpeta({ permission_level: 'viewer' })] }).copiar_estructura.disponible, true);
     assert.equal(capacidadesDeSeleccion({ elementos: [doc()] }).copiar_estructura.mostrar, 'oculta');
+    // 5-nov-2026: el dueño marca las subcarpetas que quiere repetir y las copia.
     const dos = capacidadesDeSeleccion({ elementos: [carpeta({ id: 'a' }), carpeta({ id: 'b' })] }).copiar_estructura;
-    assert.equal(dos.disponible, false);
+    assert.equal(dos.disponible, true);
+    assert.equal(capacidadesDeSeleccion({ elementos: [carpeta({ id: 'a' }), doc({ id: 'b' })] }).copiar_estructura.mostrar, 'oculta');
     assert.equal(capacidadesDeSeleccion({ elementos: [carpeta({ permission_level: 'none' })] }).copiar_estructura.disponible, false);
+    assert.equal(capacidadesDeSeleccion({ elementos: [carpeta({ id: 'a' }), carpeta({ id: 'b', permission_level: 'none' })] })
+        .copiar_estructura.disponible, false);
 });
 
 await test('subir nueva version: solo sobre UN documento y con `edit`', () => {

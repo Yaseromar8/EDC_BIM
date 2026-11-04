@@ -1,10 +1,12 @@
 # -*- coding: utf-8 -*-
-"""COPIAR LA ESTRUCTURA DE CARPETAS: las subcarpetas de una carpeta modelo, VACÍAS, en una o varias carpetas destino
-(4-nov-2026, el dueño: «tengo 10 carpetas que tendrán las mismas subcarpetas. Quisiera poder copiar esas subcarpetas,
-obviamente vacías, solo carpetas»).
+"""COPIAR LA ESTRUCTURA DE CARPETAS: las carpetas elegidas, VACÍAS, en una o varias carpetas destino (4-nov-2026, el
+dueño: «tengo 10 carpetas que tendrán las mismas subcarpetas. Quisiera poder copiar esas subcarpetas, obviamente
+vacías, solo carpetas»).
 
 Qué hace y por qué así:
-  · Se copian las SUBCARPETAS de la carpeta modelo (no ella misma), con sus nombres y su anidación. Ningún documento.
+  · Se copian las CARPETAS QUE SE MARCAN (una o varias), cada una con sus subcarpetas, sus nombres y su anidación.
+    Ningún documento. Es como lo usa el dueño: marca las subcarpetas que quiere repetir y las copia (5-nov-2026: la
+    primera forma copiaba solo el interior de UNA carpeta y le negaba la copia con varias marcadas).
   · Se copia lo que quien copia VE: una subcarpeta que no puede ver (ni lo de dentro) no se copia, ni se anuncia.
   · Si en el destino ya hay una subcarpeta con ese nombre, se USA (y se sigue dentro): copiar dos veces no duplica, y se
     puede completar una estructura a medias.
@@ -71,12 +73,32 @@ def es_de_su_arbol(cur, raiz_id, nodo_id):
     return cur.fetchone() is not None
 
 
-def copiar(cur, model_urn, origen_id, destinos, creado_por, puede_ver, puede_crear_en, validar):
-    """Copia la estructura. Devuelve {'creadas', 'ya_estaban', 'por_destino': {destino: creadas}}.
+# La clave del destino en el plan: las carpetas de primer nivel cuelgan de ella.
+_DESTINO = ''
 
-    `puede_ver(id)`: si quien copia ve esa carpeta modelo. `puede_crear_en(id)`: si puede crear carpetas en esa del
-    destino. `validar(nombre, padre)`: None o (codigo, texto) con las reglas de la obra. Lanza `Negativa`."""
-    plan = visibles(subcarpetas(cur, model_urn, origen_id), origen_id, puede_ver)
+
+def plan_de(cur, model_urn, raices, puede_ver, con_las_raices=True):
+    """Lo que se copia en cada destino, de arriba abajo: [(id, padre, nombre)], con padre `_DESTINO` en el primer nivel.
+
+    `con_las_raices`: las carpetas elegidas van ELLAS MISMAS, cada una con sus subcarpetas (lo que el dueño marca y
+    copia). Sin ellas, solo sus subcarpetas (la forma del 4-nov, que sigue sirviendo al portal anterior)."""
+    plan = []
+    for raiz in raices:
+        debajo = visibles(subcarpetas(cur, model_urn, raiz), raiz, puede_ver)
+        if con_las_raices:
+            plan.append((str(raiz), _DESTINO, _nombre(cur, raiz)))
+            plan.extend(debajo)
+        else:
+            plan.extend((fid, _DESTINO if padre == str(raiz) else padre, nombre) for fid, padre, nombre in debajo)
+    return plan
+
+
+def copiar(cur, model_urn, raices, destinos, creado_por, puede_ver, puede_crear_en, validar, con_las_raices=True):
+    """Copia la estructura de `raices` en cada destino. Devuelve {'creadas', 'ya_estaban', 'por_destino', 'modelo'}.
+
+    `puede_ver(id)`: si quien copia ve esa carpeta. `puede_crear_en(id)`: si puede crear carpetas en esa del destino.
+    `validar(nombre, padre)`: None o (codigo, texto) con las reglas de la obra. Lanza `Negativa`."""
+    plan = plan_de(cur, model_urn, raices, puede_ver, con_las_raices)
     if not plan:
         raise Negativa('SIN_SUBCARPETAS', 'Esa carpeta no tiene subcarpetas que copiar.')
     if len(plan) * len(destinos) > TOPE_CARPETAS:
@@ -85,7 +107,7 @@ def copiar(cur, model_urn, origen_id, destinos, creado_por, puede_ver, puede_cre
     creadas = ya = 0
     por_destino = {}
     for destino in destinos:
-        mapa = {str(origen_id): str(destino)}
+        mapa = {_DESTINO: str(destino)}
         nuevas = set()            # creadas ahora: heredan el permiso de su padre, ya comprobado
         antes = creadas
         for fid, padre, nombre in plan:

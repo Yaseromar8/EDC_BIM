@@ -264,7 +264,13 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
       });
       if (r.status === 404) throw new Error('endpoint-404');
       const d = await r.json();
-      if (d.success) { setMarkups(prev => prev.map(m => m.id === local.id ? { ...m, id: d.id, _unsaved: false } : m)); return d.id; }
+      // `puede_unirse_a`: a qué incidencias puede ir una nube recién dibujada (la regla es del servidor).
+      if (d.success) {
+        setMarkups(prev => prev.map(m => m.id === local.id
+          ? { ...m, id: d.id, _unsaved: false, ...(d.puede_unirse_a?.length ? { puede_unirse_a: d.puede_unirse_a } : {}) }
+          : m));
+        return d.id;
+      }
       throw new Error(d.error || 'fallo');
     } catch (e) {
       // No borramos la anotación: el usuario no pierde su trabajo en la sesión.

@@ -344,7 +344,7 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
   const [grupoActivoId, setGrupoActivoId] = React.useState(null);
   const grupoActivo = grupoActivoId ? (grupos.grupos.find(g => g.id === grupoActivoId) || null) : null;
   const [paraAgrupar, setParaAgrupar] = React.useState(null);
-  // COPIAR LA ESTRUCTURA de una carpeta (4-nov-2026): la carpeta modelo, mientras se eligen los destinos.
+  // COPIAR LA ESTRUCTURA (4-nov-2026): las carpetas marcadas (una o varias), mientras se eligen los destinos.
   const [copiandoEstructura, setCopiandoEstructura] = React.useState(null);
   // ‹ › del lector recorren el grupo cuando el documento se abrió desde él.
   const [juegoDelGrupo, setJuegoDelGrupo] = React.useState(null);
@@ -1681,7 +1681,7 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
         user={user} onRefresh={() => fe.triggerRefresh(fe.currentPath)}
         onClose={() => { fe.setActiveRowMenu(null); fe.setRightClickedId(null); }}
         onCreateChild={(id) => fe.setCreatingChildParentId(id)}
-        onCopiarEstructura={!fe.isTrashMode ? (item) => setCopiandoEstructura(item) : undefined}
+        onCopiarEstructura={!fe.isTrashMode ? (carpetas) => setCopiandoEstructura(carpetas) : undefined}
         onOpenPermissions={(item) => fe.setPermissionsFolder(item)}
         onOpenAccBridge={(item) => setAccBridgeFolder(item)}
         onRename={(data) => fe.setEditingNodeId(data)}
@@ -1753,7 +1753,7 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
 
       <MoveModal moveState={fe.moveState} setMoveState={fe.setMoveState} projectPrefix={projectPrefix} projectRootId={fe.projectRootId} onExecuteMove={fe.handleExecuteMove} />
       {copiandoEstructura && (
-        <CopiarEstructuraModal carpeta={copiandoEstructura} projectPrefix={projectPrefix} projectRootId={fe.projectRootId}
+        <CopiarEstructuraModal carpetas={copiandoEstructura} projectPrefix={projectPrefix} projectRootId={fe.projectRootId}
           onCerrar={() => setCopiandoEstructura(null)}
           onHecho={() => { setCopiandoEstructura(null); fe.triggerRefresh(fe.currentPath); }} />
       )}

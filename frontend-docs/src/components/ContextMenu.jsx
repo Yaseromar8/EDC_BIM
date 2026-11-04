@@ -120,11 +120,11 @@ export default function ContextMenu({
           Añadir subcarpeta
         </button>
       )}
-      {/* COPIAR LA ESTRUCTURA (4-nov-2026): sus subcarpetas, vacías, en otras carpetas. */}
+      {/* COPIAR LA ESTRUCTURA (4-nov-2026): las carpetas marcadas (5-nov: una o varias), vacías, en otras carpetas. */}
       {item.type === 'folder' && onCopiarEstructura && visible('copiar_estructura') && (
-        <button {...props('copiar_estructura')} onClick={() => { if (!cap('copiar_estructura').disponible) return; onClose(); onCopiarEstructura(item); }}>
+        <button {...props('copiar_estructura')} onClick={() => { if (!cap('copiar_estructura').disponible) return; onClose(); onCopiarEstructura(objetivo.length ? objetivo : [item]); }}>
           <div className="menu-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round"><path d="M8 7h4l1.5 2H20v9H8z"></path><path d="M5 10v10h12"></path></svg></div>
-          Copiar estructura
+          Copiar estructura{sufijo}
         </button>
       )}
       {item.type === 'folder' && isAdmin && (

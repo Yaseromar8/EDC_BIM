@@ -1695,11 +1695,12 @@ _ES_UUID = re.compile(r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F
 
 @documents_bp.route('/api/docs/carpetas/copiar-estructura', methods=['POST'])
 def copiar_estructura_de_carpetas():
-    """COPIAR LA ESTRUCTURA (4-nov-2026): las subcarpetas de `origen`, vacías, dentro de cada carpeta de `destinos`.
+    """COPIAR LA ESTRUCTURA (4-nov-2026): las carpetas elegidas, vacías y con sus subcarpetas, dentro de cada destino.
 
-    Cuerpo: {model_urn, origen, destinos: [ids]}. Exige ver la carpeta modelo y «Editar» en cada destino (y en cada
-    subcarpeta del destino donde haya que crear); cada carpeta nueva pasa las reglas de crear una a mano. Todo o nada.
-    Las reglas y el porqué, en `estructura_de_carpetas.py`."""
+    Cuerpo: {model_urn, carpetas: [ids], destinos: [ids]}. Con `origen` en vez de `carpetas` (el portal del 4-nov), solo
+    las subcarpetas de esa. Exige ver cada carpeta elegida y «Editar» en cada destino (y en cada subcarpeta del destino
+    donde haya que crear); cada carpeta nueva pasa las reglas de crear una a mano. Todo o nada. Las reglas y el porqué,
+    en `estructura_de_carpetas.py`."""
     import estructura_de_carpetas as est
     from flask import g
     from db import get_db_connection, log_activity
@@ -1709,20 +1710,27 @@ def copiar_estructura_de_carpetas():
 
     data = request.get_json(silent=True) or {}
     model_urn = str(data.get('model_urn') or '').strip()
-    origen = str(data.get('origen') or '').strip()
-    destinos = list(dict.fromkeys(str(x).strip() for x in (data.get('destinos') or []) if str(x or '').strip()))
+    def ids(clave):
+        valor = data.get(clave) or []
+        return list(dict.fromkeys(str(x).strip() for x in (valor if isinstance(valor, list) else [valor])
+                                  if str(x or '').strip()))
+    con_las_raices = 'carpetas' in data
+    raices = ids('carpetas') if con_las_raices else ids('origen')
+    destinos = ids('destinos')
     user = getattr(g, 'current_user', None)
     if not model_urn or not verify_project_access(user, model_urn):
         return jsonify({"success": False, "error": "No tienes acceso a este proyecto."}), 403
-    if not origen or not destinos:
-        return jsonify({"success": False, "error": "Elige la carpeta modelo y al menos un destino."}), 400
-    if not all(_ES_UUID.match(x) for x in [origen] + destinos):
+    if not raices or not destinos or (not con_las_raices and len(raices) != 1):
+        return jsonify({"success": False, "error": "Elige las carpetas que copiar y al menos un destino."}), 400
+    if not all(_ES_UUID.match(x) for x in raices + destinos):
         return jsonify({"success": False, "error": "Carpeta no válida."}), 400
-    if len(destinos) > est.TOPE_DESTINOS:
-        return jsonify({"success": False, "error": "Como mucho %d destinos a la vez." % est.TOPE_DESTINOS}), 400
-    rbac = check_folder_permission(user, origen, model_urn, 'viewer', 'copiar la estructura de esta carpeta')
-    if rbac:
-        return rbac
+    if len(destinos) > est.TOPE_DESTINOS or len(raices) > est.TOPE_DESTINOS:
+        return jsonify({"success": False, "error": "Como mucho %d carpetas y %d destinos a la vez."
+                        % (est.TOPE_DESTINOS, est.TOPE_DESTINOS)}), 400
+    for r in raices:
+        rbac = check_folder_permission(user, r, model_urn, 'viewer', 'copiar la estructura de esta carpeta')
+        if rbac:
+            return rbac
     for d in destinos:
         rbac = check_folder_permission(user, d, model_urn, 'edit', 'crear carpetas en ese destino')
         if rbac:
@@ -1735,15 +1743,18 @@ def copiar_estructura_de_carpetas():
             # Todas, carpetas vivas de ESTA obra.
             cur.execute("""SELECT id::text, name FROM file_nodes
                             WHERE id = ANY(%s::uuid[]) AND model_urn = %s AND node_type = 'FOLDER' AND is_deleted = FALSE""",
-                        ([origen] + destinos, model_urn))
+                        (raices + destinos, model_urn))
             nombres = dict(cur.fetchall())
-            if origen not in nombres or any(d not in nombres for d in destinos):
+            if any(x not in nombres for x in raices + destinos):
                 return jsonify({"success": False, "error": "Alguna carpeta no existe en esta obra."}), 404
             for d in destinos:
-                if est.es_de_su_arbol(cur, origen, d):
-                    return jsonify({"success": False, "error": "No se copia una estructura dentro de sí misma: «%s» "
-                                    "es la carpeta modelo o está dentro de ella." % nombres[d],
-                                    "code": "DENTRO_DE_SI"}), 400
+                for r in raices:
+                    if est.es_de_su_arbol(cur, r, d):
+                        return jsonify({"success": False, "error": "No se copia una carpeta dentro de sí misma: «%s» "
+                                        "es «%s» o está dentro de ella." % (nombres[d], nombres[r]),
+                                        "code": "DENTRO_DE_SI"}), 400
+            # Una elegida que ya va dentro de otra elegida se copiaría dos veces: va con la de arriba.
+            raices = [r for r in raices if not any(o != r and est.es_de_su_arbol(cur, o, r) for o in raices)]
             ajustes = _get_project_settings(cur, model_urn)
             cuota = validate_storage_quota(cur, model_urn, ajustes)
             if not cuota['valid']:
@@ -1759,17 +1770,18 @@ def copiar_estructura_de_carpetas():
                 return None
 
             try:
-                hecho = est.copiar(cur, model_urn, origen, destinos, performed_by,
+                hecho = est.copiar(cur, model_urn, raices, destinos, performed_by,
                                    puede_ver=lambda n: nivel(n) >= PERMISSION_LEVELS['viewer'],
                                    puede_crear_en=lambda n: nivel(n) >= PERMISSION_LEVELS['edit'],
-                                   validar=validar)
+                                   validar=validar, con_las_raices=con_las_raices)
             except est.Negativa as e:
                 conn.rollback()
                 return jsonify({"success": False, "error": e.texto, "code": e.codigo}), e.http
             conn.commit()
-        log_activity(model_urn, 'copy_folder_structure', 'folder', entity_id=origen, entity_name=nombres[origen],
-                     performed_by=performed_by,
-                     details={'destinos': destinos, 'creadas': hecho['creadas'], 'ya_estaban': hecho['ya_estaban']})
+        log_activity(model_urn, 'copy_folder_structure', 'folder', entity_id=raices[0],
+                     entity_name=', '.join(nombres[r] for r in raices), performed_by=performed_by,
+                     details={'carpetas': raices, 'con_las_carpetas': con_las_raices, 'destinos': destinos,
+                              'creadas': hecho['creadas'], 'ya_estaban': hecho['ya_estaban']})
         return jsonify({"success": True, **hecho}), 200
     except Exception as e:
         print(f"[COPIAR ESTRUCTURA] {e}")

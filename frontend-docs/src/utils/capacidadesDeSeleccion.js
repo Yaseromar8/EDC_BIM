@@ -47,14 +47,13 @@ export const EXIGE = {
     // «Administrar». Una carpeta con subcarpetas donde no se llega a «Editar» la niega
     // el servidor, que es quien conoce el subárbol: aquí no se adivina.
     suprimir:  'edit',
-    // Copiar la estructura LEE la carpeta modelo; donde se escribe es en los destinos, que se eligen después y los
-    // comprueba el servidor (`POST /api/docs/carpetas/copiar-estructura`, 4-nov-2026).
+    // Copiar la estructura LEE las carpetas marcadas (una o varias, 5-nov-2026); donde se escribe es en los destinos,
+    // que se eligen después y los comprueba el servidor (`POST /api/docs/carpetas/copiar-estructura`).
     copiar_estructura: 'viewer',
 };
 
 /** Capacidades que sólo tienen sentido sobre UN elemento. */
-const SOLO_UNO = new Set(['renombrar', 'compartir', 'reservar', 'atributos', 'subcarpeta', 'nueva_version',
-                          'copiar_estructura']);
+const SOLO_UNO = new Set(['renombrar', 'compartir', 'reservar', 'atributos', 'subcarpeta', 'nueva_version']);
 /** Capacidades que sólo tienen sentido sobre un DOCUMENTO. */
 const SOLO_ARCHIVO = new Set(['reservar', 'atributos', 'nueva_version']);
 /** Capacidades que sólo tienen sentido sobre una CARPETA. */

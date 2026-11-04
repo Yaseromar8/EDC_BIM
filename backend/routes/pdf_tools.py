@@ -251,7 +251,16 @@ def create_markup():
                          d.get('text'), _user().get('name') or d.get('user'), version))
             new_id = cur.fetchone()[0]
             conn.commit()
-        return jsonify({"success": True, "id": new_id})
+            # Una NUBE recién dibujada ya lleva a qué incidencias puede ir (5-nov-2026: sin esto no ofrecía «Añadir a
+            # la incidencia» ni «Asignar» hasta recargar la hoja). La misma regla que al listar las marcas. La marca
+            # ya está guardada: si esto falla, se dice que se guardó y la lista lo trae al recargar.
+            nueva = {'id': new_id, 'kind': d['kind'], 'created_by': _user().get('name') or d.get('user')}
+            if d['kind'] == 'cloud':
+                try:
+                    _con_incidencias_para_la_nube_suelta(cur, [nueva], d['node_id'])
+                except Exception:
+                    traceback.print_exc()
+        return jsonify({"success": True, "id": new_id, "puede_unirse_a": nueva.get('puede_unirse_a') or []})
     except Exception as e:
         traceback.print_exc()
         return jsonify({"success": False, "error": str(e)}), 500

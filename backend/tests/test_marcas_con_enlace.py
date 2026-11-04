@@ -62,6 +62,11 @@ class Connection:
         self.committed = False
 
 
+def _insercion(cur):
+    """Los parámetros del INSERT de la marca (tras él, una nube consulta a qué incidencias puede ir)."""
+    return next(p for sql, p in cur.queries if 'INSERT INTO pdf_markups' in sql)
+
+
 def _conectar(monkeypatch, rows):
     cur = Cursor(rows)
     conn = Connection(cur)
@@ -239,14 +244,14 @@ def test_crear_en_una_version_ajena_al_documento_cae_en_la_vigente(app, monkeypa
     cur, _ = _conectar(monkeypatch, [None, (VIGENTE,), (42,)])
     r = app.test_client().post('/api/pdf/markups', json={'node_id': PLANO, 'model_urn': 'obra', 'page': 1,
                                                           'kind': 'cloud', 'geometry': {}, 'version_id': AJENO})
-    assert r.status_code == 200 and cur.queries[-1][1][8] == VIGENTE
+    assert r.status_code == 200 and _insercion(cur)[8] == VIGENTE
 
 
 def test_crear_en_la_version_que_se_mira(app, monkeypatch):
     cur, _ = _conectar(monkeypatch, [(ANTERIOR,), (43,)])
     app.test_client().post('/api/pdf/markups', json={'node_id': PLANO, 'model_urn': 'obra', 'page': 1,
                                                      'kind': 'cloud', 'geometry': {}, 'version_id': ANTERIOR})
-    assert cur.queries[0][1] == (ANTERIOR, PLANO) and cur.queries[-1][1][8] == ANTERIOR
+    assert cur.queries[0][1] == (ANTERIOR, PLANO) and _insercion(cur)[8] == ANTERIOR
 
 
 def test_llevar_a_la_vigente_copia_en_borrador_y_dice_de_donde_viene(app, monkeypatch):
@@ -607,8 +612,37 @@ def test_duplicar_y_llevar_no_copian_la_conversacion(app, monkeypatch):
     cur, _ = _conectar(monkeypatch, [(VIGENTE,), (43,)])
     app.test_client().post('/api/pdf/markups', json={'node_id': PLANO, 'model_urn': 'obra', 'page': 1, 'kind': 'cloud',
                                                      'geometry': {}, 'style': {'comentarios': [{'id': 'x'}]}})
-    assert 'comentarios' not in json.loads(cur.queries[-1][1][5])
+    assert 'comentarios' not in json.loads(_insercion(cur)[5])
     fila = (PLANO, 'obra', 2, 'cloud', {}, {'color': '#d97757', 'comentarios': [{'id': 'x'}]}, None, ANTERIOR, VIGENTE, 1)
     cur, _ = _conectar(monkeypatch, [fila, (77,)])
     app.test_client().post('/api/pdf/markups/5/llevar')
     assert json.loads(cur.queries[-1][1][5]) == {'color': '#d97757'}
+
+
+# 5-NOV-2026: una nube recién dibujada ya dice a qué incidencias puede ir (antes, solo al recargar la hoja).
+def test_una_nube_nueva_trae_a_que_incidencias_puede_ir_y_otra_marca_no(app, monkeypatch):
+    vistos = []
+    def destinos(cur, rows, nodo):
+        vistos.append((rows[0]['kind'], rows[0]['created_by'], nodo))
+        rows[0]['puede_unirse_a'] = [{'id': '9', 'codigo': 'ISS-009', 'clase': 'observacion', 'asigna': True}]
+        return rows
+    monkeypatch.setattr(pdf, '_con_incidencias_para_la_nube_suelta', destinos)
+    _conectar(monkeypatch, [(VIGENTE,), (43,)])
+    r = app.test_client().post('/api/pdf/markups', json={'node_id': PLANO, 'model_urn': 'obra', 'page': 1,
+                                                         'kind': 'cloud', 'geometry': {}})
+    assert r.status_code == 200 and r.get_json()['puede_unirse_a'][0]['codigo'] == 'ISS-009'
+    assert vistos == [('cloud', 'Ana', PLANO)]
+    _conectar(monkeypatch, [(VIGENTE,), (44,)])
+    r = app.test_client().post('/api/pdf/markups', json={'node_id': PLANO, 'model_urn': 'obra', 'page': 1,
+                                                         'kind': 'arrow', 'geometry': {}})
+    assert r.get_json()['puede_unirse_a'] == [] and len(vistos) == 1
+
+
+def test_si_falla_la_consulta_de_incidencias_la_nube_se_da_por_guardada(app, monkeypatch):
+    def rota(cur, rows, nodo):
+        raise RuntimeError('caida')
+    monkeypatch.setattr(pdf, '_con_incidencias_para_la_nube_suelta', rota)
+    _conectar(monkeypatch, [(VIGENTE,), (45,)])
+    r = app.test_client().post('/api/pdf/markups', json={'node_id': PLANO, 'model_urn': 'obra', 'page': 1,
+                                                         'kind': 'cloud', 'geometry': {}})
+    assert r.status_code == 200 and r.get_json() == {'success': True, 'id': 45, 'puede_unirse_a': []}
