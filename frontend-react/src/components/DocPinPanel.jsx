@@ -4,6 +4,7 @@ import { apiFetch, getUploadAuthHeaders } from '../utils/apiFetch';
 import { Document, Page, pdfjs } from 'react-pdf';
 import PdfReader from './PdfReader';
 import { useUrlFirmada } from '../utils/permisosDeLectura';
+import { documentosParaVincular, urlParaAbrir } from '../utils/documentosDelPin';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
 
@@ -395,71 +396,27 @@ const DocPinPanel = ({
         }
     };
 
-    const handleBatchAttach = async () => {
+    // VINCULAR DOCUMENTOS DE DOCS A ESTE PIN (docs/archivos/29, F1). Cada uno se guarda por su id de Docs (`nodeId`),
+    // con su nombre, y se abre siempre por Docs: la versión vigente y el permiso de quien lo abre, no una URL
+    // guardada. El guardado es el del seguimiento de la obra (App → `/api/project-pins`). Antes se llamaba a
+    // `/api/docs/mutate-bind`, que ya no existe: fallaba y no se vinculaba nada.
+    const handleBatchAttach = () => {
         if (selectedItems.size === 0) return;
-
-        const allAvailableFiles = [...files, ...searchResults];
-        const muts = [];
-
-        selectedItems.forEach(id => {
-            const file = allAvailableFiles.find(f => f.id === id);
-            if (file && file.type !== 'FOLDER') {
-                muts.push({
-                    urn: file.id,
-                    url: `${DOCS_API}/view?id=${file.id}&model_urn=${encodeURIComponent(modelUrn)}`,
-                    type: file.name.split('.').pop().toLowerCase()
-                });
-            }
-        });
-
-        if (muts.length === 0) {
-            showNotify('No se seleccionaron archivos válidos para vincular', 'error');
+        const nuevos = documentosParaVincular([...selectedItems], [...files, ...searchResults], pin.docs);
+        if (nuevos.length === 0) {
+            showNotify(selectedItems.size ? 'Esos documentos ya estaban vinculados' : 'Elige al menos un documento', 'error');
             return;
         }
-
-        // 1. Arreglo unidimensional keys (Identificadores semánticos del modelo)
-        const keys = [pin.id]; // Si el pin agrupa varios dbIds, se enviarán todos: pin.targetIds || [pin.id]
-
-        // Payload simétrico y optimizado para la transacción REST
-        const payload = {
-            keys: keys,
-            muts: muts
-        };
-
-        try {
-            // Se despacha a la API remota que el backend Python procesará sin saturar React
-            const res = await apiFetch(`${BACKEND_URL}/api/docs/mutate-bind`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            });
-
-            if (res.ok) {
-                showNotify(`${muts.length} URLs inyectadas al elemento (Inyección Simétrica exitosa)`);
-                // Si la Vista requiere enterarse del vínculo, mandamos una actualización local mínima
-                if (onAttachBatchDocs) {
-                    onAttachBatchDocs(pin.id, muts);
-                } else if (onAttachDoc) {
-                    // Fallback local ultraligero
-                    muts.forEach(m => onAttachDoc(pin.id, { id: m.urn, name: `🔗 Link: ${m.urn.substring(0,8)}`, ...m }));
-                }
-            } else {
-                showNotify('El servidor rechazó la inyección simétrica', 'error');
-            }
-        } catch (error) {
-            console.error('[Inyección Simétrica] Error de red:', error);
-            showNotify('Fallo de red al despachar payload.', 'error');
-        }
-
+        if (onAttachBatchDocs) onAttachBatchDocs(pin.id, nuevos);
+        else if (onAttachDoc) nuevos.forEach(d => onAttachDoc(pin.id, d));
+        showNotify(nuevos.length === 1 ? 'Documento vinculado' : `${nuevos.length} documentos vinculados`);
         setSelectedItems(new Set());
         setBrowsing(false);
     };
 
     const handleOpenDoc = (doc) => {
         // Al abrir, generamos una URL fresca basada en ID si existe (robusto)
-        const freshUrl = doc.nodeId
-            ? `${DOCS_API}/view?id=${doc.nodeId}&model_urn=${encodeURIComponent(modelUrn)}`
-            : doc.url;
+        const freshUrl = urlParaAbrir(doc, DOCS_API, modelUrn);
         setViewingDoc({ ...doc, url: freshUrl });
     };
 

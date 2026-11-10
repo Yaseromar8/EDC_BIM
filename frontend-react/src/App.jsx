@@ -3864,43 +3864,11 @@ function App() {
   };
 
   // Attach a doc (PDF) to a doc pin
+  // LOS DOCUMENTOS DE UN PIN se guardan con el seguimiento de la obra (`/api/project-pins`, pin «docs»), por su id de
+  // Docs (`nodeId`), y se abren por Docs, que comprueba el permiso y sirve la versión vigente (docs/archivos/29, F1).
+  // Hasta el 10-nov-2026 aquí se llamaba antes a `/api/docs/mutate-bind`, una ruta que ya no existe: fallaba y
+  // CORTABA el guardado, y por eso vincular un documento a un elemento no hacía nada.
   const handleAttachDocToPin = async (pinId, doc, isUpdate = false, pinType = 'docs') => {
-
-    if (!isUpdate) {
-      // Encontrar el pin objetivo para extraer dbId y urn
-      const targetArray = trackingData[pinType] || [];
-      const targetPin = targetArray.find(p => p.id === pinId);
-
-      if (targetPin && targetPin.dbId) {
-        try {
-          // Disparar Payload Simétrico al Backend para persistencia real (dataType: 25)
-          const payload = {
-            urn: targetPin.modelUrn || targetPin.urn || 'global',
-            dbId: targetPin.dbId,
-            documentName: doc.name || doc.plano_titulo || 'Documento Adjunto',
-            documentUrl: doc.nodeId || doc.url,
-            dataType: 25
-          };
-
-          const API_URL = import.meta.env.VITE_BACKEND_URL || '';
-          const response = await fetch(`${API_URL}/api/docs/mutate-bind`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-          });
-
-          if (!response.ok) {
-            console.warn('[APS Bridge] Fallo la inyección del puntero en el servidor', await response.text());
-            return; // Abort local UI update if server failed (as requested)
-          }
-          console.log('[APS Bridge] Inyección dataType: 25 persistida con éxito en BIM-Talara.');
-        } catch (e) {
-          console.error('[APS Bridge] API no disponible para mutate-bind u ocurrió un error de red:', e);
-          return; // Abort
-        }
-      }
-    }
-
     setTrackingData(prev => {
       const targetArray = prev[pinType] || [];
       const updatedDocs = targetArray.map(pin => {
