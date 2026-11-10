@@ -957,7 +957,10 @@ def list_documents():
         # documentos tardara cerca de un minuto en el plan gratuito.
         import os as _os
         _es_portal = (_os.getenv('DEPLOY_PROFILE', 'completo') or '').strip().lower() == 'portal'
-        if not _es_portal and _puede_descargar(user, parent_id, model_urn):
+        # `enlaces=0`: quien solo necesita nombres (el selector de modelos del visor, docs/archivos/29) no paga
+        # una firma por fichero.
+        _quiere_enlaces = request.args.get('enlaces') != '0'
+        if not _es_portal and _quiere_enlaces and _puede_descargar(user, parent_id, model_urn):
             for f in contents['files']:
                 if f.get('gcs_urn'):
                     f['mediaLink'] = generate_signed_url(f['gcs_urn'])

@@ -266,9 +266,13 @@ def _extraction_source_context(conn, urn, target_urn, scope_hint=None, puede_ent
     de haberlo comprobado. Sin una de las dos, la regla de antes sigue intacta.
     """
     from db import resolve_project_id
-    from inventory_identity import IdentityError, source_identity
+    from inventory_identity import IdentityError, es_urn_de_docs, source_identity
 
     normalized, source_lineage = source_identity(urn)
+    # Un modelo de ALEPHIA Docs solo se compara con modelos de Docs, y uno de ACC solo con los de ACC: un linaje de
+    # un tipo no puede ser el del otro, y así un modelo de ACC nunca pregunta a la base por los de Docs
+    # (docs/archivos/29, F4).
+    pedido_de_docs = es_urn_de_docs(normalized)
     if not isinstance(target_urn, str) or not target_urn.strip() or target_urn != target_urn.strip():
         raise IdentityError('INVALID_SCOPE')
     with conn.cursor() as cursor:
@@ -276,6 +280,8 @@ def _extraction_source_context(conn, urn, target_urn, scope_hint=None, puede_ent
         config_rows = cursor.fetchall()
     related = []
     for configured_scope, configured_urn, configured_item in config_rows:
+        if es_urn_de_docs(configured_urn) != pedido_de_docs:
+            continue
         try:
             configured_normalized, configured_lineage = source_identity(configured_urn)
         except IdentityError:
@@ -323,8 +329,21 @@ def _extraction_source_context(conn, urn, target_urn, scope_hint=None, puede_ent
         raise IdentityError('ITEM_LINEAGE_CONFLICT')
     item_id = next(iter(item_ids)) if item_ids else None
     source_identity(normalized, item_id)
+    documento_de_docs = None
+    if pedido_de_docs:
+        # UN DOCUMENTO DE DOCS ES DE SU OBRA. Su inventario solo entra en un frente de esa misma obra, se haya
+        # vinculado por donde se haya vinculado: «compartir» entre obras es cosa de ACC, no de Docs.
+        documento_de_docs = source_lineage.rsplit(':', 1)[1]
+        with conn.cursor() as cursor:
+            cursor.execute("SELECT model_urn FROM file_nodes WHERE id = %s::uuid AND NOT COALESCE(is_deleted, FALSE)",
+                           (documento_de_docs,))
+            fila = cursor.fetchone()
+        if not fila:
+            raise IdentityError('UNKNOWN_DOCS_VERSION')
+        if str(resolve_project_id(fila[0]) or '') != str(project_id):
+            raise IdentityError('SOURCE_PROJECT_CONFLICT')
     return {'source_urn': normalized, 'source_lineage': source_lineage,
-            'item_id': item_id, 'project_id': project_id,
+            'item_id': item_id, 'project_id': project_id, 'documento_de_docs': documento_de_docs,
             'authorization_scopes': authorization_scopes,
             'registered_source': bool(related),
             'linked_in_scope': any(entry[0] == target_urn for entry in related),
@@ -1062,6 +1081,15 @@ def start_extraction():
                 except IdentityError:
                     return False
             context = _extraction_source_context(conn, urn, target_urn, scope_hint=scope_hint, puede_entrar=puede_entrar)
+            if context.get('documento_de_docs'):
+                # Quien lo pide tiene que poder ver el documento en Docs, como para abrirlo allí.
+                from routes.docs_cad import _cargar, _guardia_del_plano
+                nodo_de_docs = _cargar(context['documento_de_docs'])
+                if not nodo_de_docs:
+                    return jsonify({'error': 'Ese documento ya no está en Docs.', 'code': 'UNKNOWN_DOCS_VERSION'}), 404
+                negativa = _guardia_del_plano(nodo_de_docs)
+                if negativa:
+                    return negativa
             if reuse_existing_snapshot and context['linked_in_scope']:
                 return jsonify({'error': 'El modelo ya esta vinculado al frente.',
                                 'code': 'MODEL_ALREADY_LINKED'}), 409

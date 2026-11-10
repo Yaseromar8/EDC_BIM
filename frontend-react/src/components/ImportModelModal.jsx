@@ -149,6 +149,7 @@ const ImportModelModal = ({ open, onClose, onLinkDocs, onUploadLocal, onExtractC
       setModelViews([]); setSelectedViewGuid(null); setLoadingViews(false); setEligiendoVista(false);
       setLocalFile(null); setLocalUploading(false); setLocalProgress(0);
       setLocalMsg(''); setErrorMsg('');
+      setDocsAlephiaOcupado(false);
       setCivilMode(CIVIL_MODES.DATA_ONLY); setCivilProcessing(false);
       setCivilProgress(0); setCivilMsg('');
       pendingDocsRef.current = null;
@@ -534,10 +535,11 @@ const ImportModelModal = ({ open, onClose, onLinkDocs, onUploadLocal, onExtractC
         {/* TABS */}
         <div className="import-tab-bar">
           <button className={`import-tab-btn ${activeTab === 'UPLOAD' ? 'active' : ''}`}
-            onClick={() => !isProcessing && setActiveTab('UPLOAD')} disabled={isProcessing}>FILE UPLOAD</button>
+            onClick={() => !isProcessing && !docsAlephiaOcupado && setActiveTab('UPLOAD')}
+            disabled={isProcessing || docsAlephiaOcupado}>FILE UPLOAD</button>
           <button className={`import-tab-btn ${activeTab === 'DOCS' ? 'active' : ''}`}
-            onClick={() => !isProcessing && !extractionDone && !eligiendoVista && setActiveTab('DOCS')}
-            disabled={isProcessing || extractionDone || eligiendoVista}>AUTODESK DOCS</button>
+            onClick={() => !isProcessing && !extractionDone && !eligiendoVista && !docsAlephiaOcupado && setActiveTab('DOCS')}
+            disabled={isProcessing || extractionDone || eligiendoVista || docsAlephiaOcupado}>AUTODESK DOCS</button>
           {/* Reemplazar un modelo (relink) sigue siendo cosa de ACC: aquí solo se añade. */}
           {!relinkTarget && onModelosDeDocs && (
             <button className={`import-tab-btn ${activeTab === 'ALEPHIA' ? 'active' : ''}`}

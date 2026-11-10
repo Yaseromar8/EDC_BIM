@@ -43,9 +43,13 @@ def bucket_de_docs():
     return os.getenv('APS_DOCS_BUCKET') or ('ecd-docs-cad-%s' % ''.join(ch for ch in cid if ch.isalnum())[:18])
 
 
-def _documento_de_la_version(version_id):
-    """El documento de una versión de Docs, según la base. Un documento sin versiones guarda su objeto con su
-    propio id (`v_id or id`): también vale. None si no existe."""
+def _documento_de_la_version(version_id, source_urn):
+    """El documento de una versión de Docs, según la base; None si no se sabe.
+
+    Primero `file_versions` (la verdad de Docs). Un documento sin versiones guarda su objeto con su propio id
+    (`v_id or id`): también vale. Si la versión ya no está (documento purgado), vale la ficha que escribió el
+    SERVIDOR al vincularlo (`model_config`, `source = 'ALEPHIA'`, solo la escribe `add-from-docs`; las rutas de ACC
+    no aceptan URN de Docs): sin ella, un modelo de un documento purgado no se podría ni quitar del frente."""
     try:
         from backend.db import get_db_connection
     except ModuleNotFoundError as exc:
@@ -59,11 +63,38 @@ def _documento_de_la_version(version_id):
                        UNION ALL SELECT id::text FROM file_nodes WHERE id = %s::uuid AND node_type = 'FILE'
                        LIMIT 1""", (version_id, version_id))
         fila = cur.fetchone()
-    return fila[0] if fila else None
+        if fila:
+            return fila[0]
+        cur.execute("""SELECT DISTINCT item_id FROM model_config
+                       WHERE urn = %s AND source = 'ALEPHIA' AND item_id LIKE %s""",
+                    (source_urn, _DOCS_LINEAGE + '%'))
+        filas = cur.fetchall()
+    # Dos fichas con linajes distintos para el mismo objeto no se resuelven eligiendo una.
+    return filas[0][0][len(_DOCS_LINEAGE):] if len(filas) == 1 else None
 
 
-# Inyectable para las pruebas sin base: callable(version_id) -> id del documento | None.
+# Inyectable para las pruebas sin base: callable(version_id, source_urn) -> id del documento | None.
 resolver_documento_de_docs = _documento_de_la_version
+
+
+def _claro(source_urn):
+    """El URN en claro, o None. Sin excepciones: para preguntas baratas, no para validar."""
+    if not isinstance(source_urn, str) or not source_urn:
+        return None
+    if source_urn.startswith("urn:"):
+        return source_urn
+    try:
+        return base64.b64decode(source_urn + "=" * (-len(source_urn) % 4), altchars=b"-_",
+                                validate=True).decode("utf-8")
+    except (ValueError, UnicodeError):
+        return None
+
+
+def es_urn_de_docs(source_urn):
+    """¿Tiene este URN la forma de una versión de ALEPHIA Docs? Sin base de datos y sin validar nada más: sirve
+    para no preguntar a la base por modelos que no pueden ser el que se busca (un URN de ACC nunca es de Docs)."""
+    claro = _claro(source_urn)
+    return bool(claro) and bool(_DOCS_VERSION.fullmatch(claro))
 
 
 def _linaje_de_docs(clear):
@@ -76,7 +107,8 @@ def _linaje_de_docs(clear):
     version = match.group(2)
     documento = _docs_por_version.get(version)
     if documento is None:
-        documento = resolver_documento_de_docs(version)
+        normalizado = base64.urlsafe_b64encode(clear.encode("utf-8")).decode("ascii").rstrip("=")
+        documento = resolver_documento_de_docs(version, normalizado)
         if not documento or not re.fullmatch(_UUID, str(documento).lower()):
             raise IdentityError("UNKNOWN_DOCS_VERSION", version=version)
         documento = str(documento).lower()

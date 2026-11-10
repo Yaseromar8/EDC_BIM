@@ -452,6 +452,23 @@
   background: var(--alephia-interactive);
   color: var(--alephia-on-interactive, #141413);
 }
+/* Filas que son botones (pestaña ALEPHIA DOCS): se eligen con el teclado. Sin aspecto de botón, y con un selector
+   que pierde frente a :hover y .active. */
+button.import-selector-option {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+}
+button.import-selector-option:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--a-action-text, #3E6F91);   /* el anillo de foco del sistema, hacia dentro */
+}
+/* Sobre la fila elegida (ya azul) el anillo azul no se ve: va en el color de la superficie. */
+button.import-selector-option.active:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--a-surface-base, #ffffff);
+}
 
 .import-tree-container {
   /* Antes 240px fijos: en árboles profundos solo se veían 4-5 filas */

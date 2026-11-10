@@ -47,6 +47,8 @@ def banco(monkeypatch):
     monkeypatch.setattr(dt.requests, 'get', get)
     monkeypatch.setattr(dt, 'get_internal_token', lambda: ('tok', None))
     monkeypatch.setattr(dt, 'get_project_config_internal', lambda: {'models': estado['modelos']})
+    # Aquí se prueba la caché, no el perímetro: quien pregunta entra en la obra (el perímetro, abajo).
+    monkeypatch.setattr(dt, 'guardia_de_obra', lambda obra, accion='': None)
     dt._actualizaciones_cache.clear()
     dt._actualizaciones_en_curso.clear()
     app = Flask(__name__)
@@ -110,3 +112,19 @@ def test_caduca(banco, monkeypatch):
     monkeypatch.setattr(dt, '_ACTUALIZACIONES_TTL_S', 0)
     pedir()
     assert estado['llamadas'] > llamadas
+
+
+def test_solo_quien_entra_en_la_obra_pregunta_por_sus_versiones(banco, monkeypatch):
+    """Antes no tenía guardia: cualquiera con sesión sabía qué modelos de un frente ajeno tenían versión nueva."""
+    estado, _pedir = banco
+    vistas = []
+
+    def guardia(obra, accion=''):
+        vistas.append(obra)
+        from flask import jsonify
+        return jsonify({'error': 'Sin acceso a este proyecto', 'code': 'PROJECT_FORBIDDEN'}), 403
+    monkeypatch.setattr(dt, 'guardia_de_obra', guardia)
+    app = Flask(__name__)
+    with app.test_request_context('/api/config/project/check-updates', method='POST', json={'project': 'p1'}):
+        respuesta, codigo = dt.check_model_updates()
+    assert codigo == 403 and vistas == ['p1'] and estado['llamadas'] == 0     # ni se pregunta a Autodesk

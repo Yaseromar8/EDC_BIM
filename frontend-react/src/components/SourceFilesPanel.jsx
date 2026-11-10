@@ -195,6 +195,16 @@ const SourceFilesPanel = ({
                                     </button>
                                 </div>
                             )}
+                            {/* Un modelo de ALEPHIA Docs cuyo documento se borró en Docs (docs/archivos/29, F3): sigue cargado
+                                tal como estaba, pero ya no tendrá versiones nuevas. Se dice, sin botón. */}
+                            {updateInfo?.reason === 'not_in_docs' && (
+                                <div className="sfp-update-banner" role="status">
+                                    <span className="sfp-update-banner-text">
+                                        <InfoIcon />
+                                        Ya no está en ALEPHIA Docs
+                                    </span>
+                                </div>
+                            )}
 
                             <div className="sfp-item-row" onClick={() => toggleExpand(model.id)}>
                                 <button className="sfp-list-chevron">

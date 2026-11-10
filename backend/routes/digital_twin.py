@@ -398,6 +398,12 @@ def add_model_route():
     negativa = guardia_de_obra(app_project_id, 'vincular un modelo a la obra')
     if negativa:
         return negativa
+    # Un modelo de ALEPHIA Docs entra SOLO por `add-from-docs`, que comprueba obra, permiso de carpeta, formato y
+    # traducción (docs/archivos/29, F4). Por aquí entraría con un URN puesto por el navegador y sin nada de eso.
+    from inventory_identity import es_urn_de_docs
+    if es_urn_de_docs(data.get('urn')):
+        return jsonify({'error': 'Los modelos de ALEPHIA Docs se vinculan desde la pestaña «ALEPHIA DOCS».',
+                        'code': 'USA_ALEPHIA_DOCS'}), 400
     name = data.get('name')
     print(f"\n[DIAG-ADD] project={app_project_id}, name={name}, urn=...{str(data.get('urn',''))[-20:]}")
 
@@ -448,7 +454,12 @@ def add_model_route():
 
 # ── MODELOS DE ALEPHIA DOCS (docs/archivos/29, F2 y F3) ─────────────────────────────────────────────────────────────
 # Las reglas viven en `modelos_de_docs.py`; aquí, la obra, los permisos y la base. La traducción es la de Docs
-# (`/api/docs/cad/translate` y `/status`, con su guardia de plano): estas rutas solo VINCULAN lo ya preparado.
+# (`/api/docs/cad/translate` y `/status`, con su guardia de plano): el visor la pide allí, y estas rutas solo la
+# CONSULTAN a Autodesk cuando la base no la sabe aún.
+#
+# ESCRITURAS: cada ruta escribe SOLO su fila de `model_config`, dentro de una transacción. Guardar la configuración
+# entera (como hacen las rutas de ACC) resucitaba un modelo quitado entre la lectura y la escritura, y dos vínculos
+# simultáneos del mismo documento pasaban los dos la comprobación de duplicado.
 
 def _documento_de_docs(documento_id):
     """(nodo, urn de su versión vigente, número de esa versión, obra del documento) o (None, …)."""
@@ -466,6 +477,126 @@ def _documento_de_docs(documento_id):
             fila = cur.fetchone()
             numero = fila[0] if fila else None
     return nodo, urn, numero, resolve_project_id(nodo.get('model_urn'))
+
+
+def _estado_de_traduccion(nodo, urn, token=None, preparar=False):
+    """Cómo está la traducción de la versión vigente, preguntando a Autodesk si la base no lo sabe.
+
+    La base solo pasa a 'success' cuando alguien abre el plano en Docs (`/translate` o `/status`); la pretraducción
+    de la subida lo deja en 'inprogress' y no vuelve. Fiarse de la base dejaba «Actualizar» esperando para siempre.
+
+    Devuelve (estado, detalle) con estado: lista | preparando | fallida | puente | error.
+    - `preparar=True` encola la traducción SOLO si Autodesk no tiene nada y nadie la está subiendo; una que FALLÓ
+      no se relanza sola (cada intento se cobra): se dice, y se reintenta abriéndola en Docs, como hasta hoy.
+    - Una versión bajo el puente temporal ACC no se traduce desde aquí: la misma regla que `/translate`."""
+    from routes.docs_cad import _manifest, _save_cad_meta, _first_error, encolar_pretraduccion
+    meta = nodo.get('meta') or {}
+    cad = meta.get('cad') or {}
+    if cad.get('status') == 'success' and cad.get('urn') == urn:
+        return 'lista', None
+    if meta.get('acc_emergency_bridge'):
+        return 'puente', 'Esta versión usa el puente temporal ACC: no se prepara desde el visor.'
+    if token is None:
+        token, error = get_internal_token()
+        if error or not token:
+            return 'error', 'Sin credenciales de Autodesk.'
+    manifest, error = _manifest(token, urn)
+    if error:
+        return 'error', 'No se pudo consultar a Autodesk. Reintenta en unos minutos.'
+    estado = (manifest or {}).get('status')
+    if estado == 'success':
+        _save_cad_meta(nodo, {'urn': urn, 'status': 'success', 'finished_at': time.time()})
+        return 'lista', None
+    if estado in ('inprogress', 'pending'):
+        return 'preparando', (manifest or {}).get('progress')
+    if estado in ('failed', 'timeout'):
+        return 'fallida', _first_error(manifest) or ''
+    # Sin manifiesto: o se está subiendo a Autodesk, o nunca se empezó.
+    subiendo = cad.get('status') in ('subiendo', 'inprogress', 'pending') and cad.get('urn') in (None, urn) \
+        and time.time() - float(cad.get('started_at') or 0) < 2 * 3600
+    if preparar and not subiendo:
+        encolar_pretraduccion(nodo['id'], False, False)
+    return 'preparando', None
+
+
+def _con_nombre_de_vista(cur):
+    """¿Tiene `model_config` la columna de la migración 38? (Igual que `save_project_config_internal`.)"""
+    cur.execute("SELECT 1 FROM information_schema.columns WHERE table_name = 'model_config' "
+                "AND column_name = 'default_view_name'")
+    return cur.fetchone() is not None
+
+
+def _insertar_modelo_de_docs(ficha):
+    """Inserta SOLO esta ficha. Con un cerrojo por frente, la comprobación de duplicado y la escritura son una:
+    dos vínculos simultáneos del mismo documento no entran los dos. Devuelve el nombre del duplicado, o None."""
+    from db import get_db_connection
+    with get_db_connection() as conn:
+        cur = conn.cursor()
+        cur.execute('SELECT pg_advisory_xact_lock(hashtext(%s))', ('model_config:' + str(ficha['appProjectId']),))
+        cur.execute('SELECT name FROM model_config WHERE app_project_id = %s AND item_id = %s LIMIT 1',
+                    (ficha['appProjectId'], ficha['itemId']))
+        dup = cur.fetchone()
+        if dup:
+            conn.rollback()
+            return dup[0] or ficha['name']
+        columnas = ['model_id', 'name', 'urn', 'source', 'region', 'project_id', 'item_id', 'version_id',
+                    'version_number', 'last_modified_time', 'app_project_id', 'default_view_guid']
+        valores = [ficha['id'], ficha['name'], ficha['urn'], ficha['source'], ficha['region'], ficha['projectId'],
+                   ficha['itemId'], ficha['versionId'], ficha['versionNumber'], ficha['lastModifiedTime'],
+                   ficha['appProjectId'], ficha.get('defaultViewGuid')]
+        if _con_nombre_de_vista(cur):
+            columnas.append('default_view_name')
+            valores.append(ficha.get('defaultViewName'))
+        cur.execute('INSERT INTO model_config (%s, updated_at) VALUES (%s, NOW())'
+                    % (', '.join(columnas), ', '.join(['%s'] * len(valores))), valores)
+        conn.commit()
+    return None
+
+
+def _guardar_version_de_docs(model):
+    """Escribe en SU fila la versión nueva de un modelo de Docs. False si el modelo ya no está en el frente (se quitó
+    mientras se actualizaba): no se resucita."""
+    from db import get_db_connection
+    with get_db_connection() as conn:
+        cur = conn.cursor()
+        cur.execute('SELECT 1 FROM model_config WHERE model_id = %s AND app_project_id = %s FOR UPDATE',
+                    (model.get('id'), model.get('appProjectId')))
+        if not cur.fetchone():
+            conn.rollback()
+            return False
+        asignaciones = ['urn = %s', 'version_id = %s', 'version_number = %s', 'last_modified_time = %s',
+                        'default_view_guid = %s']
+        valores = [model.get('urn'), model.get('versionId'), model.get('versionNumber'),
+                   model.get('lastModifiedTime'), model.get('defaultViewGuid')]
+        if _con_nombre_de_vista(cur):
+            asignaciones.append('default_view_name = %s')
+            valores.append(model.get('defaultViewName'))
+        cur.execute('UPDATE model_config SET %s, updated_at = NOW() WHERE model_id = %s AND app_project_id = %s'
+                    % (', '.join(asignaciones), '%s', '%s'), valores + [model.get('id'), model.get('appProjectId')])
+        conn.commit()
+    return True
+
+
+def _anotar_en_docs(nodo, accion, frente, **detalles):
+    """La actividad de la obra: vincular, actualizar y quitar un modelo de Docs quedan en el historial."""
+    from db import log_activity
+    try:
+        log_activity(nodo.get('model_urn'), accion, 'file', entity_id=str(nodo['id']), entity_name=nodo.get('name'),
+                     performed_by=(getattr(g, 'current_user', None) or {}).get('email'),
+                     details={'frente': frente, **detalles})
+    except Exception as e:
+        print(f'[docs-model] actividad sin anotar ({accion}): {e}')
+
+
+def _lanzar_extraccion(urn, frente, job_id):
+    """La extracción del inventario, como la lanzan las rutas de ACC; el visor sondea ESTE trabajo."""
+    try:
+        from routes.inventory import extract_metadata_task
+        threading.Thread(target=extract_metadata_task, args=(urn, frente, job_id), daemon=True).start()
+        return job_id
+    except Exception as e:
+        print(f'[docs-model] no se pudo lanzar la extracción: {e}')
+        return None
 
 
 @digital_twin_bp.route('/api/config/project/docs-obra', methods=['GET'])
@@ -495,7 +626,7 @@ def add_model_from_docs():
     defaultViewName}. El URN, el linaje y la versión los pone el servidor, no el navegador."""
     import modelos_de_docs as _md
     from routes.docs_cad import _guardia_del_plano
-    from db import resolve_project_id, log_activity
+    from db import resolve_project_id
     data = request.get_json(silent=True) or {}
     frente = data.get('project')
     negativa = guardia_de_obra(frente, 'vincular un modelo a la obra')
@@ -510,6 +641,11 @@ def add_model_from_docs():
         negativa = _guardia_del_plano(nodo)       # «Ver» en el documento, como para abrirlo en Docs
         if negativa:
             return negativa
+        # Si la base aún no sabe que la versión está traducida, se pregunta a Autodesk (sin lanzar nada).
+        estado, _detalle = _estado_de_traduccion(nodo, urn)
+        if estado == 'lista':
+            nodo.setdefault('meta', {})['cad'] = {**((nodo.get('meta') or {}).get('cad') or {}),
+                                                  'status': 'success', 'urn': urn}
     config = get_project_config_internal()
     del_frente = [m for m in config.get('models', []) if m.get('appProjectId') == frente]
     try:
@@ -519,45 +655,40 @@ def add_model_from_docs():
     ahora = datetime.now().isoformat()
     nuevo = _md.ficha(nodo, numero, frente, urn, data.get('defaultViewGuid'), data.get('defaultViewName'),
                       ahora=ahora, model_id=str(int(time.time() * 1000)))
-    config.setdefault('models', []).append(nuevo)
-    if not save_project_config_internal(config):
-        return jsonify({'error': 'No se pudo guardar.'}), 500
     try:
-        log_activity(nodo.get('model_urn'), 'link_docs_model', 'file', entity_id=str(nodo['id']),
-                     entity_name=nodo.get('name'), performed_by=(getattr(g, 'current_user', None) or {}).get('email'),
-                     details={'frente': frente, 'version': numero, 'vista': data.get('defaultViewName')})
+        duplicado = _insertar_modelo_de_docs(nuevo)
     except Exception as e:
-        print(f'[docs-model] actividad sin anotar: {e}')
-    # El inventario de la versión vinculada, como al importar uno de ACC: lo extrae el servidor y el visor sondea
-    # ESTE trabajo (B1 ya acepta el linaje de Docs, F4).
-    extraction_job_id = None
-    try:
-        from routes.inventory import extract_metadata_task
-        extraction_job_id = f"link_docs_{nuevo['id']}"
-        threading.Thread(target=extract_metadata_task, args=(urn, frente, extraction_job_id), daemon=True).start()
-    except Exception as e:
-        print(f'[docs-model] no se pudo lanzar la extracción: {e}')
-        extraction_job_id = None
-    return jsonify({'models': [m for m in config['models'] if m.get('appProjectId') == frente], 'urn': urn,
-                    'extraction_job_id': extraction_job_id})
+        traceback.print_exc()
+        return jsonify({'error': 'No se pudo guardar el vínculo.', 'details': str(e)[:200]}), 500
+    if duplicado:
+        texto = '«%s» ya está vinculado a este frente.' % duplicado
+        return jsonify({'error': texto, 'message': texto, 'code': 'DUPLICADO'}), 409
+    _anotar_en_docs(nodo, 'link_docs_model', frente, version=numero, vista=data.get('defaultViewName'))
+    extraction_job_id = _lanzar_extraccion(urn, frente, f"link_docs_{nuevo['id']}")
+    modelos = [m for m in get_project_config_internal().get('models', []) if m.get('appProjectId') == frente]
+    return jsonify({'models': modelos, 'urn': urn, 'extraction_job_id': extraction_job_id})
 
 
 def _comprobar_modelo_de_docs(model):
-    """«Buscar actualizaciones» para un modelo de ALEPHIA Docs: la vigente en Docs contra la cargada."""
+    """«Buscar actualizaciones» para un modelo de ALEPHIA Docs: la vigente en Docs contra la cargada. Se llama en el
+    hilo de la petición (mira el permiso de quien pregunta) y nunca se guarda en la caché compartida."""
     import modelos_de_docs as _md
+    from routes.docs_cad import _guardia_del_plano
     nodo, _urn, numero, _obra = _documento_de_docs(_md.documento_del_linaje(model.get('itemId')))
     if not nodo:
         return _md.comprobacion_de_version(model, None, None, existe=False)
+    if _guardia_del_plano(nodo):
+        return _md.comprobacion_de_version(model, None, None, visible=False)
     return _md.comprobacion_de_version(model, nodo.get('v_id'), numero)
 
 
 def _traer_version_de_docs(model, token=None):
     """Lleva un modelo de ALEPHIA Docs a su versión vigente si ya está traducida; si no, la prepara. Muta `model` solo
-    al actualizar. Devuelve el informe por modelo de «Actualizar todo»: {status: updated | up_to_date |
-    pending_translation | view_missing | not_in_docs | forbidden | error, message, newUrn}. Lo usan las dos rutas, la de
-    un modelo y la de todos, para que digan lo mismo."""
+    al actualizar (quien llama la guarda con `_guardar_version_de_docs`). Devuelve el informe por modelo de
+    «Actualizar todo»: {status: updated | up_to_date | pending_translation | translation_failed | view_missing |
+    not_in_docs | forbidden | error, message, newUrn}. Lo usan las dos rutas, para que digan lo mismo."""
     import modelos_de_docs as _md
-    from routes.docs_cad import _guardia_del_plano, encolar_pretraduccion
+    from routes.docs_cad import _guardia_del_plano
     nodo, urn, numero, _obra = _documento_de_docs(_md.documento_del_linaje(model.get('itemId')))
     if not nodo:
         return {'status': 'not_in_docs', 'message': 'Ese documento ya no está en Docs.'}
@@ -566,19 +697,21 @@ def _traer_version_de_docs(model, token=None):
     if str(nodo.get('v_id') or '') == str(model.get('versionId') or ''):
         return {'status': 'up_to_date', 'message': 'Ya es la versión vigente de Docs.',
                 'versionNumber': model.get('versionNumber')}
-    cad = (nodo.get('meta') or {}).get('cad') or {}
-    if cad.get('status') != 'success' or cad.get('urn') != urn:
-        if cad.get('status') not in ('inprogress', 'pending'):
-            try:
-                encolar_pretraduccion(nodo['id'], False, False)
-            except Exception as e:
-                print(f'[docs-model] no se pudo preparar la versión nueva: {e}')
-        return {'status': 'pending_translation',
-                'message': 'La versión nueva se está preparando en Docs. Reintenta en unos minutos.'}
     if token is None:
         token, error = get_internal_token()
         if error or not token:
             return {'status': 'error', 'message': 'Sin credenciales de Autodesk.'}
+    estado, detalle = _estado_de_traduccion(nodo, urn, token, preparar=True)
+    if estado == 'preparando':
+        return {'status': 'pending_translation',
+                'message': 'La versión nueva se está preparando en Docs%s. Reintenta en unos minutos.'
+                           % (' (%s)' % detalle if detalle else '')}
+    if estado == 'fallida':
+        return {'status': 'translation_failed',
+                'message': 'Autodesk no pudo preparar la versión nueva%s. Ábrela en Docs para reintentarlo.'
+                           % (': %s' % detalle if detalle else '')}
+    if estado != 'lista':
+        return {'status': 'error', 'message': detalle}
     from vista_del_modelo import llevar_vista_a_la_version
     puede, aviso = llevar_vista_a_la_version(model, model.get('urn'), urn, token)
     if not puede:
@@ -587,35 +720,40 @@ def _traer_version_de_docs(model, token=None):
     model['versionId'] = str(nodo.get('v_id'))
     model['versionNumber'] = numero
     model['lastModifiedTime'] = datetime.now().isoformat() + 'Z'
-    return {'status': 'updated', 'newUrn': urn, 'versionNumber': numero}
+    return {'status': 'updated', 'newUrn': urn, 'versionNumber': numero, '_nodo': nodo}
+
+
+def _cerrar_actualizacion_de_docs(model, r, frente, extraer=True):
+    """Guarda SU fila, lo anota y lanza la extracción (con `extraer=False`, la encola quien llama, como hace
+    «Actualizar todo»). Devuelve el informe final (sin el nodo interno)."""
+    nodo = r.pop('_nodo', None)
+    if r['status'] != 'updated':
+        return r
+    if not _guardar_version_de_docs(model):
+        return {'status': 'error', 'message': 'Ese modelo se quitó del frente mientras se actualizaba.'}
+    if nodo:
+        _anotar_en_docs(nodo, 'update_docs_model', frente, version=r.get('versionNumber'))
+    job_id = f"auto_update_{model.get('id') or r['newUrn'][:8]}_{int(time.time())}"
+    r['extraction_job_id'] = _lanzar_extraccion(r['newUrn'], frente, job_id) if extraer else job_id
+    return r
 
 
 def _actualizar_modelo_de_docs(config, model, app_project_id):
     """«Actualizar» un modelo de ALEPHIA Docs: lo mismo que con ACC, incluida la extracción del inventario que lanza
     el servidor (el linaje de Docs ya lo acepta B1, docs/archivos/29 F4)."""
-    r = _traer_version_de_docs(model)
+    frente = app_project_id or model.get('appProjectId')
+    r = _cerrar_actualizacion_de_docs(model, _traer_version_de_docs(model), frente)
     if r['status'] == 'forbidden':
         return jsonify({'error': r['message']}), 403
-    if r['status'] == 'error':
-        return jsonify({'error': r['message']}), 500
+    if r['status'] in ('error', 'translation_failed'):
+        return jsonify({'error': r['message']}), 409
     if r['status'] != 'updated':
         return jsonify({'updated': False, 'message': r['message'],
                         'pending_translation': r['status'] == 'pending_translation',
                         'view_missing': r['status'] == 'view_missing'}), 200
-    save_project_config_internal(config)
-    extraction_job_id = None
-    try:
-        from routes.inventory import extract_metadata_task
-        extraction_job_id = f"auto_update_{model.get('id') or r['newUrn'][:8]}_{int(time.time())}"
-        threading.Thread(target=extract_metadata_task,
-                         args=(r['newUrn'], app_project_id or model.get('appProjectId'), extraction_job_id),
-                         daemon=True).start()
-    except Exception as e:
-        print(f'[docs-model] no se pudo lanzar la extracción: {e}')
-        extraction_job_id = None
-    if app_project_id:
-        config['models'] = [m for m in config.get('models', []) if m.get('appProjectId') == app_project_id]
-    return jsonify({'updated': True, 'config': config, 'newUrn': r['newUrn'], 'extraction_job_id': extraction_job_id})
+    modelos = [m for m in get_project_config_internal().get('models', []) if m.get('appProjectId') == frente]
+    return jsonify({'updated': True, 'config': {'models': modelos}, 'newUrn': r['newUrn'],
+                    'extraction_job_id': r['extraction_job_id']})
 
 
 @digital_twin_bp.route('/api/config/project/update', methods=['POST'])
@@ -835,19 +973,21 @@ def update_all_models():
     for model in project_models:
         entry = {'id': model.get('id'), 'name': model.get('name'), 'urn': model.get('urn')}
         if _md.es_de_docs(model):
-            # Un modelo de ALEPHIA Docs se pone al día desde Docs (docs/archivos/29, F3), en la misma cola.
+            # Un modelo de ALEPHIA Docs se pone al día desde Docs (docs/archivos/29, F3): escribe SU fila y su
+            # extracción entra en la misma cola que las de ACC.
             try:
-                r = _traer_version_de_docs(model, token)
+                r = _cerrar_actualizacion_de_docs(model, _traer_version_de_docs(model, token), app_project_id,
+                                                  extraer=False)
             except Exception as de:
                 traceback.print_exc()
                 r = {'status': 'error', 'message': str(de)}
             if r['status'] == 'updated':
-                config_dirty = True
-                job_id = f"auto_update_{model.get('id') or r['newUrn'][:8]}_{int(time.time())}"
-                to_extract.append((r['newUrn'], app_project_id, job_id))
-                r['extraction_job_id'] = job_id
-            elif r['status'] in ('not_in_docs', 'forbidden'):
-                r['status'] = 'error'
+                to_extract.append((r['newUrn'], app_project_id, r['extraction_job_id']))
+            elif r['status'] != 'up_to_date' and r['status'] != 'pending_translation' and r['status'] != 'view_missing':
+                r['status'] = 'error'       # not_in_docs, forbidden, translation_failed: el visor los pinta como error
+            if r.get('message', '').startswith('Ese modelo se quitó'):
+                # Que el guardado entero del final (el de ACC) no lo resucite.
+                config['models'] = [m for m in config.get('models', []) if m is not model]
             entry.update(r)
             results.append(entry)
             continue
@@ -1562,9 +1702,10 @@ def remove_model_route():
         with get_db_connection() as conn:
             authorize_scope(conn, app_project_id, lock=True)
             with conn.cursor() as cursor:
-                cursor.execute('SELECT model_id FROM model_config WHERE urn=%s AND app_project_id=%s FOR UPDATE',
-                               (urn, app_project_id))
-                if not cursor.fetchone():
+                cursor.execute('SELECT model_id, source, item_id FROM model_config '
+                               'WHERE urn=%s AND app_project_id=%s FOR UPDATE', (urn, app_project_id))
+                quitado = cursor.fetchone()
+                if not quitado:
                     return jsonify({'error': 'Model not found'}), 404
                 try:
                     source_identity(urn)
@@ -1579,6 +1720,12 @@ def remove_model_route():
                                (urn, app_project_id))
             conn.commit()  # Config and active pointer change together or neither does.
         invalidar_resolver_de_obras()
+        import modelos_de_docs as _md
+        if _md.es_de_docs({'source': quitado[1], 'itemId': quitado[2]}):
+            from routes.docs_cad import _cargar
+            nodo = _cargar(_md.documento_del_linaje(quitado[2]))
+            if nodo:
+                _anotar_en_docs(nodo, 'unlink_docs_model', app_project_id)
         config = get_project_config_internal()
         config['models'] = [m for m in config.get('models', []) if m.get('appProjectId') == app_project_id]
         return jsonify(config)
@@ -1602,6 +1749,12 @@ def relink_model_route():
     negativa = guardia_de_obra(app_project_id, 'reapuntar un modelo a otro archivo')
     if negativa:
         return negativa
+    # Un modelo de ALEPHIA Docs entra SOLO por `add-from-docs`, que comprueba obra, permiso de carpeta, formato y
+    # traducción (docs/archivos/29, F4). Por aquí entraría con un URN puesto por el navegador y sin nada de eso.
+    from inventory_identity import es_urn_de_docs
+    if es_urn_de_docs((new_data or {}).get('urn')):
+        return jsonify({'error': 'Los modelos de ALEPHIA Docs se vinculan desde la pestaña «ALEPHIA DOCS».',
+                        'code': 'USA_ALEPHIA_DOCS'}), 400
 
     # SEGURIDAD TRANSACCIONAL (Fase 6): el relink apunta a OTRO archivo (otro base_urn),
     # así que la limpieza por linaje de la extracción no cubre la data vieja.
@@ -1707,13 +1860,6 @@ _actualizaciones_en_curso = {}  # clave -> threading.Lock (una sola consulta a A
 
 
 def _comprobar_modelo(model, headers):
-    import modelos_de_docs as _md
-    if _md.es_de_docs(model):
-        try:
-            return _comprobar_modelo_de_docs(model)
-        except Exception as e:
-            return {'model_id': model.get('id'), 'name': model.get('name'), 'has_update': False,
-                    'reason': 'exception_docs: %s' % str(e)[:80], 'current_version': model.get('versionNumber')}
     pid = model.get('projectId')
     iid = model.get('itemId')
     if not pid or not iid:
@@ -1781,12 +1927,29 @@ def check_model_updates():
     app_project_id = data.get('project')
     if not app_project_id:
         return jsonify({'error': 'Missing project'}), 400
+    # Como «Actualizar» y «Actualizar todo»: solo quien entra en la obra pregunta por sus versiones.
+    negativa = guardia_de_obra(app_project_id, 'buscar versiones nuevas de los modelos del frente')
+    if negativa:
+        return negativa
 
     config = get_project_config_internal()
     project_models = [m for m in config.get('models', []) if m.get('appProjectId') == app_project_id]
 
+    # LOS MODELOS DE ALEPHIA DOCS, aparte (docs/archivos/29, F3): se miran en ESTE hilo, con el permiso de quien
+    # pregunta, y NUNCA entran en la caché compartida entre usuarios (lo que uno ve, otro quizá no). Son consultas a
+    # la base, sin Autodesk: no hace falta ni caché ni hilos.
+    import modelos_de_docs as _md
+    de_docs = []
+    for m in [m for m in project_models if _md.es_de_docs(m)]:
+        try:
+            de_docs.append(_comprobar_modelo_de_docs(m))
+        except Exception as e:
+            de_docs.append({'model_id': m.get('id'), 'name': m.get('name'), 'urn': m.get('urn'), 'has_update': False,
+                            'reason': 'exception_docs: %s' % str(e)[:80], 'current_version': m.get('versionNumber')})
+    project_models = [m for m in project_models if not _md.es_de_docs(m)]
+
     if not project_models:
-        return jsonify({'updates': []})
+        return jsonify({'updates': de_docs})
 
     clave = (app_project_id, tuple((m.get('id'), m.get('versionId'), m.get('projectId'), m.get('itemId'))
                                    for m in project_models))
@@ -1794,7 +1957,7 @@ def check_model_updates():
     with _actualizaciones_lock:
         guardado = _actualizaciones_cache.get(clave)
         if guardado and ahora - guardado[0] < _ACTUALIZACIONES_TTL_S:
-            return jsonify({'updates': guardado[1]})
+            return jsonify({'updates': guardado[1] + de_docs})
         cerrojo = _actualizaciones_en_curso.setdefault(clave, threading.Lock())
 
     try:
@@ -1802,7 +1965,7 @@ def check_model_updates():
             with _actualizaciones_lock:  # otra petición pudo responder mientras esperábamos
                 guardado = _actualizaciones_cache.get(clave)
                 if guardado and time.monotonic() - guardado[0] < _ACTUALIZACIONES_TTL_S:
-                    return jsonify({'updates': guardado[1]})
+                    return jsonify({'updates': guardado[1] + de_docs})
             token, error = get_internal_token()
             if error or not token:
                 return jsonify({'error': 'Auth failed'}), 500
@@ -1816,7 +1979,7 @@ def check_model_updates():
                 # Una respuesta con errores de Autodesk no se comparte: el siguiente vuelve a preguntar.
                 if not any(u.get('reason', '').startswith(('api_error', 'exception')) for u in updates):
                     _actualizaciones_cache[clave] = (time.monotonic(), updates)
-            return jsonify({'updates': updates})
+            return jsonify({'updates': updates + de_docs})
 
     except Exception as e:
         traceback.print_exc()

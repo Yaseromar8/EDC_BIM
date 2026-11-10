@@ -107,12 +107,14 @@ def ficha(nodo, version_numero, frente, urn, vista_guid=None, vista_nombre=None,
     return f
 
 
-def comprobacion_de_version(modelo, vigente_id, vigente_numero, existe=True):
+def comprobacion_de_version(modelo, vigente_id, vigente_numero, existe=True, visible=True):
     """Lo que «Buscar actualizaciones» dice de un modelo de Docs (la misma forma que con ACC)."""
-    base = {'model_id': modelo.get('id'), 'name': modelo.get('name'),
-            'current_version': modelo.get('versionNumber')}
+    base = {'model_id': modelo.get('id'), 'name': modelo.get('name'), 'urn': modelo.get('urn'),
+            'current_version': modelo.get('versionNumber'), 'source': FUENTE}
     if not existe:
         return {**base, 'has_update': False, 'reason': 'not_in_docs'}
+    if not visible:
+        # Quien no ve el documento en Docs no se entera de sus versiones.
+        return {**base, 'has_update': False, 'reason': 'forbidden'}
     hay = bool(vigente_id) and str(vigente_id) != str(modelo.get('versionId') or '')
-    return {**base, 'has_update': hay, 'latest_version': vigente_numero if hay else modelo.get('versionNumber'),
-            'source': FUENTE}
+    return {**base, 'has_update': hay, 'latest_version': vigente_numero if hay else modelo.get('versionNumber')}

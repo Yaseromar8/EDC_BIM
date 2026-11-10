@@ -156,7 +156,7 @@ equipo, no entra en el inventario B1 ni en las vistas guardadas V2. **Con F4** e
 | F1 | Hecha en local (10-nov-2026). Pruebas: `documentosDelPin` 4/4 (incluido el contrato «nadie llama a mutate-bind»); las suites cerradas de Saved Views y la configuración del inventario, intactas; el visor compila. No se probó en el visor real: hacerlo escribe en el seguimiento de la obra en producción. |
 | F2 | Hecha en local (10-nov-2026). Pestaña «ALEPHIA DOCS» en «Importar modelo» (`ImportarDesdeDocs.jsx`) y rutas `GET /api/config/project/docs-obra` y `POST /api/config/project/add-from-docs` (`modelos_de_docs.py`). |
 | F3 | Hecha en local (10-nov-2026). «Buscar actualizaciones», «Actualizar» y «Actualizar todo» para modelos de Docs, con un mismo núcleo (`_traer_version_de_docs`). |
-| F4 | Hecha en local (10-nov-2026). B1 y Vistas guardadas V2 aceptan el linaje de Docs; ver §7, que difiere de §2.3 en dos puntos. |
+| F4 | Hecha en local (10-nov-2026). B1 y Vistas guardadas V2 aceptan el linaje de Docs; ver §7, que difiere de §2.3 en dos puntos. **Necesita la migración 50** (la base de B1 solo admitía el linaje de Autodesk: §7.4-A). |
 
 ## 7 · Cómo quedó (10-nov-2026)
 
@@ -215,3 +215,48 @@ su comportamiento ante lo desconocido.
 inventario, guardar una vista y restaurarla tras subir una versión). En el banco Autodesk está sustituido; en el
 visor real se escribe en `model_config` de producción. Es la prueba que falta, en local, con un modelo de una obra
 de prueba.
+
+### 7.4 Revisión del 10-nov-2026: lo que estaba mal en `6fb3e0af` y cómo quedó
+
+El dueño pidió revisarlo a fondo. Una revisión independiente (otro agente, con el código y sin mis conclusiones) y la
+mía encontraron defectos reales. Todos se comprobaron antes de corregirlos, y cada corrección tiene su prueba.
+
+| # | Defecto | Gravedad | Corrección |
+|---|---|---|---|
+| A | **B1 rechazaba en la BASE el linaje de Docs.** La migración 31 puso en `inventory_identity_b1.sources` un CHECK que solo admite el de Autodesk. Extraer el inventario de un modelo de Docs fallaba al escribir, y quitarlo del frente daba 503. El ensayo no lo vio porque sustituía la extracción. | **Alta** | **Migración 50** (`50_linaje_de_docs_en_b1.sql` y su rollback): el CHECK admite los dos linajes. Ensayada en la base desechable: se aplica, se puede repetir, se deshace, y como `ecd_app` se niega. El ensayo publica ahora un inventario de verdad en las tablas de B1. |
+| B | «Actualizar» de un modelo de Docs se quedaba en «se está preparando» **para siempre**: la base solo pasa a «traducida» cuando alguien abre el plano en Docs. | Alta | `_estado_de_traduccion` pregunta a Autodesk cuando la base no lo sabe, y apunta el resultado. |
+| C | Una traducción fallida se relanzaba (y se cobraba) en cada clic; y las versiones bajo el puente temporal ACC se traducían a sus espaldas. | Media | Una fallida se dice, con el motivo de Autodesk, y se reintenta abriéndola en Docs, como hasta hoy. El puente no se toca. |
+| D | Un URN de Docs podía entrar por las rutas de ACC (`add`, `relink`) o pedir la extracción en un frente de otra obra, saltándose obra, carpeta y formato. | Media | `add` y `relink` de ACC rechazan un URN de Docs (`USA_ALEPHIA_DOCS`). La extracción solo admite un documento de Docs en un frente de **su** obra, y `/api/inventory/extract` exige poder verlo en Docs. |
+| E | Vincular y actualizar guardaban **toda** la configuración: un modelo quitado mientras tanto resucitaba, y dos vínculos simultáneos del mismo documento entraban los dos. | Media | Cada ruta escribe solo su fila, en una transacción: con cerrojo por frente al vincular y con `FOR UPDATE` al actualizar. Si el modelo se quitó a la vez, lo dice y no lo crea. |
+| F | Un documento **purgado** dejaba su modelo imposible de quitar del frente (B1 ya no sabía su linaje). | Media | B1 recurre a la ficha que escribió el servidor (`model_config`, `source = 'ALEPHIA'`) cuando la versión ya no existe. |
+| G | «Buscar actualizaciones» no tenía `guardia_de_obra` (de antes de este trabajo), y la respuesta de los modelos de Docs se guardaba en la caché que comparten todos los usuarios. | Media | Guardia de obra en la ruta. Los modelos de Docs se miran en el hilo de la petición, con el permiso de quien pregunta, y nunca entran en la caché: quien no ve el documento no se entera de sus versiones. |
+| H | Un modelo de ACC preguntaba a la base por cada modelo de Docs al extraer, y un fallo de la base habría roto también extracciones de ACC. | Baja | Un modelo de un tipo solo se compara con los de su tipo (`es_urn_de_docs`, sin base). |
+| I | Pantalla. Un emoji (📁), contra la regla del dueño. Filas sin teclado. La versión sin alinear. Un listado lento se pintaba bajo otra carpeta. Cerrar a media preparación dejaba la pestaña bloqueada hasta recargar. Cerrar mientras se vinculaba dejaba el modelo vinculado sin que el visor se enterara. Espera sin tope. | Media | Iconos de la pestaña de ACC y filas que son botones (anillo de foco del sistema, también sobre la fila elegida). Cada listado lleva su turno. Las pestañas se bloquean mientras se prepara y se liberan al cerrar. El vínculo llega al visor aunque el panel se haya cerrado. Tope de 20 min. Comprobado en el banco de la pantalla (`probar-importar-docs.html`, sin commitear). |
+| J | El listado de Docs firmaba una descarga por fichero que el selector no usa (en carpetas grandes, lento). | Baja | `/api/docs/list?enlaces=0`: el selector no las pide; el resto, igual. |
+| K | El aviso «hay versión nueva» de un modelo de Docs no se limpiaba al actualizarlo (le faltaba `urn`). «Actualizar» y «quitar» no quedaban en la actividad. Nada decía «ya no está en Docs». | Baja | Con `urn`; la actividad de la obra anota vincular, actualizar y quitar; el panel de modelos dice «Ya no está en ALEPHIA Docs». |
+
+**Lo que NO se cambió, y por qué (decisión del dueño):**
+- **Ver un modelo de Docs ya federado no mira el permiso de su carpeta en Docs.** Pasa igual que con los de ACC: lo
+  ve quien entra en el frente. §2.1 prometía «quien no puede ver el documento no lo carga»; hacerlo de verdad toca la
+  carga del visor (`Viewer.jsx`, con trabajo ajeno sin commitear) y, además, el token del visor ya abre cualquier URN.
+  Hoy el permiso de Docs se exige al **vincular, actualizar, extraer y preguntar por versiones**. Si se quiere que
+  tampoco se cargue, es una decisión aparte.
+- **Si la reextracción de un modelo de Docs falla tras «Actualizar», el visor pierde la correspondencia de su
+  inventario hasta que se repita** (`model.js` deduce el linaje del URN, y el de Docs no se puede deducir). Con ACC se
+  conserva. Se arregla dando al visor el linaje desde la ficha; `model.js` tiene trabajo ajeno sin commitear.
+- Las rutas de ACC siguen guardando la configuración entera (defecto E, que es suyo de antes); solo las de Docs se
+  corrigieron.
+
+**Orden de publicación (cambia):** **migración 50** como `ecd_migrator` → backend → visor. Sin la 50, vincular un
+modelo de Docs funciona pero su inventario no se guarda, y quitarlo del frente da 503.
+
+### 7.5 Pruebas tras la revisión (10-nov-2026)
+
+| Qué | Resultado |
+|---|---|
+| `test_modelos_de_docs.py` (+ estado de la traducción, puente, fallida, sin manifiesto, visibilidad, `es_urn_de_docs`) | 15/15 |
+| `test_actualizaciones_compartidas.py` (+ «solo quien entra en la obra pregunta por sus versiones») | en verde |
+| Ensayo con rutas y tablas reales en la base desechable, con la migración 50 (incluye R1–R8: Autodesk terminó y la base no lo sabía, fallida sin relanzar, duplicado bajo cerrojo, quitado durante la actualización, permiso al buscar versiones, URN de Docs por ACC, extracción de otra obra y sin permiso, documento purgado que se quita) | 40/40 |
+| Migración 50: aplicar, repetir, deshacer, volver a aplicar, y negarse como `ecd_app` | correcto |
+| Banco de la pantalla: carpeta lenta y rápida, teclado, contraste de la fila elegida, cerrar a media preparación, cerrar mientras se vincula | correcto |
+| Suites cerradas del visor (63, 150, 117, 20, 20, 4) | en verde |

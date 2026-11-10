@@ -93,7 +93,7 @@ def docs(monkeypatch):
     monkeypatch.setenv('APS_DOCS_BUCKET', 'ecd-docs-cad-banco')
     pedidas = []
 
-    def resolver(version):
+    def resolver(version, urn):
         pedidas.append(version)
         return DOC.upper() if version == VERSION else None
     monkeypatch.setattr(b1, 'resolver_documento_de_docs', resolver)
@@ -154,3 +154,65 @@ def test_el_linaje_de_docs_vale_para_las_vistas_guardadas():
     # Las dos reglas (la del módulo y la de las vistas guardadas) dicen lo mismo de un linaje de Docs.
     assert [md.es_linaje_de_docs(m) for m in muestras] == [vistas_v2.es_linaje(m) for m in muestras] \
         == [True, False, False, False, False]
+
+
+# ── Revisión (10-nov-2026): el estado de la traducción se pregunta a Autodesk, y quien no ve no se entera ──
+def test_quien_no_ve_el_documento_no_se_entera_de_sus_versiones():
+    m = {'id': '77', 'name': 'DRENAJE_SECTOR1.rvt', 'urn': URN_V3, 'versionId': 'v-3', 'versionNumber': 3}
+    oculto = md.comprobacion_de_version(m, 'v-4', 4, visible=False)
+    assert oculto['has_update'] is False and oculto['reason'] == 'forbidden' and 'latest_version' not in oculto
+    assert md.comprobacion_de_version(m, 'v-4', 4)['urn'] == URN_V3       # el visor limpia el aviso por urn
+
+
+@pytest.fixture
+def traduccion(monkeypatch):
+    from routes import docs_cad
+    import routes.digital_twin as dt
+    estado = {'manifiesto': None, 'guardado': [], 'encolados': []}
+    monkeypatch.setattr(docs_cad, '_manifest', lambda tok, urn: (estado['manifiesto'], None))
+    monkeypatch.setattr(docs_cad, '_save_cad_meta', lambda nodo, patch: estado['guardado'].append(patch))
+    monkeypatch.setattr(docs_cad, 'encolar_pretraduccion', lambda *a, **k: estado['encolados'].append(a[0]))
+    monkeypatch.setattr(dt, 'get_internal_token', lambda: ('tok', None))
+    return estado, dt._estado_de_traduccion
+
+
+def test_la_traduccion_se_pregunta_a_autodesk_si_la_base_no_la_sabe(traduccion):
+    estado, consultar = traduccion
+    # La base lo sabe: ni se pregunta.
+    assert consultar(nodo(), URN_V3) == ('lista', None)
+    # La base dice «en curso» (la pretraducción no vuelve a escribir) y Autodesk ya terminó: lista, y se apunta.
+    estado['manifiesto'] = {'status': 'success'}
+    en_curso = nodo(meta={'cad': {'status': 'inprogress', 'urn': URN_V3, 'started_at': 9e12}})
+    assert consultar(en_curso, URN_V3)[0] == 'lista' and estado['guardado'][-1]['status'] == 'success'
+    estado['manifiesto'] = {'status': 'inprogress', 'progress': '40% complete'}
+    assert consultar(en_curso, URN_V3, preparar=True) == ('preparando', '40% complete') and not estado['encolados']
+
+
+def test_una_traduccion_fallida_no_se_relanza_sola_y_el_puente_no_se_toca(traduccion):
+    estado, consultar = traduccion
+    estado['manifiesto'] = {'status': 'failed', 'derivatives': [{'messages': [{'type': 'error', 'message': 'Tr fail'}]}]}
+    assert consultar(nodo(meta={}), URN_V3, preparar=True)[0] == 'fallida' and not estado['encolados']
+    estado['manifiesto'] = None
+    puente = nodo(meta={'acc_emergency_bridge': True})
+    assert consultar(puente, URN_V3, preparar=True)[0] == 'puente' and not estado['encolados']
+
+
+def test_sin_manifiesto_se_prepara_una_sola_vez(traduccion):
+    estado, consultar = traduccion
+    import time as _time
+    subiendo = nodo(meta={'cad': {'status': 'subiendo', 'started_at': _time.time()}})
+    assert consultar(subiendo, URN_V3, preparar=True)[0] == 'preparando' and not estado['encolados']
+    assert consultar(nodo(meta={}), URN_V3)[0] == 'preparando' and not estado['encolados']   # sin `preparar`
+    assert consultar(nodo(meta={}), URN_V3, preparar=True)[0] == 'preparando' and estado['encolados'] == [DOC]
+    # Una subida que se quedó colgada hace horas ya no cuenta como «en curso».
+    colgada = nodo(meta={'cad': {'status': 'subiendo', 'started_at': _time.time() - 3 * 3600}})
+    consultar(colgada, URN_V3, preparar=True)
+    assert estado['encolados'] == [DOC, DOC]
+
+
+def test_es_urn_de_docs_no_pregunta_a_nadie(monkeypatch):
+    monkeypatch.setattr(b1, 'resolver_documento_de_docs', lambda *a: pytest.fail('no debía tocar la base'))
+    assert b1.es_urn_de_docs(_urn_de_docs('cualquier-bucket', 'docs-%s.rvt' % VERSION))
+    acc = base64.urlsafe_b64encode(b'urn:adsk.wipprod:fs.file:vf.ub2xfjDiRByamkMzvCD7zg?version=50').decode()
+    assert not b1.es_urn_de_docs(acc.rstrip('=')) and not b1.es_urn_de_docs('') and not b1.es_urn_de_docs(None)
+    assert not b1.es_urn_de_docs('%%%no-es-base64')
