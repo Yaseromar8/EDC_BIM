@@ -2499,6 +2499,343 @@
           "migradoDeV1": true
         }
       }
+    },
+    {
+      "nombre": "v2 con un modelo de ALEPHIA Docs",
+      "esperado": true,
+      "motivos": [],
+      "porQue": "desde el 10-nov-2026 (docs/archivos/29, F4) el linaje de un modelo de ALEPHIA Docs es el id de su documento, estable entre versiones como el de ACC",
+      "state": {
+        "schemaVersion": 2,
+        "models": [
+          {
+            "lineage": "urn:alephia:docs.lineage:0d0c0b0a-1111-4222-8333-944445555666",
+            "urnAtSave": "dXJuOmFkc2sub2JqZWN0czpvcy5vYmplY3Q6ZWNkLWRvY3MtY2FkLXp6L2RvY3MtYWFhYWJiYmItY2NjYy00ZGRkLThlZWUtZmZmZjAwMDAxMTExLnJ2dA",
+            "versionAtSave": 3,
+            "visible": true,
+            "order": 0
+          }
+        ]
+      }
+    },
+    {
+      "nombre": "ACC y ALEPHIA Docs federados, todo por linaje",
+      "esperado": true,
+      "motivos": [],
+      "porQue": "Sources, los ocultos y los colores por modelo usan el linaje de cada uno, sea de ACC o de Docs",
+      "state": {
+        "schemaVersion": 2,
+        "lmv": {
+          "viewport": {
+            "eye": [
+              1,
+              2,
+              3
+            ]
+          },
+          "objectSet": [
+            {
+              "id": [
+                966
+              ],
+              "seedUrn": "dXJuOmFkc2sud2lwcHJvZDpmcy5maWxlOnZmLnp6RTRBYWFhQWFhYUFhYWFBYWFhQWE_dmVyc2lvbj01MA"
+            }
+          ],
+          "cutplanes": [
+            [
+              0,
+              0,
+              1,
+              -5
+            ]
+          ]
+        },
+        "models": [
+          {
+            "lineage": "urn:adsk.wipprod:dm.lineage:zzE4AaaaAaaaAaaaAaaaAa",
+            "urnAtSave": "dXJuOmFkc2sud2lwcHJvZDpmcy5maWxlOnZmLnp6RTRBYWFhQWFhYUFhYWFBYWFhQWE_dmVyc2lvbj01MA",
+            "versionAtSave": 50,
+            "visible": true,
+            "order": 0
+          },
+          {
+            "lineage": "urn:alephia:docs.lineage:0d0c0b0a-1111-4222-8333-944445555666",
+            "urnAtSave": "dXJuOmFkc2sub2JqZWN0czpvcy5vYmplY3Q6ZWNkLWRvY3MtY2FkLXp6L2RvY3MtYWFhYWJiYmItY2NjYy00ZGRkLThlZWUtZmZmZjAwMDAxMTExLnJ2dA",
+            "versionAtSave": 3,
+            "visible": true,
+            "order": 1
+          }
+        ],
+        "federation": {
+          "activeLineage": "urn:adsk.wipprod:dm.lineage:zzE4AaaaAaaaAaaaAaaaAa",
+          "globalOffsetAtSave": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          }
+        },
+        "filters": {
+          "properties": [
+            "Standard::Revit Category"
+          ],
+          "selections": {
+            "Standard::Revit Category": [
+              "Walls"
+            ],
+            "Standard::Sources": [
+              "urn:adsk.wipprod:dm.lineage:zzE4AaaaAaaaAaaaAaaaAa",
+              "urn:alephia:docs.lineage:0d0c0b0a-1111-4222-8333-944445555666"
+            ]
+          },
+          "colors": {
+            "Standard::Revit Category": true
+          },
+          "valueColors": {
+            "Standard::Revit Category::Walls": "#ff0000"
+          },
+          "sourceColor": {
+            "on": true,
+            "custom": {
+              "urn:adsk.wipprod:dm.lineage:zzE4AaaaAaaaAaaaAaaaAa": "#00ff00",
+              "urn:alephia:docs.lineage:0d0c0b0a-1111-4222-8333-944445555666": "#0000ff"
+            }
+          },
+          "hiddenModelLineages": [
+            "urn:alephia:docs.lineage:0d0c0b0a-1111-4222-8333-944445555666"
+          ]
+        },
+        "inventory": {
+          "columns": {
+            "mode": "all"
+          }
+        },
+        "extensions": {
+          "pkHeatmap": null
+        },
+        "meta": {
+          "appVersion": "2026.09",
+          "capturedAt": "2026-09-05T12:00:00Z"
+        }
+      }
+    },
+    {
+      "nombre": "linaje de Docs en mayusculas",
+      "esperado": false,
+      "motivos": [
+        "LINAJE_NO_ES_LINAJE"
+      ],
+      "porQue": "una sola forma: el id del documento en minusculas, como lo escribe el servidor",
+      "state": {
+        "schemaVersion": 2,
+        "models": [
+          {
+            "lineage": "urn:alephia:docs.lineage:0D0C0B0A-1111-4222-8333-944445555666",
+            "urnAtSave": "dXJuOmFkc2sud2lwcHJvZDpmcy5maWxlOnZmLnp6RTRBYWFhQWFhYUFhYWFBYWFhQWE_dmVyc2lvbj01MA",
+            "versionAtSave": 50,
+            "visible": true,
+            "order": 0
+          }
+        ]
+      }
+    },
+    {
+      "nombre": "linaje de Docs que no es un documento",
+      "esperado": false,
+      "motivos": [
+        "LINAJE_NO_ES_LINAJE"
+      ],
+      "porQue": "tras el prefijo de Docs tiene que ir el id de un documento, no cualquier texto",
+      "state": {
+        "schemaVersion": 2,
+        "models": [
+          {
+            "lineage": "urn:alephia:docs.lineage:modelo-1",
+            "urnAtSave": "dXJuOmFkc2sud2lwcHJvZDpmcy5maWxlOnZmLnp6RTRBYWFhQWFhYUFhYWFBYWFhQWE_dmVyc2lvbj01MA",
+            "versionAtSave": 50,
+            "visible": true,
+            "order": 0
+          }
+        ]
+      }
+    },
+    {
+      "nombre": "Standard::Sources seleccionado por URN de Docs",
+      "esperado": false,
+      "motivos": [
+        "IDENTIDAD_DE_VERSION"
+      ],
+      "porQue": "el URN de una version de Docs es de esa version: Sources se guarda por linaje",
+      "state": {
+        "schemaVersion": 2,
+        "lmv": {
+          "viewport": {
+            "eye": [
+              1,
+              2,
+              3
+            ]
+          },
+          "objectSet": [
+            {
+              "id": [
+                966
+              ],
+              "seedUrn": "dXJuOmFkc2sud2lwcHJvZDpmcy5maWxlOnZmLnp6RTRBYWFhQWFhYUFhYWFBYWFhQWE_dmVyc2lvbj01MA"
+            }
+          ],
+          "cutplanes": [
+            [
+              0,
+              0,
+              1,
+              -5
+            ]
+          ]
+        },
+        "models": [
+          {
+            "lineage": "urn:adsk.wipprod:dm.lineage:zzE4AaaaAaaaAaaaAaaaAa",
+            "urnAtSave": "dXJuOmFkc2sud2lwcHJvZDpmcy5maWxlOnZmLnp6RTRBYWFhQWFhYUFhYWFBYWFhQWE_dmVyc2lvbj01MA",
+            "versionAtSave": 50,
+            "visible": true,
+            "order": 0
+          }
+        ],
+        "federation": {
+          "activeLineage": "urn:adsk.wipprod:dm.lineage:zzE4AaaaAaaaAaaaAaaaAa",
+          "globalOffsetAtSave": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          }
+        },
+        "filters": {
+          "properties": [
+            "Standard::Revit Category"
+          ],
+          "selections": {
+            "Standard::Revit Category": [
+              "Walls"
+            ],
+            "Standard::Sources": [
+              "dXJuOmFkc2sub2JqZWN0czpvcy5vYmplY3Q6ZWNkLWRvY3MtY2FkLXp6L2RvY3MtYWFhYWJiYmItY2NjYy00ZGRkLThlZWUtZmZmZjAwMDAxMTExLnJ2dA"
+            ]
+          },
+          "colors": {
+            "Standard::Revit Category": true
+          },
+          "valueColors": {
+            "Standard::Revit Category::Walls": "#ff0000"
+          },
+          "sourceColor": {
+            "on": true,
+            "custom": {
+              "urn:adsk.wipprod:dm.lineage:zzE4AaaaAaaaAaaaAaaaAa": "#00ff00"
+            }
+          },
+          "hiddenModelLineages": []
+        },
+        "inventory": {
+          "columns": {
+            "mode": "all"
+          }
+        },
+        "extensions": {
+          "pkHeatmap": null
+        },
+        "meta": {
+          "appVersion": "2026.09",
+          "capturedAt": "2026-09-05T12:00:00Z"
+        }
+      }
+    },
+    {
+      "nombre": "sourceColor.custom indexado por URN de Docs",
+      "esperado": false,
+      "motivos": [
+        "MAPA_INDEXADO_POR_URN"
+      ],
+      "porQue": "el URN de Docs no lleva ?version= pero es de una version (docs-<id de la version>): un mapa indexado por el se pierde en la siguiente",
+      "state": {
+        "schemaVersion": 2,
+        "lmv": {
+          "viewport": {
+            "eye": [
+              1,
+              2,
+              3
+            ]
+          },
+          "objectSet": [
+            {
+              "id": [
+                966
+              ],
+              "seedUrn": "dXJuOmFkc2sud2lwcHJvZDpmcy5maWxlOnZmLnp6RTRBYWFhQWFhYUFhYWFBYWFhQWE_dmVyc2lvbj01MA"
+            }
+          ],
+          "cutplanes": [
+            [
+              0,
+              0,
+              1,
+              -5
+            ]
+          ]
+        },
+        "models": [
+          {
+            "lineage": "urn:adsk.wipprod:dm.lineage:zzE4AaaaAaaaAaaaAaaaAa",
+            "urnAtSave": "dXJuOmFkc2sud2lwcHJvZDpmcy5maWxlOnZmLnp6RTRBYWFhQWFhYUFhYWFBYWFhQWE_dmVyc2lvbj01MA",
+            "versionAtSave": 50,
+            "visible": true,
+            "order": 0
+          }
+        ],
+        "federation": {
+          "activeLineage": "urn:adsk.wipprod:dm.lineage:zzE4AaaaAaaaAaaaAaaaAa",
+          "globalOffsetAtSave": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          }
+        },
+        "filters": {
+          "properties": [
+            "Standard::Revit Category"
+          ],
+          "selections": {
+            "Standard::Revit Category": [
+              "Walls"
+            ]
+          },
+          "colors": {
+            "Standard::Revit Category": true
+          },
+          "valueColors": {
+            "Standard::Revit Category::Walls": "#ff0000"
+          },
+          "sourceColor": {
+            "on": true,
+            "custom": {
+              "dXJuOmFkc2sub2JqZWN0czpvcy5vYmplY3Q6ZWNkLWRvY3MtY2FkLXp6L2RvY3MtYWFhYWJiYmItY2NjYy00ZGRkLThlZWUtZmZmZjAwMDAxMTExLnJ2dA": "#00ff00"
+            }
+          },
+          "hiddenModelLineages": []
+        },
+        "inventory": {
+          "columns": {
+            "mode": "all"
+          }
+        },
+        "extensions": {
+          "pkHeatmap": null
+        },
+        "meta": {
+          "appVersion": "2026.09",
+          "capturedAt": "2026-09-05T12:00:00Z"
+        }
+      }
     }
   ]
 }

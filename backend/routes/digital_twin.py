@@ -446,6 +446,178 @@ def add_model_route():
          return jsonify(resp)
     return jsonify({"error": "Failed to save"}), 500
 
+# ── MODELOS DE ALEPHIA DOCS (docs/archivos/29, F2 y F3) ─────────────────────────────────────────────────────────────
+# Las reglas viven en `modelos_de_docs.py`; aquí, la obra, los permisos y la base. La traducción es la de Docs
+# (`/api/docs/cad/translate` y `/status`, con su guardia de plano): estas rutas solo VINCULAN lo ya preparado.
+
+def _documento_de_docs(documento_id):
+    """(nodo, urn de su versión vigente, número de esa versión, obra del documento) o (None, …)."""
+    from routes.docs_cad import _cargar, _urn_for, _bucket_key
+    from db import resolve_project_id, get_db_connection
+    nodo = _cargar(str(documento_id))
+    if not nodo:
+        return None, None, None, None
+    urn = _urn_for(nodo, _bucket_key())
+    numero = None
+    if nodo.get('v_id'):
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            cur.execute('SELECT version_number FROM file_versions WHERE id = %s', (nodo['v_id'],))
+            fila = cur.fetchone()
+            numero = fila[0] if fila else None
+    return nodo, urn, numero, resolve_project_id(nodo.get('model_urn'))
+
+
+@digital_twin_bp.route('/api/config/project/docs-obra', methods=['GET'])
+def docs_de_la_obra_del_frente():
+    """La obra de ALEPHIA Docs de este frente (su `model_urn` en Docs y su nombre), para navegar sus carpetas."""
+    from db import resolve_project_id, get_db_connection
+    frente = request.args.get('project') or ''
+    negativa = guardia_de_obra(frente, 'ver los modelos de Docs de la obra')
+    if negativa:
+        return negativa
+    obra = resolve_project_id(frente)
+    if not obra:
+        return jsonify({'success': False, 'error': 'No se pudo saber de qué obra es este frente.'}), 404
+    with get_db_connection() as conn:
+        cur = conn.cursor()
+        cur.execute('SELECT model_urn, name FROM projects WHERE id::text = %s', (str(obra),))
+        fila = cur.fetchone()
+    if not fila or not fila[0]:
+        return jsonify({'success': False, 'error': 'La obra no tiene Docs.'}), 404
+    import modelos_de_docs as _md
+    return jsonify({'success': True, 'model_urn': fila[0], 'nombre': fila[1], 'formatos': list(_md.FORMATOS)})
+
+
+@digital_twin_bp.route('/api/config/project/add-from-docs', methods=['POST'])
+def add_model_from_docs():
+    """Vincula al frente un modelo de ALEPHIA Docs YA TRADUCIDO. {project, documento, defaultViewGuid,
+    defaultViewName}. El URN, el linaje y la versión los pone el servidor, no el navegador."""
+    import modelos_de_docs as _md
+    from routes.docs_cad import _guardia_del_plano
+    from db import resolve_project_id, log_activity
+    data = request.get_json(silent=True) or {}
+    frente = data.get('project')
+    negativa = guardia_de_obra(frente, 'vincular un modelo a la obra')
+    if negativa:
+        return negativa
+    try:
+        _md.linaje_de(data.get('documento'))
+    except _md.Negativa as e:
+        return jsonify({'error': e.texto, 'code': e.codigo}), e.http
+    nodo, urn, numero, obra_doc = _documento_de_docs(data.get('documento'))
+    if nodo:
+        negativa = _guardia_del_plano(nodo)       # «Ver» en el documento, como para abrirlo en Docs
+        if negativa:
+            return negativa
+    config = get_project_config_internal()
+    del_frente = [m for m in config.get('models', []) if m.get('appProjectId') == frente]
+    try:
+        _md.comprobar(nodo, resolve_project_id(frente), obra_doc, urn, del_frente)
+    except _md.Negativa as e:
+        return jsonify({'error': e.texto, 'message': e.texto, 'code': e.codigo, **e.extra}), e.http
+    ahora = datetime.now().isoformat()
+    nuevo = _md.ficha(nodo, numero, frente, urn, data.get('defaultViewGuid'), data.get('defaultViewName'),
+                      ahora=ahora, model_id=str(int(time.time() * 1000)))
+    config.setdefault('models', []).append(nuevo)
+    if not save_project_config_internal(config):
+        return jsonify({'error': 'No se pudo guardar.'}), 500
+    try:
+        log_activity(nodo.get('model_urn'), 'link_docs_model', 'file', entity_id=str(nodo['id']),
+                     entity_name=nodo.get('name'), performed_by=(getattr(g, 'current_user', None) or {}).get('email'),
+                     details={'frente': frente, 'version': numero, 'vista': data.get('defaultViewName')})
+    except Exception as e:
+        print(f'[docs-model] actividad sin anotar: {e}')
+    # El inventario de la versión vinculada, como al importar uno de ACC: lo extrae el servidor y el visor sondea
+    # ESTE trabajo (B1 ya acepta el linaje de Docs, F4).
+    extraction_job_id = None
+    try:
+        from routes.inventory import extract_metadata_task
+        extraction_job_id = f"link_docs_{nuevo['id']}"
+        threading.Thread(target=extract_metadata_task, args=(urn, frente, extraction_job_id), daemon=True).start()
+    except Exception as e:
+        print(f'[docs-model] no se pudo lanzar la extracción: {e}')
+        extraction_job_id = None
+    return jsonify({'models': [m for m in config['models'] if m.get('appProjectId') == frente], 'urn': urn,
+                    'extraction_job_id': extraction_job_id})
+
+
+def _comprobar_modelo_de_docs(model):
+    """«Buscar actualizaciones» para un modelo de ALEPHIA Docs: la vigente en Docs contra la cargada."""
+    import modelos_de_docs as _md
+    nodo, _urn, numero, _obra = _documento_de_docs(_md.documento_del_linaje(model.get('itemId')))
+    if not nodo:
+        return _md.comprobacion_de_version(model, None, None, existe=False)
+    return _md.comprobacion_de_version(model, nodo.get('v_id'), numero)
+
+
+def _traer_version_de_docs(model, token=None):
+    """Lleva un modelo de ALEPHIA Docs a su versión vigente si ya está traducida; si no, la prepara. Muta `model` solo
+    al actualizar. Devuelve el informe por modelo de «Actualizar todo»: {status: updated | up_to_date |
+    pending_translation | view_missing | not_in_docs | forbidden | error, message, newUrn}. Lo usan las dos rutas, la de
+    un modelo y la de todos, para que digan lo mismo."""
+    import modelos_de_docs as _md
+    from routes.docs_cad import _guardia_del_plano, encolar_pretraduccion
+    nodo, urn, numero, _obra = _documento_de_docs(_md.documento_del_linaje(model.get('itemId')))
+    if not nodo:
+        return {'status': 'not_in_docs', 'message': 'Ese documento ya no está en Docs.'}
+    if _guardia_del_plano(nodo):
+        return {'status': 'forbidden', 'message': 'No tienes acceso a ese documento en Docs.'}
+    if str(nodo.get('v_id') or '') == str(model.get('versionId') or ''):
+        return {'status': 'up_to_date', 'message': 'Ya es la versión vigente de Docs.',
+                'versionNumber': model.get('versionNumber')}
+    cad = (nodo.get('meta') or {}).get('cad') or {}
+    if cad.get('status') != 'success' or cad.get('urn') != urn:
+        if cad.get('status') not in ('inprogress', 'pending'):
+            try:
+                encolar_pretraduccion(nodo['id'], False, False)
+            except Exception as e:
+                print(f'[docs-model] no se pudo preparar la versión nueva: {e}')
+        return {'status': 'pending_translation',
+                'message': 'La versión nueva se está preparando en Docs. Reintenta en unos minutos.'}
+    if token is None:
+        token, error = get_internal_token()
+        if error or not token:
+            return {'status': 'error', 'message': 'Sin credenciales de Autodesk.'}
+    from vista_del_modelo import llevar_vista_a_la_version
+    puede, aviso = llevar_vista_a_la_version(model, model.get('urn'), urn, token)
+    if not puede:
+        return {'status': 'view_missing', 'message': aviso}
+    model['urn'] = urn
+    model['versionId'] = str(nodo.get('v_id'))
+    model['versionNumber'] = numero
+    model['lastModifiedTime'] = datetime.now().isoformat() + 'Z'
+    return {'status': 'updated', 'newUrn': urn, 'versionNumber': numero}
+
+
+def _actualizar_modelo_de_docs(config, model, app_project_id):
+    """«Actualizar» un modelo de ALEPHIA Docs: lo mismo que con ACC, incluida la extracción del inventario que lanza
+    el servidor (el linaje de Docs ya lo acepta B1, docs/archivos/29 F4)."""
+    r = _traer_version_de_docs(model)
+    if r['status'] == 'forbidden':
+        return jsonify({'error': r['message']}), 403
+    if r['status'] == 'error':
+        return jsonify({'error': r['message']}), 500
+    if r['status'] != 'updated':
+        return jsonify({'updated': False, 'message': r['message'],
+                        'pending_translation': r['status'] == 'pending_translation',
+                        'view_missing': r['status'] == 'view_missing'}), 200
+    save_project_config_internal(config)
+    extraction_job_id = None
+    try:
+        from routes.inventory import extract_metadata_task
+        extraction_job_id = f"auto_update_{model.get('id') or r['newUrn'][:8]}_{int(time.time())}"
+        threading.Thread(target=extract_metadata_task,
+                         args=(r['newUrn'], app_project_id or model.get('appProjectId'), extraction_job_id),
+                         daemon=True).start()
+    except Exception as e:
+        print(f'[docs-model] no se pudo lanzar la extracción: {e}')
+        extraction_job_id = None
+    if app_project_id:
+        config['models'] = [m for m in config.get('models', []) if m.get('appProjectId') == app_project_id]
+    return jsonify({'updated': True, 'config': config, 'newUrn': r['newUrn'], 'extraction_job_id': extraction_job_id})
+
+
 @digital_twin_bp.route('/api/config/project/update', methods=['POST'])
 def update_model_link():
     data = request.get_json()
@@ -463,6 +635,11 @@ def update_model_link():
     if not model:
         return jsonify({'error': 'Model not found'}), 404
         
+    # Un modelo de ALEPHIA Docs se actualiza desde Docs, no preguntando a Autodesk por un item de ACC.
+    import modelos_de_docs as _md
+    if _md.es_de_docs(model):
+        return _actualizar_modelo_de_docs(config, model, app_project_id)
+
     if not model.get('projectId') or not model.get('itemId'):
         # Can't check for updates without ACC metadata
         return jsonify({'updated': False, 'message': 'Este modelo no tiene projectId/itemId. Use Relink.'}), 200
@@ -654,8 +831,26 @@ def update_all_models():
     to_extract = []   # [(new_urn, target, job_id)]
     config_dirty = False
 
+    import modelos_de_docs as _md
     for model in project_models:
         entry = {'id': model.get('id'), 'name': model.get('name'), 'urn': model.get('urn')}
+        if _md.es_de_docs(model):
+            # Un modelo de ALEPHIA Docs se pone al día desde Docs (docs/archivos/29, F3), en la misma cola.
+            try:
+                r = _traer_version_de_docs(model, token)
+            except Exception as de:
+                traceback.print_exc()
+                r = {'status': 'error', 'message': str(de)}
+            if r['status'] == 'updated':
+                config_dirty = True
+                job_id = f"auto_update_{model.get('id') or r['newUrn'][:8]}_{int(time.time())}"
+                to_extract.append((r['newUrn'], app_project_id, job_id))
+                r['extraction_job_id'] = job_id
+            elif r['status'] in ('not_in_docs', 'forbidden'):
+                r['status'] = 'error'
+            entry.update(r)
+            results.append(entry)
+            continue
         pid, iid = model.get('projectId'), model.get('itemId')
         if not pid or not iid:
             entry.update(status='no_acc_metadata', message='Sin projectId/itemId (usa Relink).')
@@ -1512,6 +1707,13 @@ _actualizaciones_en_curso = {}  # clave -> threading.Lock (una sola consulta a A
 
 
 def _comprobar_modelo(model, headers):
+    import modelos_de_docs as _md
+    if _md.es_de_docs(model):
+        try:
+            return _comprobar_modelo_de_docs(model)
+        except Exception as e:
+            return {'model_id': model.get('id'), 'name': model.get('name'), 'has_update': False,
+                    'reason': 'exception_docs: %s' % str(e)[:80], 'current_version': model.get('versionNumber')}
     pid = model.get('projectId')
     iid = model.get('itemId')
     if not pid or not iid:

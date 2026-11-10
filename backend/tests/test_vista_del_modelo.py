@@ -84,7 +84,11 @@ def test_el_extractor_ya_no_cae_en_silencio_a_otra_vista():
 def test_actualizar_y_actualizar_todos_comprueban_la_vista():
     import routes.digital_twin as dt
     fuente = open(dt.__file__, encoding='utf-8').read()
-    assert fuente.count('llevar_vista_a_la_version(model, model.get(') == 2
+    # ACC: «Actualizar» y «Actualizar todos». ALEPHIA Docs (docs/archivos/29, F3): las dos rutas pasan por un mismo
+    # núcleo, `_traer_version_de_docs`, que también la comprueba. Tres, y la de Docs dentro de su núcleo.
+    assert fuente.count('llevar_vista_a_la_version(model, model.get(') == 3
+    nucleo = fuente[fuente.index('def _traer_version_de_docs('):fuente.index('def _actualizar_modelo_de_docs(')]
+    assert 'llevar_vista_a_la_version(model, model.get(' in nucleo and "'status': 'view_missing'" in nucleo
     assert "'view_missing': True" in fuente and "status='view_missing'" in fuente
     assert "default_view_name = EXCLUDED.default_view_name" in fuente
 

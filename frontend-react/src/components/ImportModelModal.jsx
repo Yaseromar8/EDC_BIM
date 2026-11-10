@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import NativeFileTree from './NativeFileTree';
+import ImportarDesdeDocs from './ImportarDesdeDocs';
 import { apiFetch } from '../utils/apiFetch';
 import { Capacitor } from '@capacitor/core';
 import './ImportModelModal.css';
@@ -56,8 +57,11 @@ const CIVIL_MODES = {
   DATA_ONLY: 'data-only'
 };
 
-const ImportModelModal = ({ open, onClose, onLinkDocs, onUploadLocal, onExtractCivilData, selectedProject, relinkTarget = null }) => {
+const ImportModelModal = ({ open, onClose, onLinkDocs, onUploadLocal, onExtractCivilData, selectedProject, relinkTarget = null,
+                            onModelosDeDocs }) => {
   const [activeTab, setActiveTab] = useState('UPLOAD');
+  // ALEPHIA DOCS (docs/archivos/29, F2): mientras prepara o vincula, no se cambia de pestaña.
+  const [docsAlephiaOcupado, setDocsAlephiaOcupado] = useState(false);
 
   // Docs State
   const [selectedDocs, setSelectedDocs] = useState([]);
@@ -534,6 +538,12 @@ const ImportModelModal = ({ open, onClose, onLinkDocs, onUploadLocal, onExtractC
           <button className={`import-tab-btn ${activeTab === 'DOCS' ? 'active' : ''}`}
             onClick={() => !isProcessing && !extractionDone && !eligiendoVista && setActiveTab('DOCS')}
             disabled={isProcessing || extractionDone || eligiendoVista}>AUTODESK DOCS</button>
+          {/* Reemplazar un modelo (relink) sigue siendo cosa de ACC: aquí solo se añade. */}
+          {!relinkTarget && onModelosDeDocs && (
+            <button className={`import-tab-btn ${activeTab === 'ALEPHIA' ? 'active' : ''}`}
+              onClick={() => !isProcessing && !extractionDone && !eligiendoVista && setActiveTab('ALEPHIA')}
+              disabled={isProcessing || extractionDone || eligiendoVista}>ALEPHIA DOCS</button>
+          )}
         </div>
 
         <div className="import-body-content">
@@ -807,6 +817,13 @@ const ImportModelModal = ({ open, onClose, onLinkDocs, onUploadLocal, onExtractC
               )}
             </div>
           )}
+
+          {/* ═══ ALEPHIA DOCS TAB ═══ */}
+          {activeTab === 'ALEPHIA' && (
+            <ImportarDesdeDocs backendUrl={BACKEND_URL} frente={selectedProject?.id}
+              ocupado={docsAlephiaOcupado} setOcupado={setDocsAlephiaOcupado}
+              onVinculado={onModelosDeDocs} onCerrar={onClose} />
+          )}
         </div>
 
         {/* FOOTER */}
@@ -817,7 +834,7 @@ const ImportModelModal = ({ open, onClose, onLinkDocs, onUploadLocal, onExtractC
             onClose();
           }}>Cancel</button>
 
-          {activeTab === 'DOCS' ? (
+          {activeTab === 'ALEPHIA' ? null : activeTab === 'DOCS' ? (
             /* AUTODESK DOCS: Start extraction */
             <button className="import-btn-primary"
               disabled={selectedDocs.length === 0}

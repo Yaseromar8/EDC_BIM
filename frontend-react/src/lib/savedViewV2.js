@@ -482,15 +482,20 @@ export function fallar(informe, motivo) {
 // identidad es guardar «la versión 50», y el día que llegue la 51 el LMV la
 // descarta sin decir nada (`restoreObjectSet`).
 
-const RE_LINAJE = /^urn:adsk\.[a-z0-9]+:dm\.lineage:[A-Za-z0-9_-]+$/;
+// Dos linajes: el de APS (ACC) y, desde el 10-nov-2026, el de ALEPHIA Docs, que es el id del documento
+// (docs/archivos/29, F4; backend/vistas_v2.py RE_LINAJE, el corpus compartido las mantiene iguales).
+const RE_LINAJE = /^(?:urn:adsk\.[a-z0-9]+:dm\.lineage:[A-Za-z0-9_-]+|urn:alephia:docs\.lineage:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/;
 const HUELLAS_DE_VERSION = ['fs.file:vf.', '?version='];
+// La versión de un documento de Docs es un objeto de su bucket (`docs-<id de la versión>`): sin ninguna de las
+// dos huellas, pero igual de versión. Solo ese objeto; los OSS de otras subidas siguen como estaban.
+const RE_HUELLA_DOCS = /os\.object:[^/\s]+\/docs-[0-9a-f]{8}-/;
 
 export const esLinaje = (v) => typeof v === 'string' && RE_LINAJE.test(v.trim());
 
 /** ¿Hay dentro de este texto un URN con la versión pegada? En claro o en base64. */
 export function contieneUrnDeVersion(texto) {
     if (typeof texto !== 'string' || !texto) return false;
-    if (HUELLAS_DE_VERSION.some((h) => texto.includes(h))) return true;
+    if (HUELLAS_DE_VERSION.some((h) => texto.includes(h)) || RE_HUELLA_DOCS.test(texto)) return true;
     // Se buscan TROZOS de base64 en cualquier posición: las claves de
     // `valueColors` son `propId::valor`, así que la clave entera no es base64
     // pero su cola sí.
@@ -503,7 +508,7 @@ export function contieneUrnDeVersion(texto) {
             const b64 = trozo.replace(/-/g, '+').replace(/_/g, '/');
             claro = atob(b64 + '='.repeat((4 - (b64.length % 4)) % 4));
         } catch { continue; }
-        if (HUELLAS_DE_VERSION.some((h) => claro.includes(h))) return true;
+        if (HUELLAS_DE_VERSION.some((h) => claro.includes(h)) || RE_HUELLA_DOCS.test(claro)) return true;
     }
     return false;
 }

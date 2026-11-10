@@ -86,9 +86,17 @@ LIM_ESTADO_BYTES = 2 * 1024 * 1024
 # da un espacio de identidad propio --el linaje-- y por eso se nombra aparte.
 PROP_SOURCES = 'Standard::Sources'
 
-RE_LINAJE = re.compile(r'^urn:adsk\.[a-z0-9]+:dm\.lineage:[A-Za-z0-9_\-]+$')
+# Dos linajes: el de APS (ACC) y, desde el 10-nov-2026, el de ALEPHIA Docs (docs/archivos/29, F4; autorizado por el
+# dueño solo para esto: «SI A LOS PUNTOS 1. 2 Y 3»). El de Docs es el id del documento, igual de estable entre
+# versiones; su forma la fija `modelos_de_docs.py` y aquí se repite para no importar nada en la base del contrato.
+RE_LINAJE = re.compile(r'^(?:urn:adsk\.[a-z0-9]+:dm\.lineage:[A-Za-z0-9_\-]+'
+                       r'|urn:alephia:docs\.lineage:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$')
 _RE_TROZO_B64 = re.compile(r'[A-Za-z0-9_\-+/]{32,}={0,2}')
 _HUELLAS_DE_VERSION = ('fs.file:vf.', '?version=')
+# La versión de un documento de ALEPHIA Docs no lleva ninguna de las dos: es un objeto de su bucket
+# (`docs-<id de la versión>`). Aceptar su linaje obliga a reconocer también su URN. Solo ese objeto: los OSS
+# de otras subidas siguen como estaban.
+_RE_HUELLA_DOCS = re.compile(r'os\.object:[^/\s]+/docs-[0-9a-f]{8}-')
 
 # Prefijos de datos aceptados en una miniatura. Nada de SVG: lleva script.
 MINIATURA_PREFIJOS = ('data:image/png;base64,', 'data:image/jpeg;base64,',
@@ -96,7 +104,7 @@ MINIATURA_PREFIJOS = ('data:image/png;base64,', 'data:image/jpeg;base64,',
 
 
 def es_linaje(valor):
-    """¿Es un identificador de LINAJE de APS (el que sobrevive al versionado)?"""
+    """¿Es un identificador de LINAJE (el que sobrevive al versionado), de APS o de ALEPHIA Docs?"""
     return isinstance(valor, str) and bool(RE_LINAJE.match(valor.strip()))
 
 
@@ -113,7 +121,7 @@ def contiene_urn_de_version(texto):
     """
     if not isinstance(texto, str) or not texto:
         return False
-    if any(h in texto for h in _HUELLAS_DE_VERSION):
+    if any(h in texto for h in _HUELLAS_DE_VERSION) or _RE_HUELLA_DOCS.search(texto):
         return True
     for trozo in _RE_TROZO_B64.findall(texto):
         relleno = trozo + '=' * (-len(trozo) % 4)
@@ -121,7 +129,7 @@ def contiene_urn_de_version(texto):
             claro = base64.urlsafe_b64decode(relleno).decode('utf-8', 'ignore')
         except Exception:
             continue
-        if any(h in claro for h in _HUELLAS_DE_VERSION):
+        if any(h in claro for h in _HUELLAS_DE_VERSION) or _RE_HUELLA_DOCS.search(claro):
             return True
     return False
 
@@ -202,7 +210,7 @@ def validar_v2_persistible(state):
                 motivo = ('IDENTIDAD_DE_VERSION' if contiene_urn_de_version(linaje)
                           else 'LINAJE_NO_ES_LINAJE')
                 _mal(problemas, campo + '.lineage', motivo,
-                     'se esperaba urn:adsk.<hub>:dm.lineage:<id>')
+                     'se esperaba urn:adsk.<hub>:dm.lineage:<id> o urn:alephia:docs.lineage:<id>')
             # Resuelto EN TIEMPO DE RESTAURACION por `aplicarRebind`. Guardarlo
             # seria guardar una version como si fuera un dato del documento.
             if m.get('urnActual'):

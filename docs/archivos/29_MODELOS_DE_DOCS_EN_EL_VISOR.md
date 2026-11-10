@@ -154,6 +154,64 @@ equipo, no entra en el inventario B1 ni en las vistas guardadas V2. **Con F4** e
 | Fase | Estado |
 |---|---|
 | F1 | Hecha en local (10-nov-2026). Pruebas: `documentosDelPin` 4/4 (incluido el contrato «nadie llama a mutate-bind»); las suites cerradas de Saved Views y la configuración del inventario, intactas; el visor compila. No se probó en el visor real: hacerlo escribe en el seguimiento de la obra en producción. |
-| F2 | Pendiente |
-| F3 | Pendiente |
-| F4 | Pendiente |
+| F2 | Hecha en local (10-nov-2026). Pestaña «ALEPHIA DOCS» en «Importar modelo» (`ImportarDesdeDocs.jsx`) y rutas `GET /api/config/project/docs-obra` y `POST /api/config/project/add-from-docs` (`modelos_de_docs.py`). |
+| F3 | Hecha en local (10-nov-2026). «Buscar actualizaciones», «Actualizar» y «Actualizar todo» para modelos de Docs, con un mismo núcleo (`_traer_version_de_docs`). |
+| F4 | Hecha en local (10-nov-2026). B1 y Vistas guardadas V2 aceptan el linaje de Docs; ver §7, que difiere de §2.3 en dos puntos. |
+
+## 7 · Cómo quedó (10-nov-2026)
+
+### 7.1 El recorrido
+
+1. **Importar modelo → ALEPHIA DOCS.** Se navega la obra del frente en Docs (sus carpetas, con los permisos de Docs) y
+   solo se listan RVT, DWG, DXF, NWD, NWC e IFC. No se ofrece al **reemplazar** un modelo (relink): eso sigue siendo
+   de ACC.
+2. **Siguiente.** Se prepara para el visor la versión vigente con la traducción de Docs de siempre
+   (`/api/docs/cad/translate` y `/status`, con su guardia de plano). Si ya estaba traducida no se gasta nada. Aguanta
+   los 502 pasajeros de Render (~1 min, como el lector de Docs) y el caso «el paquete con imagen adjunta falló».
+3. **Vista.** Las vistas de esa versión, con la 3D elegida por defecto.
+4. **Vincular al frente.** El servidor comprueba obra, permiso, formato, duplicado y que la versión vigente esté
+   traducida, y escribe la ficha. **El URN, el linaje y la versión los pone el servidor, nunca el navegador.** Lanza
+   la extracción del inventario y el visor sondea ese mismo trabajo.
+5. **Versión nueva en Docs.** «Buscar actualizaciones» la ve; «Actualizar» y «Actualizar todo» la traen si ya está
+   traducida, o la preparan y piden reintentar. La vista se lleva por su nombre (`vista_del_modelo`) y se reextrae el
+   inventario. En la papelera: «ya no está en Docs», sin romper el frente.
+
+### 7.2 F4: lo que se abrió de lo cerrado, y en qué difiere de §2.3
+
+Se abrió **solo** lo que autorizó el dueño: que los dos contratos acepten el linaje de Docs. Dos diferencias con
+lo que se escribió en §2.3, por lo que se encontró en el código:
+
+1. **El linaje no sale de la ficha, sale del URN, preguntando a la base.** B1 se llama con el URN a secas desde más
+   de diez sitios (extracción, inventario, comparador, actualizar…). El URN de Docs es un objeto del bucket de Docs,
+   `docs-<id de la versión>`, sin el documento dentro, así que `source_identity` lo resuelve con `file_versions`
+   (versión → documento). Es **fail-closed**:
+   - otro bucket, u otro OSS (una subida «LOCAL»), sigue rechazado como antes;
+   - una versión que no está en la base da `UNKNOWN_DOCS_VERSION`;
+   - con `item_id`, se exige que coincida (`ITEM_LINEAGE_CONFLICT`), como con ACC.
+
+   La relación versión → documento no cambia nunca, así que se recuerda en memoria.
+2. **El URN de Docs también cuenta como identidad de versión** en las vistas guardadas. El validador reconocía una
+   versión por `fs.file:vf.` o `?version=`, y el URN de Docs no lleva ninguna: un mapa de colores indexado por él
+   pasaba como válido y se perdía en la siguiente versión (comprobado). Aceptar el linaje sin esto dejaba el agujero.
+   La huella es estrecha, solo `os.object:<bucket>/docs-<uuid>`: los OSS de otras subidas siguen como estaban. Va en
+   los dos lados, servidor (`vistas_v2.py`) y visor (`savedViewV2.js`), y el corpus compartido los mantiene iguales.
+
+Lo que **no** cambia: el linaje de ACC y todas sus reglas; los sitios del visor que deducen el linaje del URN sin
+ficha (`model.js`, `CompareView`) dan `null` para un modelo de Docs, y ahí se queda en «no se resuelve», que ya era
+su comportamiento ante lo desconocido.
+
+### 7.3 Pruebas (10-nov-2026)
+
+| Qué | Resultado |
+|---|---|
+| `backend/tests/test_modelos_de_docs.py` (reglas, B1 con la versión de Docs, mismo bucket que Docs, mismo linaje en los dos contratos) | 10/10 |
+| Suites cerradas del backend: `test_vistas_v2`, `test_inventory_identity_core`, `test_identity`, `test_inventory_reimport_snapshot` | 84/84 (eran 72; +6 casos nuevos del corpus, +6 de Docs) |
+| Corpus compartido de persistibilidad v2 | 31 → 37 casos, los mismos veredictos en Python y en Node |
+| Ensayo con las rutas reales contra la base desechable (`model_config`, `file_versions` y permisos de carpeta reales) | 23/23 |
+| Visor: `capturarVistaV2` 63, `restaurarVistaV2` 150, `savedViewV2` 117 (eran 111: los 6 casos nuevos), `inventoryConfig` 20, `frenteDeVistas` 20, `documentosDelPin` 4 | todo en verde |
+| `test_vista_del_modelo`: ahora exige tres comprobaciones de la vista (ACC uno, ACC todos y el núcleo de Docs), nombrando la de Docs | en verde |
+
+**No probado:** un modelo de Docs real en el visor real, con Autodesk de verdad (traducir, cargar, extraer el
+inventario, guardar una vista y restaurarla tras subir una versión). En el banco Autodesk está sustituido; en el
+visor real se escribe en `model_config` de producción. Es la prueba que falta, en local, con un modelo de una obra
+de prueba.

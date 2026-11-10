@@ -5182,6 +5182,13 @@ function App() {
           onExtractCivilData={handleExtractCivilData}
           selectedProject={selectedProject}
           relinkTarget={relinkTargetModel}
+          onModelosDeDocs={(lista, urn, guid, trabajo) => {
+            // Un modelo de ALEPHIA Docs ya vinculado por el servidor (docs/archivos/29, F2): se refleja, y se sondea
+            // la extracción de su inventario que lanzó el propio servidor (no se lanza otra).
+            if (urn && guid) setActiveViewableGuids(prev => ({ ...prev, [urn]: guid }));
+            setModels(lista.map(m => ({ ...m, label: m.name })));
+            if (urn && trabajo) triggerBackgroundExtraction(urn, trabajo);
+          }}
         />
 
         {/* Views Popover */}

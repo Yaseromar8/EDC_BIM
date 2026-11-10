@@ -25,6 +25,65 @@ SCHEMA = "inventory_identity_b1"
 DATABASE_PREFIX = "ecd_ensayo_"
 IDENTITY_FIELDS = ("scope_id", "source_lineage", "external_id")
 _VERSION = re.compile(r"^urn:(adsk\.[a-z0-9]+):fs\.file:vf\.([A-Za-z0-9_-]+)(\?[^\s]+)?$")
+# UNA VERSIÓN DE ALEPHIA DOCS (10-nov-2026, docs/archivos/29, F4). Docs traduce cada versión en su propio objeto de
+# su propio bucket (routes/docs_cad.py `_object_key_for`): `docs-<id de la versión>[-pdf2d](.ext|-pkg.zip)`. La
+# versión no lleva el documento dentro, así que su linaje lo dice la base (`file_versions`), no se adivina. Solo
+# eso se abrió de este contrato, con autorización del dueño; cualquier otro OSS se sigue rechazando.
+_UUID = r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+_DOCS_VERSION = re.compile(r"^urn:adsk\.objects:os\.object:([a-z0-9._-]+)/docs-(" + _UUID + r")(?:-pdf2d)?"
+                           r"(?:-pkg\.zip|\.[a-z0-9]+)$")
+_DOCS_LINEAGE = "urn:alephia:docs.lineage:"
+_docs_por_version = {}          # versión -> documento: no cambia nunca, así que se recuerda
+
+
+def bucket_de_docs():
+    """El bucket de ALEPHIA Docs; el mismo cálculo que routes/docs_cad.py `_bucket_key` (lo comprueba un test)."""
+    import os
+    cid = (os.getenv('APS_CLIENT_ID') or 'ecd').lower()
+    return os.getenv('APS_DOCS_BUCKET') or ('ecd-docs-cad-%s' % ''.join(ch for ch in cid if ch.isalnum())[:18])
+
+
+def _documento_de_la_version(version_id):
+    """El documento de una versión de Docs, según la base. Un documento sin versiones guarda su objeto con su
+    propio id (`v_id or id`): también vale. None si no existe."""
+    try:
+        from backend.db import get_db_connection
+    except ModuleNotFoundError as exc:
+        if exc.name not in ("backend", "backend.db"):
+            raise
+        from db import get_db_connection
+    with get_db_connection() as conn:
+        cur = conn.cursor()
+        # `version_id` ya es un UUID (lo exige `_DOCS_VERSION`): el cast es seguro y usa la clave primaria.
+        cur.execute("""SELECT file_node_id::text FROM file_versions WHERE id = %s::uuid
+                       UNION ALL SELECT id::text FROM file_nodes WHERE id = %s::uuid AND node_type = 'FILE'
+                       LIMIT 1""", (version_id, version_id))
+        fila = cur.fetchone()
+    return fila[0] if fila else None
+
+
+# Inyectable para las pruebas sin base: callable(version_id) -> id del documento | None.
+resolver_documento_de_docs = _documento_de_la_version
+
+
+def _linaje_de_docs(clear):
+    """(es de Docs, linaje). Lanza si parece de Docs pero no se puede confirmar: fail-closed."""
+    match = _DOCS_VERSION.fullmatch(clear)
+    if not match:
+        return False, None
+    if match.group(1) != bucket_de_docs():
+        raise IdentityError("INVALID_SOURCE_URN")
+    version = match.group(2)
+    documento = _docs_por_version.get(version)
+    if documento is None:
+        documento = resolver_documento_de_docs(version)
+        if not documento or not re.fullmatch(_UUID, str(documento).lower()):
+            raise IdentityError("UNKNOWN_DOCS_VERSION", version=version)
+        documento = str(documento).lower()
+        _docs_por_version[version] = documento
+    return True, _DOCS_LINEAGE + documento
+
+
 _BASE_FIELDS = {
     "Material": "material", "material": "material",
     "Status": "status", "status": "status", "installation_status": "status",
@@ -75,8 +134,9 @@ def _text(value, label):
 def source_identity(source_urn, item_id=None):
     """Return (normalized runtime URN, stable lineage), aligned with linajeDeUrn.
 
-    URL-safe/standard base64 and a clear APS file-version URN are accepted.
-    Non-APS/OSS and guessed GUID/document relationships are deliberately rejected.
+    URL-safe/standard base64 and a clear APS file-version URN are accepted, and the version of an ALEPHIA Docs
+    document in Docs' own bucket, whose lineage the database states (never guessed).
+    Any other OSS and guessed GUID/document relationships are deliberately rejected.
     """
     if not isinstance(source_urn, str) or not source_urn or source_urn != source_urn.strip():
         raise IdentityError("INVALID_SOURCE_URN")
@@ -89,9 +149,12 @@ def source_identity(source_urn, item_id=None):
         except (ValueError, UnicodeError) as exc:
             raise IdentityError("INVALID_SOURCE_URN") from exc
     match = _VERSION.fullmatch(clear)
-    if not match:
-        raise IdentityError("INVALID_SOURCE_URN")
-    lineage = f"urn:{match.group(1)}:dm.lineage:{match.group(2)}"
+    if match:
+        lineage = f"urn:{match.group(1)}:dm.lineage:{match.group(2)}"
+    else:
+        de_docs, lineage = _linaje_de_docs(clear)
+        if not de_docs:
+            raise IdentityError("INVALID_SOURCE_URN")
     if not es_linaje(lineage):
         raise IdentityError("INVALID_SOURCE_URN")
     if item_id is not None:
