@@ -81,6 +81,8 @@ servir: todas las filas, su JSON entero y el gzip.
     `get_inventory` es ahora su lista.
 - **`backend/inventory_http.py`**
   - **`_construir_cuerpo`** escribe cada fila al compresor según llega de la base. Sale el mismo JSON.
+    (En [04](04_INVENTARIO_EN_EL_NAVEGADOR.md) se le añadió un salto de línea tras cada fila, para que el visor
+    lo lea línea a línea; quitándolos es, byte a byte, el JSON de antes.)
   - El esquema de columnas (`inventory_schema_request`) mira sus 2.000 elementos sin traer el frente entero.
 
 ## 5 · Evidencia

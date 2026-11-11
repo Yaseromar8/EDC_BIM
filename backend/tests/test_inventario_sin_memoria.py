@@ -260,11 +260,29 @@ def test_el_cuerpo_fila_a_fila_es_el_mismo_json_que_el_de_la_lista(monkeypatch):
                'B': [{'external_id': 'z', 'properties': {}}]}
     esperado = json.dumps([f for filas in frentes.values() for f in filas], ensure_ascii=False,
                           separators=(',', ':'), default=str).encode('utf-8')
-    assert gzip.decompress(_cuerpo(monkeypatch, frentes)) == esperado
+    cuerpo = gzip.decompress(_cuerpo(monkeypatch, frentes))
+    salto = bytes([10])
+    # Quien lo lee entero obtiene la lista de siempre: los saltos de línea son espacio en blanco de JSON...
+    assert json.loads(cuerpo) == json.loads(esperado)
+    # ...y quitándolos queda, byte a byte, el JSON que se servía antes.
+    assert cuerpo.replace(salto, b'') == esperado
+
+
+def test_el_cuerpo_lleva_una_fila_por_linea(monkeypatch):
+    """El visor lo lee línea a línea (lib/inventarioPorFilas.js): cada fila entera en su línea, ninguna partida."""
+    filas = [{'external_id': 'e%d' % i, 'properties': {'g': {'texto': 'dos' + chr(10) + 'líneas ] , [', 'n': i}}}
+             for i in range(5)]
+    salto = bytes([10])
+    lineas = gzip.decompress(_cuerpo(monkeypatch, {'A': filas[:3], 'B': filas[3:]})).split(salto)
+    assert lineas[0] == b'[' and lineas[-1] == b']' and len(lineas) == 5 + 2
+    leidas = [json.loads(linea.decode('utf-8').lstrip(',')) for linea in lineas[1:-1]]
+    assert leidas == filas                                  # el salto de dentro de un valor va escapado
+    assert [linea[:1] for linea in lineas[1:-1]] == [b'{', b',', b',', b',', b',']
 
 
 def test_el_cuerpo_de_un_frente_vacio_es_una_lista_vacia(monkeypatch):
-    assert gzip.decompress(_cuerpo(monkeypatch, {'A': []})) == b'[]'
+    cuerpo = gzip.decompress(_cuerpo(monkeypatch, {'A': []}))
+    assert json.loads(cuerpo) == [] and cuerpo.split() == [b'[', b']']
 
 
 def test_get_inventory_es_la_lista_de_iter_inventory():

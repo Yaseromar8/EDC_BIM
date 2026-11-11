@@ -1,5 +1,5 @@
 import { INVENTORY_IDENTITY_FORMAT, INVENTORY_INTERNAL_KEYS, withInventoryIdentity, requireInventoryResponse, markInventoryRevision } from './lib/inventoryIdentity';
-import { normalizeInventoryPreload, normalizeInventoryRefresh } from './lib/inventoryNormalizers';
+import { inventarioDeRespuesta } from './lib/inventarioPorFilas';
 import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { urlInventario, enlaceCompartido } from './utils/enlaceCompartido';
 import './App.css';
@@ -2387,8 +2387,12 @@ function App() {
     // INYECCIÓN CDE PROFESIONAL: Descargar inventario completo de la base de datos PostgreSQL
     // Una vez descargado, evitará usar las consultas asfixiantes (O(N^2)) del visor LMV local.
     // RESILIENTE: la respuesta puede llegar VACÍA (backend frío/timeout en payloads grandes),
-    // lo que rompía JSON.parse ("Unexpected end of JSON input"). Leemos texto, validamos, y
-    // reintentamos con backoff antes de rendirnos.
+    // lo que rompía JSON.parse ("Unexpected end of JSON input"). Si llega vacía se reintenta con
+    // backoff antes de rendirnos.
+    // FILA A FILA (11-nov-2026, docs/rendimiento/04): el cuerpo ya no se baja a un texto entero para
+    // convertirlo de golpe. Con 95.000 elementos eso eran 1,3 GB y 15 s de pantalla congelada, y por
+    // encima de ~512 MB de JSON el texto no cabe en una cadena: `res.text()` volvía vacío y un modelo
+    // grande no cargaba nunca. Ahora cada fila se convierte y se normaliza según llega.
     const fetchInventoryResilient = async (attempt = 0) => {
       const res = await apiFetch(urlInventario(BACKEND_URL, selectedProject.id));
       if (!res.ok) {
@@ -2405,8 +2409,9 @@ function App() {
         }
         throw new Error(`Falló /api/inventory (HTTP ${res.status}) → ${serverMsg}`);
       }
-      const text = await res.text();
-      if (!text || !text.trim()) {
+      // Un cuerpo cortado o que no es JSON lanza aquí con su motivo, y no se reintenta (como antes).
+      const inventario = await inventarioDeRespuesta(res, normalizeRevitCategory);
+      if (inventario.vacio) {
         // Cuerpo vacío: reintentar hasta 2 veces (el backend puede estar despertando)
         if (attempt < 2) {
           const wait = 800 * (attempt + 1);
@@ -2416,11 +2421,7 @@ function App() {
         }
         throw new Error('El backend devolvió el inventario VACÍO tras 3 intentos (revisar /api/inventory / Cloud SQL).');
       }
-      try {
-        return JSON.parse(text);
-      } catch (e) {
-        throw new Error(`Inventario con JSON inválido (${text.length} bytes, posible respuesta truncada).`);
-      }
+      return inventario;   // { mappedData, schemaMap }: ya normalizado
     };
 
     // Promesa GLOBAL del preload: InventoryDataGrid la espera en vez de bajar
@@ -2451,8 +2452,8 @@ function App() {
         if (cached) console.log('[Piedra Rosetta] Caché local desactualizado (hubo re-extracción/edición) — descargando fresco…');
       }
 
-      const dbData = await fetchInventoryResilient();
-      return { dbData, verKey };
+      const inventario = await fetchInventoryResilient();
+      return { inventario, verKey };
       })() };
     }
     window.__inventoryPreloadPromise = inventoryPreloadRequestRef.current.promise
@@ -2464,8 +2465,8 @@ function App() {
           setPermToast(null);
           return;
         }
-        const { dbData, verKey } = payload;
-        const { mappedData, schemaMap } = normalizeInventoryPreload(dbData, normalizeRevitCategory);
+        const { inventario, verKey } = payload;
+        const { mappedData, schemaMap } = inventario;
         tagInventory(mappedData, selectedProject?.id);
         console.log(`[Piedra Rosetta] Descargados ${mappedData.length} activos desde PostgreSQL (Enterprise CDE Mode)`);
 
@@ -2540,11 +2541,10 @@ function App() {
       console.log('[Piedra Rosetta] Recarga reactiva disparada — descargando inventario fresco...');
       apiFetch(urlInventario(BACKEND_URL, selectedProject.id))
         .then(res => {
-          return requireInventoryResponse(res).then(ok => ok.json());
+          return requireInventoryResponse(res).then(ok => inventarioDeRespuesta(ok, normalizeRevitCategory));
         })
-        .then(dbData => {
+        .then(({ mappedData, schemaMap }) => {
           if (!current()) return;
-          const { mappedData, schemaMap } = normalizeInventoryRefresh(dbData, normalizeRevitCategory);
 
           tagInventory(mappedData, selectedProject?.id);
           window.__inventoryCache = null;

@@ -272,12 +272,19 @@ def _construir_cuerpo(scopes, include_props):
 
     Antes se juntaban todas las filas, luego su JSON entero y luego el gzip: medido, ~17 MB de memoria por
     cada 1.000 elementos. El JSON de una lista es «[» + sus elementos separados por «,» + «]», así que
-    escribiendo cada fila al compresor según llega de la base sale EL MISMO JSON y en memoria solo queda
+    escribiendo cada fila al compresor según llega de la base sale la misma lista y en memoria solo queda
     lo comprimido.
+
+    UNA FILA POR LÍNEA. Entre fila y fila va un salto de línea, que en JSON es espacio en blanco: quien lo
+    lea entero (`JSON.parse`, `json.loads`) obtiene la misma lista de siempre, y el visor puede leerlo línea
+    a línea sin tener nunca el texto entero en memoria (frontend-react/src/lib/inventarioPorFilas.js). Medido en
+    Chrome: por encima de ~512 MB de JSON el texto entero no cabe en una cadena y el inventario no cargaba.
+    Dentro de una fila no hay saltos de línea: json.dumps los escribe escapados.
     """
+    salto = bytes([10])
     salida = io.BytesIO()
     with gzip.GzipFile(fileobj=salida, mode="wb", compresslevel=_GZIP_NIVEL, mtime=0) as comprimido:
-        comprimido.write(b"[")
+        comprimido.write(b"[" + salto)
         primera = True
         with get_db_connection() as conn:
             repo = InventoryIdentityRepository(conn)
@@ -287,6 +294,7 @@ def _construir_cuerpo(scopes, include_props):
                         comprimido.write(b",")
                     comprimido.write(json.dumps(row, ensure_ascii=False, separators=(",", ":"),
                                                 default=str).encode("utf-8"))
+                    comprimido.write(salto)
                     primera = False
         comprimido.write(b"]")
     return salida.getvalue()

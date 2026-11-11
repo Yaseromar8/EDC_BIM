@@ -18,10 +18,22 @@
 // misma columna y el segundo ganara; el nombre suelto se mantiene para los
 // consumidores que todavia lo leen, pero la identidad de la propiedad es la
 // clave cualificada.
+//
+// FILA A FILA (11-nov-2026, docs/rendimiento/04). El normalizador se puede alimentar
+// con una fila cada vez (`crearNormalizador`), para que el inventario se convierta
+// segun llega de la red y nunca exista la lista cruda entera. Dos ahorros, medidos en
+// Chrome, que NO cambian lo que sale:
+//   - el nombre limpio y la clave `Grupo::Propiedad` se calculan una vez por propiedad
+//     y no una vez por celda (eran 16 millones de veces con 95.000 elementos);
+//   - los valores repetidos («Construccion nueva», «NIVEL 03») comparten una sola
+//     cadena en vez de una copia por elemento.
 import { withInventoryIdentity } from './inventoryIdentity.js';
 
 const SEPARADOR_INICIAL = /^[\s\-_.]+/;
 const COLA_TRAS_GUION = /^.*?\s*[-–—]\s*(.+)$/;
+// A partir de aqui ya no se recuerdan mas valores distintos: los que quedan son casi todos unicos
+// (marcas, longitudes) y recordarlos costaria mas de lo que ahorra.
+const MAX_VALORES_RECORDADOS = 400000;
 
 /** El nombre de la propiedad sin el prefijo redundante de su grupo. */
 export function nombreDePropiedad(grupo, nombreCrudo) {
@@ -47,9 +59,36 @@ export function valorDePropiedad(bruto) {
     return String(bruto).trim();
 }
 
-function normalizarInventario(dbData, normalizeRevitCategory) {
+/**
+ * Un normalizador que recibe las filas del servidor de una en una.
+ * `fila(node)` añade la fila normalizada; `fin()` devuelve `{ mappedData, schemaMap }`,
+ * lo mismo que daba normalizar la lista entera.
+ */
+export function crearNormalizador(normalizeRevitCategory) {
     const schemaMap = {};
-    const mappedData = (dbData || []).map(node => {
+    const mappedData = [];
+    const porGrupo = new Map();      // grupo -> Map(nombre crudo -> { nombre, clave })
+    const valores = new Map();       // valor -> la unica cadena que lo representa
+
+    const propiedadDe = (grupo, nombreCrudo) => {
+        let delGrupo = porGrupo.get(grupo);
+        if (!delGrupo) { delGrupo = new Map(); porGrupo.set(grupo, delGrupo); }
+        let propiedad = delGrupo.get(nombreCrudo);
+        if (!propiedad) {
+            const nombre = nombreDePropiedad(grupo, nombreCrudo);
+            propiedad = { nombre, clave: grupo + '::' + nombre };
+            delGrupo.set(nombreCrudo, propiedad);
+        }
+        return propiedad;
+    };
+    const unica = valor => {
+        const ya = valores.get(valor);
+        if (ya !== undefined) return ya;
+        if (valores.size < MAX_VALORES_RECORDADOS) valores.set(valor, valor);
+        return valor;
+    };
+
+    const fila = node => {
         const row = {
             dbId: node.external_id,
             model_urn: node.model_urn,
@@ -63,9 +102,8 @@ function normalizarInventario(dbData, normalizeRevitCategory) {
             for (const [grupo, contenido] of Object.entries(node.properties)) {
                 if (typeof contenido !== 'object' || contenido === null) continue;
                 for (const [nombreCrudo, bruto] of Object.entries(contenido)) {
-                    const nombre = nombreDePropiedad(grupo, nombreCrudo);
-                    const valor = valorDePropiedad(bruto);
-                    const clave = grupo + '::' + nombre;
+                    const { nombre, clave } = propiedadDe(grupo, nombreCrudo);
+                    const valor = unica(valorDePropiedad(bruto));
                     // La clave cualificada es la identidad de la propiedad: se
                     // escribe siempre, sin que otro grupo pueda pisarla.
                     row[clave] = valor;
@@ -92,9 +130,22 @@ function normalizarInventario(dbData, normalizeRevitCategory) {
             || row['__category__']
             || '(Unassigned)';
         row['Revit Category'] = normalizeRevitCategory(categoria);
-        return withInventoryIdentity(node, row);
-    });
+        mappedData.push(withInventoryIdentity(node, row));
+    };
+
+    return { fila, fin: () => resultadoDe(mappedData, schemaMap) };
+}
+
+// EL UNICO RETORNO del normalizador. Por aqui sale el inventario llegue la lista entera o fila a fila:
+// el banco `filtersCore.interaccionesIntegradas` lo muta para demostrar que sigue siendo uno solo.
+function resultadoDe(mappedData, schemaMap) {
     return { mappedData, schemaMap };
+}
+
+function normalizarInventario(dbData, normalizeRevitCategory) {
+    const normalizador = crearNormalizador(normalizeRevitCategory);
+    for (const node of (dbData || [])) normalizador.fila(node);
+    return normalizador.fin();
 }
 
 export function normalizeInventoryPreload(dbData, normalizeRevitCategory) {

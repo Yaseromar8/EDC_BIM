@@ -51,7 +51,17 @@ check('P0-2/homonym-facets-are-independent', [
 ], [['A'], ['B']]);
 
 const app = readFileSync(new URL('../src/App.jsx', import.meta.url), 'utf8');
-check('normalizers/real-functions-connected-in-App', [app.includes('normalizeInventoryPreload(dbData, normalizeRevitCategory)'), app.includes('normalizeInventoryRefresh(dbData, normalizeRevitCategory)')], [true, true]);
+// 11-nov-2026 (docs/rendimiento/04): App ya no recibe la lista entera para normalizarla de golpe; lee el
+// inventario fila a fila por `lib/inventarioPorFilas`, que alimenta al MISMO normalizador (`crearNormalizador`,
+// del que `normalizeInventoryPreload/Refresh` son ahora la forma «lista entera»). Lo que este caso vigila no
+// cambia --que App pase por el normalizador real en la precarga y en el refresco, y no por una copia en linea--;
+// cambia por donde se comprueba. Antes: las dos llamadas literales en App.jsx.
+const porFilas = readFileSync(new URL('../src/lib/inventarioPorFilas.js', import.meta.url), 'utf8');
+check('normalizers/real-functions-connected-in-App', [
+    app.includes('inventarioDeRespuesta(res, normalizeRevitCategory)'),          // precarga
+    app.includes('inventarioDeRespuesta(ok, normalizeRevitCategory)'),           // refresco
+    porFilas.includes('crearNormalizador(normalizeRevitCategory)') && porFilas.includes("from './inventoryNormalizers.js'"),
+], [true, true, true]);
 check('normalizers/old-IDB-format-invalidated', app.includes('cached.identityFormat === INVENTORY_IDENTITY_FORMAT'), true);
 assert.equal(initial.mappedData[0].dbId, 'shared');
 console.log(JSON.stringify({ suite: 'filtersCore.normalizadores', ...totals, limitations: 'Normalizador y motor REALES, sin navegador ni DB. Los defectos B2 se corrigieron en el producto; las expectativas no se tocaron.' }));
