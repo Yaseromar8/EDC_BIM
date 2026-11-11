@@ -8,9 +8,15 @@ export const INVENTORY_INTERNAL_KEYS = new Set([
 
 const text = value => typeof value === 'string' && value.trim().length > 0;
 
+// Dos linajes: el de APS (ACC) y el de ALEPHIA Docs, que es el id del documento (docs/archivos/29, F4).
+// Es la misma regla que `lib/savedViewV2.js` RE_LINAJE y `backend/vistas_v2.py`. Hasta el 11-nov-2026 aquí
+// solo se aceptaba el de ACC: las filas de un modelo de Docs salían «sin identidad verificable», no se
+// podían editar y su clave no era la que usan Filters y el servidor.
+const LINAJE = /^(?:urn:adsk\.[a-z0-9]+:dm\.lineage:[A-Za-z0-9_-]+|urn:alephia:docs\.lineage:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/;
+
 export function inventoryIdentity(row) {
     if (!row || !['scope_id', 'source_lineage', 'external_id'].every(key => text(row[key]))) return null;
-    if (!/^urn:adsk\.[a-z0-9]+:dm\.lineage:[A-Za-z0-9_-]+$/.test(row.source_lineage)) return null;
+    if (!LINAJE.test(row.source_lineage)) return null;
     const identity = { scope_id: row.scope_id, source_lineage: row.source_lineage, external_id: row.external_id };
     const key = JSON.stringify(Object.values(identity));
     if (row.element_key !== undefined && row.element_key !== null && row.element_key !== key) return null;

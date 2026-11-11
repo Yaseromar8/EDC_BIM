@@ -260,3 +260,18 @@ modelo de Docs funciona pero su inventario no se guarda, y quitarlo del frente d
 | Migración 50: aplicar, repetir, deshacer, volver a aplicar, y negarse como `ecd_app` | correcto |
 | Banco de la pantalla: carpeta lenta y rápida, teclado, contraste de la fila elegida, cerrar a media preparación, cerrar mientras se vincula | correcto |
 | Suites cerradas del visor (63, 150, 117, 20, 20, 4) | en verde |
+
+### 7.6 Corrección del 11-nov-2026: la identidad del inventario en el visor
+
+Defecto de F4 (`6fb3e0af`), encontrado al trabajar el inventario de modelos pesados. El servidor (B1) y las vistas
+guardadas aceptaban el linaje de Docs, pero `frontend-react/src/lib/inventoryIdentity.js` seguía aceptando solo el de
+ACC. Para un modelo federado desde Docs, cada fila del inventario salía **sin identidad**:
+
+- no se podía editar («La fila no tiene identidad verificable»);
+- su clave era la de solo lectura, no `[frente, linaje, externalId]`, que es la que usan Filters y el servidor.
+
+`inventoryIdentity` acepta ahora los dos linajes, con la misma regla que `lib/savedViewV2.js` y
+`backend/vistas_v2.py`. Una versión, un id suelto, un id en mayúsculas o con espacios siguen sin identidad.
+
+Evidencia: `node frontend-react/pruebas/identidadDeDocs.prueba.mjs`, 19/19; con el fichero anterior la misma fila
+da identidad nula. **No verificado con un modelo de Docs real en el visor**: hace falta la sesión del dueño.
