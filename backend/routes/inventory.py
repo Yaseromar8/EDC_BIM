@@ -350,6 +350,60 @@ def _extraction_source_context(conn, urn, target_urn, scope_hint=None, puede_ent
             'compartido': target_urn != '__cmp__' and bool(known_projects) and project_id not in known_projects}
 
 
+# Tope de seguridad de la paginación de propiedades: 2.000.000 de objetos. No es el límite de tamaño de un
+# modelo (ese era la memoria, y ya no aplica): solo evita un bucle sin fin si Autodesk nunca diera la última página.
+EXTRACCION_MAX_PAGINAS = 4000
+# Cada cuántos segundos se renueva el estado del trabajo mientras se guarda el inventario en la base.
+LATIDO_DE_GUARDADO = 30
+
+
+class _Carrete:
+    """Los nodos de Autodesk en disco, comprimidos, en el orden en que llegaron.
+
+    Sustituye a la lista que guardaba el modelo entero en memoria mientras se extraía (docs/rendimiento/02).
+    Es un fichero temporal del sistema: se borra al cerrarlo, o al morir el proceso.
+    """
+
+    def __init__(self):
+        import tempfile
+        self._f = tempfile.TemporaryFile(prefix='extraccion_')
+        self._n = 0
+
+    def __len__(self):
+        return self._n
+
+    def guardar(self, nodo):
+        import struct
+        import zlib
+        datos = zlib.compress(json.dumps(nodo).encode('ascii'), 1)
+        self._f.seek(0, 2)
+        self._f.write(struct.pack('<I', len(datos)))
+        self._f.write(datos)
+        self._n += 1
+
+    def __iter__(self):
+        import struct
+        import zlib
+        posicion = 0
+        for _ in range(self._n):
+            self._f.seek(posicion)
+            (largo,) = struct.unpack('<I', self._f.read(4))
+            datos = self._f.read(largo)
+            posicion += 4 + largo
+            yield json.loads(zlib.decompress(datos))
+
+    def vaciar(self):
+        self._f.seek(0)
+        self._f.truncate()
+        self._n = 0
+
+    def close(self):
+        try:
+            self._f.close()
+        except Exception:
+            pass
+
+
 def _aps_collection(response):
     """Una coleccion ausente/malformada NO es una extraccion vacia completa."""
     from inventory_identity import IdentityError
@@ -416,6 +470,7 @@ def extract_metadata_task(urn, target_urn, job_id, purge_source_urns=None, scope
     `_extraction_source_context`. """
     # Clave de concurrencia: mismo modelo + mismo scope
     _key = None
+    carrete = filas = None   # el modelo en disco mientras se extrae; se cierran (y se borran) en el finally
     try:
         print(f"\n[Extractor] ===== INICIO JOB: {job_id} =====")
         print(f"[Extractor] URN recibido (raw): {urn}")
@@ -434,7 +489,7 @@ def extract_metadata_task(urn, target_urn, job_id, purge_source_urns=None, scope
         print(f"[Extractor] Target URN: {target_urn}")
 
         from db import get_db_connection
-        from inventory_identity import InventoryIdentityRepository, IdentityError, source_identity
+        from inventory_identity import InventoryIdentityRepository, IdentityError, SnapshotRows, source_identity
         with get_db_connection() as conn:
             source_context = _extraction_source_context(conn, urn, target_urn, scope_hint=scope_hint, compartir=compartir)
             urn = source_context['source_urn']
@@ -614,77 +669,9 @@ def extract_metadata_task(urn, target_urn, job_id, purge_source_urns=None, scope
             vista_usada = {'guid': guid, 'name': next((v.get('name') for v in metadata if v.get('guid') == guid), None)}
         print(f"[Extractor] GUID seleccionado final: {guid}")
 
-        # Fase 2: Extracción Properties (Paginada)
-        # Usamos POST .../properties:query con paginación para garantizar cobertura total.
-        # Fallback al GET legacy si el POST falla.
-        set_job(job_id, {'status': 'pending', 'progress': 40, 'message': 'Descargando propiedades (paginado)...'})
-        
-        collection = None
-        PAGE_SIZE = 500
-        query_url = f"{APS_MD_URL}/{urn}/metadata/{guid}/properties:query"
-        print(f"[Extractor] Fase 2 - POST paginado {query_url}")
-        
-        try:
-            all_items = []
-            offset = 0
-            pagination_complete = False
-            max_pages = 200  # Safety limit (100,000 elementos max)
-            for page in range(max_pages):
-                payload = {
-                    'query': {},
-                    'pagination': {'limit': PAGE_SIZE, 'offset': offset}
-                }
-                for attempt in range(20):
-                    resp = _aps('POST', query_url, headers={**headers, 'Content-Type': 'application/json'}, json=payload)
-                    if resp.status_code == 202:
-                        pct = 40 + int((page * PAGE_SIZE) / max(1, PAGE_SIZE * 10) * 20)
-                        set_job(job_id, {'status': 'pending', 'progress': min(pct, 65), 'message': f'Esperando respuesta de Autodesk (intento {attempt+1})...'})
-                        time.sleep(5)
-                        continue
-                    break
-                
-                if resp.status_code == 202:
-                    raise Exception("Timeout en paginación")
-                resp.raise_for_status()
-                batch = _aps_collection(resp)
-                all_items.extend(batch)
-                print(f"[Extractor] Fase 2 - Página {page+1}: +{len(batch)} elementos (total: {len(all_items)})")
-                set_job(job_id, {'status': 'pending', 'progress': min(40 + page * 3, 65), 'message': f'Descargando propiedades ({len(all_items)} elementos)...'})
-                
-                if len(batch) < PAGE_SIZE:
-                    pagination_complete = True
-                    break  # Ultima pagina demostrada, no limite del bucle.
-                offset += PAGE_SIZE
-            if not pagination_complete:
-                raise IdentityError('INCOMPLETE_EXTRACTION_PAGE_LIMIT')
-            collection = all_items
-            print(f"[Extractor] Fase 2 - POST paginado completado: {len(collection)} elementos totales")
-            
-        except IdentityError:
-            raise  # limite/malformacion no se convierte en exito via fallback.
-        except Exception as paginated_err:
-            # FALLBACK: GET legacy (funciona para modelos pequeños/medianos)
-            print(f"[Extractor] Fase 2 - POST paginado falló ({paginated_err}), usando GET legacy...")
-            prop_url = f"{APS_MD_URL}/{urn}/metadata/{guid}/properties?forceget=true"
-            collection = None
-            max_retries = 30
-            for attempt in range(max_retries):
-                resp = _aps('GET', prop_url, headers=headers)
-                print(f"[Extractor] Fase 2 (GET fallback) - Intento {attempt+1}/{max_retries}: status={resp.status_code}")
-                if resp.status_code == 202:
-                    pct = 40 + int((attempt / max_retries) * 25)
-                    set_job(job_id, {'status': 'pending', 'progress': pct, 'message': f'Esperando respuesta de Autodesk (intento {attempt+1})...'})
-                    time.sleep(5)
-                    continue
-                resp.raise_for_status()
-                collection = _aps_collection(resp)
-                print(f"[Extractor] Fase 2 (GET fallback) - Recibidos {len(collection)} elementos")
-                break
-                
-        if collection is None:
-            raise Exception("Autodesk tardó demasiado en preparar las propiedades.")
-
-        # Fase 2.1: Extracción Árbol Jerárquico (Para Herencia Tipo->Instancia)
+        # Fase 2.1: Árbol Jerárquico (Para Herencia Tipo->Instancia). Va ANTES que las propiedades
+        # (11-nov-2026): sabiendo qué nodos son padres, de cada página solo se retiene en memoria lo
+        # que heredan las instancias; el resto va al carrete en disco.
         set_job(job_id, {'status': 'pending', 'progress': 70, 'message': 'Descargando árbol jerárquico (Fusión Semántica)...'})
         # `forceget=true`: por encima de 20 MB Autodesk responde 413 si no se le pide expresamente; y
         # mientras prepara el árbol responde 202, que antes se tomaba como respuesta (y fallaba con
@@ -720,16 +707,16 @@ def extract_metadata_task(urn, target_urn, job_id, purge_source_urns=None, scope
         # Fase 2.2: Verificación Cruzada (Tree Leaves vs Properties Collection)
         # Detectar nodos hoja del árbol que NO están en el collection de propiedades.
         # Esto captura Revit Parts y elementos que la API de propiedades puede omitir.
-        tree_all_nodes = {}  # objectid -> name
+        tree_all_nodes = {}  # objectid -> name, solo de los nodos con hijos: son los únicos cuyo nombre se consulta
         tree_leaf_ids = set()
         def catalog_tree(objects_list):
             for obj in objects_list:
                 oid = obj.get('objectid')
-                tree_all_nodes[oid] = obj.get('name', 'Unnamed')
                 children = obj.get('objects', [])
                 if not children:
                     tree_leaf_ids.add(oid)
                 else:
+                    tree_all_nodes[oid] = obj.get('name', 'Unnamed')
                     catalog_tree(children)
         catalog_tree(hier_objects)
         
@@ -743,7 +730,105 @@ def extract_metadata_task(urn, target_urn, job_id, purge_source_urns=None, scope
         tree_parent_ids = set(parent_map.values())
         print(f"[Extractor] Fase 2.2 - Detectados {len(tree_parent_ids)} nodos padre (serán excluidos como no-instancias)")
         
-        collection_ids = {node.get('objectid') for node in collection}
+        # El árbol ya dio lo que hacía falta (padres, hojas y nombres de los padres): se suelta antes de
+        # bajar las propiedades. Con 300.000 nodos son cientos de MB que no deben convivir con lo demás.
+        del hierarchy_payload, hierarchy_data, hier_objects, hier_resp
+
+        # Fase 2: Extracción Properties (Paginada)
+        # Usamos POST .../properties:query con paginación para garantizar cobertura total.
+        # Fallback al GET legacy si el POST falla.
+        #
+        # MEMORIA CONSTANTE (11-nov-2026, docs/rendimiento/02). Antes cada página se sumaba a una lista con
+        # el modelo entero y de ahí salían tres copias más (filas, filas preparadas y el JSON de la huella):
+        # medido, ~31 MB por cada 1.000 elementos; 50.000 elementos pedían 1,6 GB en un servidor de 2 GB.
+        # Ahora cada nodo va comprimido a un carrete en disco y en memoria solo quedan los identificadores
+        # y las propiedades de los nodos PADRE (tipos, familias, categorías), que son las que se heredan.
+        set_job(job_id, {'status': 'pending', 'progress': 40, 'message': 'Descargando propiedades (paginado)...'})
+
+        carrete = _Carrete()
+        props_by_id = {}
+        names_by_id = {}
+        collection_ids = set()
+
+        def _recibir(nodos):
+            for node in nodos:
+                oid = node.get('objectid')
+                collection_ids.add(oid)
+                if oid in tree_parent_ids:
+                    props_by_id[oid] = node.get('properties', {})
+                    names_by_id[oid] = node.get('name', 'Unnamed')
+                carrete.guardar(node)
+
+        PAGE_SIZE = 500
+        query_url = f"{APS_MD_URL}/{urn}/metadata/{guid}/properties:query"
+        print(f"[Extractor] Fase 2 - POST paginado {query_url}")
+
+        collection_ready = False
+        try:
+            offset = 0
+            pagination_complete = False
+            # Ya no hay tope de 100.000 elementos: el límite era la memoria, no Autodesk. Queda un tope de
+            # seguridad muy por encima de cualquier modelo real, por si la paginación no terminara nunca.
+            for page in range(EXTRACCION_MAX_PAGINAS):
+                payload = {
+                    'query': {},
+                    'pagination': {'limit': PAGE_SIZE, 'offset': offset}
+                }
+                for attempt in range(20):
+                    resp = _aps('POST', query_url, headers={**headers, 'Content-Type': 'application/json'}, json=payload)
+                    if resp.status_code == 202:
+                        pct = 40 + int((page * PAGE_SIZE) / max(1, PAGE_SIZE * 10) * 20)
+                        set_job(job_id, {'status': 'pending', 'progress': min(pct, 65), 'message': f'Esperando respuesta de Autodesk (intento {attempt+1})...'})
+                        time.sleep(5)
+                        continue
+                    break
+
+                if resp.status_code == 202:
+                    raise Exception("Timeout en paginación")
+                resp.raise_for_status()
+                batch = _aps_collection(resp)
+                _recibir(batch)
+                print(f"[Extractor] Fase 2 - Página {page+1}: +{len(batch)} elementos (total: {len(carrete)})")
+                set_job(job_id, {'status': 'pending', 'progress': min(40 + page * 3, 65), 'message': f'Descargando propiedades ({len(carrete)} elementos)...'})
+
+                if len(batch) < PAGE_SIZE:
+                    pagination_complete = True
+                    break  # Ultima pagina demostrada, no limite del bucle.
+                offset += PAGE_SIZE
+            if not pagination_complete:
+                raise IdentityError('INCOMPLETE_EXTRACTION_PAGE_LIMIT')
+            collection_ready = True
+            print(f"[Extractor] Fase 2 - POST paginado completado: {len(carrete)} elementos totales")
+
+        except IdentityError:
+            raise  # limite/malformacion no se convierte en exito via fallback.
+        except Exception as paginated_err:
+            # FALLBACK: GET legacy (funciona para modelos pequeños/medianos). Lo bajado a medias se tira.
+            print(f"[Extractor] Fase 2 - POST paginado falló ({paginated_err}), usando GET legacy...")
+            carrete.vaciar()
+            props_by_id.clear()
+            names_by_id.clear()
+            collection_ids.clear()
+            prop_url = f"{APS_MD_URL}/{urn}/metadata/{guid}/properties?forceget=true"
+            max_retries = 30
+            for attempt in range(max_retries):
+                resp = _aps('GET', prop_url, headers=headers)
+                print(f"[Extractor] Fase 2 (GET fallback) - Intento {attempt+1}/{max_retries}: status={resp.status_code}")
+                if resp.status_code == 202:
+                    pct = 40 + int((attempt / max_retries) * 25)
+                    set_job(job_id, {'status': 'pending', 'progress': pct, 'message': f'Esperando respuesta de Autodesk (intento {attempt+1})...'})
+                    time.sleep(5)
+                    continue
+                resp.raise_for_status()
+                _recibir(_aps_collection(resp))
+                collection_ready = True
+                print(f"[Extractor] Fase 2 (GET fallback) - Recibidos {len(carrete)} elementos")
+                break
+
+        if not collection_ready:
+            raise Exception("Autodesk tardó demasiado en preparar las propiedades.")
+
+        # Fase 2.2 (sigue): hojas del árbol que la colección de propiedades no trajo.
         missing_leaf_ids = tree_leaf_ids - collection_ids
         
         if missing_leaf_ids:
@@ -765,7 +850,7 @@ def extract_metadata_task(urn, target_urn, job_id, purge_source_urns=None, scope
                     q_resp = requests.post(q_url, headers={**headers, 'Content-Type': 'application/json'}, json=q_payload, timeout=30)
                     if q_resp.status_code == 200:
                         batch_results = _aps_collection(q_resp)
-                        collection.extend(batch_results)
+                        _recibir(batch_results)
                         recovered += len(batch_results)
                 except Exception as gap_err:
                     print(f"[Extractor] Fase 2.2 - Error recuperando lote {i//BATCH}: {gap_err}")
@@ -773,20 +858,18 @@ def extract_metadata_task(urn, target_urn, job_id, purge_source_urns=None, scope
         else:
             print(f"[Extractor] Fase 2.2 - [OK] Cobertura completa: {len(tree_leaf_ids)} hojas, todas presentes en collection")
 
-        still_missing = tree_leaf_ids - {node.get('objectid') for node in collection}
+        still_missing = tree_leaf_ids - collection_ids
         if still_missing:
             raise IdentityError('INCOMPLETE_MODEL_COVERAGE', missing_leaves=len(still_missing))
 
         # Fase 3: Inserción BD y Fusión Genética
         set_job(job_id, {'status': 'pending', 'progress': 80, 'message': 'Estructurando gemelo digital (Fusionando Familias)...'})
-        
-        props_by_id = {node.get('objectid'): node.get('properties', {}) for node in collection}
-        names_by_id = {node.get('objectid'): node.get('name', 'Unnamed') for node in collection}
-        # Enriquecer names_by_id con nombres del árbol (más completo que el collection)
+
+        # Nombres de los nodos padre: el de la colección si vino, y si no el del árbol (más completo).
         for oid, oname in tree_all_nodes.items():
             if oid not in names_by_id:
                 names_by_id[oid] = oname
-        
+
         import copy
 
         def _aplanar(v):
@@ -828,11 +911,13 @@ def extract_metadata_task(urn, target_urn, job_id, purge_source_urns=None, scope
                     if val_src != '' and val_src != 'None':
                         target[k] = copy.deepcopy(v)
 
-        inventory_data = []
+        # Las filas del inventario tampoco se juntan en memoria: cada una se valida y va a disco
+        # (inventory_identity.SnapshotRows). Si este proceso muere a medias no se publica nada.
+        filas = SnapshotRows(target_urn, urn, source_context['item_id'])
+        total_instancias = 0
         skipped_nodes = 0
         ejes_descartados = 0   # ejes de tuberías/conexiones (ejes_mep.py): se dicen al terminar
-        seen_external_ids = set()  # Deduplicación integral por externalId
-        for node in collection:
+        for node in carrete:
             name = node.get('name', 'Unnamed')
             external_id = node.get('externalId')
             objectid = node.get('objectid')
@@ -996,36 +1081,55 @@ def extract_metadata_task(urn, target_urn, job_id, purge_source_urns=None, scope
                 ejes_descartados += 1
                 continue
             
-            inventory_data.append({
+            filas.add({
                 "name": name,
                 "external_id": external_id,
-                "properties": json.dumps(merged_props)
+                "properties": json.dumps(merged_props),
+                "project_id": source_context['project_id'],
             })
+            total_instancias += 1
+            if total_instancias % 5000 == 0:
+                set_job(job_id, {'status': 'pending', 'progress': 85,
+                                 'message': f'Estructurando gemelo digital ({total_instancias} elementos)...'})
 
-        print(f"[Extractor] Fase 3 - {len(inventory_data)} instancias geométricas para insertar ({skipped_nodes} nodos type/category descartados, {ejes_descartados} de ellos ejes de tuberías/conexiones)")
+        carrete.close()
+        filas.seal()
+        print(f"[Extractor] Fase 3 - {total_instancias} instancias geométricas para insertar ({skipped_nodes} nodos type/category descartados, {ejes_descartados} de ellos ejes de tuberías/conexiones)")
 
         # Una extraccion completa puede tener cero instancias: publica el vacio
         # y cambia generation. No hereda filas de la version anterior.
-        rows = [{**item, 'project_id': source_context['project_id']}
-                for item in inventory_data]
         # No se añade datetime.now a cada fila: haria diferente el content_hash
         # de un reintento identico y destruiria la idempotencia del snapshot.
-        with get_db_connection() as conn:
-            repository = InventoryIdentityRepository(conn)
-            publication = repository.publish_snapshot(
-                target_urn, urn, rows, expected_active_urn=expected['active_urn'],
-                expected_generation=expected['generation'], allowed_scopes=[target_urn],
-                item_id=source_context['item_id'], complete=True)
-            if retire:
-                repository.deactivate_sources(target_urn, retire, allowed_scopes=[target_urn])
-            conn.commit()
+        set_job(job_id, {'status': 'pending', 'progress': 90,
+                         'message': f'Guardando el inventario ({total_instancias} elementos)...'})
+        # Guardar cientos de miles de filas tarda minutos y no pasa por set_job. Sin este latido, el sondeo
+        # de estado (get_job) daria el trabajo por muerto a los 10 minutos sin novedad, estando vivo.
+        guardado = threading.Event()
+
+        def _latido():
+            while not guardado.wait(LATIDO_DE_GUARDADO):
+                set_job(job_id, {'status': 'pending', 'progress': 90,
+                                 'message': f'Guardando el inventario ({total_instancias} elementos)...'})
+        threading.Thread(target=_latido, daemon=True).start()
+        try:
+            with get_db_connection() as conn:
+                repository = InventoryIdentityRepository(conn)
+                publication = repository.publish_snapshot(
+                    target_urn, urn, filas, expected_active_urn=expected['active_urn'],
+                    expected_generation=expected['generation'], allowed_scopes=[target_urn],
+                    item_id=source_context['item_id'], complete=True)
+                if retire:
+                    repository.deactivate_sources(target_urn, retire, allowed_scopes=[target_urn])
+                conn.commit()
+        finally:
+            guardado.set()
         if target_urn != '__cmp__':
             _apuntar_vista_extraida(target_urn, urn, vista_usada)
 
         set_job(job_id, {'status': 'success', 'progress': 100,
-                         'message': f'Extracción completa. {len(inventory_data)} activos insertados'
+                         'message': f'Extracción completa. {total_instancias} activos insertados'
                                     + (f' ({ejes_descartados} ejes de tuberías/conexiones descartados: no son elementos aparte).' if ejes_descartados else '.')})
-        print(f"[Extractor] COMPLETADO: {len(inventory_data)} activos insertados en PostgreSQL")
+        print(f"[Extractor] COMPLETADO: {total_instancias} activos insertados en PostgreSQL")
         print(f"[Extractor] ===== FIN JOB: {job_id} =====\n")
 
     except Exception as e:
@@ -1043,6 +1147,9 @@ def extract_metadata_task(urn, target_urn, job_id, purge_source_urns=None, scope
         set_job(job_id, {'status': 'error', 'progress': 0,
                          'message': mensaje, 'code': getattr(e, 'code', 'EXTRACTION_FAILED')})
     finally:
+        for temporal in (carrete, filas):
+            if temporal is not None:
+                temporal.close()
         # Liberar el guard de concurrencia para este modelo+scope
         if _key:
             with _EXTRACTING_LOCK:

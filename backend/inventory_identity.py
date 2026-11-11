@@ -8,7 +8,9 @@ from contextlib import contextmanager
 import hashlib
 import json
 import re
+import tempfile
 import uuid
+import zlib
 
 from psycopg2 import sql
 from psycopg2.extras import Json, RealDictCursor, execute_values
@@ -124,6 +126,8 @@ _BASE_FIELDS = {
 }
 _NATIVE_TEXT = ("name", "material", "installation_status", "vaciado_nro",
                 "classification", "project_id", "last_updated")
+_PUBLISH_BATCH = 500
+_READ_PAGE = 500
 _RESERVED = set(IDENTITY_FIELDS) | {
     "source_urn", "model_urn", "element_key", "dbId", "db_id", "externalId",
     "properties", "project_id", "last_updated", "native_metadata", "original_payload",
@@ -230,6 +234,150 @@ def _params(identity):
 def _fingerprint(value):
     return hashlib.sha256(json.dumps(value, sort_keys=True, ensure_ascii=False,
                                      allow_nan=False, separators=(",", ":")).encode("utf-8")).hexdigest()
+
+
+def _canonical(row):
+    """The bytes one row contributes to the snapshot fingerprint."""
+    return json.dumps(row, sort_keys=True, ensure_ascii=False, allow_nan=False,
+                      separators=(",", ":")).encode("utf-8")
+
+
+def _fingerprint_rows(canonical_rows):
+    """`_fingerprint(list of rows)` without building the list's JSON in memory.
+
+    json.dumps of a list is "[" + its items joined by "," + "]", so feeding the same
+    bytes row by row gives the SAME hash: a version extracted before this existed is
+    still recognised as identical (a test compares both on random data).
+    """
+    digest = hashlib.sha256(b"[")
+    first = True
+    for data in canonical_rows:
+        if not first:
+            digest.update(b",")
+        digest.update(data)
+        first = False
+    digest.update(b"]")
+    return digest.hexdigest()
+
+
+def _prepare_row(raw, scope_id, lineage, source_urn):
+    """Validate one native row and give it its stored shape. One rule for lists and for rows on disk."""
+    if not isinstance(raw, dict):
+        raise IdentityError("INVALID_ROW")
+    ext = _text(raw.get("external_id"), "external_id")
+    for key, expected in (("scope_id", scope_id), ("source_lineage", lineage),
+                          ("model_urn", scope_id)):
+        if key in raw and raw[key] != expected:
+            raise IdentityError("ROW_IDENTITY_CONFLICT", field=key, external_id=ext)
+    if "source_urn" in raw and source_identity(raw["source_urn"])[0] != source_urn:
+        raise IdentityError("ROW_IDENTITY_CONFLICT", field="source_urn", external_id=ext)
+    row = {"external_id": ext, "properties": _object(raw.get("properties", {}), "properties")}
+    for key in _NATIVE_TEXT:
+        value = raw.get(key)
+        if value is not None and not isinstance(value, str):
+            raise IdentityError("INVALID_NATIVE_FIELD", field=key)
+        row[key] = value
+    known = set(row) | set(IDENTITY_FIELDS) | {"source_urn", "model_urn", "element_key", "native_metadata"}
+    metadata = _object(raw.get("native_metadata", {}), "native_metadata")
+    metadata.update({key: _json_value(value) for key, value in raw.items() if key not in known})
+    row["native_metadata"] = metadata
+    return row
+
+
+class _RowsInMemory:
+    """The eager list publish_snapshot has always taken, behind the interface SnapshotRows has."""
+
+    def __init__(self, prepared):
+        self._prepared = prepared
+
+    def __len__(self):
+        return len(self._prepared)
+
+    def canonical_rows(self):
+        return (_canonical(row) for row in self._prepared)
+
+    def rows(self):
+        return iter(self._prepared)
+
+
+class SnapshotRows:
+    """A COMPLETE native snapshot kept on disk instead of in memory (docs/rendimiento/02).
+
+    Measured 11-nov-2026: holding a model's rows in memory cost ~31 MB per 1,000 elements
+    during extraction, so 50,000 elements already asked for 1.6 GB on a 2 GB server. Here
+    each row is validated exactly as publish_snapshot validates a list (`_prepare_row`),
+    its canonical JSON goes compressed to a temporary file, and only (external_id, where)
+    stays in memory. It is not a partial iterator: publish_snapshot only takes it sealed,
+    and the producer seals it once the extraction has proved complete.
+    """
+
+    def __init__(self, scope_id, source_urn, item_id=None):
+        self.scope_id = _text(scope_id, "scope_id")
+        self.source_urn, self.source_lineage = source_identity(source_urn, item_id)
+        self._file = tempfile.TemporaryFile(prefix="b1_snapshot_")
+        self._index = []
+        self._seen = set()
+        self._end = 0
+        self.sealed = False
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        self.close()
+        return False
+
+    def __len__(self):
+        return len(self._index)
+
+    def add(self, raw):
+        if self.sealed:
+            raise IdentityError("INVALID_ROWS", "A sealed snapshot takes no more rows")
+        row = _prepare_row(raw, self.scope_id, self.source_lineage, self.source_urn)
+        ext = row["external_id"]
+        if ext in self._seen:
+            raise IdentityError("DUPLICATE_EXTERNAL_ID", external_id=ext)
+        self._seen.add(ext)
+        data = zlib.compress(_canonical(row), 1)
+        self._file.seek(self._end)
+        self._file.write(data)
+        self._index.append((ext, self._end, len(data)))
+        self._end += len(data)
+
+    def seal(self):
+        """Declare the snapshot complete. Rows are served sorted by external_id, as a list was."""
+        if not self.sealed:
+            self._index.sort(key=lambda entry: entry[0])
+            self._seen = None
+            self.sealed = True
+        return self
+
+    def canonical_rows(self):
+        if not self.sealed:
+            raise IdentityError("INVALID_ROWS", "Seal the snapshot before reading it")
+        for _ext, offset, length in self._index:
+            self._file.seek(offset)
+            yield zlib.decompress(self._file.read(length))
+
+    def rows(self):
+        return (json.loads(data) for data in self.canonical_rows())
+
+    def close(self):
+        try:
+            self._file.close()
+        except Exception:
+            pass
+
+
+def _batches(iterable, size):
+    batch = []
+    for item in iterable:
+        batch.append(item)
+        if len(batch) >= size:
+            yield batch
+            batch = []
+    if batch:
+        yield batch
 
 
 class InventoryIdentityRepository:
@@ -390,35 +538,28 @@ class InventoryIdentityRepository:
             expected_active_urn, expected_lineage = source_identity(expected_active_urn)
             if expected_lineage != lineage:
                 raise IdentityError("EXPECTED_SOURCE_CONFLICT")
-        if not isinstance(rows, (list, tuple)):
+        if isinstance(rows, SnapshotRows):
+            # Rows already validated one by one and kept on disk: it must be THIS snapshot, and complete.
+            if not rows.sealed:
+                raise IdentityError("INVALID_ROWS", "Supply a sealed complete snapshot, not a partial one")
+            if (rows.scope_id, rows.source_lineage, rows.source_urn) != (scope_id, lineage, source_urn):
+                raise IdentityError("ROW_IDENTITY_CONFLICT", field="snapshot")
+            prepared = rows
+        elif isinstance(rows, (list, tuple)):
+            listed, seen = [], set()
+            for raw in rows:
+                if not isinstance(raw, dict):
+                    raise IdentityError("INVALID_ROW")
+                ext = _text(raw.get("external_id"), "external_id")
+                if ext in seen:
+                    raise IdentityError("DUPLICATE_EXTERNAL_ID", external_id=ext)
+                seen.add(ext)
+                listed.append(_prepare_row(raw, scope_id, lineage, source_urn))
+            listed.sort(key=lambda row: row["external_id"])
+            prepared = _RowsInMemory(listed)
+        else:
             raise IdentityError("INVALID_ROWS", "Supply an eager complete list, not a partial iterator")
-        prepared, seen = [], set()
-        for raw in rows:
-            if not isinstance(raw, dict):
-                raise IdentityError("INVALID_ROW")
-            ext = _text(raw.get("external_id"), "external_id")
-            if ext in seen:
-                raise IdentityError("DUPLICATE_EXTERNAL_ID", external_id=ext)
-            seen.add(ext)
-            for key, expected in (("scope_id", scope_id), ("source_lineage", lineage),
-                                  ("model_urn", scope_id)):
-                if key in raw and raw[key] != expected:
-                    raise IdentityError("ROW_IDENTITY_CONFLICT", field=key, external_id=ext)
-            if "source_urn" in raw and source_identity(raw["source_urn"])[0] != source_urn:
-                raise IdentityError("ROW_IDENTITY_CONFLICT", field="source_urn", external_id=ext)
-            row = {"external_id": ext, "properties": _object(raw.get("properties", {}), "properties")}
-            for key in _NATIVE_TEXT:
-                value = raw.get(key)
-                if value is not None and not isinstance(value, str):
-                    raise IdentityError("INVALID_NATIVE_FIELD", field=key)
-                row[key] = value
-            known = set(row) | set(IDENTITY_FIELDS) | {"source_urn", "model_urn", "element_key", "native_metadata"}
-            metadata = _object(raw.get("native_metadata", {}), "native_metadata")
-            metadata.update({key: _json_value(value) for key, value in raw.items() if key not in known})
-            row["native_metadata"] = metadata
-            prepared.append(row)
-        prepared.sort(key=lambda row: row["external_id"])
-        content_hash = _fingerprint(prepared)
+        content_hash = _fingerprint_rows(prepared.canonical_rows())
         with self._atomic() as cursor:
             self._lock_scopes(cursor, [scope_id])
             cursor.execute("""INSERT INTO inventory_identity_b1.sources (scope_id, source_lineage)
@@ -443,10 +584,11 @@ class InventoryIdentityRepository:
                                   (scope_id, source_lineage, source_urn, row_count, content_hash)
                                   VALUES (%s, %s, %s, %s, %s)""",
                                (scope_id, lineage, source_urn, len(prepared), content_hash))
-                if prepared:
+                # In batches: no statement ever holds the whole model. Same transaction, same rows.
+                for batch in _batches(prepared.rows(), _PUBLISH_BATCH):
                     execute_values(cursor, """INSERT INTO inventory_identity_b1.elements
                         (scope_id, source_lineage, external_id) VALUES %s ON CONFLICT DO NOTHING""",
-                        [(scope_id, lineage, row["external_id"]) for row in prepared])
+                        [(scope_id, lineage, row["external_id"]) for row in batch])
                     execute_values(cursor, """INSERT INTO inventory_identity_b1.occurrences
                         (scope_id, source_lineage, source_urn, external_id, name, properties,
                          material, installation_status, vaciado_nro, classification,
@@ -454,7 +596,7 @@ class InventoryIdentityRepository:
                         [(scope_id, lineage, source_urn, row["external_id"], row["name"],
                           Json(row["properties"]), row["material"], row["installation_status"],
                           row["vaciado_nro"], row["classification"], row["project_id"],
-                          row["last_updated"], Json(row["native_metadata"])) for row in prepared])
+                          row["last_updated"], Json(row["native_metadata"])) for row in batch])
             activated = bool(activate and active_urn != source_urn)
             restored = bool(existing and not existing[2])
             if restored:
@@ -472,6 +614,17 @@ class InventoryIdentityRepository:
 
     def get_inventory(self, scope_id, *, allowed_scopes, include_props=True, source_urn=None):
         """Read active Sources or one explicit version; preserve legacy model_urn shape."""
+        return list(self.iter_inventory(scope_id, allowed_scopes=allowed_scopes,
+                                        include_props=include_props, source_urn=source_urn))
+
+    def iter_inventory(self, scope_id, *, allowed_scopes, include_props=True, source_urn=None):
+        """get_inventory, one row at a time: the same rows, in the same order.
+
+        The whole result used to be fetched and kept as a list (measured: ~5x the size of
+        its JSON). A server-side cursor hands it over in pages, so a reader that writes each
+        row out as it comes never holds the model. Arguments are checked before any row is
+        asked for; the caller keeps the connection open while it iterates.
+        """
         scope_id = _text(scope_id, "scope_id")
         _authorize(scope_id, _allowlist(allowed_scopes))
         if not isinstance(include_props, bool):
@@ -482,7 +635,12 @@ class InventoryIdentityRepository:
             source_urn, lineage = source_identity(source_urn)
             predicate = "o.source_urn=%s AND o.source_lineage=%s"
             params.extend((source_urn, lineage))
-        with self.conn.cursor(cursor_factory=RealDictCursor) as cursor:
+        return self._inventory_rows(scope_id, predicate, params, include_props)
+
+    def _inventory_rows(self, scope_id, predicate, params, include_props):
+        with self.conn.cursor(name="b1_inventory_" + uuid.uuid4().hex,
+                              cursor_factory=RealDictCursor) as cursor:
+            cursor.itersize = _READ_PAGE
             cursor.execute("""SELECT o.scope_id, o.source_lineage, o.source_urn, o.external_id,
                 o.name, o.properties, o.project_id, o.last_updated, o.native_metadata,
                 COALESCE(u.material,o.material) AS material,
@@ -496,8 +654,7 @@ class InventoryIdentityRepository:
                 LEFT JOIN inventory_identity_b1.user_data u
                   USING (scope_id,source_lineage,external_id)
                 WHERE o.scope_id=%s AND (o.scope_id<>'__cmp__' OR x.read_visible) AND """ + predicate + " ORDER BY o.source_lineage,o.source_urn,o.external_id", params)
-            result = []
-            for record in cursor.fetchall():
+            for record in cursor:
                 row = dict(record)
                 extras = row.pop("extras")
                 row["element_key"] = element_key(row["scope_id"], row["source_lineage"], row["external_id"])
@@ -510,8 +667,7 @@ class InventoryIdentityRepository:
                         row["properties"]["Live Edit"] = {**live, **extras}
                 else:
                     row.pop("properties")
-                result.append(row)
-        return result
+                yield row
 
     def update_element(self, identity, field_name, value, *, allowed_scopes):
         return self.bulk_update([identity], field_name, value, allowed_scopes=allowed_scopes)

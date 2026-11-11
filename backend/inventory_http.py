@@ -6,6 +6,7 @@ The share route may provide a server-resolved scope; a query parameter cannot.
 
 import gzip
 import hashlib
+import io
 import json
 import os
 import threading
@@ -267,13 +268,28 @@ def _cache_put(ranura, clave, cuerpo):
 
 
 def _construir_cuerpo(scopes, include_props):
-    with get_db_connection() as conn:
-        repo = InventoryIdentityRepository(conn)
-        rows = [row for scope in scopes for row in repo.get_inventory(
-            scope, allowed_scopes=scopes, include_props=include_props)]
-    cuerpo = json.dumps(rows, ensure_ascii=False, separators=(",", ":"), default=str).encode("utf-8")
-    del rows  # el pico era tener filas, JSON y gzip vivos a la vez
-    return gzip.compress(cuerpo, compresslevel=_GZIP_NIVEL)
+    """El inventario ya comprimido, escrito fila a fila (11-nov-2026, docs/rendimiento/02).
+
+    Antes se juntaban todas las filas, luego su JSON entero y luego el gzip: medido, ~17 MB de memoria por
+    cada 1.000 elementos. El JSON de una lista es «[» + sus elementos separados por «,» + «]», así que
+    escribiendo cada fila al compresor según llega de la base sale EL MISMO JSON y en memoria solo queda
+    lo comprimido.
+    """
+    salida = io.BytesIO()
+    with gzip.GzipFile(fileobj=salida, mode="wb", compresslevel=_GZIP_NIVEL, mtime=0) as comprimido:
+        comprimido.write(b"[")
+        primera = True
+        with get_db_connection() as conn:
+            repo = InventoryIdentityRepository(conn)
+            for scope in scopes:
+                for row in repo.iter_inventory(scope, allowed_scopes=scopes, include_props=include_props):
+                    if not primera:
+                        comprimido.write(b",")
+                    comprimido.write(json.dumps(row, ensure_ascii=False, separators=(",", ":"),
+                                                default=str).encode("utf-8"))
+                    primera = False
+        comprimido.write(b"]")
+    return salida.getvalue()
 
 
 def read_inventory_request(*, forced_scope=None):
@@ -422,7 +438,8 @@ def inventory_schema_request():
             keys = set()
             sampled = 0
             for scope in scopes:
-                for row in repo.get_inventory(scope, allowed_scopes=scopes):
+                # Fila a fila: para mirar 2.000 elementos no se trae el frente entero (docs/rendimiento/02).
+                for row in repo.iter_inventory(scope, allowed_scopes=scopes):
                     for category, values in row["properties"].items():
                         if isinstance(values, dict):
                             keys.update((category, name) for name in values)

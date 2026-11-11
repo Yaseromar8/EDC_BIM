@@ -23,10 +23,10 @@ def entorno(monkeypatch):
         def __init__(self, conn):
             pass
 
-        def get_inventory(self, scope, *, allowed_scopes, include_props=True):
+        def iter_inventory(self, scope, *, allowed_scopes, include_props=True):
             estado['consultas'] += 1
             time.sleep(estado['espera'])
-            return [{'scope_id': scope, 'external_id': 'e1', 'clave': estado['clave'], 'props': include_props}]
+            return iter([{'scope_id': scope, 'external_id': 'e1', 'clave': estado['clave'], 'props': include_props}])
 
     def leer_scopes(conn, forced):
         if estado['denegar']:
