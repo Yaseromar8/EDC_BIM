@@ -113,6 +113,17 @@ RUTAS_POR_RECURSO = {
     'delete_pin':         ('control_pins', 'pin_id'),
     'delete_def':         ('custom_attr_defs', 'attr_id'),
     'delete_markup':      ('pdf_markups', 'markup_id'),
+    # Todo lo demas que se hace sobre UNA MARCA de un plano solo trae su id (11-nov-2026). Estaba
+    # registrado borrar, y nada mas: bajo ENFORCE, a quien no es administrador de la entidad le salia
+    # "No se pudo determinar a que obra pertenece esta peticion" al abrir la observacion de una marca,
+    # comentarla, editarla, publicarla o llevarla a la version vigente. Cada manejador sigue
+    # comprobando dentro autor, publicacion y permiso de carpeta; aqui solo se dice de que obra es.
+    'publicar_markup':     ('pdf_markups', 'markup_id'),
+    'editar_markup':       ('pdf_markups', 'markup_id'),
+    'comentar_marca':      ('pdf_markups', 'markup_id'),
+    'llevar_a_la_vigente': ('pdf_markups', 'markup_id'),
+    'crear_observacion':   ('pdf_markups', 'markup_id'),
+    'leer_observacion':    ('pdf_markups', 'markup_id'),
     'act_on_review':      ('doc_reviews', 'rid'),
     # La salida de una revision BLOQUEADA. Recibe solo el id de la
     # revision, asi que su obra sale de la fila -- igual que `act`.
