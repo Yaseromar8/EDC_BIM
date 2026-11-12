@@ -216,3 +216,97 @@ def test_es_urn_de_docs_no_pregunta_a_nadie(monkeypatch):
     acc = base64.urlsafe_b64encode(b'urn:adsk.wipprod:fs.file:vf.ub2xfjDiRByamkMzvCD7zg?version=50').decode()
     assert not b1.es_urn_de_docs(acc.rstrip('=')) and not b1.es_urn_de_docs('') and not b1.es_urn_de_docs(None)
     assert not b1.es_urn_de_docs('%%%no-es-base64')
+
+
+# ══ EL SELECTOR LISTA DOCS CON EL ALCANCE DE DOCS (12-nov-2026) ═════════════
+# Visto en produccion el dia que se publico: «Importar modelo → ALEPHIA Docs» salia vacio en la raiz. La ruta
+# mandaba `projects.model_urn`, y Docs guarda y lista su expediente bajo el alcance de ESCRITURA de la obra
+# (`project_ref.es_escritura`; sin ninguno, el id). Ninguna prueba lo vio porque en todas el id, el `model_urn` y el
+# alcance eran la misma cadena: aqui son tres distintas, a proposito.
+
+class _CursorDeObra:
+    def __init__(self, e):
+        self.e, self._uno = e, None
+
+    def execute(self, sql, params=None):
+        s = ' '.join(sql.split()).upper()
+        self.e['sql'].append(s)
+        if s.startswith('SELECT NAME FROM PROJECTS'):
+            self._uno = (self.e['nombre'],) if self.e['nombre'] else None
+        elif s.startswith('SELECT ALIAS FROM PROJECT_REF'):
+            self._uno = (self.e['alias'],) if self.e['alias'] else None
+        elif 'MODEL_URN' in s and 'FROM PROJECTS' in s:
+            self._uno = ('urn-del-modelo-3d-que-no-es-el-de-docs', self.e['nombre'])
+        else:
+            self._uno = None
+
+    def fetchone(self):
+        return self._uno
+
+
+class _ConexionDeObra:
+    def __init__(self, e):
+        self.e = e
+
+    def cursor(self):
+        return _CursorDeObra(self.e)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+
+@pytest.fixture
+def selector(monkeypatch):
+    from flask import Flask
+    import db
+    from routes import digital_twin as dt
+    e = {'sql': [], 'nombre': 'PQT8_TALARA', 'alias': 'proyectos/PQT8_TALARA', 'obra': 'obra-17'}
+    monkeypatch.setattr(dt, 'guardia_de_obra', lambda frente, accion='': None)
+    monkeypatch.setattr(db, 'resolve_project_id', lambda frente: e['obra'])
+    monkeypatch.setattr(db, 'get_db_connection', lambda: _ConexionDeObra(e))
+    app = Flask(__name__)
+
+    def pedir(frente='frente-1'):
+        with app.test_request_context('/api/config/project/docs-obra?project=' + frente):
+            r = dt.docs_de_la_obra_del_frente()
+            cuerpo, estado = (r[0], r[1]) if isinstance(r, tuple) else (r, 200)
+            return estado, cuerpo.get_json()
+
+    return e, pedir
+
+
+def test_el_selector_lista_docs_con_el_alcance_de_escritura_de_la_obra(selector):
+    e, pedir = selector
+    estado, cuerpo = pedir()
+    assert estado == 200 and cuerpo['success'] is True
+    # Lo que `/api/docs/list` espera en `model_urn`: donde Docs guarda el expediente.
+    assert cuerpo['model_urn'] == 'proyectos/PQT8_TALARA'
+    assert cuerpo['nombre'] == 'PQT8_TALARA'
+    assert cuerpo['formatos'] == list(md.FORMATOS)
+
+
+def test_una_obra_sin_historia_se_lista_por_su_id(selector):
+    e, pedir = selector
+    e['alias'] = None
+    estado, cuerpo = pedir()
+    assert estado == 200 and cuerpo['model_urn'] == 'obra-17'
+
+
+def test_el_selector_no_usa_el_model_urn_de_la_ficha_de_la_obra(selector):
+    e, pedir = selector
+    _, cuerpo = pedir()
+    assert cuerpo['model_urn'] != 'urn-del-modelo-3d-que-no-es-el-de-docs'
+    assert not any('MODEL_URN' in s and 'FROM PROJECTS' in s for s in e['sql'])
+
+
+def test_un_frente_sin_obra_o_una_obra_que_ya_no_existe_lo_dicen(selector):
+    e, pedir = selector
+    e['nombre'] = None
+    estado, cuerpo = pedir()
+    assert estado == 404 and cuerpo['success'] is False
+    e['nombre'], e['obra'] = 'PQT8_TALARA', None
+    estado, cuerpo = pedir()
+    assert estado == 404 and cuerpo['success'] is False

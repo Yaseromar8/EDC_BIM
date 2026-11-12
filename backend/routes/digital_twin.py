@@ -601,8 +601,18 @@ def _lanzar_extraccion(urn, frente, job_id):
 
 @digital_twin_bp.route('/api/config/project/docs-obra', methods=['GET'])
 def docs_de_la_obra_del_frente():
-    """La obra de ALEPHIA Docs de este frente (su `model_urn` en Docs y su nombre), para navegar sus carpetas."""
+    """La obra de ALEPHIA Docs de este frente (el alcance bajo el que Docs guarda su expediente, y su nombre), para
+    navegar sus carpetas.
+
+    EL ALCANCE ES EL DE ESCRITURA, NO `projects.model_urn` (12-nov-2026). Docs lista su arbol con
+    `scope_escritura` (`GET /api/projects`, `frontend-docs/src/utils/arbolDocumental.js`): el alias de `project_ref`
+    marcado `es_escritura`, o el id de la obra si no hay ninguno. `projects.model_urn` es otra cosa y en una obra con
+    historia no coincide: el selector salia vacio en la raiz («No hay modelos…») aunque la obra tuviera carpetas.
+    Visto en produccion el dia que se publico; las pruebas no lo vieron porque en ellas el id, el `model_urn` y el
+    alcance eran la misma cadena.
+    """
     from db import resolve_project_id, get_db_connection
+    import referencias_de_obra as _ref
     frente = request.args.get('project') or ''
     negativa = guardia_de_obra(frente, 'ver los modelos de Docs de la obra')
     if negativa:
@@ -612,12 +622,14 @@ def docs_de_la_obra_del_frente():
         return jsonify({'success': False, 'error': 'No se pudo saber de qué obra es este frente.'}), 404
     with get_db_connection() as conn:
         cur = conn.cursor()
-        cur.execute('SELECT model_urn, name FROM projects WHERE id::text = %s', (str(obra),))
+        cur.execute('SELECT name FROM projects WHERE id::text = %s', (str(obra),))
         fila = cur.fetchone()
-    if not fila or not fila[0]:
-        return jsonify({'success': False, 'error': 'La obra no tiene Docs.'}), 404
+        if not fila:
+            return jsonify({'success': False, 'error': 'La obra de este frente ya no existe.'}), 404
+        alcance = _ref.scope_de_escritura(cur, obra)
     import modelos_de_docs as _md
-    return jsonify({'success': True, 'model_urn': fila[0], 'nombre': fila[1], 'formatos': list(_md.FORMATOS)})
+    # La clave se sigue llamando `model_urn`: es el parametro que espera `/api/docs/list`.
+    return jsonify({'success': True, 'model_urn': alcance, 'nombre': fila[0], 'formatos': list(_md.FORMATOS)})
 
 
 @digital_twin_bp.route('/api/config/project/add-from-docs', methods=['POST'])
