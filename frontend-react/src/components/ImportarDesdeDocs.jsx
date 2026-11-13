@@ -14,9 +14,15 @@
  * - Filas que son botones: se recorren y se eligen con el teclado.
  * - La espera tiene tope: un modelo enorme sigue preparándose en Docs y se vincula después, sin dejar la pantalla
  *   sondeando para siempre.
+ *
+ * POR AUTODESK DOCS (13-nov-2026): una versión de una carpeta con el «puente ACC» la prepara Autodesk, no Docs. Antes
+ * de preparar nada se pregunta (`/api/docs/cad/acc-link`): si se ve por Autodesk y está lista, se leen sus vistas y el
+ * servidor la vincula por ahí; si Autodesk aún no terminó, se dice. Visto en producción: decía «Esta version usa el
+ * puente temporal ACC; consulta su estado en Docs» y no dejaba vincular ningún modelo de esas carpetas.
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { apiFetch } from '../utils/apiFetch';
+import { destinoPorAutodesk, NOTA_POR_AUTODESK } from '../utils/modelosDeDocsPorAutodesk';
 
 const ESPERA_MS = 3000;
 const FALLOS_TOLERADOS = 20;              // ~1 min: Render se reinicia y despierta a su ritmo (como el lector de Docs)
@@ -46,6 +52,7 @@ export default function ImportarDesdeDocs({ backendUrl, frente, onVinculado, onC
   const [vistas, setVistas] = useState([]);
   const [vista, setVista] = useState(null);
   const [urn, setUrn] = useState(null);
+  const [porAutodesk, setPorAutodesk] = useState(false);
   const [error, setError] = useState('');
   const vivo = useRef(true);
   const turno = useRef(0);                            // el listado vigente; los anteriores se descartan
@@ -117,6 +124,19 @@ export default function ImportarDesdeDocs({ backendUrl, frente, onVinculado, onC
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ node_id: doc.id }),
     });
     setError(''); setFase('preparando'); setProgreso('Comprobando el modelo…'); setOcupado?.(true);
+    setPorAutodesk(false);
+    // ¿La prepara Autodesk Docs (puente de su carpeta)? Entonces no se prepara aquí: se vincula por ahí.
+    const enlace = await pedir(`/api/docs/cad/acc-link?node_id=${encodeURIComponent(doc.id)}`).catch(() => null);
+    if (!vivo.current) return;
+    const destino = enlace?.ok ? destinoPorAutodesk(enlace.d) : null;
+    if (destino?.espera) return rendirse(destino.espera);
+    if (destino?.urn) {
+      setPorAutodesk(true);
+      setUrn(destino.urn);
+      setProgreso('Leyendo sus vistas…');
+      await cargarVistas(destino.urn);
+      return;
+    }
     const desde = Date.now();
     const primera = await traducir().catch(() => null);
     if (!vivo.current) return;
@@ -231,6 +251,7 @@ export default function ImportarDesdeDocs({ backendUrl, frente, onVinculado, onC
       {(fase === 'vista' || fase === 'vinculando') && (
         <div className="import-field">
           <div className="import-label" id="vistas-de-docs">Vista de «{elegido?.name}»</div>
+          {porAutodesk && <p style={{ color: '#52524d', fontSize: 13, margin: '0 0 8px' }}>{NOTA_POR_AUTODESK}</p>}
           <div className="import-tree-container" role="group" aria-labelledby="vistas-de-docs">
             {vistas.map(v => (
               <button type="button" key={v.guid} aria-pressed={vista === v.guid} disabled={fase === 'vinculando'}

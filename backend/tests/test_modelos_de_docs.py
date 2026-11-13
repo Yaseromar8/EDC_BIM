@@ -310,3 +310,90 @@ def test_un_frente_sin_obra_o_una_obra_que_ya_no_existe_lo_dicen(selector):
     e['nombre'], e['obra'] = 'PQT8_TALARA', None
     estado, cuerpo = pedir()
     assert estado == 404 and cuerpo['success'] is False
+
+
+# ══ UN MODELO QUE SE VE POR AUTODESK DOCS SE VINCULA POR AUTODESK DOCS (13-nov-2026) ═══
+# Visto en produccion: «Esta version usa el puente temporal ACC; consulta su estado en Docs», y no se podia vincular
+# ningun modelo de una carpeta con puente. Las reglas, puras; con la aplicacion y la base:
+# herramientas/ensayo_de_modelos_de_docs.py.
+
+DOC_ACC = {'id': '0b5a3c52-7f1e-4d1a-9c3e-4e6f2a9b8d01', 'name': 'COMUNAL_ESTRUCTURAL.rvt'}
+
+
+def enlace_acc(**mas):
+    e = {'project_id': 'b.proyecto', 'item_id': 'urn:adsk.wipprod:dm.lineage:AbC_1-x',
+         'version_id': 'urn:adsk.wipprod:fs.file:vf.AbC_1-x?version=3', 'version_number': None,
+         'viewer_urn': 'dXJuOmFkc2sud2lwcHJvZDpmcy5maWxlOnZmLkFiQ18xLXg_dmVyc2lvbj0z', 'gcs_urn': 'x/v3'}
+    e.update(mas)
+    return e
+
+
+def test_el_numero_de_version_sale_del_id_de_la_version_de_acc():
+    assert md.numero_de_version_acc('urn:adsk.wipprod:fs.file:vf.AbC_1-x?version=3') == 3
+    assert md.numero_de_version_acc('urn:adsk.wipprod:fs.file:vf.AbC?version=12') == 12
+    for malo in (None, '', 'urn:adsk.wipprod:fs.file:vf.AbC', 'urn:alephia:docs.lineage:x?version=2', 'version=3'):
+        assert md.numero_de_version_acc(malo) is None
+
+
+@pytest.mark.parametrize('falta', ['project_id', 'item_id', 'version_id', 'viewer_urn'])
+def test_un_enlace_al_que_le_falta_algo_no_sirve_para_vincular(falta):
+    assert md.enlace_acc_completo(enlace_acc()) is True
+    assert md.enlace_acc_completo(enlace_acc(**{falta: None})) is False
+    assert md.enlace_acc_completo(None) is False
+
+
+def test_un_enlace_con_un_linaje_o_una_version_que_no_son_de_acc_no_sirve():
+    assert not md.enlace_acc_completo(enlace_acc(item_id='urn:alephia:docs.lineage:' + DOC_ACC['id']))
+    assert not md.enlace_acc_completo(enlace_acc(version_id='docs-' + DOC_ACC['id']))
+    assert not md.enlace_acc_completo(enlace_acc(viewer_urn='con espacios y/barras'))
+
+
+def test_la_ficha_por_acc_es_la_de_un_modelo_de_acc_con_los_datos_del_enlace():
+    f = md.ficha_por_acc(DOC_ACC, enlace_acc(), 'frente-1', 'guid', '{3D}', ahora='2026-11-13T09:00:00', model_id='7')
+    assert f == {'id': '7', 'name': 'COMUNAL_ESTRUCTURAL.rvt', 'urn': enlace_acc()['viewer_urn'], 'source': 'DOCS',
+                 'region': 'US', 'projectId': 'b.proyecto', 'itemId': 'urn:adsk.wipprod:dm.lineage:AbC_1-x',
+                 'versionId': 'urn:adsk.wipprod:fs.file:vf.AbC_1-x?version=3', 'versionNumber': 3,
+                 'lastModifiedTime': '2026-11-13T09:00:00', 'added_at': '2026-11-13T09:00:00',
+                 'appProjectId': 'frente-1', 'defaultViewGuid': 'guid', 'defaultViewName': '{3D}'}
+    # No es «un modelo de Docs» para las rutas que distinguen: sigue TODAS las reglas de ACC.
+    assert md.es_de_docs(f) is False
+    assert md.ficha_por_acc(DOC_ACC, enlace_acc(version_number=9), 'f')['versionNumber'] == 9
+
+
+def test_por_acc_se_hacen_las_mismas_preguntas_que_por_docs():
+    ok = md.comprobar_por_acc(DOC_ACC, 'obra', 'obra', enlace_acc(), [])
+    assert ok == 'urn:adsk.wipprod:dm.lineage:AbC_1-x'
+    casos = [
+        (dict(nodo=None), 'NO_ENCONTRADO', 404),
+        (dict(nodo={'id': DOC_ACC['id'], 'name': 'memoria.pdf'}), 'FORMATO', 400),
+        (dict(obra_doc='otra'), 'OTRA_OBRA', 403),
+        (dict(obra_frente=None), 'OTRA_OBRA', 403),
+        (dict(enlace=enlace_acc(item_id=None)), 'ENLACE_ACC_INCOMPLETO', 409),
+    ]
+    for cambio, codigo, http in casos:
+        with pytest.raises(md.Negativa) as e:
+            md.comprobar_por_acc(cambio.get('nodo', DOC_ACC) if 'nodo' in cambio else DOC_ACC,
+                                 cambio.get('obra_frente', 'obra') if 'obra_frente' in cambio else 'obra',
+                                 cambio.get('obra_doc', 'obra'), cambio.get('enlace', enlace_acc()), [])
+        assert (e.value.codigo, e.value.http) == (codigo, http), cambio
+
+
+def test_la_misma_pieza_de_acc_no_entra_dos_veces_venga_por_donde_venga():
+    # Ya esta en el frente porque se importo por la pestaña «Autodesk Docs» (otra version de la misma pieza)...
+    por_la_otra_pestana = [{'name': 'COMUNAL_ESTRUCTURAL.rvt', 'itemId': 'urn:adsk.wipprod:dm.lineage:AbC_1-x',
+                            'urn': 'otra-version'}]
+    with pytest.raises(md.Negativa) as e:
+        md.comprobar_por_acc(DOC_ACC, 'obra', 'obra', enlace_acc(), por_la_otra_pestana)
+    assert e.value.codigo == 'DUPLICADO' and e.value.http == 409
+    # ...o con el mismo URN bajo otra pieza.
+    with pytest.raises(md.Negativa):
+        md.comprobar_por_acc(DOC_ACC, 'obra', 'obra', enlace_acc(), [{'itemId': 'x', 'urn': enlace_acc()['viewer_urn']}])
+
+
+def test_con_el_puente_sin_terminar_se_dice_que_pasa():
+    assert 'aún está preparando' in md.espera_del_puente({'status': 'preparing'})
+    assert 'aún está preparando' in md.espera_del_puente(None)
+    assert 'en pausa' in md.espera_del_puente({'status': 'queued', 'paused': True})
+    assert md.espera_del_puente({'status': 'error', 'error': 'ACC no pudo preparar esta version.'}) == (
+        'Autodesk Docs no pudo preparar esta versión: ACC no pudo preparar esta version. Revísala en Docs.')
+    assert md.espera_del_puente({'status': 'error'}) == 'Autodesk Docs no pudo preparar esta versión. Revísala en Docs.'

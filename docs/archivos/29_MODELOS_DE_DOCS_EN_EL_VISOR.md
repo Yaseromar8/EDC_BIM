@@ -275,3 +275,74 @@ ACC. Para un modelo federado desde Docs, cada fila del inventario salía **sin i
 
 Evidencia: `node frontend-react/pruebas/identidadDeDocs.prueba.mjs`, 19/19; con el fichero anterior la misma fila
 da identidad nula. **No verificado con un modelo de Docs real en el visor**: hace falta la sesión del dueño.
+
+## 8 · Tras publicarlo (12 y 13-nov-2026): dos cosas que solo se vieron con la obra real
+
+Se publicó el 12-nov-2026 sin la prueba con un modelo real que pedía §7.3. La primera prueba real fue en producción,
+y encontró dos cosas. Las dos tienen la misma raíz: **los datos de las pruebas eran más limpios que los de la obra.**
+
+### 8.1 El selector salía vacío en la raíz (12-nov-2026, arreglado en `8f713135`)
+
+| | |
+|---|---|
+| **Qué se veía** | «No hay modelos RVT, DWG, DXF, NWD, NWC ni IFC en esta carpeta», sin ninguna carpeta donde entrar. |
+| **Causa** | `GET /api/config/project/docs-obra` mandaba `projects.model_urn`. Docs guarda y lista su expediente por el **alcance de escritura** de la obra (`scope_escritura`: el alias de `project_ref` marcado `es_escritura`, o el id). En una obra con historia no coinciden. |
+| **Arreglo** | La ruta contesta `referencias_de_obra.scope_de_escritura()`, la misma autoridad que `GET /api/projects`. |
+| **Por qué no se vio** | En todas las pruebas el id de la obra, su `model_urn` y su alcance eran la misma cadena. Y la ruta no tenía prueba. |
+| **Efecto lateral** | Listar la raíz de un alcance sin archivos hace que se cree su carpeta raíz vacía. Abrir el selector pudo dejar una en producción bajo `projects.model_urn`. No contiene nada y ninguna pantalla lista ese alcance. |
+
+### 8.2 Las carpetas con «puente ACC» no dejaban vincular (13-nov-2026)
+
+**Qué se veía.** Al elegir un RVT y pulsar «Siguiente»: «Esta version usa el puente temporal ACC; consulta su estado
+en Docs».
+
+**Qué es.** Una carpeta de Docs puede tener el puente (`acc_emergency_bridge.py`): sus CAD se copian a Autodesk Docs
+y es Autodesk quien los prepara. Docs guarda en cada versión el enlace (`acc_link`: proyecto, pieza, versión y URN de
+ACC). Esa versión **no tiene traducción propia**, y §7.4-C decidió, con razón, no lanzarla a sus espaldas. Lo que
+faltó es decidir qué hacer entonces: se quedó en un aviso que no deja avanzar.
+
+**Qué se hace ahora.** Se vincula con lo que el modelo **es** para el visor: un modelo de Autodesk Docs.
+
+1. Antes de preparar nada, el selector pregunta a Docs por el enlace de esa versión (`/api/docs/cad/acc-link`).
+2. Si está listo: se leen sus vistas y se dice «Este modelo se ve a través de Autodesk Docs, por el puente de su
+   carpeta».
+3. Al vincular, el servidor (`add-from-docs`) lee él mismo el enlace y escribe la ficha de un modelo de ACC:
+   `source = 'DOCS'`, URN, proyecto, pieza (`itemId`, el linaje de ACC), versión y número. El navegador sigue
+   mandando solo el documento y la vista.
+4. Si Autodesk aún no terminó, falló o el puente está en pausa: se dice cuál de las tres, y no se vincula nada.
+
+**Por qué así y no con el linaje de Docs.** El inventario (B1) y las vistas guardadas sacan la identidad del URN, y
+se les llama con el URN a secas desde más de diez sitios. Un URN de ACC da el linaje de ACC. Guardar ese modelo con
+el linaje de Docs obligaría a que el mismo URN tuviera dos identidades según por qué pestaña entró, y eso no se puede
+sostener. Como modelo de ACC no se abre ningún contrato cerrado.
+
+**Lo que esto implica, y conviene saber:**
+
+- **Las versiones nuevas llegan igual.** Al subir una versión a esa carpeta de Docs, el puente crea una versión nueva
+  de la misma pieza en ACC, y «Buscar actualizaciones» la encuentra preguntando a Autodesk, como con cualquier modelo
+  de ACC.
+- **Es el mismo modelo que entraría por la pestaña «Autodesk Docs».** No se puede vincular dos veces: la pieza es la
+  misma venga por donde venga.
+- **Si un día se apaga el puente de esa carpeta**, las versiones siguientes se prepararán en Docs y ya no llegarán a
+  la pieza de ACC: ese modelo se queda en su última versión de ACC. Habrá que vincular el documento otra vez (como
+  modelo de Docs), y sus vistas guardadas e inventario empiezan de nuevo, porque es otra identidad. El puente se
+  llama «temporal»: esto pasará.
+- **El permiso de Docs se exige al vincular** (hay que poder ver el documento). Después, lo ve quien entra en el
+  frente, igual que el resto de modelos (§7.4).
+
+### 8.3 Pruebas (13-nov-2026)
+
+| Qué | Resultado |
+|---|---|
+| `backend/herramientas/ensayo_de_modelos_de_docs.py` (nuevo, versionado): la aplicación real contra PostgreSQL local, con una obra cuyo id, `model_urn` y alcance son **tres cadenas distintas** y una carpeta con puente | 19 de 19 |
+| `backend/tests/test_modelos_de_docs.py`: + el alcance (4) y las reglas de vincular por ACC (10) | 29 |
+| `frontend-react/pruebas/modelosDeDocsPorAutodesk.prueba.mjs` (nuevo) | 7 |
+| Banco de pantalla del selector (respuestas simuladas): puente listo → vistas con su nota → vinculado, sin pedir ninguna preparación; en preparación y fallido → su aviso; un modelo sin puente → el camino de siempre | correcto, sin errores en consola |
+
+Autodesk está sustituido en todo lo anterior. **No verificado:** un modelo real de una carpeta con puente, en
+producción, con la sesión del dueño: que cargue, que se extraiga su inventario y que «Buscar actualizaciones» vea
+una versión nueva subida a Docs.
+
+**Lección, para los bancos y ensayos de obra:** el id de la obra, su `model_urn` y su alcance de escritura tienen que
+ser tres cadenas distintas, y alguna carpeta tiene que llevar el puente. Con datos más limpios que los reales, las
+pruebas dan verde y producción no.

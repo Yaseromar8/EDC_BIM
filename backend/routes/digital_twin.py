@@ -519,6 +519,29 @@ def _estado_de_traduccion(nodo, urn, token=None, preparar=False):
     return 'preparando', None
 
 
+def _enlace_acc_de(nodo):
+    """Cómo se ve por Autodesk Docs la versión vigente de un documento de Docs.
+
+    (enlace, None)   se ve por ACC y ya está lista: el `acc_link` de esa versión (puente de la carpeta o vínculo
+                     manual), que pertenece a los bytes de ESTA versión;
+    (None, estado)   usa el puente y Autodesk aún no terminó (o falló, o está en pausa);
+    (None, None)     no usa ACC: sigue el camino de siempre, con la traducción de Docs.
+
+    Con el puente sin terminar se pregunta por su estado como lo hace Docs al abrir el plano (`status_and_link`): si
+    Autodesk ya acabó, deja escrito el enlace."""
+    from routes.docs_cad import _acc_link_vigente
+    enlace = _acc_link_vigente(nodo)
+    if enlace:
+        return enlace, None
+    if not (nodo.get('meta') or {}).get('acc_emergency_bridge'):
+        return None, None
+    from acc_emergency_bridge import status_and_link
+    estado, enlace = status_and_link(nodo)
+    if enlace:
+        return enlace, None
+    return None, (estado or {'status': 'preparing'})
+
+
 def _con_nombre_de_vista(cur):
     """¿Tiene `model_config` la columna de la migración 38? (Igual que `save_project_config_internal`.)"""
     cur.execute("SELECT 1 FROM information_schema.columns WHERE table_name = 'model_config' "
@@ -660,6 +683,14 @@ def add_model_from_docs():
                                                   'status': 'success', 'urn': urn}
     config = get_project_config_internal()
     del_frente = [m for m in config.get('models', []) if m.get('appProjectId') == frente]
+    # ¿SE VE POR AUTODESK DOCS? (13-nov-2026) El puente de su carpeta la copió a ACC y es Autodesk quien la prepara:
+    # no tiene traducción propia. Se vincula por ACC, con el enlace que guardó Docs (modelos_de_docs.py).
+    enlace, espera = _enlace_acc_de(nodo) if nodo else (None, None)
+    if espera:
+        texto = _md.espera_del_puente(espera)
+        return jsonify({'error': texto, 'message': texto, 'code': 'PUENTE_SIN_TERMINAR'}), 409
+    if enlace:
+        return _vincular_por_acc(nodo, enlace, frente, obra_doc, del_frente, data)
     try:
         _md.comprobar(nodo, resolve_project_id(frente), obra_doc, urn, del_frente)
     except _md.Negativa as e:
@@ -679,6 +710,33 @@ def add_model_from_docs():
     extraction_job_id = _lanzar_extraccion(urn, frente, f"link_docs_{nuevo['id']}")
     modelos = [m for m in get_project_config_internal().get('models', []) if m.get('appProjectId') == frente]
     return jsonify({'models': modelos, 'urn': urn, 'extraction_job_id': extraction_job_id})
+
+
+def _vincular_por_acc(nodo, enlace, frente, obra_doc, del_frente, data):
+    """Vincula al frente un documento de Docs que se ve por Autodesk Docs: una ficha de ACC, con los datos del enlace
+    que guardó Docs. Las mismas guardas, la misma escritura de una sola fila y la misma extracción que el resto."""
+    import modelos_de_docs as _md
+    from db import resolve_project_id
+    try:
+        _md.comprobar_por_acc(nodo, resolve_project_id(frente), obra_doc, enlace, del_frente)
+    except _md.Negativa as e:
+        return jsonify({'error': e.texto, 'message': e.texto, 'code': e.codigo, **e.extra}), e.http
+    nuevo = _md.ficha_por_acc(nodo, enlace, frente, data.get('defaultViewGuid'), data.get('defaultViewName'),
+                              ahora=datetime.now().isoformat(), model_id=str(int(time.time() * 1000)))
+    try:
+        duplicado = _insertar_modelo_de_docs(nuevo)
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({'error': 'No se pudo guardar el vínculo.', 'details': str(e)[:200]}), 500
+    if duplicado:
+        texto = '«%s» ya está vinculado a este frente.' % duplicado
+        return jsonify({'error': texto, 'message': texto, 'code': 'DUPLICADO'}), 409
+    _anotar_en_docs(nodo, 'link_docs_model', frente, version=nuevo['versionNumber'],
+                    vista=data.get('defaultViewName'), por='autodesk_docs')
+    extraction_job_id = _lanzar_extraccion(nuevo['urn'], frente, f"link_docs_{nuevo['id']}")
+    modelos = [m for m in get_project_config_internal().get('models', []) if m.get('appProjectId') == frente]
+    return jsonify({'models': modelos, 'urn': nuevo['urn'], 'extraction_job_id': extraction_job_id,
+                    'por_autodesk_docs': True})
 
 
 def _comprobar_modelo_de_docs(model):
