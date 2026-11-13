@@ -29,7 +29,6 @@ import { isNativeAR } from './native/arcore';
 import PhotoAlbumModal from './components/PhotoAlbumModal';
 import SheetViewerPanel from './components/SheetViewerPanel';
 import LinkRevitBadge from './components/LinkRevitBadge';
-import SectionCutTool from './components/SectionCutTool';
 // Tablero de análisis: diferido (React.lazy) — sale del bundle inicial del visor.
 const DashboardWorkspace = React.lazy(() => import('./components/dashboard/DashboardWorkspace'));
 import ProgressDetailPanel from './components/ProgressDetailPanel';
@@ -4772,7 +4771,6 @@ function App() {
                   de arriba (flex:1) se achica solo para acomodarla. */}
               {!compareMode && activePanel !== 'build' && (
                 <ViewerLabelsBar rightSlot={<>
-                  <SectionCutTool />
                   {/* Mismo motivo que el latido: consulta /api/link/status cada
                       3 s y para un invitado siempre es 401. El enlace de Revit
                       es una herramienta del equipo, no del que recibe el enlace. */}

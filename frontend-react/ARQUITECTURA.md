@@ -107,7 +107,7 @@ sitio que decide qué pantalla se ve. No hay router: la pantalla es una función
     <ProfilePanel/> <SheetViewerPanel/>       (4386, 4390)
     <Suspense><DashboardWorkspace/>           (4395)  único React.lazy
     avisos: webglLost · permToast · relocatingPin · pinPrompt
-    <ViewerLabelsBar rightSlot={<SectionCutTool/> <LinkRevitBadge/>}/>   (4561-4567)
+    <ViewerLabelsBar rightSlot={<LinkRevitBadge/>}/>   (4561-4567)
     {budgetTabOpen && <BudgetTree/>}          (4643)
     {inventoryTabOpen && <InventoryDataGrid/>}(4698)
   {activeSheet && panel dividido}             (4713)  <PdfReader/> | <SecondaryViewer/>
@@ -194,7 +194,7 @@ Autodesk.Viewing.Initializer({ …, getAccessToken: cb => apiFetch('/api/token')
 
 `window.viewer` / `window.NOP_VIEWER` / `window.__mainViewer` son **el puente** por el
 que los módulos que no reciben el visor por props (extensiones, `ViewerLabelsBar`,
-`lob4d/*`, `native/*`, `SectionCutTool`) lo alcanzan.
+`lob4d/*`, `native/*`) lo alcanzan.
 
 ### 4.2 Carga federada y alineada (1946-2215)
 
@@ -236,7 +236,7 @@ inventario pasa por ahí.
 | `Autodesk.AEC.Minimap3DExtension` | minimapa | `Viewer.jsx:2498-2508` (`minimapActive`) |
 | `Autodesk.Viewing.Extensions.VR` | VR | `Viewer.jsx:2520-2531` (`vrActive`) |
 | `Autodesk.DataVisualization` | mapas de calor / sprites de datos | `aps/utils/DataVizEngine.js` |
-| `Autodesk.Section` | planos de corte | `components/SectionCutTool.jsx:237` |
+| `Autodesk.SmartSection` | planos de corte: la sección nueva del motor, encendida desde el 13-nov-2026. Sustituye a `Autodesk.Section` y a nuestra herramienta de corte propia (`components/SectionCutTool.jsx`), retirada ese día | `lib/funcionesDelMotor.js` (docs/visor/70) |
 
 `aps/extensions/DeviceOrientationExtension.js` (giroscopio) **no la importa nadie**.
 
@@ -354,7 +354,7 @@ seguimiento en `Viewer`. Endpoints: `/api/project-pins` (`routes/tracking.py`),
 `/api/build/signed-read` (`server.py:271`).
 
 **Civil / obra lineal** — `CivilToolsPanel` (2.105 líneas: alineamientos, secciones,
-superficies, Design Automation), `SectionViewer`, `SectionCutTool`,
+superficies, Design Automation), `SectionViewer`,
 `ghostEarthworks.js` (corte/relleno), `ProgressiveExtension`, `GeoControlPanel`
 (puntos de control y amarre UTM). Endpoints: `/api/civil/alignments|sections|surfaces`
 (GET/POST/DELETE), `extract-curves|extract-sections-test|extract-surfaces` (POST, Design
@@ -595,8 +595,8 @@ _2 módulos, 5044 líneas._
 - **Props:** ninguna — es la raíz (la firma `{ open, availableProperties, selectedIds, onClose, onSave, onReset }` que aparece en el fichero es de un subcomponente interno: el configurador de columnas/filtros)
 - **Estado local (`useState`):** 86 — `pendingSelection`, `availableQuery`, `selectedQuery`, `hideLocations`, `includeMultiLevel`, `user`, `permToast`, `webglLost`, `models`, `relinkTargetModel`, `extractionJobs`, `hiddenModelUrns`, `isSharedMode`, `sharedViewData`, `savedViews`, `documents`, `sprites`, `activeSpriteId`, `showSprites`, `spritePlacementActive`, `activePanel`, `compareMode`, `panelVisible`, `inventoryTabOpen`, `inventoryPanelHeight`, `budgetTabOpen`, `budgetPoppedOut`, `budgetPanelHeight`, `lob4dTabOpen`, `geoPanelOpen`, `tableroOpen`, `tableroW`, `sidebarWidth`, `isolatedExtIds`, `importModalOpen`, `documentsModalOpen`, `filterConfiguratorOpen`, `availableProperties`, `filterProperties`, `filterSelections` …
 - **Hooks:** `useCallback`×36, `useEffect`×42, `useMemo`×2, `useRef`×4, `useState`×86
-- **Renderiza:** `AddDocumentModal`, `BudgetIcon`, `BudgetTree`, `CivilRoadIcon`, `CompareView`, `DashboardWorkspace`, `DocPinPanel`, `DocumentManager`, `ErrorBoundary`, `FilterConfiguratorModal`, `FilterIcon`, `FolderIcon`, `FourDIcon`, `GeoControlPanel`, `ImportModelModal`, `InventoryDataGrid`, `InventoryIcon`, `LOB4DPanel`, `LandingPage`, `LinkRevitBadge`, `LoginScreen`, `NativeARView`, `PdfReader`, `PhotoAlbumModal`, `ProfilePanel`, `ProgressDetailPanel`, `ProgressIcon`, `React.Suspense`, `SecondaryViewer`, `SectionCutTool`, `SheetViewerPanel`, `TandemSidebar`, `TopBar`, `Viewer`, `ViewerLabelsBar`, `ViewsPanel`
-- **Importa (local):** `./App.css`, `./components/AddDocumentModal`, `./components/BudgetTree`, `./components/CompareView`, `./components/DocPinPanel`, `./components/DocumentManager`, `./components/DocumentPanel`, `./components/ErrorBoundary`, `./components/FilterConfiguratorModal`, `./components/GeoControlPanel`, `./components/ImportModelModal`, `./components/InventoryDataGrid`, `./components/LOB4DPanel`, `./components/LandingPage`, `./components/LinkRevitBadge`, `./components/LoginScreen`, `./components/NativeARView`, `./components/NativeFileTree`, `./components/PdfReader`, `./components/PhotoAlbumModal`, `./components/ProfilePanel`, `./components/ProgressDetailPanel`, `./components/SecondaryViewer`, `./components/SectionCutTool`, `./components/SheetViewerPanel`, `./components/SourceFilesPanel`, `./components/TandemFilterPanel`, `./components/TandemSidebar`, `./components/TopBar`, `./components/Viewer`, `./components/ViewerLabelsBar`, `./components/ViewsPanel`, `./native/arcore`, `./services/uploadQueue`, `./services/uploadService`, `./utils/apiFetch`, `./utils/enlaceCompartido`, `./utils/frenteSession`, `./utils/inventoryCache`
+- **Renderiza:** `AddDocumentModal`, `BudgetIcon`, `BudgetTree`, `CivilRoadIcon`, `CompareView`, `DashboardWorkspace`, `DocPinPanel`, `DocumentManager`, `ErrorBoundary`, `FilterConfiguratorModal`, `FilterIcon`, `FolderIcon`, `FourDIcon`, `GeoControlPanel`, `ImportModelModal`, `InventoryDataGrid`, `InventoryIcon`, `LOB4DPanel`, `LandingPage`, `LinkRevitBadge`, `LoginScreen`, `NativeARView`, `PdfReader`, `PhotoAlbumModal`, `ProfilePanel`, `ProgressDetailPanel`, `ProgressIcon`, `React.Suspense`, `SecondaryViewer`, `SheetViewerPanel`, `TandemSidebar`, `TopBar`, `Viewer`, `ViewerLabelsBar`, `ViewsPanel`
+- **Importa (local):** `./App.css`, `./components/AddDocumentModal`, `./components/BudgetTree`, `./components/CompareView`, `./components/DocPinPanel`, `./components/DocumentManager`, `./components/DocumentPanel`, `./components/ErrorBoundary`, `./components/FilterConfiguratorModal`, `./components/GeoControlPanel`, `./components/ImportModelModal`, `./components/InventoryDataGrid`, `./components/LOB4DPanel`, `./components/LandingPage`, `./components/LinkRevitBadge`, `./components/LoginScreen`, `./components/NativeARView`, `./components/NativeFileTree`, `./components/PdfReader`, `./components/PhotoAlbumModal`, `./components/ProfilePanel`, `./components/ProgressDetailPanel`, `./components/SecondaryViewer`, `./components/SheetViewerPanel`, `./components/SourceFilesPanel`, `./components/TandemFilterPanel`, `./components/TandemSidebar`, `./components/TopBar`, `./components/Viewer`, `./components/ViewerLabelsBar`, `./components/ViewsPanel`, `./native/arcore`, `./services/uploadQueue`, `./services/uploadService`, `./utils/apiFetch`, `./utils/enlaceCompartido`, `./utils/frenteSession`, `./utils/inventoryCache`
 - **Carga perezosa:** `./components/dashboard/DashboardWorkspace`, `./components/ghostEarthworks`
 - **Paquetes:** `@capacitor/app`, `@capacitor/network`, `@capawesome/capacitor-background-task`, `react`
 - **Lo importan:** `main.jsx`
@@ -1668,21 +1668,6 @@ _48 módulos, 29164 líneas._
 - **Lo importan:** `App.jsx`
 - **API de Autodesk usada:** `Autodesk.Viewing.Document.load`, `Autodesk.Viewing.GuiViewer3D`
 - **Funciones de módulo (línea):** `SecondaryViewer`:4
-
-### `components/SectionCutTool.jsx` — 361 líneas
-
-> SectionCutTool — corte PREDECIBLE para obra lineal. Regla de diseño: siempre se corta respecto al EJE de la obra y al elemento que tocas, nunca respecto a ejes globales (el modelo está georreferenciado y rotado: X/Y/Z del mundo dan planos diagonales inútiles). Tres cortes con significado FIJO — el mismo botón hace lo mismo toques la cara que toques:
-
-- **Exporta:** default `SectionCutTool`
-- **Props:** `plane`, `edge`, `planeColor`
-- **Estado local (`useState`):** 3 — `mode`, `hit`, `applied`
-- **Hooks:** `useEffect`×3, `useRef`×2, `useState`×3
-- **Renderiza:** `IsoCutIcon`
-- **Paquetes:** `react`
-- **Lo importan:** `App.jsx`
-- **Extensiones del visor:**  carga `Autodesk.Section`
-- **Funciones de módulo (línea):** `getFaceHit`:22, `radioEnPantalla`:47, `showPickMarker`:70, `clearPickMarker`:111, `axisFrameAt`:123, `IsoCutIcon`:140, `normalFor`:156, `fmtPk`:182
-- **Funciones internas del componente (línea):** `onDown`:205, `onUp`:206, `applyPlane`:230, `chooseCut`:244, `invert`:251, `clearCut`:258, `exitMode`:266, `iconBtn`:273
 
 ### `components/SectionViewer.jsx` — 1302 líneas
 

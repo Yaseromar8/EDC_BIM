@@ -13,6 +13,7 @@ import { BaseExtension } from '../aps/extensions/BaseExtension';
 import { findLeafNodes, getBulkProperties, calculateDynamicFilterBucketsNative, extractPartidasNative, extractSchemaNative } from '../aps/utils/model';
 import IconMarkupExtension from '../aps/extensions/IconMarkupExtension';
 import LOB4DExtension from '../aps/extensions/LOB4DExtension';
+import { encenderFuncionesDelMotor } from '../lib/funcionesDelMotor';
 import { DataVizEngine } from '../aps/utils/DataVizEngine';
 
 const BACKEND_URL = (typeof window !== 'undefined' && window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()) ? 'https://visor-ecd-backend-va.onrender.com' : (import.meta.env.VITE_BACKEND_URL || (typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3000' : (typeof window !== 'undefined' && window.location.hostname.match(/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/) ? `http://${window.location.hostname}:3000` : 'https://visor-ecd-backend-va.onrender.com')));
@@ -584,6 +585,12 @@ const Viewer = ({
                     });
                 }
             };
+
+            // FUNCIONES DEL MOTOR QUE VENÍAN APAGADAS (13-nov-2026, docs/visor/70): láser, pendiente y «borrar todas» en
+            // la regla, y la sección nueva. Van encendidas para todos; `?motor=no` las apaga en ese navegador si una
+            // versión del motor las rompe (son API privadas de Autodesk). Tiene que ir ANTES de arrancar el motor.
+            const delMotor = encenderFuncionesDelMotor(window.Autodesk?.Viewing, window.location.search, window.localStorage);
+            if (delMotor.modo !== 'todo' || delMotor.fallidas.length) console.info('[APS LMV] funciones del motor', delMotor);
 
             Autodesk.Viewing.Initializer(options, () => {
                 console.log(`[APS LMV] ⏱️ ${performance.now().toFixed(2)}ms - Evento: INITIALIZATION_FINISHED - Entorno WebGL listo.`);
@@ -1489,7 +1496,11 @@ const Viewer = ({
         // Con este guard, el marquee CEDE el clic a esas herramientas.
         const interactiveToolActive = () => {
             try {
-                for (const n of ['Autodesk.Measure', 'Autodesk.Section']) {
+                // 'Autodesk.SmartSection' es la sección nueva del motor (docs/visor/70): cuando está encendida
+                // sustituye a 'Autodesk.Section'. Sin nombrarla aquí, este marquee se quedaba con el clic sobre el
+                // plano y además seleccionaba el elemento de debajo, y el motor suelta el plano activo en cuanto
+                // cambia la selección: las flechas para mover el corte no llegaban a salir (13-nov-2026).
+                for (const n of ['Autodesk.Measure', 'Autodesk.Section', 'Autodesk.SmartSection']) {
                     const ext = viewer.getExtension(n);
                     if (ext && (ext.isActive?.() || ext.activeStatus)) return true;
                 }
