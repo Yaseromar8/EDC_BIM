@@ -20,6 +20,11 @@
  * ABRIR UNA INCIDENCIA (3-nov-2026, «al hacer clic no te lleva al archivo»). Con
  * `onAbrirIncidencia`: si vive en un plano, al plano con la incidencia abierta;
  * si no, a la herramienta Issues de su obra, con ella abierta.
+ *
+ * EL RESUMEN AL ENTRAR (13-nov-2026, el dueño: «un resumen de cada usuario de lo que está pendiente, vencido y
+ * entregado… para que cada vez que ingresen sepa qué le falta»). Arriba, tres números; debajo, lo pendiente con lo
+ * vencido primero; y al final lo que la persona YA entregó y espera a que otro lo acepte o lo verifique. Contar y
+ * ordenar es de `utils/miTrabajo.js`; qué sale lo decide el servidor.
  */
 import React, { useEffect, useState } from 'react';
 import { apiFetch } from '../utils/apiFetch';
@@ -28,6 +33,9 @@ import { apiFetch } from '../utils/apiFetch';
 // al backend. En desarrollo colaba por el proxy de Vite, que es justo lo que
 // hacia que el defecto no se viera.
 import { API } from '../utils/helpers';
+import {
+  diasPara, resumenDeMiTrabajo, pendientesEnOrden, haceCuanto, fraseSinPendientes,
+} from '../utils/miTrabajo';
 
 const ETIQUETA = {
   REVIEW: 'Revisión',
@@ -37,17 +45,12 @@ const ETIQUETA = {
   NUBE: 'Nube',
 };
 
-function diasPara(iso) {
-  if (!iso) return null;
-  const ms = new Date(iso).getTime() - Date.now();
-  return Math.ceil(ms / 86400000);
-}
-
 const ETIQUETA_ISSUE = 'Incidencia';
 
 export default function MiTrabajo({ compacto = false, onAbrir = null, onAbrirIncidencia = null }) {
   const [estado, setEstado] = useState('cargando');
   const [pendientes, setPendientes] = useState([]);
+  const [entregados, setEntregados] = useState([]);
 
   useEffect(() => {
     let vivo = true;
@@ -58,6 +61,7 @@ export default function MiTrabajo({ compacto = false, onAbrir = null, onAbrirInc
         if (!r.ok) { setEstado('error'); return; }
         const d = await r.json();
         setPendientes(d.pendientes || []);
+        setEntregados(d.entregados || []);
         setEstado('listo');
       } catch {
         if (vivo) setEstado('error');
@@ -77,18 +81,37 @@ export default function MiTrabajo({ compacto = false, onAbrir = null, onAbrirInc
       <div style={S.vacio}>No se pudo cargar el trabajo pendiente.</div></div>;
   }
 
+  const resumen = resumenDeMiTrabajo(pendientes, entregados);
+  const enOrden = pendientesEnOrden(pendientes);
+  const abrirEntregado = (e) => onAbrirIncidencia({
+    obra: e.project_id, incidencia: e.incidencia, documento: e.documento || null, version: e.version || null,
+    nube: e.objeto_tipo === 'NUBE' ? (e.marca || null) : null });
+
   return (
     <div style={S.caja}>
-      <div style={S.titulo}>
-        Mi trabajo
-        {pendientes.length > 0 && <span style={S.contador}>{pendientes.length}</span>}
-      </div>
+      <div style={S.titulo}>Mi trabajo</div>
+
+      {/* Los tres números: lo que falta, lo que ya pasó su fecha y lo que espera a otro. */}
+      <dl style={S.resumen} aria-label="Resumen de mi trabajo">
+        <div style={S.cifra}>
+          <dt style={S.rotulo}>Pendiente</dt>
+          <dd style={S.numero}>{resumen.pendiente}</dd>
+        </div>
+        <div style={S.cifra}>
+          <dt style={S.rotulo}>Vencido</dt>
+          <dd style={{ ...S.numero, ...(resumen.vencido ? S.numeroVencido : null) }}>{resumen.vencido}</dd>
+        </div>
+        <div style={S.cifra}>
+          <dt style={S.rotulo}>Entregado</dt>
+          <dd style={S.numero}>{resumen.entregado}</dd>
+        </div>
+      </dl>
 
       {pendientes.length === 0 ? (
-        <div style={S.vacio}>No tienes nada pendiente.</div>
+        <div style={S.vacio}>{fraseSinPendientes(resumen)}</div>
       ) : (
         <ul style={S.lista}>
-          {pendientes.slice(0, compacto ? 5 : 50).map((p, i) => {
+          {enOrden.slice(0, compacto ? 5 : 50).map((p, i) => {
             const dias = diasPara(p.vence_en);
             const vencido = dias !== null && dias < 0;
             const esRevision = Boolean(onAbrir) && p.objeto_tipo === 'REVIEW' && p.objeto_id && p.project_id;
@@ -136,6 +159,35 @@ export default function MiTrabajo({ compacto = false, onAbrir = null, onAbrirInc
           })}
         </ul>
       )}
+
+      {entregados.length > 0 && (
+        <>
+          <div style={S.subtitulo}>Entregado, esperando respuesta</div>
+          <ul style={S.lista}>
+            {entregados.slice(0, compacto ? 3 : 50).map((e, i) => {
+              const abrible = Boolean(onAbrirIncidencia) && e.incidencia && e.project_id;
+              const contenido = (
+                <>
+                  <span style={S.tipo}>{e.objeto_tipo === 'ISSUE' ? ETIQUETA_ISSUE : (ETIQUETA[e.objeto_tipo] || e.objeto_tipo)}</span>
+                  <div style={S.centro}>
+                    <div style={S.asunto}>{e.asunto}</div>
+                    <div style={S.meta}>{e.project_name || e.project_id}{e.espera ? ` · espera a ${e.espera}` : ''}</div>
+                  </div>
+                  <span style={S.plazo}>{haceCuanto(e.entregado_en)}</span>
+                </>
+              );
+              return (
+                <li key={e.id} style={{ ...(abrible ? S.filaAbrible : S.fila), ...(i === 0 ? S.primera : {}) }}>
+                  {abrible ? (
+                    <button type="button" className="mt-abrir" title="Abrir el plano donde lo entregaste"
+                            onClick={() => abrirEntregado(e)}>{contenido}</button>
+                  ) : contenido}
+                </li>
+              );
+            })}
+          </ul>
+        </>
+      )}
     </div>
   );
 }
@@ -148,8 +200,16 @@ const S = {
           width: 536, maxWidth: '100%', boxSizing: 'border-box' },
   titulo: { fontSize: 14, fontWeight: 600, marginBottom: 6,
             display: 'flex', alignItems: 'center', gap: 8 },
-  contador: { background: 'var(--eg-acento)', color: '#fff', borderRadius: 9, padding: '1px 7px',
-              fontSize: 12, fontWeight: 600 },
+  // El resumen: el dato manda (el número); el color, solo en lo vencido cuando lo hay.
+  resumen: { display: 'flex', gap: 28, margin: '2px 0 8px', padding: '8px 0 10px',
+             borderBottom: '1px solid var(--eg-fila)' },
+  cifra: { display: 'flex', flexDirection: 'column-reverse', gap: 2, minWidth: 72 },
+  numero: { margin: 0, fontSize: 22, fontWeight: 600, lineHeight: 1.1, fontVariantNumeric: 'tabular-nums',
+            color: 'var(--eg-texto)' },
+  numeroVencido: { color: 'var(--eg-peligro)' },
+  rotulo: { fontSize: 12, color: 'var(--eg-texto-3)' },
+  subtitulo: { fontSize: 13, fontWeight: 600, color: 'var(--eg-texto-3)', margin: '10px 0 2px',
+               paddingTop: 10, borderTop: '1px solid var(--eg-fila)' },
   vacio: { color: 'var(--eg-texto-3)', fontSize: 14, padding: '6px 0 10px' },
   lista: { listStyle: 'none', margin: 0, padding: 0 },
   fila: { display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0',

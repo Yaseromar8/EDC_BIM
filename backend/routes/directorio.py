@@ -272,6 +272,17 @@ def quitar_participante(project_id, company_id):
 
 # ── Mi Trabajo ────────────────────────────────────────────────────────────
 
+def _lo_entregado(cur, user_id, obra):
+    """Lo que la persona entrego y espera respuesta (lo_entregado.py), o [] si no se pudo leer: «Mi trabajo» no se cae
+    por esto. Por eso se llama lo ultimo: una consulta fallida deja la transaccion sin poder leer mas."""
+    try:
+        import lo_entregado
+        return lo_entregado.entregado_por(cur, user_id, obra)
+    except Exception as e:
+        print('[mi-trabajo] lo entregado sin leer: %s' % e)
+        return []
+
+
 @directorio_bp.route('/api/mi-trabajo', methods=['GET'])
 def mi_trabajo():
     """Lo que esta esperando por el usuario de la sesion. SOLO LEE.
@@ -306,6 +317,9 @@ def mi_trabajo():
             pendientes = flujo_rev.encargos_presentables(cur, u, pendientes)
             # Una incidencia sobre un plano lleva a ese plano (3-nov-2026).
             pendientes = enc.con_su_documento(cur, pendientes)
-        return jsonify({'pendientes': pendientes, 'total': len(pendientes)}), 200
+            # LO QUE YA ENTREGO Y ESPERA RESPUESTA (13-nov-2026): la otra mitad del resumen de la portada
+            # (pendiente · vencido · entregado). Es LA ULTIMA lectura y va aparte: si falla, lo pendiente sale igual.
+            entregados = _lo_entregado(cur, u['id'], obra)
+        return jsonify({'pendientes': pendientes, 'total': len(pendientes), 'entregados': entregados}), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500

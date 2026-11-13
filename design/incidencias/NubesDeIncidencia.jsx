@@ -11,6 +11,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { enviarJson } from './piezas.jsx';
 import { colorDeIndice, iniciales } from './reglas.js';
+import { botonDeRespuesta, avisoDeRespuesta, rotuloDeRespondida } from './respuestaDeNube.js';
 
 // Las fechas del historial ya traen su zona; las de la base no (UTC sin zona): igual que en el panel.
 function fechaCorta(iso) {
@@ -35,7 +36,8 @@ function rotulo(n) {
     const v = n.verificacion?.version_number;
     return `${n.estado_etiqueta}${v ? ` en la V${v}` : ''}`;
   }
-  return `${n.estado_etiqueta}${r}`;
+  // Respondida sin adjuntar nada («había que mover un cuadro»): se lee «Resuelta», no «Entregada» (13-nov-2026).
+  return `${rotuloDeRespondida(n) || n.estado_etiqueta}${r}`;
 }
 
 /**
@@ -67,7 +69,7 @@ function Entrega({ entorno, obra, codigo, ronda, ocupado, onEntregar }) {
     ...(nota.trim() ? [{ tipo: 'nota', texto: nota.trim() }] : [])];
   return (
     <div className="pinc-acto nub-entrega">
-      <b>Entregar{ronda > 1 ? ` la ronda ${ronda}` : ''}</b>
+      <b>Responder{ronda > 1 ? ` la ronda ${ronda}` : ''}</b>
       <textarea value={nota} rows={2} maxLength={2000} onChange={e => setNota(e.target.value)} autoFocus
         placeholder="Qué se hizo" aria-label="Respuesta" />
       {lista.length > 0 && (
@@ -95,7 +97,7 @@ function Entrega({ entorno, obra, codigo, ronda, ocupado, onEntregar }) {
       </div>
       <div className="pinc-botones">
         <button type="button" className="pinc-btn pinc-btn--prim" disabled={!entregas.length || subiendo || ocupado}
-          onClick={() => onEntregar(entregas)}>Entregar</button>
+          onClick={() => onEntregar(entregas)}>{botonDeRespuesta(entregas)}</button>
       </div>
       {eligiendo && Elegir && createPortal(
         <Elegir obra={obra} titulo="Enlazar un documento de Docs"
@@ -208,12 +210,12 @@ function Nube({ entorno, obra, ob, i, n, numero, color, abierta, onAbrir, ocupad
           {acto === 'no_levantada' && <Motivo titulo="No quedó levantada" boton="No levantada" peligro ocupado={ocupado}
             onCancelar={() => setActo(null)} onHacer={(m) => dar({ acto: 'verificar', resultado: 'no_levantada', motivo: m }, 'Nube no levantada')} />}
           {acto === 'entregar' && <Entrega entorno={entorno} obra={obra} codigo={i.codigo} ronda={n.ronda} ocupado={ocupado}
-            onEntregar={(entregas) => dar({ acto: 'entregar', entregas }, 'Entregado: le llega al encargado del plano')} />}
+            onEntregar={(entregas) => dar({ acto: 'entregar', entregas }, avisoDeRespuesta(entregas))} />}
 
           {!acto && (
             <div className="pinc-botones">
               {debeEntregar && <button type="button" className="pinc-btn pinc-btn--prim" disabled={ocupado}
-                onClick={() => setActo('entregar')}>Entregar{n.ronda > 1 ? ` ronda ${n.ronda}` : ''}</button>}
+                onClick={() => setActo('entregar')}>Responder{n.ronda > 1 ? ` ronda ${n.ronda}` : ''}</button>}
               {puede('aceptar') && <button type="button" className="pinc-btn pinc-btn--prim" disabled={ocupado}
                 onClick={() => dar({ acto: 'aceptar' }, 'Aceptado')}>Aceptar</button>}
               {puede('devolver') && <button type="button" className="pinc-btn" disabled={ocupado}
