@@ -3642,7 +3642,7 @@ def get_shared_document(share_id):
             cursor = conn.cursor()
             cursor.execute("""
                 SELECT s.role, s.access_type, f.name, f.gcs_urn, f.size_bytes, f.mime_type,
-                       s.expires_at, s.revoked
+                       s.expires_at, s.revoked, f.node_type
                 FROM document_shares s
                 JOIN file_nodes f ON s.file_node_id = f.id
                 WHERE s.id = %s
@@ -3652,7 +3652,7 @@ def get_shared_document(share_id):
             if not row:
                 return jsonify({"success": False, "error": "Enlace inválido o expirado"}), 404
 
-            role, access_type, name, gcs_urn, size, mime, expires_at, revoked = row
+            role, access_type, name, gcs_urn, size, mime, expires_at, revoked, node_type = row
 
             # Enlace revocado por quien lo creó
             if revoked:
@@ -3663,6 +3663,14 @@ def get_shared_document(share_id):
                 if datetime.now(timezone.utc) > expires_at:
                     return jsonify({"success": False, "error": "Este enlace expiró."}), 410
             
+            # UNA CARPETA (17-nov-2026, docs/archivos/32): «Compartir» deja crear el enlace de una carpeta, y aquí
+            # se contestaba «El archivo físico no existe». Se dice que es una carpeta; su contenido lo dan
+            # `/contenido` y `/archivo/<id>` (routes/carpetas_compartidas.py), con sus propias comprobaciones.
+            if node_type == 'FOLDER':
+                return jsonify({"success": True, "data": {
+                    "es_carpeta": True, "name": str(name or '').rstrip('/'), "role": role,
+                    "access_type": access_type}}), 200
+
             if not gcs_urn:
                 return jsonify({"success": False, "error": "El archivo físico no existe"}), 404
 
@@ -4730,3 +4738,7 @@ def get_quarantine_files():
     except Exception as e:
         print("Error al acceder al Holding Area:", e)
         return jsonify({'error': str(e)}), 500
+
+# UNA CARPETA COMPARTIDA POR ENLACE (17-nov-2026): sus rutas viven en su módulo y se cuelgan de este blueprint al
+# cargarlo. Al final a propósito: necesitan `documents_bp` y `_anotar_acceso`, ya definidos.
+import routes.carpetas_compartidas  # noqa: E402,F401

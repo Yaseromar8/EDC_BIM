@@ -117,6 +117,11 @@ SIN_CUBRIR = {
     # Se declara aqui en vez de reescribir la prosa para esquivar al detector.
     ('routes/specs.py', '/catalogo'): 'catalogo de divisiones SUGERIDAS, constante del codigo, igual para todas las obras; no consulta la base',
     ('routes/documents.py', '/api/docs/shared/<share_id>'): 'enlace compartido: el permiso lo da el propio share, no la pertenencia',
+    # 17-nov-2026, docs/archivos/32: el enlace publico de una CARPETA. Mismo motivo que el de arriba: el permiso lo
+    # da el enlace (vigente y no revocado), y solo alcanza a lo que esta DENTRO de esa carpeta (cada ruta lo comprueba
+    # subiendo por parent_id) y a lo que la regla de salida del ECD deja salir.
+    ('routes/carpetas_compartidas.py', '/api/docs/shared/<share_id>/contenido'): 'enlace compartido de una carpeta: el permiso lo da el propio share y solo alcanza a su contenido',
+    ('routes/carpetas_compartidas.py', '/api/docs/shared/<share_id>/archivo/<node_id>'): 'enlace compartido de una carpeta: el documento tiene que estar dentro de ella y poder salir del ECD',
     ('routes/pins.py', '/uploads/pins/<path:filename>'): 'exige sesion o permiso firmado del fichero, pero no acota por obra',
     # PENDIENTE: reciben un identificador cuya obra hay que deducir consultando
     # la base. Deuda declarada, no excusa.

@@ -239,7 +239,11 @@ def test_el_recorte_es_real(rutas_portal):
     # CAD (presentación y cámara) o un PDF (página y zoom) desde cada carpeta, la suya o una que lo enlaza (el dueño:
     # «esas carpetas representan distintas vistas», docs/archivos/28). Guardia de obra, «Ver» en el documento y
     # «Editar» en la carpeta para fijarla o restablecerla.
-    TECHO = 319
+    # +2 (17-nov-2026, docs/archivos/32): `GET /api/docs/shared/<share_id>/contenido` y `.../archivo/<node_id>`. El
+    # enlace público de una CARPETA: «Compartir» deja crearlo y la página pública solo sabía abrir un archivo, así
+    # que esos enlaces —ya enviados por correo en el Excel del sustento de metrados de PQT8— no abrían. Solo lectura,
+    # solo lo que hay dentro de la carpeta compartida y con la regla de salida del ECD.
+    TECHO = 321
     sin_puente = [r for r in rutas_portal
                   if r not in puente_acc and r not in revision_cad]
     assert len(sin_puente) < TECHO, (

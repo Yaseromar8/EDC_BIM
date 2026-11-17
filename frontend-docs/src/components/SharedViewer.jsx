@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Capacitor } from '@capacitor/core';
 import DocumentViewer from './DocumentViewer';
+import CarpetaCompartida from './CarpetaCompartida';
 
 const API = Capacitor.isNativePlatform()
   ? 'https://visor-ecd-backend-va.onrender.com'
@@ -22,7 +23,7 @@ export default function SharedViewer({ shareId }) {
           setError(res.error || "Enlace no válido");
         }
       })
-      .catch(err => setError("Error de conexión"))
+      .catch(() => setError("Error de conexión"))
       .finally(() => setLoading(false));
   }, [shareId]);
 
@@ -43,6 +44,11 @@ export default function SharedViewer({ shareId }) {
         <p style={{ fontFamily: 'var(--a-font-sans)', color: '#72706b' }}>{error}</p>
       </div>
     );
+  }
+
+  // El enlace de una CARPETA (17-nov-2026, docs/archivos/32): su contenido, para leer.
+  if (data.es_carpeta) {
+    return <CarpetaCompartida API={API} shareId={shareId} nombre={data.name} />;
   }
 
   return (
