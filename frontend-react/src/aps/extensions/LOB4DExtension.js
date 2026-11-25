@@ -247,6 +247,12 @@ export default class LOB4DExtension extends window.Autodesk.Viewing.Extension {
         };
         window.addEventListener('lob-group-labels', this.handleGroupLabels);
 
+        // Rótulos sólo de lo seleccionado (25-nov-2026, docs/visor/71 §7.3, con permiso del dueño): la valorización
+        // del mes de la Planilla avisa qué elementos eligió; se dibujan sólo los rótulos de los grupos que contienen
+        // alguno. Con `porModelo: null`, todos otra vez.
+        this.handleZoneLabelsFilter = (e) => this.filtrarRotulos(e?.detail?.porModelo || null);
+        window.addEventListener('lob-zone-labels-filter', this.handleZoneLabelsFilter);
+
         // Toggle de excavación fantasma (DWG de sólidos → "ya no existe")
         this.handleGhostExcav = (e) => this.ghostExcavation(e?.detail?.visible !== false);
         window.addEventListener('lob-ghost-excavation', this.handleGhostExcav);
@@ -302,6 +308,7 @@ export default class LOB4DExtension extends window.Autodesk.Viewing.Extension {
         window.removeEventListener('lob-focus-elements', this.handleFocusElements);
         window.removeEventListener('lob-zone-labels', this.handleZoneLabels);
         window.removeEventListener('lob-group-labels', this.handleGroupLabels);
+        window.removeEventListener('lob-zone-labels-filter', this.handleZoneLabelsFilter);
         window.removeEventListener('lob-ghost-excavation', this.handleGhostExcav);
         window.removeEventListener('lob-pk-heatmap', this.handlePkHeatmap);
         window.removeEventListener('lob-zone-hover', this.handleZoneHover);
@@ -1921,6 +1928,7 @@ export default class LOB4DExtension extends window.Autodesk.Viewing.Extension {
         });
 
         this._zoneLabelsVisible = true;
+        this._calcularFiltroDeRotulos();
         this.updateZoneLabels();
         console.log(`[LOB4D] ${etiq}: ${created} grupo(s) rotulados (parámetro "${zoneKey}"). Elementos con clave: ${conZona}`);
         if (!created) {
@@ -1944,7 +1952,9 @@ export default class LOB4DExtension extends window.Autodesk.Viewing.Extension {
             const s = this.viewer.worldToClient(label.worldPos);
             const inFront = s.z == null || (s.z >= 0 && s.z <= 1);
             const off = !inFront || s.x < -200 || s.y < -100 || s.x > W + 200 || s.y > H + 100;
-            if (off) {
+            // Fuera del filtro de la valorización (filtrarRotulos): el rótulo no se dibuja.
+            const filtrado = this._zonasFiltradas && !this._zonasFiltradas.has(label.zone);
+            if (off || filtrado) {
                 label.el.style.display = 'none';
                 label.line.style.display = 'none';
                 label.dot.style.display = 'none';
@@ -1989,6 +1999,28 @@ export default class LOB4DExtension extends window.Autodesk.Viewing.Extension {
             if (activo) label.line.removeAttribute('stroke-dasharray');
             else label.line.setAttribute('stroke-dasharray', '3 3');
         }
+    }
+
+    // Rótulos sólo de lo seleccionado (docs/visor/71 §7.3). `porModelo` = [{ model, dbIds }] de lo elegido en la
+    // valorización del mes, o null para volver a todos. Se guarda lo pedido y se resuelve a grupos con los miembros de
+    // cada rótulo (_zoneMembers); si los rótulos se reconstruyen después, se vuelve a resolver.
+    filtrarRotulos(porModelo) {
+        this._filtroDeRotulos = Array.isArray(porModelo) && porModelo.length ? porModelo : null;
+        this._calcularFiltroDeRotulos();
+        this.updateZoneLabels();
+    }
+
+    _calcularFiltroDeRotulos() {
+        if (!this._filtroDeRotulos || !this._zoneMembers) { this._zonasFiltradas = null; return; }
+        const buscados = new Map(this._filtroDeRotulos.map(({ model, dbIds }) => [model, new Set(dbIds)]));
+        const zonas = new Set();
+        this._zoneMembers.forEach((miembros, zona) => {
+            for (const [model, ids] of miembros.byModel) {
+                const s = buscados.get(model);
+                if (s && ids.some(id => s.has(id))) { zonas.add(zona); break; }
+            }
+        });
+        this._zonasFiltradas = zonas;
     }
 
     clearZoneLabels() {

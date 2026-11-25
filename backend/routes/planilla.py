@@ -480,3 +480,176 @@ def guardar_criterios_medida():
             return _sin_tabla('41', TABLA_CRITERIOS)
         raise
     return jsonify(cuerpo), status
+
+
+# ── La valorización del mes (migración 52, docs/visor/71 §8) ───────────────────────────────
+#
+# El dueño (25-nov-2026): «eso solo yo lo podría subir con admin, ese Excel. Y debe permanecer para todos». Se guarda
+# el Excel TAL CUAL (el visor lo abre igual que si se cargara del disco), por obra y frente, con versiones. Lo sube o
+# lo quita un ADMINISTRADOR DE LA OBRA; lo leen todos los de la obra. Sin la migración 52: 503 MIGRATION_MISSING.
+
+import base64 as _base64  # noqa: E402
+import hashlib as _hashlib  # noqa: E402
+import os as _os  # noqa: E402
+
+TABLA_VALORIZACIONES = 'planilla_valorizaciones'
+LIMITE_VALORIZACION = 8 * 1024 * 1024          # el CHECK de la tabla dice lo mismo
+# Un .xlsx/.xlsm es un ZIP; un .xls, un documento OLE. Otra cosa no es un Excel.
+FIRMAS_EXCEL = (b'PK\x03\x04', b'\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1')
+EXTENSIONES_EXCEL = ('.xlsx', '.xlsm', '.xls')
+
+SQL_VALORIZACION_VIGENTE = '''SELECT v.version, v.archivo, v.tamano, v.huella, v.contenido, v.creado_en, u.name
+                                FROM planilla_valorizaciones v LEFT JOIN users u ON u.id = v.creado_por
+                               WHERE v.project_id = %s AND v.frente = %s AND v.vigente'''
+SQL_VALORIZACION_VERSIONES = '''SELECT v.version, v.archivo, v.creado_en, u.name, v.vigente, v.retirado_en
+                                  FROM planilla_valorizaciones v LEFT JOIN users u ON u.id = v.creado_por
+                                 WHERE v.project_id = %s AND v.frente = %s ORDER BY v.version DESC LIMIT %s'''
+
+
+class ValorizacionInvalida(ValueError):
+    pass
+
+
+def validar_valorizacion(archivo, contenido_b64):
+    """(nombre, bytes, huella) o ValorizacionInvalida con el motivo para el usuario."""
+    nombre = _os.path.basename(str(archivo or '').replace('\\', '/')).strip()[:200]
+    if not nombre or not nombre.lower().endswith(EXTENSIONES_EXCEL):
+        raise ValorizacionInvalida('El archivo tiene que ser un Excel (.xlsx, .xlsm o .xls).')
+    try:
+        datos = _base64.b64decode(str(contenido_b64 or ''), validate=True)
+    except Exception:
+        raise ValorizacionInvalida('El contenido del Excel no llegó bien. Vuelve a cargarlo.')
+    if not datos:
+        raise ValorizacionInvalida('El Excel está vacío.')
+    if len(datos) > LIMITE_VALORIZACION:
+        raise ValorizacionInvalida('El Excel pasa de 8 MB: es demasiado grande para guardarlo aquí.')
+    if not datos.startswith(FIRMAS_EXCEL):
+        raise ValorizacionInvalida('Ese archivo no es un Excel aunque lo diga su nombre.')
+    return nombre, datos, _hashlib.sha256(datos).hexdigest()
+
+
+def _frente_o_negativa(cur, valor, obra):
+    frente = _frente_de(cur, valor, obra)
+    return (None, _frente_desconocido()) if frente is None else (frente, None)
+
+
+@planilla_bp.route('/api/planilla/valorizacion', methods=['GET'])
+def leer_valorizacion():
+    """La valorización vigente del frente (el Excel, en base64) y sus versiones. Quien pertenece a la obra."""
+    valor = request.args.get('project')
+    negativa = guardia_de_obra(valor, 'leer la valorización de la obra')
+    if negativa:
+        return negativa
+    obra, negativa = _obra_canonica(valor)
+    if negativa:
+        return negativa
+    try:
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            frente, negativa = _frente_o_negativa(cur, valor, obra)
+            if negativa:
+                return negativa
+            cur.execute(SQL_VALORIZACION_VIGENTE, (obra, frente))
+            fila = cur.fetchone()
+            cur.execute(SQL_VALORIZACION_VERSIONES, (obra, frente, HISTORIAL))
+            versiones = cur.fetchall()
+            puede_editar = _es_admin(cur, obra)
+    except Exception as e:
+        if _tabla_ausente(e, TABLA_VALORIZACIONES):
+            return _sin_tabla('52', TABLA_VALORIZACIONES)
+        raise
+    vigente = None
+    if fila:
+        contenido = bytes(fila[4]) if fila[4] is not None else b''
+        vigente = {'version': fila[0], 'archivo': fila[1], 'tamano': fila[2], 'huella': fila[3],
+                   'contenido_b64': _base64.b64encode(contenido).decode('ascii'),
+                   'creado_en': _fecha(fila[5]), 'creado_por': fila[6] or ''}
+    return jsonify({
+        'success': True, 'vigente': vigente, 'puede_editar': puede_editar, 'frente': frente,
+        'versiones': [{'version': v[0], 'archivo': v[1], 'creado_en': _fecha(v[2]), 'creado_por': v[3] or '',
+                       'vigente': bool(v[4]), 'retirado_en': _fecha(v[5])} for v in versiones],
+    })
+
+
+@planilla_bp.route('/api/planilla/valorizacion', methods=['POST'])
+def guardar_valorizacion():
+    """Guarda el Excel como versión nueva y la deja vigente. El mismo Excel que el vigente no crea otra."""
+    if request.content_length is not None and request.content_length > LIMITE_VALORIZACION * 2:
+        return _error('El Excel es demasiado grande para guardarlo.', 413, 'PAYLOAD_TOO_LARGE')
+    datos = request.get_json(silent=True)
+    if not isinstance(datos, dict):
+        return _error('Cuerpo JSON requerido.', 400, 'INVALID_BODY')
+    negativa = guardia_de_obra(datos.get('project'), 'cambiar la valorización de la obra')
+    if negativa:
+        return negativa
+    obra, negativa = _obra_canonica(datos.get('project'))
+    if negativa:
+        return negativa
+    uid = _uid()   # None sólo con la identidad demo local (ver guardar_itemizado): nunca un 401 aquí
+    try:
+        archivo, contenido, huella = validar_valorizacion(datos.get('archivo'), datos.get('contenido_b64'))
+    except ValorizacionInvalida as e:
+        return _error(str(e), 400, 'INVALID_EXCEL')
+    try:
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            frente, negativa = _frente_o_negativa(cur, datos.get('project'), obra)
+            if negativa:
+                return negativa
+            if not _es_admin(cur, obra):
+                return _error('Solo un administrador de la obra sube la valorización.', 403, 'NOT_PROJECT_ADMIN')
+            # Una carga por obra y frente a la vez: «una sola vigente» no depende de quién llega antes.
+            cur.execute('SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))',
+                        (_candado('planilla_valorizacion:', obra, frente),))
+            cur.execute('SELECT v.version, v.huella FROM planilla_valorizaciones v '
+                        'WHERE v.project_id = %s AND v.frente = %s AND v.vigente', (obra, frente))
+            actual = cur.fetchone()
+            if actual and actual[1] == huella:
+                conn.commit()
+                return jsonify({'success': True, 'version': actual[0], 'sin_cambios': True}), 200
+            cur.execute('UPDATE planilla_valorizaciones v SET vigente = false, retirado_por = %s, retirado_en = now() '
+                        'WHERE v.project_id = %s AND v.frente = %s AND v.vigente', (uid, obra, frente))
+            cur.execute('SELECT COALESCE(MAX(version), 0) + 1 FROM planilla_valorizaciones WHERE project_id = %s', (obra,))
+            version = cur.fetchone()[0]
+            cur.execute('INSERT INTO planilla_valorizaciones '
+                        '(project_id, frente, version, archivo, tamano, huella, contenido, creado_por) '
+                        'VALUES (%s, %s, %s, %s, %s, %s, %s, %s)',
+                        (obra, frente, version, archivo, len(contenido), huella, contenido, uid))
+            conn.commit()
+    except Exception as e:
+        if _tabla_ausente(e, TABLA_VALORIZACIONES):
+            return _sin_tabla('52', TABLA_VALORIZACIONES)
+        raise
+    return jsonify({'success': True, 'version': version, 'sin_cambios': False, 'huella': huella}), 201
+
+
+@planilla_bp.route('/api/planilla/valorizacion', methods=['DELETE'])
+def quitar_valorizacion():
+    """Deja el frente sin valorización vigente. La versión queda en el historial: no se borra."""
+    valor = request.args.get('project')
+    negativa = guardia_de_obra(valor, 'quitar la valorización de la obra')
+    if negativa:
+        return negativa
+    obra, negativa = _obra_canonica(valor)
+    if negativa:
+        return negativa
+    uid = _uid()
+    try:
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            frente, negativa = _frente_o_negativa(cur, valor, obra)
+            if negativa:
+                return negativa
+            if not _es_admin(cur, obra):
+                return _error('Solo un administrador de la obra quita la valorización.', 403, 'NOT_PROJECT_ADMIN')
+            cur.execute('SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))',
+                        (_candado('planilla_valorizacion:', obra, frente),))
+            cur.execute('UPDATE planilla_valorizaciones v SET vigente = false, retirado_por = %s, retirado_en = now() '
+                        'WHERE v.project_id = %s AND v.frente = %s AND v.vigente RETURNING v.version', (uid, obra, frente))
+            quitada = cur.fetchone()
+            conn.commit()
+    except Exception as e:
+        if _tabla_ausente(e, TABLA_VALORIZACIONES):
+            return _sin_tabla('52', TABLA_VALORIZACIONES)
+        raise
+    return jsonify({'success': True, 'quitada': quitada[0] if quitada else None})

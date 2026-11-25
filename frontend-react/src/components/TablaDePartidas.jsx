@@ -8,6 +8,7 @@ import { EVENTOS } from '../lib/aislamientoTemporal';
 import { useVentanaDelPanel } from './PanelAparte';
 import { coberturaDelItemizado, ESTADOS } from '../lib/planillaCobertura';
 import { ID_ESTADO, ID_CAPITULO, COLORES_ESTADO } from '../lib/camposDerivados';
+import ValorizacionDelMes from './ValorizacionDelMes';
 import { UNIDADES_MEDIBLES, MAX_MEDIR_CON, candidatosDeMedida, candidatosAMano, todosLosNumericos, camposParaDonde, simularCriterio, validarCriterios,
     claveDeCriterio, describirCriterio, etiquetaDeClave, sinMedidaNativa, usoDeCriterios } from '../lib/criteriosDeMedida';
 
@@ -481,6 +482,11 @@ export default function TablaDePartidas({ filas, filasObra, dic, roles, claveDeF
     const cobertura = useMemo(() => (dic && indice ? coberturaDelItemizado(filas, dic, indice, claveDeFila) : null),
         [filas, dic, indice, claveDeFila]);
     const [verFalta, setVerFalta] = useState(false);
+    // La valorización del mes en el 3D (docs/visor/71): el Excel de costos, sus partidas en verde.
+    const [verValorizacion, setVerValorizacion] = useState(false);
+    // «Análisis» plegado por defecto; se recuerda en este navegador.
+    const [verAnalisis, setVerAnalisis] = useState(() => { try { return localStorage.getItem('alephia_planilla_analisis') === '1'; } catch { return false; } });
+    const alternarAnalisis = () => setVerAnalisis(v => { const n = !v; try { localStorage.setItem('alephia_planilla_analisis', n ? '1' : '0'); } catch { /* noop */ } return n; });
     const dif = useMemo(() => (verFalta && indice ? diferencias(partidas, indice, itemizado.items) : null), [verFalta, partidas, indice, itemizado]);
     // Un clic aísla (una partida, un estado, una categoría…); otro clic en lo MISMO muestra todo como estaba.
     const alternar = (clave, claves) => {
@@ -711,30 +717,25 @@ export default function TablaDePartidas({ filas, filasObra, dic, roles, claveDeF
     };
     return (
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, background: '#ffffff', fontSize: '13px', color: '#333330' }}>
+            {/* LA CABECERA, ORDENADA (25-nov-2026): el dueño la veía «llena de cosas; quizá las de análisis puedan ir
+                ocultas». A la vista, lo de cada día: la valorización del mes, «solo con dato» y el itemizado. Los
+                conteos, la cobertura, «qué falta», «cómo se leyó» y colorear en Filters, tras «Análisis» (se recuerda). */}
             <div style={{ padding: '0 12px', height: '28px', flexShrink: 0, fontSize: '12px', color: '#72706b', borderBottom: '1px solid #e8e6dc', display: 'flex', gap: '8px', alignItems: 'center', whiteSpace: 'nowrap', overflow: 'hidden' }}>
-                <span title="Partidas del itemizado (filas con unidad) que tienen elementos en el modelo, sobre todas las del itemizado">
-                    <strong style={{ color: '#141413', fontWeight: 600 }}>{miles(plantilla.resumen.conDato)}</strong> de {miles(plantilla.resumen.partidas)} partidas del itemizado con dato
-                    {' · '}{lineas.toLocaleString('es-PE')} líneas de {filas.length.toLocaleString('es-PE')} elementos {ambito}
-                </span>
+                <button style={{ ...estiloBoton, flexShrink: 0, background: verValorizacion ? 'var(--alephia-selected-bg, #ECF0F1)' : '#ffffff' }}
+                    onClick={() => setVerValorizacion(v => !v)} aria-expanded={verValorizacion}
+                    title="El Excel de la valorización: clic en una fila para ir a sus elementos en el 3D">
+                    Valorización del mes
+                </button>
+                <button style={{ ...estiloBoton, flexShrink: 0, background: verAnalisis ? 'var(--alephia-selected-bg, #ECF0F1)' : '#ffffff' }}
+                    onClick={() => alternarAnalisis()} aria-expanded={verAnalisis}
+                    title="Conteos, cobertura del itemizado, qué falta, cómo se leyó, criterios de medida y colorear en Filters">
+                    Análisis {verAnalisis ? '▾' : '▸'}
+                </button>
                 <label style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }} title="Oculta las partidas sin elementos en el modelo y los títulos sin ninguna">
                     <input type="checkbox" checked={soloConDato} onChange={e => setSoloConDato(e.target.checked)} />solo con dato
                 </label>
                 {plegados.size > 0 && <button className="v-enlace" style={{ fontSize: '12px' }} onClick={() => setPlegados(new Set())}>desplegar todo</button>}
                 {onUsarTodo && <button className="v-enlace" style={{ fontSize: '12px' }} onClick={onUsarTodo}>usar toda la tabla</button>}
-                {porCriterio > 0 && <span title="Líneas sin medida nativa medidas con un criterio de medida de la obra">· {porCriterio.toLocaleString('es-PE')} medidas con criterio</span>}
-                {sinMedida > 0 && <span style={{ color: ROJO }}>· {sinMedida.toLocaleString('es-PE')} sin medida</span>}
-                {(onCriterios || criterios?.criterios.length > 0) && (
-                    <button className="v-enlace" style={{ fontSize: '12px' }} onClick={() => setVerCriterios(v => !v)} aria-expanded={verCriterios}
-                        title="Con qué parámetro se mide lo que no trae medida nativa, para toda la obra">
-                        criterios de medida ({criterios?.criterios.length || 0})
-                    </button>
-                )}
-                {calidad.repetidas > 0 && <span title="La misma partida en varias líneas del mismo elemento (p. ej. línea sin número y línea 2): se cuenta una vez">· {calidad.repetidas.toLocaleString('es-PE')} repetidas contadas una vez</span>}
-                {calidad.intercambiadas > 0 && <span style={{ color: ROJO }} title="En Revit, la descripción está en CodigoDePartida y el código en NombreDePartida: se leen al derecho">· {calidad.intercambiadas} con código y nombre intercambiados</span>}
-                <button className="v-enlace" style={{ fontSize: '12px' }} onClick={() => setVerComo(v => !v)} aria-expanded={verComo}
-                    title="Qué parámetros se leyeron como código, descripción y unidad, y por qué">
-                    cómo se leyó
-                </button>
                 <span style={{ width: '1px', height: '12px', background: '#e8e6dc' }} />
                 <span title={itemizado.local
                     ? `${itemizado.porque}. ${estadoObra.aviso || 'Solo en este navegador.'}`
@@ -749,10 +750,32 @@ export default function TablaDePartidas({ filas, filasObra, dic, roles, claveDeF
                     <AccionesDelItemizado estado={estadoObra} hay onArchivo={cargarItemizado} onQuitar={quitarItemizado} />
                 </span>
                 {error && <span style={{ color: ROJO }}>{error}</span>}
-                <span style={{ flex: 1 }} />
-                <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }} title="m → Longitud · m² → Área · m³ → Volumen de Revit; kg → longitud total de barra × kg/m del diámetro de barra; und → 1 por elemento. Si el elemento no la trae: el criterio de medida de la obra (·crit.)">Cantidad = medida nativa; si falta, criterio de la obra</span>
             </div>
-            {cobertura && (
+            {verAnalisis && (
+                <div style={{ padding: '0 12px', height: '28px', flexShrink: 0, fontSize: '12px', color: '#72706b', borderBottom: '1px solid #e8e6dc', display: 'flex', gap: '8px', alignItems: 'center', whiteSpace: 'nowrap', overflow: 'hidden' }}>
+                <span title="Partidas del itemizado (filas con unidad) que tienen elementos en el modelo, sobre todas las del itemizado">
+                    <strong style={{ color: '#141413', fontWeight: 600 }}>{miles(plantilla.resumen.conDato)}</strong> de {miles(plantilla.resumen.partidas)} partidas del itemizado con dato
+                    {' · '}{lineas.toLocaleString('es-PE')} líneas de {filas.length.toLocaleString('es-PE')} elementos {ambito}
+                </span>
+                {porCriterio > 0 && <span title="Líneas sin medida nativa medidas con un criterio de medida de la obra">· {porCriterio.toLocaleString('es-PE')} medidas con criterio</span>}
+                {sinMedida > 0 && <span style={{ color: ROJO }}>· {sinMedida.toLocaleString('es-PE')} sin medida</span>}
+                {(onCriterios || criterios?.criterios.length > 0) && (
+                    <button className="v-enlace" style={{ fontSize: '12px' }} onClick={() => setVerCriterios(v => !v)} aria-expanded={verCriterios}
+                        title="Con qué parámetro se mide lo que no trae medida nativa, para toda la obra">
+                        criterios de medida ({criterios?.criterios.length || 0})
+                    </button>
+                )}
+                {calidad.repetidas > 0 && <span title="La misma partida en varias líneas del mismo elemento (p. ej. línea sin número y línea 2): se cuenta una vez">· {calidad.repetidas.toLocaleString('es-PE')} repetidas contadas una vez</span>}
+                {calidad.intercambiadas > 0 && <span style={{ color: ROJO }} title="En Revit, la descripción está en CodigoDePartida y el código en NombreDePartida: se leen al derecho">· {calidad.intercambiadas} con código y nombre intercambiados</span>}
+                <button className="v-enlace" style={{ fontSize: '12px' }} onClick={() => setVerComo(v => !v)} aria-expanded={verComo}
+                    title="Qué parámetros se leyeron como código, descripción y unidad, y por qué">
+                    cómo se leyó
+                </button>
+                    <span style={{ flex: 1 }} />
+                <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }} title="m → Longitud · m² → Área · m³ → Volumen de Revit; kg → longitud total de barra × kg/m del diámetro de barra; und → 1 por elemento. Si el elemento no la trae: el criterio de medida de la obra (·crit.)">Cantidad = medida nativa; si falta, criterio de la obra</span>
+                </div>
+            )}
+            {verAnalisis && cobertura && (
                 <div style={{ padding: '0 12px', height: '28px', flexShrink: 0, fontSize: '12px', color: '#52524d', borderBottom: '1px solid #e8e6dc', display: 'flex', gap: '10px', alignItems: 'center', whiteSpace: 'nowrap', overflow: 'hidden' }}>
                     <span title="Elementos con alguna línea cuyo código es un ítem del itemizado o sub-partida de uno, sobre los elementos de la tabla">
                         Cobertura del itemizado <strong style={{ color: '#141413', fontWeight: 600 }}>{cobertura.porcentaje.toLocaleString('es-PE')} %</strong>
@@ -787,6 +810,10 @@ export default function TablaDePartidas({ filas, filasObra, dic, roles, claveDeF
                     )}
                 </div>
             )}
+            {verValorizacion && (
+                <ValorizacionDelMes filasObra={filasObra} dic={dic} claveDeFila={claveDeFila}
+                    onSeleccionar={onSeleccionar} onMostrarTodo={onMostrarTodo} onCerrar={() => setVerValorizacion(false)} />
+            )}
             {verFalta && cobertura && dif && <QueFalta cobertura={cobertura} dif={dif} ambito={ambito} activa={activa} onAlternar={alternar} onCerrar={() => setVerFalta(false)} />}
             {verCriterios && <ListaDeCriterios juego={criterios} uso={uso} estado={estadoCrit} onGuardar={onCriterios} onCerrar={() => setVerCriterios(false)} />}
             {partidaAMedir && (
@@ -795,7 +822,8 @@ export default function TablaDePartidas({ filas, filasObra, dic, roles, claveDeF
                     juego={criterios} estado={estadoCrit} onGuardar={onCriterios} onCerrar={() => setMedirCon(null)} />
             )}
             {verComo && roles && <ComoSeLeyo roles={roles} itemizado={itemizado} cruce={cruce} onCerrar={() => setVerComo(false)} />}
-            <div ref={cuerpoRef} role="table" aria-label="Partidas" onScroll={e => setScroll(e.currentTarget.scrollTop)} style={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
+            {/* Con la valorización abierta, su hoja ocupa el cuerpo de la Planilla (como el Excel); las partidas vuelven al cerrarla. */}
+            <div ref={cuerpoRef} role="table" aria-label="Partidas" onScroll={e => setScroll(e.currentTarget.scrollTop)} style={{ flex: 1, overflow: 'auto', minHeight: 0, display: verValorizacion ? 'none' : undefined }}>
                 <div role="row" style={{ display: 'grid', gridTemplateColumns: rejilla, position: 'sticky', top: 0, zIndex: 1, background: '#f5f4ef', borderBottom: '1px solid #cccac0', height: `${ALTO}px`, alignItems: 'center', fontWeight: 600, fontSize: '12px', color: '#52524d' }}>
                     {COLUMNAS.map(c => <div key={c.titulo} role="columnheader" style={c.derecha ? num : celda}>{c.titulo}</div>)}
                 </div>
