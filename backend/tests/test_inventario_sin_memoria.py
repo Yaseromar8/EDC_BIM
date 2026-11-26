@@ -330,7 +330,7 @@ class _Respuesta:
         pass
 
 
-def _extraer(monkeypatch, objetos, arbol, tam_pagina_falso=None, olvidar=(), paginacion_rota=False):
+def _extraer(monkeypatch, objetos, arbol, tam_pagina_falso=None, olvidar=(), paginacion_rota=False, in_roto=False):
     """Corre extract_metadata_task entera contra un Autodesk de mentira; devuelve (filas publicadas, trabajos)."""
     import db
     from routes import inventory
@@ -382,6 +382,10 @@ def _extraer(monkeypatch, objetos, arbol, tam_pagina_falso=None, olvidar=(), pag
             consulta = kw['json']
             if '$in' in consulta['query']:
                 pedidas = consulta['query']['$in'][1:]
+                if in_roto:
+                    r = _Respuesta({'developerMessage': 'consulta no valida'})
+                    r.status_code, r.text = 400, '{"developerMessage": "consulta no valida"}'
+                    return r
                 return _Respuesta({'data': {'collection': [o for o in objetos if o['objectid'] in pedidas]}})
             if paginacion_rota:
                 raise Exception('Autodesk no pagina')
@@ -569,11 +573,26 @@ def test_el_respaldo_que_trae_todo_de_una_vez_sigue_para_un_modelo_pequeno(monke
     assert [f['external_id'] for f in filas] == ['geo-11', 'geo-21']
 
 
-def test_un_modelo_grande_no_usa_el_respaldo_y_falla_con_su_motivo(monkeypatch):
+def test_un_modelo_grande_no_usa_el_respaldo_y_pide_por_identificadores(monkeypatch):
+    """El caso de PL (26-nov): la paginación da 400. Se piden las propiedades por `$in` con los identificadores
+    del árbol, por lotes; el GET que trae todo de una vez ni se pide. El inventario es el mismo."""
     from routes import inventory
     objetos, arbol = _modelo_nwc()
+    esperado, _, _ = _extraer(monkeypatch, objetos, arbol)
     monkeypatch.setattr(inventory, 'RESPALDO_MAX_NODOS', 5)          # el modelo de prueba tiene 7 nodos
+    monkeypatch.setattr(inventory, 'POR_IDENTIFICADORES', 3)         # tres lotes
     filas, trabajos, pedidos = _extraer(monkeypatch, objetos, arbol, paginacion_rota=True)
+    assert trabajos[-1]['status'] == 'success', trabajos[-1]
+    assert 'properties?forceget=true' not in pedidos
+    assert pedidos.count('properties:query') == 1 + 3                 # la página que falla y tres lotes
+    assert filas == esperado
+
+
+def test_si_autodesk_rechaza_tambien_por_identificadores_falla_con_su_motivo(monkeypatch):
+    from routes import inventory
+    objetos, arbol = _modelo_nwc()
+    monkeypatch.setattr(inventory, 'RESPALDO_MAX_NODOS', 5)
+    filas, trabajos, pedidos = _extraer(monkeypatch, objetos, arbol, paginacion_rota=True, in_roto=True)
     assert filas == [] and trabajos[-1]['status'] == 'error'
-    assert 'demasiado grande (7 nodos)' in trabajos[-1]['message']
-    assert 'properties?forceget=true' not in pedidos                 # ni se pide
+    assert 'Autodesk respondió 400' in trabajos[-1]['message'] and 'consulta no valida' in trabajos[-1]['message']
+    assert 'properties?forceget=true' not in pedidos

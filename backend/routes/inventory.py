@@ -475,6 +475,45 @@ class _PropiedadesEnDisco:
             pass
 
 
+def _fallo_con_motivo(resp):
+    """Como `raise_for_status`, pero el error lleva lo que contestó Autodesk: un 400 sin su motivo obligó a
+    adivinar (docs/rendimiento/05 §6)."""
+    if resp.status_code >= 400:
+        cuerpo = ' '.join(str(getattr(resp, 'text', '') or '').split())[:300]
+        raise Exception(f"Autodesk respondió {resp.status_code}" + (f": {cuerpo}" if cuerpo else ''))
+
+
+POR_IDENTIFICADORES = 500
+
+
+def _propiedades_por_identificadores(query_url, headers, ids, recibir, job_id, cuantos):
+    """Las propiedades de `ids` con `properties:query` + `$in`, por lotes. Si Autodesk rechaza un lote (400),
+    se parte en lotes más pequeños, hasta 50; si aun así lo rechaza, falla con su motivo."""
+    def pedir(lote):
+        cuerpo = {'query': {'$in': ['objectid'] + list(lote)}, 'pagination': {'limit': len(lote), 'offset': 0}}
+        for intento in range(20):
+            resp = _aps('POST', query_url, headers={**headers, 'Content-Type': 'application/json'}, json=cuerpo)
+            if resp.status_code != 202:
+                return resp
+            time.sleep(5)
+        raise Exception("Autodesk tardó demasiado en preparar las propiedades.")
+
+    def traer(lote):
+        resp = pedir(lote)
+        if resp.status_code == 400 and len(lote) > 50:
+            mitad = len(lote) // 2
+            traer(lote[:mitad])
+            traer(lote[mitad:])
+            return
+        _fallo_con_motivo(resp)
+        recibir(_aps_collection(resp))
+
+    for i in range(0, len(ids), POR_IDENTIFICADORES):
+        traer(ids[i:i + POR_IDENTIFICADORES])
+        set_job(job_id, {'status': 'pending', 'progress': min(40 + int(25 * (i + POR_IDENTIFICADORES) / max(1, len(ids))), 65),
+                         'message': f'Descargando propiedades por identificadores ({cuantos()} de {len(ids)})...'})
+
+
 def _aps_collection(response):
     """Una coleccion ausente/malformada NO es una extraccion vacia completa."""
     from inventory_identity import IdentityError
@@ -857,7 +896,7 @@ def extract_metadata_task(urn, target_urn, job_id, purge_source_urns=None, scope
 
                 if resp.status_code == 202:
                     raise Exception("Timeout en paginación")
-                resp.raise_for_status()
+                _fallo_con_motivo(resp)
                 batch = _aps_collection(resp)
                 _recibir(batch)
                 print(f"[Extractor] Fase 2 - Página {page+1}: +{len(batch)} elementos (total: {len(carrete)})")
@@ -880,21 +919,28 @@ def extract_metadata_task(urn, target_urn, job_id, purge_source_urns=None, scope
             # eso agota la memoria y Render reinicia el servidor, con Docs y el visor dentro. Por encima del
             # tope no se intenta: la extracción falla con su motivo y se puede reintentar.
             nodos_del_modelo = len(tree_leaf_ids) + len(tree_all_nodes)
-            if nodos_del_modelo > RESPALDO_MAX_NODOS:
-                print(f"[Extractor] Fase 2 - POST paginado falló ({paginated_err}); sin respaldo: "
-                      f"{nodos_del_modelo} nodos > {RESPALDO_MAX_NODOS}")
-                raise Exception(
-                    f"Autodesk no entregó las propiedades por páginas ({paginated_err}). El modelo es "
-                    f"demasiado grande ({nodos_del_modelo} nodos) para pedirlas de una vez sin riesgo "
-                    f"para el servidor: vuelve a intentarlo más tarde.") from paginated_err
-            print(f"[Extractor] Fase 2 - POST paginado falló ({paginated_err}), usando GET legacy...")
             carrete.vaciar()
             props_by_id.clear()
             names_by_id.clear()
             collection_ids.clear()
+            if nodos_del_modelo > RESPALDO_MAX_NODOS:
+                # POR IDENTIFICADORES (26-nov-2026, docs/rendimiento/05 §6). Visto con el NWC de PL (184.814
+                # nodos): Autodesk responde 400 a la consulta por páginas, y el respaldo que trae todo de una vez
+                # agotaba la memoria. Los identificadores ya están en el árbol: se piden con `$in` (forma
+                # documentada de `properties:query`, la misma de la recuperación de 2.2), por lotes y con la
+                # misma memoria constante.
+                print(f"[Extractor] Fase 2 - POST paginado falló ({paginated_err}); {nodos_del_modelo} nodos: "
+                      f"se piden por identificadores")
+                _propiedades_por_identificadores(
+                    query_url, headers, sorted(tree_leaf_ids | set(tree_all_nodes)), _recibir, job_id,
+                    lambda: len(carrete))
+                collection_ready = True
+                print(f"[Extractor] Fase 2 - Por identificadores: {len(carrete)} elementos")
+            else:
+                print(f"[Extractor] Fase 2 - POST paginado falló ({paginated_err}), usando GET legacy...")
             prop_url = f"{APS_MD_URL}/{urn}/metadata/{guid}/properties?forceget=true"
             max_retries = 30
-            for attempt in range(max_retries):
+            for attempt in (range(max_retries) if not collection_ready else ()):
                 resp = _aps('GET', prop_url, headers=headers)
                 print(f"[Extractor] Fase 2 (GET fallback) - Intento {attempt+1}/{max_retries}: status={resp.status_code}")
                 if resp.status_code == 202:
