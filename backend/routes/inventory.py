@@ -124,6 +124,11 @@ APS_MD_URL = "https://developer.api.autodesk.com/modelderivative/v2/designdata"
 # 120 s sin recibir nada) y se reintenta con pausa ante cortes, plazos vencidos, 429 y 5xx. Si aun
 # así no contesta, la extracción FALLA con su motivo: un error se ve y se reintenta; un cuelgue no.
 APS_PLAZO = (10, 120)
+
+# Por encima de estos nodos no se usa el GET de respaldo, que trae la colección entera de una vez
+# (docs/rendimiento/05): la respuesta entera y su conversión a Python. 30.000 nodos son ~15.000 elementos de
+# un NWC; con el perfil del banco, varios cientos de MB de una vez. Más ya pone en riesgo los 2 GB del servidor.
+RESPALDO_MAX_NODOS = 30000
 APS_REINTENTABLES = (429, 500, 502, 503, 504)
 
 
@@ -404,6 +409,72 @@ class _Carrete:
             pass
 
 
+class _PropiedadesEnDisco:
+    """Las propiedades de los nodos PADRE, en disco y con una caché pequeña en memoria (26-nov-2026,
+    docs/rendimiento/05).
+
+    El arreglo de noviembre dejó en memoria solo las propiedades de los padres porque en un modelo Revit son
+    pocos (categorías, familias, tipos). En un NWC no: cada elemento es padre de su pieza de geometría, y los
+    padres son más que las piezas. Medido en producción: PL del Centro de Salud, 184.814 nodos y 101.313
+    padres. En el banco con ese perfil, la extracción crecía ~13 MB por cada 1.000 elementos (tracemalloc; el
+    proceso real ocupa más): PL, ~1,1 GB solo en esto, encima de lo que el servidor ya tiene. Con esto, casi
+    plano (109 MB con 20.000 elementos). Se usa como el diccionario de antes (`[oid] = props`, `.get(oid, {})`, `clear()`) y
+    devuelve lo mismo: el JSON de Autodesk, ida y vuelta.
+
+    La caché sirve porque la colección llega por hermanos: los elementos de un mismo tipo piden los mismos
+    antepasados uno detrás de otro. Lo devuelto no se modifica (`deep_merge` solo lee la fuente).
+    """
+
+    def __init__(self, cache=1024):
+        import tempfile
+        from collections import OrderedDict
+        self._f = tempfile.TemporaryFile(prefix='padres_')
+        self._sitio = {}
+        self._cache = OrderedDict()
+        self._max = cache
+
+    def __len__(self):
+        return len(self._sitio)
+
+    def __contains__(self, oid):
+        return oid in self._sitio
+
+    def __setitem__(self, oid, props):
+        import zlib
+        datos = zlib.compress(json.dumps(props).encode('ascii'), 1)
+        self._f.seek(0, 2)
+        self._sitio[oid] = (self._f.tell(), len(datos))
+        self._f.write(datos)
+        self._cache.pop(oid, None)
+
+    def get(self, oid, defecto=None):
+        if oid in self._cache:
+            self._cache.move_to_end(oid)
+            return self._cache[oid]
+        sitio = self._sitio.get(oid)
+        if sitio is None:
+            return defecto
+        import zlib
+        self._f.seek(sitio[0])
+        props = json.loads(zlib.decompress(self._f.read(sitio[1])))
+        self._cache[oid] = props
+        if len(self._cache) > self._max:
+            self._cache.popitem(last=False)
+        return props
+
+    def clear(self):
+        self._f.seek(0)
+        self._f.truncate()
+        self._sitio.clear()
+        self._cache.clear()
+
+    def close(self):
+        try:
+            self._f.close()
+        except Exception:
+            pass
+
+
 def _aps_collection(response):
     """Una coleccion ausente/malformada NO es una extraccion vacia completa."""
     from inventory_identity import IdentityError
@@ -470,7 +541,7 @@ def extract_metadata_task(urn, target_urn, job_id, purge_source_urns=None, scope
     `_extraction_source_context`. """
     # Clave de concurrencia: mismo modelo + mismo scope
     _key = None
-    carrete = filas = None   # el modelo en disco mientras se extrae; se cierran (y se borran) en el finally
+    carrete = filas = props_by_id = None   # el modelo en disco mientras se extrae; se cierran (y se borran) en el finally
     try:
         print(f"\n[Extractor] ===== INICIO JOB: {job_id} =====")
         print(f"[Extractor] URN recibido (raw): {urn}")
@@ -743,10 +814,11 @@ def extract_metadata_task(urn, target_urn, job_id, purge_source_urns=None, scope
         # medido, ~31 MB por cada 1.000 elementos; 50.000 elementos pedían 1,6 GB en un servidor de 2 GB.
         # Ahora cada nodo va comprimido a un carrete en disco y en memoria solo quedan los identificadores
         # y las propiedades de los nodos PADRE (tipos, familias, categorías), que son las que se heredan.
+        # Esas también van a disco (26-nov-2026, docs/rendimiento/05): en un NWC los padres son los elementos.
         set_job(job_id, {'status': 'pending', 'progress': 40, 'message': 'Descargando propiedades (paginado)...'})
 
         carrete = _Carrete()
-        props_by_id = {}
+        props_by_id = _PropiedadesEnDisco()
         names_by_id = {}
         collection_ids = set()
 
@@ -804,6 +876,17 @@ def extract_metadata_task(urn, target_urn, job_id, purge_source_urns=None, scope
             raise  # limite/malformacion no se convierte en exito via fallback.
         except Exception as paginated_err:
             # FALLBACK: GET legacy (funciona para modelos pequeños/medianos). Lo bajado a medias se tira.
+            # Trae la colección ENTERA en una sola respuesta (docs/rendimiento/03 §6.5): con un modelo grande
+            # eso agota la memoria y Render reinicia el servidor, con Docs y el visor dentro. Por encima del
+            # tope no se intenta: la extracción falla con su motivo y se puede reintentar.
+            nodos_del_modelo = len(tree_leaf_ids) + len(tree_all_nodes)
+            if nodos_del_modelo > RESPALDO_MAX_NODOS:
+                print(f"[Extractor] Fase 2 - POST paginado falló ({paginated_err}); sin respaldo: "
+                      f"{nodos_del_modelo} nodos > {RESPALDO_MAX_NODOS}")
+                raise Exception(
+                    f"Autodesk no entregó las propiedades por páginas ({paginated_err}). El modelo es "
+                    f"demasiado grande ({nodos_del_modelo} nodos) para pedirlas de una vez sin riesgo "
+                    f"para el servidor: vuelve a intentarlo más tarde.") from paginated_err
             print(f"[Extractor] Fase 2 - POST paginado falló ({paginated_err}), usando GET legacy...")
             carrete.vaciar()
             props_by_id.clear()
@@ -1147,7 +1230,7 @@ def extract_metadata_task(urn, target_urn, job_id, purge_source_urns=None, scope
         set_job(job_id, {'status': 'error', 'progress': 0,
                          'message': mensaje, 'code': getattr(e, 'code', 'EXTRACTION_FAILED')})
     finally:
-        for temporal in (carrete, filas):
+        for temporal in (carrete, filas, props_by_id):
             if temporal is not None:
                 temporal.close()
         # Liberar el guard de concurrencia para este modelo+scope

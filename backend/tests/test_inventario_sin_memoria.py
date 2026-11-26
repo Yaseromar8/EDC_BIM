@@ -330,7 +330,7 @@ class _Respuesta:
         pass
 
 
-def _extraer(monkeypatch, objetos, arbol, tam_pagina_falso=None, olvidar=()):
+def _extraer(monkeypatch, objetos, arbol, tam_pagina_falso=None, olvidar=(), paginacion_rota=False):
     """Corre extract_metadata_task entera contra un Autodesk de mentira; devuelve (filas publicadas, trabajos)."""
     import db
     from routes import inventory
@@ -383,9 +383,13 @@ def _extraer(monkeypatch, objetos, arbol, tam_pagina_falso=None, olvidar=()):
             if '$in' in consulta['query']:
                 pedidas = consulta['query']['$in'][1:]
                 return _Respuesta({'data': {'collection': [o for o in objetos if o['objectid'] in pedidas]}})
+            if paginacion_rota:
+                raise Exception('Autodesk no pagina')
             pag = consulta['pagination']
             visibles = [o for o in objetos if o['objectid'] not in olvidar]
             return _Respuesta({'data': {'collection': visibles[pag['offset']:pag['offset'] + pag['limit']]}})
+        if url.endswith('/properties?forceget=true'):                     # el GET de respaldo: todo de una vez
+            return _Respuesta({'data': {'collection': list(objetos)}})
         return _Respuesta({'data': {'objects': arbol}})
 
     monkeypatch.setattr(db, 'get_db_connection', conexion)
@@ -492,3 +496,84 @@ def test_la_extraccion_no_guarda_el_modelo_en_una_lista():
     fuente = Path(inventory.__file__).read_text(encoding='utf-8')
     for junta in ('all_items', 'inventory_data', 'collection.extend('):
         assert junta not in fuente, junta
+
+
+# ── NWC: los padres son los elementos (26-nov-2026, docs/rendimiento/05) ─────────────────────────────
+
+def test_las_propiedades_en_disco_devuelven_lo_mismo_que_el_diccionario():
+    from routes.inventory import _PropiedadesEnDisco
+    props = {n: {'Elemento': {'Nombre': 'Tubo %d' % n, 'Diámetro': ['50 mm', '']}, 'Cotas': {'L': n * 1.5},
+                 'Texto': 'ñandú — ü'} for n in range(1, 40)}
+    disco = _PropiedadesEnDisco(cache=4)                      # caché diminuta: casi todo sale del disco
+    try:
+        for n, p in props.items():
+            disco[n] = p
+        assert len(disco) == 39 and 7 in disco and 99 not in disco
+        for _ in range(2):                                    # dos pasadas: del disco y de la caché
+            for n in list(props) + list(reversed(list(props))):
+                assert disco.get(n, {}) == props[n]
+        assert disco.get(99, {}) == {}
+        disco.clear()
+        assert len(disco) == 0 and disco.get(1, {}) == {}
+    finally:
+        disco.close()
+
+
+def _modelo_nwc():
+    """Archivo → Tuberías → Tipo → ELEMENTO → geometría, como un NWC: el elemento (con sus propiedades) es el
+    padre de su pieza de geometría, que es la hoja y la fila del inventario."""
+    arbol = [{'objectid': 1, 'name': 'PL.nwc', 'objects': [
+        {'objectid': 2, 'name': 'Tuberías', 'objects': [
+            {'objectid': 3, 'name': 'Tipo DN50', 'objects': [
+                {'objectid': 10, 'name': 'Tubo [10]', 'objects': [{'objectid': 11, 'name': 'Sólido'}]},
+                {'objectid': 20, 'name': 'Tubo [20]', 'objects': [{'objectid': 21, 'name': 'Sólido'}]}]}]}]}]
+    objetos = [{'objectid': 1, 'name': 'PL.nwc', 'externalId': 'doc', 'properties': {}},
+               {'objectid': 2, 'name': 'Tuberías', 'externalId': 'cat', 'properties': {}},
+               {'objectid': 3, 'name': 'Tipo DN50', 'externalId': 'tipo',
+                'properties': {'Datos de identidad': {'Nombre de tipo': 'DN50'}}},
+               {'objectid': 10, 'name': 'Tubo [10]', 'externalId': 'el-10',
+                'properties': {'Elemento': {'Marca': 'M10', 'Longitud': '3.00 m'}}},
+               {'objectid': 11, 'name': 'Sólido', 'externalId': 'geo-11',
+                'properties': {'Geometría': {'Primitivas': '12'}}},
+               {'objectid': 20, 'name': 'Tubo [20]', 'externalId': 'el-20',
+                'properties': {'Elemento': {'Marca': 'M20', 'Longitud': '4.00 m'}}},
+               {'objectid': 21, 'name': 'Sólido', 'externalId': 'geo-21',
+                'properties': {'Geometría': {'Primitivas': '8'}}}]
+    return objetos, arbol
+
+
+def test_en_un_nwc_la_pieza_hereda_de_su_elemento(monkeypatch):
+    objetos, arbol = _modelo_nwc()
+    filas, trabajos, _ = _extraer(monkeypatch, objetos, arbol)
+    assert trabajos[-1]['status'] == 'success', trabajos[-1]
+    assert [f['external_id'] for f in filas] == ['geo-11', 'geo-21']
+    once = filas[0]['properties']
+    assert once['Elemento'] == {'Marca': 'M10', 'Longitud': '3.00 m'}          # lo del elemento padre
+    assert once['Datos de identidad'] == {'Nombre de tipo': 'DN50'} and once['Geometría'] == {'Primitivas': '12'}
+    assert filas[1]['properties']['Elemento']['Marca'] == 'M20'                 # cada pieza, de SU elemento
+
+
+def test_las_propiedades_de_los_padres_no_se_guardan_en_un_diccionario():
+    """Guardia: en un NWC los padres son los elementos; un dict con sus propiedades es el modelo entero."""
+    from pathlib import Path
+    from routes import inventory
+    fuente = Path(inventory.__file__).read_text(encoding='utf-8')
+    assert 'props_by_id = {}' not in fuente and 'props_by_id = _PropiedadesEnDisco()' in fuente
+
+
+def test_el_respaldo_que_trae_todo_de_una_vez_sigue_para_un_modelo_pequeno(monkeypatch):
+    objetos, arbol = _modelo_nwc()
+    filas, trabajos, pedidos = _extraer(monkeypatch, objetos, arbol, paginacion_rota=True)
+    assert trabajos[-1]['status'] == 'success', trabajos[-1]
+    assert 'properties?forceget=true' in pedidos
+    assert [f['external_id'] for f in filas] == ['geo-11', 'geo-21']
+
+
+def test_un_modelo_grande_no_usa_el_respaldo_y_falla_con_su_motivo(monkeypatch):
+    from routes import inventory
+    objetos, arbol = _modelo_nwc()
+    monkeypatch.setattr(inventory, 'RESPALDO_MAX_NODOS', 5)          # el modelo de prueba tiene 7 nodos
+    filas, trabajos, pedidos = _extraer(monkeypatch, objetos, arbol, paginacion_rota=True)
+    assert filas == [] and trabajos[-1]['status'] == 'error'
+    assert 'demasiado grande (7 nodos)' in trabajos[-1]['message']
+    assert 'properties?forceget=true' not in pedidos                 # ni se pide
