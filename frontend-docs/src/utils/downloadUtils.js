@@ -6,7 +6,10 @@ export const downloadFolderAsZip = async (folderId, modelUrn, API_BASE_URL, fold
     const toastId = toast.loading(`Obteniendo hipervínculos para "${folderName}"...`);
     
     try {
-        const url = new URL(`${API_BASE_URL}/api/docs/download_folder_urls`);
+        // En producción `API` es '' (el portal y la API comparten origen): `new URL('/api/…')` sin base lanza
+        // «Failed to construct 'URL': Invalid URL» y la carpeta no se descargaba nunca (27-nov-2026). Con el origen de
+        // la página como base, una API relativa se resuelve y una absoluta (desarrollo, app nativa) se queda igual.
+        const url = new URL(`${API_BASE_URL}/api/docs/download_folder_urls`, window.location.origin);
         url.searchParams.append("folder_id", folderId);
         url.searchParams.append("model_urn", modelUrn);
 
