@@ -565,9 +565,19 @@ def test_las_propiedades_de_los_padres_no_se_guardan_en_un_diccionario():
     assert 'props_by_id = {}' not in fuente and 'props_by_id = _PropiedadesEnDisco()' in fuente
 
 
-def test_el_respaldo_que_trae_todo_de_una_vez_sigue_para_un_modelo_pequeno(monkeypatch):
+def test_si_falla_la_paginacion_un_modelo_pequeno_tambien_va_por_identificadores(monkeypatch):
+    """El 400 de Autodesk a la consulta por páginas afecta a todos los modelos: ninguno baja todo de una vez."""
     objetos, arbol = _modelo_nwc()
+    esperado, _, _ = _extraer(monkeypatch, objetos, arbol)
     filas, trabajos, pedidos = _extraer(monkeypatch, objetos, arbol, paginacion_rota=True)
+    assert trabajos[-1]['status'] == 'success', trabajos[-1]
+    assert 'properties?forceget=true' not in pedidos
+    assert filas == esperado
+
+
+def test_el_get_que_trae_todo_queda_como_ultimo_recurso_de_un_modelo_pequeno(monkeypatch):
+    objetos, arbol = _modelo_nwc()
+    filas, trabajos, pedidos = _extraer(monkeypatch, objetos, arbol, paginacion_rota=True, in_roto=True)
     assert trabajos[-1]['status'] == 'success', trabajos[-1]
     assert 'properties?forceget=true' in pedidos
     assert [f['external_id'] for f in filas] == ['geo-11', 'geo-21']

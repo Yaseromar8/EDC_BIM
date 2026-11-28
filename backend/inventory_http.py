@@ -47,7 +47,14 @@ def identity_error_response(exc):
         "IDENTITY_CONFLICT": "Las referencias de identidad de la petición no coinciden.",
         "LEGACY_USER_DATA_PENDING": "Este frente tiene metadata humana anterior sin migrar. No se muestra el inventario a medias: sus datos siguen guardados.",
     }
-    # Domain details may contain candidates from other scopes: never serialize them.
+    # Domain details may contain candidates from other scopes: never serialize them. La única excepción son
+    # los modelos sin inventario de `_ensure_readable`, que salen del `model_config` del frente ya autorizado.
+    if code == "INVENTORY_REEXTRACTION_REQUIRED" and (exc.details or {}).get("modelos"):
+        modelos = [str(m) for m in exc.details["modelos"]][:20]
+        lista = ", ".join(modelos)
+        return jsonify({"error": f"El inventario de {lista} no está listo. El resto se conserva: "
+                                 f"reextráelo desde «⋯ → Reextraer inventario» de ese modelo.",
+                        "code": code, "modelos": modelos}), status
     return jsonify({"error": messages.get(code, "No se pudo completar la operación de Inventory."),
                     "code": code}), status
 
@@ -134,15 +141,21 @@ def _ensure_readable(conn, scopes):
         for scope in scopes:
             cursor.execute("SELECT source_lineage,active_urn,generation FROM inventory_identity_b1.sources WHERE scope_id=%s", (scope,))
             sources = {row[0]: (row[1], row[2]) for row in cursor.fetchall()}
-            cursor.execute("SELECT urn,item_id FROM public.model_config WHERE app_project_id=%s", (scope,))
+            cursor.execute("SELECT urn,item_id,name FROM public.model_config WHERE app_project_id=%s", (scope,))
             configured = cursor.fetchall()
-            for urn, item_id in configured:
+            # Se revisan todos antes de negarse, para decir CUÁLES faltan (26-nov-2026, rendimiento/05 §7):
+            # «necesita reextracción» sin nombre obligaba a adivinar qué modelo del frente lo bloqueaba.
+            faltan = []
+            for urn, item_id, nombre in configured:
                 try:
                     version, lineage = source_identity(urn, item_id=item_id or None)
-                except IdentityError as exc:
-                    raise IdentityError("INVENTORY_REEXTRACTION_REQUIRED") from exc
+                except IdentityError:
+                    faltan.append(nombre or urn)
+                    continue
                 if sources.get(lineage, (None,))[0] != version:
-                    raise IdentityError("INVENTORY_REEXTRACTION_REQUIRED")
+                    faltan.append(nombre or urn)
+            if faltan:
+                raise IdentityError("INVENTORY_REEXTRACTION_REQUIRED", modelos=faltan)
             if configured:
                 # Current model_config is the declared read scope, not proof of
                 # all historical Sources. Orphan legacy rows remain untouched

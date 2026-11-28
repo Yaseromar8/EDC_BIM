@@ -2399,14 +2399,20 @@ function App() {
         // CAUSA real, y reintentar: los 500 vienen intermitentes (conexión del
         // pool que tropieza); el siguiente intento suele pasar.
         let serverMsg = '';
-        try { serverMsg = (await res.text()).slice(0, 300); } catch { /* noop */ }
+        try { serverMsg = (await res.text()).slice(0, 2000); } catch { /* noop */ }
+        // El aviso va en lenguaje claro: el `error` del servidor, nunca su JSON en bruto (26-nov-2026,
+        // docs/rendimiento/05 §7). Un 409 dice qué modelo del frente no tiene inventario: reintentar no lo
+        // arregla, así que se avisa a la primera.
+        let cuerpo = null;
+        try { cuerpo = JSON.parse(serverMsg); } catch { /* no era JSON */ }
+        if (res.status === 409 && cuerpo?.error) throw new Error(cuerpo.error);
         if (attempt < 2) {
           const wait = 1000 * (attempt + 1);
           console.warn(`[Piedra Rosetta] /api/inventory HTTP ${res.status} (${serverMsg}). Reintentando en ${wait}ms…`);
           await new Promise(r => setTimeout(r, wait));
           return fetchInventoryResilient(attempt + 1);
         }
-        throw new Error(`Falló /api/inventory (HTTP ${res.status}) → ${serverMsg}`);
+        throw new Error(cuerpo?.error || `No se pudo cargar el inventario (HTTP ${res.status}).`);
       }
       // Un cuerpo cortado o que no es JSON lanza aquí con su motivo, y no se reintenta (como antes).
       const inventario = await inventarioDeRespuesta(res, normalizeRevitCategory);
@@ -2638,9 +2644,11 @@ function App() {
       }
 
       let attempts = 0;
-      // ~12 min a 3s: las extracciones del update-all corren EN COLA secuencial,
-      // así que el último modelo del lote espera a los anteriores antes de empezar.
-      const MAX_ATTEMPTS = 240;
+      // TOPE DE SEGURIDAD, NO DE PACIENCIA (26-nov-2026, docs/rendimiento/05 §7). Con 12 min el visor
+      // decía «tardó demasiado» mientras el servidor seguía guardando los 83.501 elementos del NWC de PL.
+      // Quien sabe si el trabajo vive es el servidor: lo da por muerto (`get_job`) cuando lleva 10 min sin
+      // señales, y mientras guarda las renueva cada 30 s. Aquí solo se corta a las 3 h, por si acaso.
+      const MAX_ATTEMPTS = 3600;
 
       const stopPoll = () => {
         clearInterval(pollInterval);

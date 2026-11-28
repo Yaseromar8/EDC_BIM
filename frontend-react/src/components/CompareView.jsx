@@ -675,7 +675,9 @@ export default function CompareView({ BACKEND_URL, projectId, onExit }) {
         const cuerpo = await res.json().catch(() => ({}));
         const { job_id } = cuerpo;
         if (!job_id) throw new Error(explicarExtraccion(label, res.status, cuerpo));
-        for (let i = 0; i < 150; i++) {                       // hasta ~7.5 min
+        // Hasta 3 h: quien decide si el trabajo murió es el servidor (10 min sin señales), no este tope
+        // (docs/rendimiento/05 §7). Con ~7,5 min un modelo grande «tardaba demasiado» estando vivo.
+        for (let i = 0; i < 3600; i++) {
             await new Promise(r => setTimeout(r, 3000));
             const st = await apiFetch(`${BACKEND_URL}/api/inventory/extract/status/${job_id}`).then(r => r.json()).catch(() => null);
             if (st && st.status === 'success') return;

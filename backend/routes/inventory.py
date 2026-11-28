@@ -483,12 +483,22 @@ def _fallo_con_motivo(resp):
         raise Exception(f"Autodesk respondió {resp.status_code}" + (f": {cuerpo}" if cuerpo else ''))
 
 
-POR_IDENTIFICADORES = 500
+# TANDAS DE 1000 Y TRES A LA VEZ (docs/rendimiento/09, medido 27-nov-2026 con el PL de Sechura, 157.332 objetos):
+#   tanda de 500  -> 3,3 s  => ~17 min solo en pedir (el visor publicado se rendía a los 12)
+#   tanda de 1000 -> 2,1 s  => ~5,5 min
+# 1000 es el máximo que admite `properties:query`. Las tandas van en paralelo, pero cada respuesta se ENTREGA en orden y
+# en ESTE hilo (`recibir` escribe en estructuras que no son seguras entre hilos), y nunca hay más de EN_PARALELO
+# respuestas en memoria. Los datos son los mismos: la misma consulta, solo más grande y simultánea.
+# (Se midió también leer `properties.db` entero: 457 MB y valores en otro formato -- «0.0» por «No» --: descartado.)
+POR_IDENTIFICADORES = 1000
+EN_PARALELO = 3
 
 
 def _propiedades_por_identificadores(query_url, headers, ids, recibir, job_id, cuantos):
     """Las propiedades de `ids` con `properties:query` + `$in`, por lotes. Si Autodesk rechaza un lote (400),
     se parte en lotes más pequeños, hasta 50; si aun así lo rechaza, falla con su motivo."""
+    from concurrent.futures import ThreadPoolExecutor
+
     def pedir(lote):
         cuerpo = {'query': {'$in': ['objectid'] + list(lote)}, 'pagination': {'limit': len(lote), 'offset': 0}}
         for intento in range(20):
@@ -499,19 +509,36 @@ def _propiedades_por_identificadores(query_url, headers, ids, recibir, job_id, c
         raise Exception("Autodesk tardó demasiado en preparar las propiedades.")
 
     def traer(lote):
+        """Las colecciones de un lote (varias si Autodesk obligó a partirlo), sin entregarlas todavía."""
         resp = pedir(lote)
         if resp.status_code == 400 and len(lote) > 50:
             mitad = len(lote) // 2
-            traer(lote[:mitad])
-            traer(lote[mitad:])
-            return
+            return traer(lote[:mitad]) + traer(lote[mitad:])
         _fallo_con_motivo(resp)
-        recibir(_aps_collection(resp))
+        return [_aps_collection(resp)]
 
-    for i in range(0, len(ids), POR_IDENTIFICADORES):
-        traer(ids[i:i + POR_IDENTIFICADORES])
-        set_job(job_id, {'status': 'pending', 'progress': min(40 + int(25 * (i + POR_IDENTIFICADORES) / max(1, len(ids))), 65),
-                         'message': f'Descargando propiedades por identificadores ({cuantos()} de {len(ids)})...'})
+    lotes = [ids[i:i + POR_IDENTIFICADORES] for i in range(0, len(ids), POR_IDENTIFICADORES)]
+    hechos = 0
+    with ThreadPoolExecutor(max_workers=EN_PARALELO, thread_name_prefix='props') as pool:
+        en_vuelo = []
+        siguiente = 0
+        while siguiente < len(lotes) or en_vuelo:
+            while siguiente < len(lotes) and len(en_vuelo) < EN_PARALELO:
+                en_vuelo.append(pool.submit(traer, lotes[siguiente]))
+                siguiente += 1
+            primero = en_vuelo.pop(0)
+            try:
+                colecciones = primero.result()
+            except Exception:
+                for f in en_vuelo:
+                    f.cancel()
+                raise
+            for coleccion in colecciones:
+                recibir(coleccion)
+            hechos += 1
+            set_job(job_id, {'status': 'pending',
+                             'progress': min(40 + int(25 * hechos / max(1, len(lotes))), 65),
+                             'message': f'Descargando propiedades por identificadores ({cuantos()} de {len(ids)})...'})
 
 
 def _aps_collection(response):
@@ -914,30 +941,39 @@ def extract_metadata_task(urn, target_urn, job_id, purge_source_urns=None, scope
         except IdentityError:
             raise  # limite/malformacion no se convierte en exito via fallback.
         except Exception as paginated_err:
-            # FALLBACK: GET legacy (funciona para modelos pequeños/medianos). Lo bajado a medias se tira.
-            # Trae la colección ENTERA en una sola respuesta (docs/rendimiento/03 §6.5): con un modelo grande
-            # eso agota la memoria y Render reinicia el servidor, con Docs y el visor dentro. Por encima del
-            # tope no se intenta: la extracción falla con su motivo y se puede reintentar.
+            # POR IDENTIFICADORES, para cualquier tamaño (26-nov-2026, docs/rendimiento/05 §6–§7). Autodesk
+            # rechaza la consulta por páginas con 400 «Invalid `query` format: not a JSON object» (visto con el
+            # NWC de PL). Los identificadores ya están en el árbol: se piden con `$in` (forma documentada de
+            # `properties:query`, la misma de la recuperación de 2.2), por lotes y con memoria constante.
+            # Lo bajado a medias se tira.
             nodos_del_modelo = len(tree_leaf_ids) + len(tree_all_nodes)
             carrete.vaciar()
             props_by_id.clear()
             names_by_id.clear()
             collection_ids.clear()
-            if nodos_del_modelo > RESPALDO_MAX_NODOS:
-                # POR IDENTIFICADORES (26-nov-2026, docs/rendimiento/05 §6). Visto con el NWC de PL (184.814
-                # nodos): Autodesk responde 400 a la consulta por páginas, y el respaldo que trae todo de una vez
-                # agotaba la memoria. Los identificadores ya están en el árbol: se piden con `$in` (forma
-                # documentada de `properties:query`, la misma de la recuperación de 2.2), por lotes y con la
-                # misma memoria constante.
-                print(f"[Extractor] Fase 2 - POST paginado falló ({paginated_err}); {nodos_del_modelo} nodos: "
-                      f"se piden por identificadores")
+            print(f"[Extractor] Fase 2 - POST paginado falló ({paginated_err}); {nodos_del_modelo} nodos: "
+                  f"se piden por identificadores")
+            try:
                 _propiedades_por_identificadores(
                     query_url, headers, sorted(tree_leaf_ids | set(tree_all_nodes)), _recibir, job_id,
                     lambda: len(carrete))
                 collection_ready = True
                 print(f"[Extractor] Fase 2 - Por identificadores: {len(carrete)} elementos")
-            else:
-                print(f"[Extractor] Fase 2 - POST paginado falló ({paginated_err}), usando GET legacy...")
+            except IdentityError:
+                raise
+            except Exception as ids_err:
+                # ÚLTIMO RECURSO: el GET que trae la colección ENTERA de una vez (03 §6.5). Solo con modelos
+                # pequeños: con uno grande agota la memoria y Render reinicia el servidor, con Docs y el visor.
+                carrete.vaciar()
+                props_by_id.clear()
+                names_by_id.clear()
+                collection_ids.clear()
+                if nodos_del_modelo > RESPALDO_MAX_NODOS:
+                    raise Exception(
+                        f"Autodesk no entregó las propiedades ({ids_err}). El modelo es demasiado grande "
+                        f"({nodos_del_modelo} nodos) para pedirlas de una vez sin riesgo para el servidor: "
+                        f"vuelve a intentarlo más tarde.") from ids_err
+                print(f"[Extractor] Fase 2 - Por identificadores falló ({ids_err}), usando GET legacy...")
             prop_url = f"{APS_MD_URL}/{urn}/metadata/{guid}/properties?forceget=true"
             max_retries = 30
             for attempt in (range(max_retries) if not collection_ready else ()):
